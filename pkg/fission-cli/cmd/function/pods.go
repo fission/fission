@@ -6,9 +6,10 @@ package function
 
 import (
 	"fmt"
+	"io"
 	"os"
-	"text/tabwriter"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -28,9 +30,7 @@ func ListPods(input cli.Input) error {
 }
 
 func (opts *ListPodsSubCommand) do(input cli.Input) error {
-
 	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
-
 	if err != nil {
 		return fmt.Errorf("error in finding pod for function : %w", err)
 	}
@@ -51,23 +51,25 @@ func (opts *ListPodsSubCommand) do(input cli.Input) error {
 		LabelSelector: labels.Set(selector).AsSelector().String(),
 	})
 	if err != nil {
-		return fmt.Errorf("error listing environments: %w", err)
+		return fmt.Errorf("error listing pods: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t\n", "NAME", "NAMESPACE", "READY", "STATUS", "IP", "EXECUTORTYPE", "MANAGED")
-	for _, pod := range pods.Items {
+	printFunctionPodsTo(os.Stdout, activePods(pods.Items))
+	return nil
+}
 
-		// A deletion timestamp indicates that a pod is terminating. Do not count this pod.
-		if pod.DeletionTimestamp != nil {
-			continue
-		}
-
-		labelList := pod.GetLabels()
-		readyContainers, noOfContainers := utils.PodContainerReadyStatus(&pod)
-		fmt.Fprintf(w, "%v\t%v\t%v/%v\t%v\t%v\t%v\t%v\t\n", pod.Name, pod.Namespace, noOfContainers, readyContainers, pod.Status.Phase, pod.Status.PodIP, labelList[v1.EXECUTOR_TYPE], labelList[v1.MANAGED])
+// printFunctionPodsTo renders the function-pods table
+// (NAME/NAMESPACE/READY/STATUS/IP/EXECUTORTYPE/MANAGED) for the given
+// non-terminating pods. Shared by `function pods` and `function describe` so the
+// two never drift; READY is ready/total.
+func printFunctionPodsTo(out io.Writer, pods []*corev1.Pod) {
+	w := util.NewTabWriter(out)
+	fmt.Fprintln(w, "NAME\tNAMESPACE\tREADY\tSTATUS\tIP\tEXECUTORTYPE\tMANAGED")
+	for _, pod := range pods {
+		ready, total := utils.PodContainerReadyStatus(pod)
+		fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
+			pod.Name, pod.Namespace, ready, total, pod.Status.Phase,
+			valueOr(pod.Status.PodIP), valueOr(pod.Labels[v1.EXECUTOR_TYPE]), valueOr(pod.Labels[v1.MANAGED]))
 	}
 	w.Flush()
-
-	return nil
 }

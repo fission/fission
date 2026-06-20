@@ -40,6 +40,13 @@ func describeFunction() *fv1.Function {
 	}
 }
 
+func describePackage(buildStatus fv1.BuildStatus, buildLog string) *fv1.Package {
+	return &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
+		Status:     fv1.PackageStatus{BuildStatus: buildStatus, BuildLog: buildLog},
+	}
+}
+
 func describeFunctionPod() *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,10 +85,7 @@ func describeInput(name, ns string) dummy.Cli {
 func TestFunctionDescribe(t *testing.T) {
 	t.Run("renders summary, conditions, package build status, and pods", func(t *testing.T) {
 		fn := describeFunction()
-		pkg := &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-			Status:     fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},
-		}
+		pkg := describePackage(fv1.BuildStatusSucceeded, "")
 		// A second pod with 1 of 2 containers ready, to lock the READY column as
 		// ready/total (a total/ready regression would render "2/1").
 		partial := describeFunctionPod()
@@ -108,10 +112,7 @@ func TestFunctionDescribe(t *testing.T) {
 		fn.Status.Conditions = []metav1.Condition{
 			{Type: fv1.FunctionConditionReady, Status: metav1.ConditionFalse, Reason: "PackageFailed", Message: "build failed"},
 		}
-		pkg := &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-			Status:     fv1.PackageStatus{BuildStatus: fv1.BuildStatusFailed},
-		}
+		pkg := describePackage(fv1.BuildStatusFailed, "")
 		setDescribeClients(t, []runtime.Object{fn, pkg})
 
 		out := captureStdout(t, func() error { return Describe(describeInput("hello", "default")) })
@@ -122,13 +123,7 @@ func TestFunctionDescribe(t *testing.T) {
 
 	t.Run("a failed build shows the build log", func(t *testing.T) {
 		fn := describeFunction()
-		pkg := &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-			Status: fv1.PackageStatus{
-				BuildStatus: fv1.BuildStatusFailed,
-				BuildLog:    `npm ERR! missing script: build`,
-			},
-		}
+		pkg := describePackage(fv1.BuildStatusFailed, `npm ERR! missing script: build`)
 		setDescribeClients(t, []runtime.Object{fn, pkg})
 
 		out := captureStdout(t, func() error { return Describe(describeInput("hello", "default")) })

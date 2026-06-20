@@ -16,16 +16,14 @@ func TestRenderInvocationFailure(t *testing.T) {
 	tests := []struct {
 		name      string
 		component string
-		reqID     string
 		status    int
 		body      string
 		contains  []string
 		absent    []string
 	}{
 		{
-			name:      "structured executor failure names component, reason, status, request",
+			name:      "structured executor failure names component, reason, status, and the body's request id",
 			component: "executor",
-			reqID:     "req-abc",
 			status:    503,
 			body:      `{"component":"executor","reason":"specialization_failed","requestId":"req-abc"}`,
 			contains:  []string{"executor", "specialization_failed", "503", "req-abc"},
@@ -33,7 +31,6 @@ func TestRenderInvocationFailure(t *testing.T) {
 		{
 			name:      "debug message is surfaced when present",
 			component: "function",
-			reqID:     "req-9",
 			status:    500,
 			body:      `{"component":"function","reason":"function_error","message":"panic: boom"}`,
 			contains:  []string{"function", "function_error", "detail: panic: boom"},
@@ -58,7 +55,7 @@ func TestRenderInvocationFailure(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var buf bytes.Buffer
-			renderInvocationFailure(&buf, "hello", tc.status, tc.component, tc.reqID, []byte(tc.body))
+			renderInvocationFailure(&buf, "hello", tc.status, tc.component, []byte(tc.body))
 			out := buf.String()
 			for _, c := range tc.contains {
 				assert.Containsf(t, out, c, "output:\n%s", out)

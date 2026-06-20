@@ -159,7 +159,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	// On failure, render the structured RFC-0015 attribution when the router
 	// produced one (X-Fission-Component header), else the legacy raw body.
 	renderInvocationFailure(os.Stderr, m.Name, resp.StatusCode,
-		resp.Header.Get(correlation.HeaderComponent), reqID, body)
+		resp.Header.Get(correlation.HeaderComponent), body)
 
 	err = util.FunctionPodLogs(input.Context(), m.Name, m.Namespace, opts.Client())
 	if err != nil {
@@ -180,7 +180,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 // X-Fission-Component header, it names the responsible component, the stable
 // reason, and the request id; otherwise it falls back to the raw response body,
 // so it degrades cleanly against a server that predates RFC-0015.
-func renderInvocationFailure(out io.Writer, fnName string, statusCode int, component, reqID string, body []byte) {
+func renderInvocationFailure(out io.Writer, fnName string, statusCode int, component string, body []byte) {
 	if component == "" {
 		fmt.Fprintf(out, "✗ function %q returned %d: %s\n", fnName, statusCode, strings.TrimSpace(string(body)))
 		return
@@ -192,8 +192,8 @@ func renderInvocationFailure(out io.Writer, fnName string, statusCode int, compo
 		line += fmt.Sprintf(" (%s)", ie.Reason)
 	}
 	line += fmt.Sprintf(" — status %d", statusCode)
-	if reqID != "" {
-		line += fmt.Sprintf(", request %s", reqID)
+	if ie.RequestID != "" {
+		line += fmt.Sprintf(", request %s", ie.RequestID)
 	}
 	fmt.Fprintln(out, line)
 	if ie.Message != "" {

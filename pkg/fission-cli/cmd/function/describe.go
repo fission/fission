@@ -86,13 +86,17 @@ func (opts *DescribeSubCommand) podsFor(ctx context.Context, fn *fv1.Function) [
 }
 
 func describeFunctionTo(out io.Writer, fn *fv1.Function, pkg *fv1.Package, pods []corev1.Pod) {
+	// Filter to the non-terminating pods once; the invocability headline and the
+	// pods table both render from this same set so they cannot disagree.
+	active := activePods(pods)
+
 	w := util.NewTabWriter(out)
 	fmt.Fprintf(w, "Name:\t%s\n", fn.Name)
 	fmt.Fprintf(w, "Namespace:\t%s\n", fn.Namespace)
 	fmt.Fprintf(w, "Environment:\t%s\n", environmentRef(fn.Spec.Environment))
 	fmt.Fprintf(w, "Executor:\t%s\n", valueOr(string(fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)))
 	fmt.Fprintf(w, "Package:\t%s\n", valueOr(fn.Spec.Package.PackageRef.Name))
-	fmt.Fprintf(w, "Invocable:\t%s\n", invocability(fn, pods))
+	fmt.Fprintf(w, "Invocable:\t%s\n", invocability(fn, active))
 	fmt.Fprintf(w, "Created:\t%s\n", util.AgeOf(fn.CreationTimestamp))
 	if line := kvLine(fn.Labels); line != "" {
 		fmt.Fprintf(w, "Labels:\t%s\n", line)
@@ -105,7 +109,19 @@ func describeFunctionTo(out io.Writer, fn *fv1.Function, pkg *fv1.Package, pods 
 	describePackageTo(out, pkg)
 
 	fmt.Fprintln(out, "\nPODS:")
-	describePodsTo(out, pods)
+	describePodsTo(out, active)
+}
+
+// activePods returns the non-terminating pods, the set both the invocability
+// headline and the pods table render from.
+func activePods(pods []corev1.Pod) []*corev1.Pod {
+	active := make([]*corev1.Pod, 0, len(pods))
+	for i := range pods {
+		if pods[i].DeletionTimestamp == nil {
+			active = append(active, &pods[i])
+		}
+	}
+	return active
 }
 
 func describePackageTo(out io.Writer, pkg *fv1.Package) {
@@ -125,39 +141,22 @@ func describePackageTo(out io.Writer, pkg *fv1.Package) {
 	}
 }
 
-func describePodsTo(out io.Writer, pods []corev1.Pod) {
-	active := make([]*corev1.Pod, 0, len(pods))
-	for i := range pods {
-		if pods[i].DeletionTimestamp == nil {
-			active = append(active, &pods[i])
-		}
-	}
+func describePodsTo(out io.Writer, active []*corev1.Pod) {
 	if len(active) == 0 {
 		fmt.Fprintf(out, "  %s\n", util.NoneValue)
 		return
 	}
-	w := util.NewTabWriter(out)
-	fmt.Fprintln(w, "NAME\tNAMESPACE\tREADY\tSTATUS\tIP\tEXECUTORTYPE\tMANAGED")
-	for _, pod := range active {
-		ready, total := utils.PodContainerReadyStatus(pod)
-		fmt.Fprintf(w, "%s\t%s\t%d/%d\t%s\t%s\t%s\t%s\n",
-			pod.Name, pod.Namespace, ready, total, pod.Status.Phase,
-			valueOr(pod.Status.PodIP), valueOr(pod.Labels[fv1.EXECUTOR_TYPE]), valueOr(pod.Labels[fv1.MANAGED]))
-	}
-	w.Flush()
+	printFunctionPodsTo(out, active)
 }
 
 // invocability answers "can I call this right now, and if not, why?" from the
 // data describe already has — the Ready condition and the count of fully-ready
 // pods — so it needs no executor diagnostics endpoint. A Ready function with no
 // warm pod is still invocable (it cold-starts), which is called out.
-func invocability(fn *fv1.Function, pods []corev1.Pod) string {
+func invocability(fn *fv1.Function, active []*corev1.Pod) string {
 	warm := 0
-	for i := range pods {
-		if pods[i].DeletionTimestamp != nil {
-			continue
-		}
-		if ready, total := utils.PodContainerReadyStatus(&pods[i]); total > 0 && ready == total {
+	for _, pod := range active {
+		if ready, total := utils.PodContainerReadyStatus(pod); total > 0 && ready == total {
 			warm++
 		}
 	}
