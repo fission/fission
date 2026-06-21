@@ -188,9 +188,14 @@ func (opts *RunSubCommand) resolveRunConfig(input cli.Input) (runConfig, error) 
 // image comes from --image (cluster-less) or the named environment's CRD, and the
 // source is loaded via the specialize contract.
 func (opts *RunSubCommand) resolveEnvRun(input cli.Input, namespace string, cfg *runConfig) error {
+	// The source laid at /userfunc/deployarchive is either a single file (--code,
+	// interpreted) or a pre-built deploy directory (--deploy, multi-file apps).
 	codePath := input.String(flagkey.PkgCode)
+	if deploy := input.StringSlice(flagkey.PkgDeployArchive); len(deploy) > 0 && deploy[0] != "" {
+		codePath = deploy[0]
+	}
 	if codePath == "" {
-		return fmt.Errorf("need --%v: the source file to run", flagkey.PkgCode)
+		return fmt.Errorf("need --%v (a single source file) or --%v (a pre-built directory) to run", flagkey.PkgCode, flagkey.PkgDeployArchive)
 	}
 
 	image := input.String(flagkey.FnImageName)
@@ -363,33 +368,47 @@ func writeBindingDir(prefix string, data map[string][]byte) (dir string, err err
 func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stderr io.Writer) error {
 	mounts := append([]bindMount(nil), cfg.extraMounts...)
 
-	// materialize lays the function code into the userfunc mount at the single
-	// target the runtime loads (targetFilename(envVersion)): for builder envs,
-	// compile into it; otherwise copy the interpreted source. It is reused on
-	// every --watch reload.
-	var userfuncDir string
-	materialize := func() error {
-		target := filepath.Join(userfuncDir, targetFilename(cfg.envVersion))
-		if cfg.builderImage != "" {
-			return runBuilder(ctx, rt, cfg, target, stderr)
-		}
-		return copyFile(cfg.codePath, target, 0o644)
-	}
+	// prepare lays the function code out for the runtime; it is reused on every
+	// --watch reload (a no-op for a directly-mounted deploy directory).
+	prepare := func() error { return nil }
 
 	if cfg.specialize {
-		var err error
-		if userfuncDir, err = os.MkdirTemp("", "fission-run-"); err != nil {
-			return fmt.Errorf("creating local mount dir: %w", err)
+		info, err := os.Stat(cfg.codePath)
+		if err != nil {
+			return fmt.Errorf("reading source %q: %w", cfg.codePath, err)
 		}
-		if cfg.keep {
-			fmt.Fprintf(stderr, "Keeping mount dir %s\n", userfuncDir)
+		deployTarget := filepath.Join(localMountPath, targetFilename(cfg.envVersion))
+		if info.IsDir() && cfg.builderImage == "" {
+			// Pre-built multi-file deploy directory (--deploy): bind-mount it
+			// directly as the deployarchive. It can be large (e.g. node_modules),
+			// so copying would be wasteful — the kubelet image-volume path mounts
+			// a package directory the same way. Edits are live; --watch only needs
+			// to re-specialize.
+			mounts = append([]bindMount{{HostDir: cfg.codePath, ContainerDir: deployTarget}}, mounts...)
 		} else {
-			defer os.RemoveAll(userfuncDir)
+			// A single --code file or --build output: lay it out under a temp
+			// userfunc dir, re-prepared on every reload.
+			userfuncDir, err := os.MkdirTemp("", "fission-run-")
+			if err != nil {
+				return fmt.Errorf("creating local mount dir: %w", err)
+			}
+			if cfg.keep {
+				fmt.Fprintf(stderr, "Keeping mount dir %s\n", userfuncDir)
+			} else {
+				defer os.RemoveAll(userfuncDir)
+			}
+			target := filepath.Join(userfuncDir, targetFilename(cfg.envVersion))
+			prepare = func() error {
+				if cfg.builderImage != "" {
+					return runBuilder(ctx, rt, cfg, target, stderr)
+				}
+				return copyFile(cfg.codePath, target, 0o644)
+			}
+			if err := prepare(); err != nil {
+				return fmt.Errorf("preparing function code: %w", err)
+			}
+			mounts = append([]bindMount{{HostDir: userfuncDir, ContainerDir: localMountPath}}, mounts...)
 		}
-		if err := materialize(); err != nil {
-			return fmt.Errorf("preparing function code: %w", err)
-		}
-		mounts = append([]bindMount{{HostDir: userfuncDir, ContainerDir: localMountPath}}, mounts...)
 	}
 
 	hostPort, err := utils.FindFreePort()
@@ -428,9 +447,10 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	}
 
 	if cfg.watch {
-		// Hot reload: rebuild/recopy into the live mount, then re-specialize.
+		// Hot reload: re-prepare the code (rebuild/recopy, or nothing for a live
+		// directory mount), then re-specialize.
 		reload := func() error {
-			if err := materialize(); err != nil {
+			if err := prepare(); err != nil {
 				return err
 			}
 			return specialize(ctx, cfg, hostPort)

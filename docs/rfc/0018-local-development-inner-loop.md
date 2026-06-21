@@ -171,6 +171,10 @@ Knowledge transfer for the implementing session — the surfaces this RFC reuses
 Phases 0 and 1 shipped together on `feat/rfc-0018-function-run-local`.
 The result is a working interpreted one-shot inner loop: `fission function run-local --image <env-image> --code f.py [--env <name>] [invoke flags]` starts the real env runtime in Docker, replays `/v2/specialize`, invokes over the shared `DoHTTPRequest` path, prints the response, and tears down (unless `--keep`).
 
+Multi-file apps are supported via `--deploy <dir>` (a pre-built deployment directory, e.g. a built Next.js app with `node_modules` + `.next`): the directory is bind-mounted **directly** as `/userfunc/deployarchive` — the way the kubelet image-volume path mounts a package dir — rather than copied, so a 200&nbsp;MB `node_modules` adds no copy cost and edits are live under `--watch`.
+A single `--code` file (or a `--build` artifact) is still laid out under a temp userfunc dir.
+This was validated end-to-end against the `nextjs-blog-demo` example (`fission/node-env-16`, entrypoint `app`): the blog index, the about page, and the dynamic SSG post routes all render, and `--keep` leaves the server up to `curl` directly.
+
 The command is named **`run-local`** (alias `runl`), not a bare `run` — mirroring the existing `run-container` and avoiding ambiguity for users.
 
 All three executor types are supported, dispatched by `--executor` (default `poolmgr`):

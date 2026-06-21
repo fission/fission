@@ -372,6 +372,33 @@ func TestRunLocalWatchReloadsOnChange(t *testing.T) {
 	assert.True(t, f.stopped)
 }
 
+func TestRunLocalDeployDirectoryIsBindMountedDirectly(t *testing.T) {
+	// A multi-file --deploy directory (e.g. a built Next.js app with node_modules)
+	// must be bind-mounted directly as /userfunc/deployarchive, not copied.
+	deployDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(deployDir, "app.js"), []byte("module.exports=1"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(deployDir, "node_modules"), 0o755))
+
+	f := &fakeRuntime{echo: "ok"}
+	cfg := runConfig{
+		image:         "fission/node-env:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		entrypoint:    "app",
+		codePath:      deployDir,
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runLocal(t.Context(), f, cfg, &stdout, &stderr))
+
+	require.GreaterOrEqual(t, len(f.lastSpec.Mounts), 1)
+	assert.Equal(t, deployDir, f.lastSpec.Mounts[0].HostDir, "the deploy dir itself should be mounted (no copy)")
+	assert.Equal(t, "/userfunc/deployarchive", f.lastSpec.Mounts[0].ContainerDir)
+}
+
 func TestRunLocalContainerExecutorSkipsSpecialize(t *testing.T) {
 	f := &fakeRuntime{echo: "container-ok"}
 	cfg := runConfig{
