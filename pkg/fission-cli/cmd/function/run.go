@@ -403,37 +403,57 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 		return fmt.Errorf("pulling image %q: %w", cfg.image, err)
 	}
 
-	fmt.Fprintf(stderr, "Starting %s on %s:%d ...\n", cfg.image, localhostAddr, hostPort)
-	id, err := rt.StartContainer(ctx, containerSpec{Image: cfg.image, Mounts: mounts, Ports: ports, Env: cfg.env})
+	spec := containerSpec{Image: cfg.image, Mounts: mounts, Ports: ports, Env: cfg.env}
+
+	// launch starts a fresh container and makes it ready: specialize for env
+	// runtimes, or wait for a container image's own server. It returns the new
+	// container id, tearing the container down if it fails to come up.
+	launch := func() (string, error) {
+		fmt.Fprintf(stderr, "Starting %s on %s:%d ...\n", cfg.image, localhostAddr, hostPort)
+		id, err := rt.StartContainer(ctx, spec)
+		if err != nil {
+			return "", err
+		}
+		ready, wrap := func() error { return waitForServer(ctx, hostPort) }, func(e error) error { return e }
+		if cfg.specialize {
+			ready = func() error { return specialize(ctx, cfg, hostPort) }
+			wrap = func(e error) error { return fmt.Errorf("specializing function: %w", e) }
+		}
+		if err := ready(); err != nil {
+			dumpContainerLogs(ctx, rt, id, stderr)
+			stopQuietly(ctx, rt, id)
+			return "", wrap(err)
+		}
+		return id, nil
+	}
+
+	id, err := launch()
 	if err != nil {
 		return err
 	}
 	if cfg.keep {
 		fmt.Fprintf(stderr, "Keeping container %s (remove it with: docker rm -f %s)\n", shortID(id), shortID(id))
 	} else {
-		defer stopQuietly(ctx, rt, id)
-	}
-
-	if cfg.specialize {
-		if err := specialize(ctx, cfg, hostPort); err != nil {
-			dumpContainerLogs(ctx, rt, id, stderr)
-			return fmt.Errorf("specializing function: %w", err)
-		}
-	} else if err := waitForServer(ctx, hostPort); err != nil {
-		// The container image is its own server — there is no specialize call to
-		// gate readiness, so probe until it accepts a request before invoking.
-		dumpContainerLogs(ctx, rt, id, stderr)
-		return err
+		// Tear down the current container; --watch replaces id below.
+		defer func() { stopQuietly(ctx, rt, id) }()
 	}
 
 	if cfg.watch {
-		// Hot reload: re-prepare the code (rebuild/recopy, or nothing for a live
-		// directory mount), then re-specialize.
+		// Env runtimes reject a second /v2/specialize on an already-specialized
+		// ("not a generic") container, so a reload replaces the container: it
+		// re-prepares the code, stops the old container (freeing the host port),
+		// and launches a fresh one on the same port.
 		reload := func() error {
 			if err := prepare(); err != nil {
 				return err
 			}
-			return specialize(ctx, cfg, hostPort)
+			stopQuietly(ctx, rt, id)
+			newID, err := launch()
+			if err != nil {
+				return err
+			}
+			id = newID
+			return nil
 		}
 		return serveAndWatch(ctx, cfg, hostPort, reload, stderr)
 	}

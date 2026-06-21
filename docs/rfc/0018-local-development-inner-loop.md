@@ -221,7 +221,8 @@ The Docker e2e (`run_local_docker_test.go`) is gated behind `FISSION_RUN_DOCKER_
 Phases 2, 3, 4 (the local bridges), and 5 followed, all behind the generalized `containerSpec` (multiple bind mounts + published ports):
 
 - **Phase 2 — env bridges + hot reload.**
-  `-e KEY=VALUE` (repeatable) and `--env-from <file>` feed the container's env; `--watch` (fsnotify on the source's parent dir, debounced) re-runs `materialize` + `specialize` on each save without restarting the container, serving until Ctrl-C.
+  `-e KEY=VALUE` (repeatable) and `--env-from <file>` feed the container's env; `--watch` (fsnotify on the source's parent dir, debounced) re-prepares the code and **restarts** the container on each save, serving until Ctrl-C.
+  The restart is required: published env runtimes reject a second `/v2/specialize` on an already-specialized container (the node env answers `Invalid argument - Not a generic container`), so the reload stops the container, frees the host port, and launches a fresh one on the same port, then re-specializes.
   `--watch` is env-executors-only (container functions carry their own prebuilt image).
 - **Phase 3 — builder leg.**
   `--build` runs the env's builder image (`run_builder.go`), reproducing buildermgr's contract — stage source under `/packages`, POST `{srcPkgFilename, command}` to `:8001`, collect the artifact — and lays the result at the single deploy target so the runtime specializes it.
@@ -279,8 +280,7 @@ Gated Docker e2e tests cover the env, container-executor, and builder legs end-t
 
 ## Open questions / risks
 
-- Do all published v2 env runtimes accept a **second** `/v2/specialize` on the same process (restart-free hot reload), or must some restart?
-  Needs per-env probing; the design degrades gracefully to restart.
+- ~~Do all published v2 env runtimes accept a **second** `/v2/specialize` on the same process (restart-free hot reload), or must some restart?~~ **Resolved:** they do not — the node env rejects it with `Not a generic container`, so `--watch` always restarts the container (stop → fresh start on the same host port → re-specialize) rather than re-specializing in place.
 - Single-file vs directory `FilePath` expectations differ across env images — confirm the per-env layout against what the in-cluster fetcher writes.
 - Bind-mount UID/permission mismatches on distroless/non-root images and macOS Docker Desktop file sharing — may need mode tuning or copying into a container volume for `--watch`.
 - Docker prerequisite excludes some users — mitigated by `--remote` (phase 4) and `--image` cluster-less mode.
