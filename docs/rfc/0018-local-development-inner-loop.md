@@ -189,6 +189,7 @@ The builder leg was validated against the real builder images across languages:
 - `python-fastapi/sourcepkg` (`python-fastapi-builder`, `pip install pyyaml`) → returns its YAML output.
 - `go/hello-world` (`go-builder-1.26`, `go build -buildmode=plugin`) → the env loads the plugin and returns `Hello, world!`.
 - `java/hello-world` (`jvm-builder`, Maven → jar) → the env loads the jar (`io.fission.HelloWorld`) and returns `Hello World!`.
+- `rust/project-example` (`rust-builder`, `cargo build`) → the compiled binary serves on `FISSION_RUNTIME_PORT` behind the env's supervisor; a `POST {"lang":"rust"}` echoes `{"echo":{"lang":"rust"}}`, confirming the supervisor/proxy env model works through the same flow with no special-casing.
 
 Each local build runs in a fresh builder container, so dependency caches (e.g. Maven's `~/.m2`) do not persist between runs the way the in-cluster builder pool's do — builds are colder locally, but otherwise identical.
 
