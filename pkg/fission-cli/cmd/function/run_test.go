@@ -5,8 +5,10 @@
 package function
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -114,6 +116,8 @@ func TestShortID(t *testing.T) {
 type fakeRuntime struct {
 	echo string // body returned on invoke
 
+	logContent []byte // stdcopy-framed stream returned by Logs
+
 	mu             sync.Mutex // guards fields written by the server goroutine
 	srv            *http.Server
 	pulled         []string
@@ -174,6 +178,10 @@ func (f *fakeRuntime) StartContainer(ctx context.Context, spec containerSpec) (s
 	f.srv = &http.Server{Handler: mux}
 	go func() { _ = f.srv.Serve(ln) }()
 	return "fakecontainerid00000", nil
+}
+
+func (f *fakeRuntime) Logs(ctx context.Context, id string) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(f.logContent)), nil
 }
 
 func (f *fakeRuntime) Stop(ctx context.Context, id string) error {
@@ -294,6 +302,66 @@ func TestWriteBindingDirRejectsTraversalKey(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dir, "token"))
 	require.NoError(t, err)
 	assert.Equal(t, "v", string(got))
+}
+
+func TestIsZipArchive(t *testing.T) {
+	assert.True(t, isZipArchive("pkg.zip"))
+	assert.True(t, isZipArchive("/a/b/PKG.ZIP"))
+	assert.False(t, isZipArchive("hello.py"))
+	assert.False(t, isZipArchive("dir"))
+}
+
+func TestRunLocalExtractsZipDeploy(t *testing.T) {
+	// A zip package (the documented Fission multi-file workflow) is extracted and
+	// the extracted directory — not the zip file — is mounted as the deployarchive.
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "pkg.zip")
+	zf, err := os.Create(zipPath)
+	require.NoError(t, err)
+	zw := zip.NewWriter(zf)
+	w, err := zw.Create("main.py")
+	require.NoError(t, err)
+	_, err = w.Write([]byte("def main(): pass"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	require.NoError(t, zf.Close())
+
+	f := &fakeRuntime{echo: "ok"}
+	cfg := runConfig{
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		entrypoint:    "main.main",
+		codePath:      zipPath,
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runLocal(t.Context(), f, cfg, &stdout, &stderr))
+
+	require.GreaterOrEqual(t, len(f.lastSpec.Mounts), 1)
+	assert.Equal(t, "/userfunc/deployarchive", f.lastSpec.Mounts[0].ContainerDir)
+	assert.NotEqual(t, zipPath, f.lastSpec.Mounts[0].HostDir, "the extracted dir, not the zip, must be mounted")
+	assert.Contains(t, f.lastSpec.Mounts[0].HostDir, "fission-run-zip-")
+}
+
+func TestDumpContainerLogsDemuxes(t *testing.T) {
+	f := &fakeRuntime{logContent: stdoutFrame("ModuleNotFoundError: No module named 'x'\n")}
+	var buf bytes.Buffer
+	dumpContainerLogs(t.Context(), f, "id", &buf)
+	assert.Contains(t, buf.String(), "--- container logs ---")
+	assert.Contains(t, buf.String(), "ModuleNotFoundError: No module named 'x'")
+}
+
+// stdoutFrame wraps payload as a single stdcopy stdout frame (8-byte header:
+// stream type + 4-byte big-endian length).
+func stdoutFrame(payload string) []byte {
+	hdr := make([]byte, 8)
+	hdr[0] = 1 // stdout
+	binary.BigEndian.PutUint32(hdr[4:], uint32(len(payload)))
+	return append(hdr, []byte(payload)...)
 }
 
 func TestParseEnvFile(t *testing.T) {

@@ -5,8 +5,10 @@
 package function
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/netip"
 	"path/filepath"
 	"strconv"
@@ -15,6 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -63,6 +66,8 @@ type localRuntime interface {
 	PullImage(ctx context.Context, image string) error
 	// StartContainer creates and starts the env runtime container and returns its id.
 	StartContainer(ctx context.Context, spec containerSpec) (string, error)
+	// Logs returns the container's recent (multiplexed) log stream.
+	Logs(ctx context.Context, id string) (io.ReadCloser, error)
 	// Stop stops and removes the container.
 	Stop(ctx context.Context, id string) error
 	// Close releases the engine client.
@@ -214,6 +219,10 @@ func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) 
 	return created.ID, nil
 }
 
+func (d *dockerRuntime) Logs(ctx context.Context, id string) (io.ReadCloser, error) {
+	return d.cli.ContainerLogs(ctx, id, client.ContainerLogsOptions{ShowStdout: true, ShowStderr: true, Tail: "40"})
+}
+
 func (d *dockerRuntime) Stop(ctx context.Context, id string) error {
 	if _, err := d.cli.ContainerStop(ctx, id, client.ContainerStopOptions{}); err != nil {
 		d.logger.V(1).Info("container stop failed", "id", id, "error", err.Error())
@@ -224,4 +233,28 @@ func (d *dockerRuntime) Stop(ctx context.Context, id string) error {
 
 func (d *dockerRuntime) Close() error {
 	return d.cli.Close()
+}
+
+// dumpContainerLogs best-effort writes the container's recent logs to w so a
+// specialize/startup failure surfaces the env's actual error (e.g. an import
+// traceback) instead of only the HTTP status. The stream is multiplexed
+// stdout/stderr, demuxed via stdcopy. A short settle lets the env flush the
+// error it logged around the failing response before we read.
+func dumpContainerLogs(ctx context.Context, rt localRuntime, id string, w io.Writer) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(300 * time.Millisecond):
+	}
+	logs, err := rt.Logs(context.WithoutCancel(ctx), id)
+	if err != nil {
+		return
+	}
+	defer logs.Close()
+	var buf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&buf, &buf, logs); err != nil || buf.Len() == 0 {
+		return
+	}
+	fmt.Fprintln(w, "--- container logs ---")
+	_, _ = io.Copy(w, &buf)
+	fmt.Fprintln(w, "--- end container logs ---")
 }

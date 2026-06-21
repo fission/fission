@@ -197,6 +197,14 @@ func (opts *RunSubCommand) resolveEnvRun(input cli.Input, namespace string, cfg 
 	if codePath == "" {
 		return fmt.Errorf("need --%v (a single source file) or --%v (a pre-built directory) to run", flagkey.PkgCode, flagkey.PkgDeployArchive)
 	}
+	// Resolve to an absolute path: a directory source is bind-mounted, and Docker
+	// treats a non-absolute bind source as a named volume (silently mounting an
+	// empty volume) rather than the host directory.
+	absCodePath, absErr := filepath.Abs(codePath)
+	if absErr != nil {
+		return fmt.Errorf("resolving source path %q: %w", codePath, absErr)
+	}
+	codePath = absCodePath
 
 	image := input.String(flagkey.FnImageName)
 	envVersion := input.Int(flagkey.FnRunEnvVersion)
@@ -373,18 +381,38 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	prepare := func() error { return nil }
 
 	if cfg.specialize {
-		info, err := os.Stat(cfg.codePath)
+		// The Fission convention packages a multi-file function as a zip; extract
+		// it (zip-slip-safe, like the fetcher) and treat the result as a deploy
+		// directory.
+		source := cfg.codePath
+		if cfg.builderImage == "" && isZipArchive(source) {
+			extractDir, err := os.MkdirTemp("", "fission-run-zip-")
+			if err != nil {
+				return fmt.Errorf("creating extract dir: %w", err)
+			}
+			if cfg.keep {
+				fmt.Fprintf(stderr, "Keeping extracted dir %s\n", extractDir)
+			} else {
+				defer os.RemoveAll(extractDir)
+			}
+			if err := utils.Unarchive(ctx, source, extractDir); err != nil {
+				return fmt.Errorf("extracting %q: %w", source, err)
+			}
+			source = extractDir
+		}
+
+		info, err := os.Stat(source)
 		if err != nil {
-			return fmt.Errorf("reading source %q: %w", cfg.codePath, err)
+			return fmt.Errorf("reading source %q: %w", source, err)
 		}
 		deployTarget := filepath.Join(localMountPath, targetFilename(cfg.envVersion))
 		if info.IsDir() && cfg.builderImage == "" {
-			// Pre-built multi-file deploy directory (--deploy): bind-mount it
-			// directly as the deployarchive. It can be large (e.g. node_modules),
-			// so copying would be wasteful — the kubelet image-volume path mounts
-			// a package directory the same way. Edits are live; --watch only needs
-			// to re-specialize.
-			mounts = append([]bindMount{{HostDir: cfg.codePath, ContainerDir: deployTarget}}, mounts...)
+			// Pre-built multi-file deploy directory (--deploy or an extracted zip):
+			// bind-mount it directly as the deployarchive. It can be large (e.g.
+			// node_modules), so copying would be wasteful — the kubelet
+			// image-volume path mounts a package directory the same way. Edits are
+			// live; --watch only needs to re-specialize.
+			mounts = append([]bindMount{{HostDir: source, ContainerDir: deployTarget}}, mounts...)
 		} else {
 			// A single --code file or --build output: lay it out under a temp
 			// userfunc dir, re-prepared on every reload.
@@ -402,7 +430,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 				if cfg.builderImage != "" {
 					return runBuilder(ctx, rt, cfg, target, stderr)
 				}
-				return copyFile(cfg.codePath, target, 0o644)
+				return copyFile(source, target, 0o644)
 			}
 			if err := prepare(); err != nil {
 				return fmt.Errorf("preparing function code: %w", err)
@@ -438,11 +466,13 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 
 	if cfg.specialize {
 		if err := specialize(ctx, cfg, hostPort); err != nil {
+			dumpContainerLogs(ctx, rt, id, stderr)
 			return fmt.Errorf("specializing function: %w", err)
 		}
 	} else if err := waitForServer(ctx, hostPort); err != nil {
 		// The container image is its own server — there is no specialize call to
 		// gate readiness, so probe until it accepts a request before invoking.
+		dumpContainerLogs(ctx, rt, id, stderr)
 		return err
 	}
 
@@ -457,6 +487,9 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 		}
 		return serveAndWatch(ctx, cfg, hostPort, reload, stderr)
 	}
+	// Note: an invoke that returns 4xx/5xx is a normal function response (already
+	// rendered by invokeLocal), not a container failure, so we don't dump logs
+	// there — only on specialize/startup failures above.
 	return invokeLocal(ctx, cfg, hostPort, stdout, stderr)
 }
 
@@ -582,6 +615,11 @@ func invokeLocal(ctx context.Context, cfg runConfig, hostPort int, stdout, stder
 	}
 	_, err = stdout.Write(body)
 	return err
+}
+
+// isZipArchive reports whether path is a .zip (the Fission package archive form).
+func isZipArchive(path string) bool {
+	return strings.EqualFold(filepath.Ext(path), ".zip")
 }
 
 // invokePath normalizes the optional --subpath into the request path.

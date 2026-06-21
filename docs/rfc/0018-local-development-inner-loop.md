@@ -175,6 +175,12 @@ Multi-file apps are supported via `--deploy <dir>` (a pre-built deployment direc
 A single `--code` file (or a `--build` artifact) is still laid out under a temp userfunc dir.
 This was validated end-to-end against the `nextjs-blog-demo` example (`fission/node-env-16`, entrypoint `app`): the blog index, the about page, and the dynamic SSG post routes all render, and `--keep` leaves the server up to `curl` directly.
 
+Validating across more examples (`python-fastapi/multifile`, entrypoint `main.main`) surfaced and fixed three rough edges:
+
+- `--code`/`--deploy` paths are resolved to absolute before mounting — Docker treats a non-absolute bind source as a *named volume*, which silently mounts an empty volume instead of the host directory.
+- A `.zip` source (the documented `--code multifile.zip` packaging) is extracted (zip-slip-safe, via `utils.Unarchive`) and the extracted directory is mounted, so the existing Fission packaging workflow works unchanged.
+- On a specialize/startup failure the env container's recent logs are dumped (demuxed via `stdcopy`), so a load error surfaces the real cause (e.g. a `ModuleNotFoundError` traceback) instead of only `Internal Server Error`.
+
 The command is named **`run-local`** (alias `runl`), not a bare `run` — mirroring the existing `run-container` and avoiding ambiguity for users.
 
 All three executor types are supported, dispatched by `--executor` (default `poolmgr`):
