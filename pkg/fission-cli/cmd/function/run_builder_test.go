@@ -48,6 +48,45 @@ func TestCopyTree(t *testing.T) {
 	})
 }
 
+func TestCopyTreeConfinesSymlinkEscape(t *testing.T) {
+	// A sensitive file outside the source tree.
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.txt")
+	require.NoError(t, os.WriteFile(secret, []byte("TOP SECRET"), 0o600))
+
+	// A source tree containing a symlink that points outside it — the shape a
+	// malicious builder image could plant in its artifact.
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "ok.txt"), []byte("ok"), 0o644))
+	require.NoError(t, os.Symlink(secret, filepath.Join(src, "escape")))
+
+	dst := filepath.Join(t.TempDir(), "out")
+	err := copyTree(src, dst)
+
+	// The escaping symlink is refused by os.Root, so the outside content never
+	// lands in the destination.
+	require.Error(t, err)
+	leaked, rerr := os.ReadFile(filepath.Join(dst, "escape"))
+	if rerr == nil {
+		assert.NotEqual(t, "TOP SECRET", string(leaked), "escaping symlink leaked outside content into the deploy")
+	}
+}
+
+func TestCopyTreeStripsSpecialModeBits(t *testing.T) {
+	src := t.TempDir()
+	bin := filepath.Join(src, "bin")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.Chmod(bin, 0o755|os.ModeSetuid))
+
+	dst := filepath.Join(t.TempDir(), "out")
+	require.NoError(t, copyTree(src, dst))
+
+	fi, err := os.Stat(filepath.Join(dst, "bin"))
+	require.NoError(t, err)
+	assert.Zero(t, fi.Mode()&os.ModeSetuid, "setuid bit must not be carried from a copied artifact")
+	assert.Equal(t, os.FileMode(0o755), fi.Mode().Perm())
+}
+
 func TestPostBuild(t *testing.T) {
 	t.Run("success decodes the build response", func(t *testing.T) {
 		var gotReq buildRequest

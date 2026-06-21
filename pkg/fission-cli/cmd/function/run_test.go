@@ -281,6 +281,21 @@ func TestRunLocalKeepLeavesContainer(t *testing.T) {
 	assert.Contains(t, stderr.String(), "Keeping container")
 }
 
+func TestWriteBindingDirRejectsTraversalKey(t *testing.T) {
+	// A key that is a traversing path must be refused, not written outside the dir
+	// (defense-in-depth over Kubernetes key validation).
+	_, err := writeBindingDir("fission-run-test-", map[string][]byte{"../escape": []byte("x")})
+	require.Error(t, err)
+
+	// A normal key still works.
+	dir, err := writeBindingDir("fission-run-test-", map[string][]byte{"token": []byte("v")})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	got, err := os.ReadFile(filepath.Join(dir, "token"))
+	require.NoError(t, err)
+	assert.Equal(t, "v", string(got))
+}
+
 func TestParseEnvFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".env")

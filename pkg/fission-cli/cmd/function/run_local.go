@@ -26,6 +26,10 @@ import (
 // file is "deployarchive" (v1 is "user"). Container-executor functions bring
 // their own server image and listen on a function-defined port instead.
 const (
+	// localhostAddr is the loopback address run-local publishes container ports on
+	// and dials; everything stays on the developer's machine.
+	localhostAddr = "127.0.0.1"
+
 	localMountPath       = "/userfunc"
 	secretsMountPath     = "/secrets" // /secrets/<ns>/<name>/<key>, matching the fetcher
 	configsMountPath     = "/configs" // /configs/<ns>/<name>/<key>, matching the fetcher
@@ -125,9 +129,9 @@ func buildLoadRequest(meta *metav1.ObjectMeta, entrypoint string, envVersion int
 // specializeURL is the env server's specialize endpoint for the given version.
 func specializeURL(hostPort, envVersion int) string {
 	if envVersion >= 2 {
-		return fmt.Sprintf("http://127.0.0.1:%d/v2/specialize", hostPort)
+		return fmt.Sprintf("http://%s:%d/v2/specialize", localhostAddr, hostPort)
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d/specialize", hostPort)
+	return fmt.Sprintf("http://%s:%d/specialize", localhostAddr, hostPort)
 }
 
 // stopQuietly tears down a container with a bounded, cancellation-immune context
@@ -182,7 +186,7 @@ func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) 
 			return "", fmt.Errorf("invalid container port %d", p.Container)
 		}
 		exposed[port] = struct{}{}
-		bindings[port] = []network.PortBinding{{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: strconv.Itoa(p.Host)}}
+		bindings[port] = []network.PortBinding{{HostIP: netip.MustParseAddr(localhostAddr), HostPort: strconv.Itoa(p.Host)}}
 	}
 
 	binds := make([]string, 0, len(spec.Mounts))

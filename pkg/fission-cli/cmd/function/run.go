@@ -324,13 +324,21 @@ func (opts *RunSubCommand) materializeBindings(input cli.Input, namespace string
 	return mounts, nil
 }
 
-func writeBindingDir(prefix string, data map[string][]byte) (string, error) {
-	dir, err := os.MkdirTemp("", prefix)
+func writeBindingDir(prefix string, data map[string][]byte) (dir string, err error) {
+	dir, err = os.MkdirTemp("", prefix)
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(dir)
+		}
+	}()
 	for k, v := range data {
-		if err := os.WriteFile(filepath.Join(dir, k), v, 0o644); err != nil {
+		// RootWriteFile confines the write to dir through an os.Root, so a key that
+		// is a traversing path (defense-in-depth over Kubernetes key validation)
+		// cannot escape the bind dir.
+		if err = utils.RootWriteFile(dir, k, v, 0o644); err != nil {
 			return "", fmt.Errorf("writing %q into bind dir: %w", k, err)
 		}
 	}
@@ -381,14 +389,14 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	ports := []portMapping{{Host: hostPort, Container: cfg.containerPort}}
 	if cfg.debugPort != 0 {
 		ports = append(ports, portMapping{Host: cfg.debugPort, Container: cfg.debugPort})
-		fmt.Fprintf(stderr, "Debugger port published on 127.0.0.1:%d\n", cfg.debugPort)
+		fmt.Fprintf(stderr, "Debugger port published on %s:%d\n", localhostAddr, cfg.debugPort)
 	}
 
 	if err := rt.PullImage(ctx, cfg.image); err != nil {
 		return fmt.Errorf("pulling image %q: %w", cfg.image, err)
 	}
 
-	fmt.Fprintf(stderr, "Starting %s on 127.0.0.1:%d ...\n", cfg.image, hostPort)
+	fmt.Fprintf(stderr, "Starting %s on %s:%d ...\n", cfg.image, localhostAddr, hostPort)
 	id, err := rt.StartContainer(ctx, containerSpec{Image: cfg.image, Mounts: mounts, Ports: ports, Env: cfg.env})
 	if err != nil {
 		return err
@@ -426,7 +434,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 // re-running reload (rebuild/recopy + re-specialize) whenever the source file
 // changes. File-change bursts are debounced so a save triggers one reload.
 func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func() error, stderr io.Writer) error {
-	url := fmt.Sprintf("http://127.0.0.1:%d", hostPort)
+	url := fmt.Sprintf("http://%s:%d", localhostAddr, hostPort)
 	fmt.Fprintf(stderr, "Serving %s at %s — watching %s for changes (Ctrl-C to stop)\n", cfg.functionMeta.Name, url, cfg.codePath)
 
 	watcher, err := fsnotify.NewWatcher()
@@ -492,7 +500,7 @@ func drainBurst(ctx context.Context, watcher *fsnotify.Watcher, debounce time.Du
 // container-executor functions which have no specialize call to gate readiness.
 func waitForServer(ctx context.Context, hostPort int) error {
 	client := &http.Client{Timeout: 5 * time.Second}
-	url := fmt.Sprintf("http://127.0.0.1:%d/", hostPort)
+	url := fmt.Sprintf("http://%s:%d/", localhostAddr, hostPort)
 	if err := httpx.WaitReady(ctx, client, url, specializeMaxRetries); err != nil {
 		return fmt.Errorf("function server did not become ready: %w", err)
 	}
@@ -521,7 +529,7 @@ func specialize(ctx context.Context, cfg runConfig, hostPort int) error {
 // `function test` uses, attaching the X-Fission-Function-* headers and rendering
 // the response (or RFC-0015 failure attribution) the same way.
 func invokeLocal(ctx context.Context, cfg runConfig, hostPort int, stdout, stderr io.Writer) error {
-	url := fmt.Sprintf("http://127.0.0.1:%d%s", hostPort, invokePath(cfg.subPath))
+	url := fmt.Sprintf("http://%s:%d%s", localhostAddr, hostPort, invokePath(cfg.subPath))
 	headers := append(functionHeaders(cfg.functionMeta), cfg.headers...)
 
 	resp, err := DoHTTPRequest(ctx, url, headers, cfg.method, cfg.body)

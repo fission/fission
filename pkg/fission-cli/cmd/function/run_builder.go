@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -94,7 +95,13 @@ func runBuilder(ctx context.Context, rt localRuntime, cfg runConfig, dstDeploy s
 		return fmt.Errorf("builder returned no artifact")
 	}
 
-	if err := copyTree(filepath.Join(sharedDir, resp.ArtifactFilename), dstDeploy); err != nil {
+	// The artifact name comes from the builder container's response; validate it
+	// stays under sharedDir (no traversal) before reading it.
+	artifactPath, err := utils.RootJoin(sharedDir, resp.ArtifactFilename)
+	if err != nil {
+		return fmt.Errorf("builder returned an unsafe artifact path %q: %w", resp.ArtifactFilename, err)
+	}
+	if err := copyTree(artifactPath, dstDeploy); err != nil {
 		return fmt.Errorf("collecting build artifact: %w", err)
 	}
 	return nil
@@ -106,7 +113,7 @@ func postBuild(ctx context.Context, hostPort int, req buildRequest) (buildRespon
 	if err != nil {
 		return buildResponse{}, fmt.Errorf("encoding build request: %w", err)
 	}
-	url := fmt.Sprintf("http://127.0.0.1:%d/", hostPort)
+	url := fmt.Sprintf("http://%s:%d/", localhostAddr, hostPort)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return buildResponse{}, err
@@ -133,7 +140,10 @@ func postBuild(ctx context.Context, hostPort int, req buildRequest) (buildRespon
 	return resp, nil
 }
 
-// copyTree copies src to dst, where src may be a single file or a directory tree.
+// copyTree copies src to dst, where src may be a single file or a directory
+// tree. For a directory, reads are confined to src through an os.Root so a
+// symlink inside the tree (e.g. one a malicious builder image planted in its
+// artifact) cannot escape to read an arbitrary host file.
 func copyTree(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
@@ -142,15 +152,16 @@ func copyTree(src, dst string) error {
 	if !info.IsDir() {
 		return copyFile(src, dst, info.Mode())
 	}
-	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	root, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
+		target := filepath.Join(dst, p)
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
@@ -158,24 +169,36 @@ func copyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		return copyFile(path, target, fi.Mode())
+		in, err := root.Open(p) // os.Root refuses a symlink that escapes src
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		return writeStream(in, target, fi.Mode())
 	})
 }
 
+// copyFile copies a single file (the user's own --code; trusted) to dst.
 func copyFile(src, dst string, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	return writeStream(in, dst, mode)
+}
+
+// writeStream streams in to dst, reducing mode to its permission bits so no
+// setuid/setgid/sticky bit is carried from a copied source. Build artifacts can
+// be large, so it copies rather than buffering the whole file.
+func writeStream(in io.Reader, dst string, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode.Perm())
 	if err != nil {
 		return err
 	}
-	// Stream the copy: build artifacts (compiled binaries) can be large.
 	_, err = io.Copy(out, in)
 	if cerr := out.Close(); err == nil {
 		err = cerr
