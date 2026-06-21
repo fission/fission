@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -447,6 +448,67 @@ func TestRunLocalWatchReloadsOnChange(t *testing.T) {
 	cancel()
 	require.NoError(t, <-done)
 	assert.True(t, f.stopped)
+}
+
+func TestWatchTriggers(t *testing.T) {
+	tests := []struct {
+		name      string
+		ev        fsnotify.Event
+		matchFile string
+		want      bool
+	}{
+		{"single-file match", fsnotify.Event{Name: "/src/code.py", Op: fsnotify.Write}, "/src/code.py", true},
+		{"single-file other file ignored", fsnotify.Event{Name: "/src/other.py", Op: fsnotify.Write}, "/src/code.py", false},
+		{"single-file chmod-only ignored", fsnotify.Event{Name: "/src/code.py", Op: fsnotify.Chmod}, "/src/code.py", false},
+		{"dir-mode any source file", fsnotify.Event{Name: "/src/main.go", Op: fsnotify.Write}, "", true},
+		{"dir-mode create", fsnotify.Event{Name: "/src/new.go", Op: fsnotify.Create}, "", true},
+		{"dir-mode rename", fsnotify.Event{Name: "/src/main.go", Op: fsnotify.Rename}, "", true},
+		{"dir-mode vim swap ignored", fsnotify.Event{Name: "/src/.main.go.swp", Op: fsnotify.Write}, "", false},
+		{"dir-mode backup ignored", fsnotify.Event{Name: "/src/main.go~", Op: fsnotify.Write}, "", false},
+		{"dir-mode emacs lock ignored", fsnotify.Event{Name: "/src/.#main.go", Op: fsnotify.Create}, "", false},
+		{"dir-mode tmp ignored", fsnotify.Event{Name: "/src/x.tmp", Op: fsnotify.Write}, "", false},
+		{"dir-mode chmod-only ignored", fsnotify.Event{Name: "/src/main.go", Op: fsnotify.Chmod}, "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, watchTriggers(tc.ev, tc.matchFile))
+		})
+	}
+}
+
+func TestRunLocalWatchDirectoryReloadsOnChange(t *testing.T) {
+	// A directory source (a compiled-language project) is watched as a tree:
+	// editing any file inside it triggers a re-specialize.
+	f := &fakeRuntime{echo: "ok"}
+	srcDir := t.TempDir()
+	main := filepath.Join(srcDir, "main.go")
+	require.NoError(t, os.WriteFile(main, []byte("v1"), 0o644))
+
+	cfg := runConfig{
+		image:         "img:test",
+		containerPort: envContainerPort,
+		specialize:    true,
+		envVersion:    2,
+		entrypoint:    "Handler",
+		codePath:      srcDir,
+		functionMeta:  metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		method:        http.MethodGet,
+		watch:         true,
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() { done <- runLocal(ctx, f, cfg, io.Discard, io.Discard) }()
+
+	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond)
+	f.setSpecializePath("")
+	require.NoError(t, os.WriteFile(main, []byte("v2"), 0o644))
+	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond,
+		"editing a file inside the source dir should trigger a re-specialize")
+
+	cancel()
+	require.NoError(t, <-done)
 }
 
 func TestRunLocalDeployDirectoryIsBindMountedDirectly(t *testing.T) {

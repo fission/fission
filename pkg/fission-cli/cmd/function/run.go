@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net/http"
 	"os"
@@ -414,11 +415,13 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 		if err != nil {
 			return "", err
 		}
-		ready, wrap := func() error { return waitForServer(ctx, hostPort) }, func(e error) error { return e }
+		ready, wrap, msg := func() error { return waitForServer(ctx, hostPort) }, func(e error) error { return e }, "Waiting for function server"
 		if cfg.specialize {
 			ready = func() error { return specialize(ctx, cfg, hostPort) }
 			wrap = func(e error) error { return fmt.Errorf("specializing function: %w", e) }
+			msg = "Specializing function"
 		}
+		fmt.Fprintf(stderr, "%s ...\n", msg)
 		if err := ready(); err != nil {
 			dumpContainerLogs(ctx, rt, id, stderr)
 			stopQuietly(ctx, rt, id)
@@ -475,14 +478,24 @@ func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func
 		return fmt.Errorf("creating file watcher: %w", err)
 	}
 	defer watcher.Close()
-	// Watch the parent directory: editors commonly replace (rename) the file on
-	// save, which removes a watch registered on the file itself.
-	if err := watcher.Add(filepath.Dir(cfg.codePath)); err != nil {
-		return fmt.Errorf("watching %s: %w", cfg.codePath, err)
+
+	// A single --code file: watch its parent dir (editors rename on save) and
+	// match the one file. A directory source (--deploy, or a builder source like
+	// a Go/Java project): watch the whole tree so any file inside triggers a
+	// reload, recompiling for builder envs.
+	var matchFile string
+	if info, serr := os.Stat(cfg.codePath); serr == nil && info.IsDir() {
+		if err := addWatchTree(watcher, cfg.codePath); err != nil {
+			return fmt.Errorf("watching %s: %w", cfg.codePath, err)
+		}
+	} else {
+		if err := watcher.Add(filepath.Dir(cfg.codePath)); err != nil {
+			return fmt.Errorf("watching %s: %w", cfg.codePath, err)
+		}
+		matchFile = filepath.Clean(cfg.codePath)
 	}
 
 	const debounce = 250 * time.Millisecond
-	target := filepath.Clean(cfg.codePath)
 	for {
 		select {
 		case <-ctx.Done():
@@ -496,8 +509,14 @@ func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func
 			if !ok {
 				return nil
 			}
-			if filepath.Clean(ev.Name) != target || ev.Op&(fsnotify.Write|fsnotify.Create) == 0 {
+			if !watchTriggers(ev, matchFile) {
 				continue
+			}
+			// Pick up newly-created subdirectories of a directory source.
+			if matchFile == "" && ev.Op&fsnotify.Create != 0 {
+				if fi, serr := os.Stat(ev.Name); serr == nil && fi.IsDir() {
+					_ = addWatchTree(watcher, ev.Name)
+				}
 			}
 			if !drainBurst(ctx, watcher, debounce) {
 				return nil
@@ -506,9 +525,44 @@ func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func
 				fmt.Fprintf(stderr, "reload failed: %v\n", err)
 				continue
 			}
-			fmt.Fprintf(stderr, "reloaded %s\n", cfg.codePath)
+			fmt.Fprintln(stderr, "reloaded")
 		}
 	}
+}
+
+// watchTriggers reports whether a file event should cause a reload: a relevant op
+// on the watched file (single-file mode), or on any non-noise path (dir mode).
+func watchTriggers(ev fsnotify.Event, matchFile string) bool {
+	if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
+		return false
+	}
+	if matchFile != "" {
+		return filepath.Clean(ev.Name) == matchFile
+	}
+	base := filepath.Base(ev.Name)
+	// Editor temp/swap files churn during a save; ignore them.
+	return !strings.HasSuffix(base, "~") && !strings.HasPrefix(base, ".#") &&
+		!strings.HasSuffix(base, ".swp") && !strings.HasSuffix(base, ".tmp")
+}
+
+// addWatchTree watches dir and its subdirectories, skipping VCS / dependency /
+// build-output dirs that would add thousands of irrelevant watches and churn.
+func addWatchTree(watcher *fsnotify.Watcher, dir string) error {
+	return filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		switch d.Name() {
+		case ".git", "node_modules", "vendor", "target", ".next", "__pycache__":
+			if p != dir {
+				return filepath.SkipDir
+			}
+		}
+		return watcher.Add(p)
+	})
 }
 
 // drainBurst waits for the file-event burst to settle: it resets a timer on each

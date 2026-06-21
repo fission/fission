@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/term"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -153,8 +155,9 @@ func stopQuietly(ctx context.Context, rt localRuntime, id string) {
 
 // dockerRuntime is the moby/moby/client-backed localRuntime.
 type dockerRuntime struct {
-	cli    *client.Client
-	logger logr.Logger
+	cli      *client.Client
+	logger   logr.Logger
+	progress io.Writer // pull progress (the developer's terminal)
 }
 
 func newDockerRuntime(logger logr.Logger) (*dockerRuntime, error) {
@@ -162,7 +165,7 @@ func newDockerRuntime(logger logr.Logger) (*dockerRuntime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting to the Docker engine (is it running?): %w", err)
 	}
-	return &dockerRuntime{cli: cli, logger: logger}, nil
+	return &dockerRuntime{cli: cli, logger: logger, progress: os.Stderr}, nil
 }
 
 func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
@@ -176,10 +179,47 @@ func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
 		return nil
 	}
 	defer resp.Close()
-	if err := resp.Wait(ctx); err != nil {
-		d.logger.V(1).Info("image pull stream reported an error; assuming it is present locally", "image", image, "error", err.Error())
-	}
+	streamPullProgress(ctx, resp, image, d.progress)
 	return nil
+}
+
+// streamPullProgress prints a concise, throttled view of an image pull — a live
+// "N/M layers" line on a terminal, a one-line start/end otherwise. A pull/stream
+// error is treated as best-effort (the image may already be present locally).
+func streamPullProgress(ctx context.Context, resp client.ImagePullResponse, image string, w io.Writer) {
+	tty := term.IsTerminal(int(os.Stderr.Fd()))
+	fmt.Fprintf(w, "Pulling %s ...\n", image)
+
+	complete := map[string]bool{}
+	var lastPrint time.Time
+	for msg, err := range resp.JSONMessages(ctx) {
+		if err != nil || msg.Error != nil {
+			return // best-effort: StartContainer is the authority on the image
+		}
+		if msg.ID == "" {
+			continue // non-layer line ("Pulling from ...", digest, etc.)
+		}
+		complete[msg.ID] = complete[msg.ID] || msg.Status == "Pull complete" || msg.Status == "Already exists"
+		if tty && time.Since(lastPrint) > 200*time.Millisecond {
+			fmt.Fprintf(w, "\r  %d/%d layers ", countTrue(complete), len(complete))
+			lastPrint = time.Now()
+		}
+	}
+	if tty {
+		fmt.Fprintf(w, "\r  pulled %d layers          \n", len(complete))
+	} else {
+		fmt.Fprintf(w, "  pulled %d layers\n", len(complete))
+	}
+}
+
+func countTrue(m map[string]bool) int {
+	n := 0
+	for _, v := range m {
+		if v {
+			n++
+		}
+	}
+	return n
 }
 
 func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) (string, error) {
