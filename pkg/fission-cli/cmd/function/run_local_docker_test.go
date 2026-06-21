@@ -117,9 +117,11 @@ func TestRunLocalDockerContainerExecutorE2E(t *testing.T) {
 	assert.Equal(t, "container-local", stdout.String())
 }
 
-// fakeBuilderDockerfile stands in for an env builder image: a server on 8001
-// implementing the build protocol — it copies the staged source
-// (/packages/<srcPkgFilename>) to an artifact dir and returns its name.
+// fakeBuilderDockerfile stands in for an env builder image: like a real builder
+// image, its default CMD does NOT start the server — the server lives at
+// /builder, which run-local invokes as "/builder /packages" (matching
+// buildermgr). The server on 8001 implements the build protocol: it copies the
+// staged source (/packages/<srcPkgFilename>) to an artifact dir and returns it.
 const fakeBuilderDockerfile = `FROM python:3.12-alpine
 RUN printf '%s\n' \
   'import json, os, shutil' \
@@ -133,7 +135,8 @@ RUN printf '%s\n' \
   '        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()' \
   '        self.wfile.write(json.dumps({"artifactFilename": art, "buildLogs": "fake build ok"}).encode())' \
   'HTTPServer(("0.0.0.0", 8001), H).serve_forever()' > /builder.py
-CMD ["python", "/builder.py"]
+RUN printf '%s\n' '#!/bin/sh' 'exec python /builder.py' > /builder && chmod +x /builder
+CMD ["python3"]
 `
 
 func TestRunBuilderDockerE2E(t *testing.T) {

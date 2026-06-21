@@ -26,6 +26,7 @@ import (
 // volume and returns its filename.
 const (
 	builderSharedPath = "/packages"
+	builderBinary     = "/builder" // builder server entrypoint (buildermgr runs "/builder /packages")
 	builderPort       = 8001
 	builderSrcDirName = "src"
 	builderTimeout    = 30 * time.Second
@@ -74,6 +75,9 @@ func runBuilder(ctx context.Context, rt localRuntime, cfg runConfig, dstDeploy s
 		Image:  cfg.builderImage,
 		Mounts: []bindMount{{HostDir: sharedDir, ContainerDir: builderSharedPath}},
 		Ports:  []portMapping{{Host: hostPort, Container: builderPort}},
+		// The builder image's default CMD does not start the builder server;
+		// run it the way buildermgr does ("/builder <sharedPath>").
+		Cmd: []string{builderBinary, builderSharedPath},
 	})
 	if err != nil {
 		return err
@@ -81,6 +85,7 @@ func runBuilder(ctx context.Context, rt localRuntime, cfg runConfig, dstDeploy s
 	defer stopQuietly(ctx, rt, id)
 
 	if err := waitForServer(ctx, hostPort); err != nil {
+		dumpContainerLogs(ctx, rt, id, stderr)
 		return fmt.Errorf("waiting for builder: %w", err)
 	}
 

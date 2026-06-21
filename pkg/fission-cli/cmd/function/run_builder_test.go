@@ -5,6 +5,7 @@
 package function
 
 import (
+	"bytes"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -85,6 +86,25 @@ func TestCopyTreeStripsSpecialModeBits(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, fi.Mode()&os.ModeSetuid, "setuid bit must not be carried from a copied artifact")
 	assert.Equal(t, os.FileMode(0o755), fi.Mode().Perm())
+}
+
+func TestRunBuilderRunsBuilderServerCommand(t *testing.T) {
+	// The builder image's default CMD does not start the server; runBuilder must
+	// run it as "/builder /packages" (like buildermgr) and collect the artifact.
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "user.py"), []byte("x"), 0o644))
+	dst := filepath.Join(t.TempDir(), "deployarchive")
+
+	f := &fakeRuntime{builderArtifact: "src-out"}
+	cfg := runConfig{builderImage: "builder:test", codePath: src, buildCommand: "./build.sh"}
+
+	var stderr bytes.Buffer
+	require.NoError(t, runBuilder(t.Context(), f, cfg, dst, &stderr))
+
+	assert.Equal(t, []string{"/builder", "/packages"}, f.lastSpec.Cmd,
+		"builder must be started with the server command, not the image default CMD")
+	_, err := os.Stat(filepath.Join(dst, "built.txt"))
+	require.NoError(t, err, "the build artifact should be collected to the deploy target")
 }
 
 func TestPostBuild(t *testing.T) {

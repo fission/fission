@@ -116,7 +116,8 @@ func TestShortID(t *testing.T) {
 type fakeRuntime struct {
 	echo string // body returned on invoke
 
-	logContent []byte // stdcopy-framed stream returned by Logs
+	logContent      []byte // stdcopy-framed stream returned by Logs
+	builderArtifact string // when set, "/" serves the builder protocol (POST builds)
 
 	mu             sync.Mutex // guards fields written by the server goroutine
 	srv            *http.Server
@@ -162,6 +163,21 @@ func (f *fakeRuntime) StartContainer(ctx context.Context, spec containerSpec) (s
 	mux.HandleFunc("/v2/specialize", record)
 	mux.HandleFunc("/specialize", record)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Builder protocol: a POST builds (emulate the builder by creating the
+		// artifact dir in the shared mount and returning its name); a GET is the
+		// readiness probe.
+		if f.builderArtifact != "" {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			shared := spec.Mounts[0].HostDir
+			_ = os.MkdirAll(filepath.Join(shared, f.builderArtifact), 0o755)
+			_ = os.WriteFile(filepath.Join(shared, f.builderArtifact, "built.txt"), []byte("ok"), 0o644)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(buildResponse{ArtifactFilename: f.builderArtifact, BuildLogs: "fake build"})
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
 		f.invokeHeaders = r.Header.Clone()

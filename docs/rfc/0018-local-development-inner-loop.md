@@ -180,6 +180,9 @@ Validating across more examples (`python-fastapi/multifile`, entrypoint `main.ma
 - `--code`/`--deploy` paths are resolved to absolute before mounting — Docker treats a non-absolute bind source as a *named volume*, which silently mounts an empty volume instead of the host directory.
 - A `.zip` source (the documented `--code multifile.zip` packaging) is extracted (zip-slip-safe, via `utils.Unarchive`) and the extracted directory is mounted, so the existing Fission packaging workflow works unchanged.
 - On a specialize/startup failure the env container's recent logs are dumped (demuxed via `stdcopy`), so a load error surfaces the real cause (e.g. a `ModuleNotFoundError` traceback) instead of only `Internal Server Error`.
+- The builder leg starts the builder container with `/builder <sharedPath>` (a `containerSpec.Cmd` override), matching buildermgr: a builder image's default CMD is the language interpreter (`python3`), not the builder server, so without the override the server on 8001 never comes up.
+
+The builder leg was then validated against the real `python-fastapi-builder` image (`python-fastapi/sourcepkg`, which `pip install`s a dependency): the build logs stream, the artifact is collected, and the function returns its YAML output.
 
 The command is named **`run-local`** (alias `runl`), not a bare `run` — mirroring the existing `run-container` and avoiding ambiguity for users.
 

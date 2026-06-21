@@ -88,12 +88,15 @@ type portMapping struct {
 
 // containerSpec describes a container `run-local` starts: the image, its bind
 // mounts (userfunc code, secrets, configmaps), the ports published to the host
-// (runtime/invoke port plus optional debug port), and extra env vars.
+// (runtime/invoke port plus optional debug port), extra env vars, and an
+// optional command override (the builder image's default CMD does not start its
+// server — buildermgr runs "/builder <sharedPath>" — so the builder leg sets it).
 type containerSpec struct {
 	Image  string
 	Mounts []bindMount
 	Ports  []portMapping
 	Env    []string
+	Cmd    []string
 }
 
 // loadRequest is the wire shape of the env server's /v2/specialize body. It is
@@ -203,6 +206,7 @@ func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) 
 		Config: &container.Config{
 			Image:        spec.Image,
 			Env:          spec.Env,
+			Cmd:          spec.Cmd,
 			ExposedPorts: exposed,
 		},
 		HostConfig: &container.HostConfig{Binds: binds, PortBindings: bindings},
