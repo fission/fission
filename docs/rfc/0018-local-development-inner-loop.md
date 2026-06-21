@@ -221,8 +221,9 @@ The Docker e2e (`run_local_docker_test.go`) is gated behind `FISSION_RUN_DOCKER_
 Phases 2, 3, 4 (the local bridges), and 5 followed, all behind the generalized `containerSpec` (multiple bind mounts + published ports):
 
 - **Phase 2 — env bridges + hot reload.**
-  `-e KEY=VALUE` (repeatable) and `--env-from <file>` feed the container's env; `--watch` (fsnotify on the source's parent dir, debounced) re-prepares the code and **restarts** the container on each save, serving until Ctrl-C.
+  `-e KEY=VALUE` (repeatable) and `--env-from <file>` feed the container's env; `--watch` (fsnotify, debounced) re-prepares the code and **restarts** the container on each save, serving until Ctrl-C.
   The restart is required: published env runtimes reject a second `/v2/specialize` on an already-specialized container (the node env answers `Invalid argument - Not a generic container`), so the reload stops the container, frees the host port, and launches a fresh one on the same port, then re-specializes.
+  The watch scope adapts to the source: a single `--code` file watches its parent directory (editors rename on save) and matches that one file; a directory source (`--deploy`, or a builder project like a Go/Java app) watches the whole tree so editing any file inside triggers a rebuild+restart+reload — VCS/dependency/build-output dirs (`.git`, `node_modules`, `vendor`, `target`, `.next`, `__pycache__`) are skipped and editor swap/backup files (`.swp`, `~`, `.#`, `.tmp`) are filtered out.
   `--watch` is env-executors-only (container functions carry their own prebuilt image).
 - **Phase 3 — builder leg.**
   `--build` runs the env's builder image (`run_builder.go`), reproducing buildermgr's contract — stage source under `/packages`, POST `{srcPkgFilename, command}` to `:8001`, collect the artifact — and lays the result at the single deploy target so the runtime specializes it.
