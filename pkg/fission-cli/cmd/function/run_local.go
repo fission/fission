@@ -199,6 +199,12 @@ func (d *dockerRuntime) StartContainer(ctx context.Context, spec containerSpec) 
 
 	binds := make([]string, 0, len(spec.Mounts))
 	for _, m := range spec.Mounts {
+		// Docker treats a non-absolute bind source as a named volume (silently
+		// mounting an empty volume) rather than the host directory — enforce
+		// absolute at the boundary so no caller can hit that trap.
+		if !filepath.IsAbs(m.HostDir) {
+			return "", fmt.Errorf("bind mount source %q must be an absolute path", m.HostDir)
+		}
 		binds = append(binds, m.HostDir+":"+m.ContainerDir)
 	}
 

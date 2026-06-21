@@ -379,64 +379,14 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	// prepare lays the function code out for the runtime; it is reused on every
 	// --watch reload (a no-op for a directly-mounted deploy directory).
 	prepare := func() error { return nil }
-
 	if cfg.specialize {
-		// The Fission convention packages a multi-file function as a zip; extract
-		// it (zip-slip-safe, like the fetcher) and treat the result as a deploy
-		// directory.
-		source := cfg.codePath
-		if cfg.builderImage == "" && isZipArchive(source) {
-			extractDir, err := os.MkdirTemp("", "fission-run-zip-")
-			if err != nil {
-				return fmt.Errorf("creating extract dir: %w", err)
-			}
-			if cfg.keep {
-				fmt.Fprintf(stderr, "Keeping extracted dir %s\n", extractDir)
-			} else {
-				defer os.RemoveAll(extractDir)
-			}
-			if err := utils.Unarchive(ctx, source, extractDir); err != nil {
-				return fmt.Errorf("extracting %q: %w", source, err)
-			}
-			source = extractDir
-		}
-
-		info, err := os.Stat(source)
+		srcMounts, p, cleanup, err := prepareEnvSource(ctx, rt, cfg, stderr)
 		if err != nil {
-			return fmt.Errorf("reading source %q: %w", source, err)
+			return err
 		}
-		deployTarget := filepath.Join(localMountPath, targetFilename(cfg.envVersion))
-		if info.IsDir() && cfg.builderImage == "" {
-			// Pre-built multi-file deploy directory (--deploy or an extracted zip):
-			// bind-mount it directly as the deployarchive. It can be large (e.g.
-			// node_modules), so copying would be wasteful — the kubelet
-			// image-volume path mounts a package directory the same way. Edits are
-			// live; --watch only needs to re-specialize.
-			mounts = append([]bindMount{{HostDir: source, ContainerDir: deployTarget}}, mounts...)
-		} else {
-			// A single --code file or --build output: lay it out under a temp
-			// userfunc dir, re-prepared on every reload.
-			userfuncDir, err := os.MkdirTemp("", "fission-run-")
-			if err != nil {
-				return fmt.Errorf("creating local mount dir: %w", err)
-			}
-			if cfg.keep {
-				fmt.Fprintf(stderr, "Keeping mount dir %s\n", userfuncDir)
-			} else {
-				defer os.RemoveAll(userfuncDir)
-			}
-			target := filepath.Join(userfuncDir, targetFilename(cfg.envVersion))
-			prepare = func() error {
-				if cfg.builderImage != "" {
-					return runBuilder(ctx, rt, cfg, target, stderr)
-				}
-				return copyFile(source, target, 0o644)
-			}
-			if err := prepare(); err != nil {
-				return fmt.Errorf("preparing function code: %w", err)
-			}
-			mounts = append([]bindMount{{HostDir: userfuncDir, ContainerDir: localMountPath}}, mounts...)
-		}
+		defer cleanup()
+		prepare = p
+		mounts = append(srcMounts, mounts...)
 	}
 
 	hostPort, err := utils.FindFreePort()
@@ -617,9 +567,105 @@ func invokeLocal(ctx context.Context, cfg runConfig, hostPort int, stdout, stder
 	return err
 }
 
-// isZipArchive reports whether path is a .zip (the Fission package archive form).
-func isZipArchive(path string) bool {
-	return strings.EqualFold(filepath.Ext(path), ".zip")
+// prepareEnvSource lays out the function code for an env runtime: it extracts a
+// zip package, then either bind-mounts a deploy directory directly (large dirs
+// like node_modules are not copied — the kubelet image-volume path mounts a
+// package dir the same way) or copies a single --code file / builder artifact
+// into a temp userfunc dir. It returns the bind mounts to prepend, a prepare
+// closure rerun on every --watch reload (a no-op for a direct directory mount),
+// and a cleanup for any temp dir it created.
+func prepareEnvSource(ctx context.Context, rt localRuntime, cfg runConfig, stderr io.Writer) (mounts []bindMount, prepare func() error, cleanup func(), err error) {
+	// Accumulate temp-dir cleanups; unwind them on an error return, hand them to
+	// the caller on success. mkTemp registers each dir so no error path has to
+	// remember to clean up by hand.
+	var cleanups []func()
+	cleanup = func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
+	mkTemp := func(prefix, label string) (dir string) {
+		var c func()
+		if dir, c, err = tempDir(prefix, label, cfg.keep, stderr); err == nil {
+			cleanups = append(cleanups, c)
+		}
+		return dir
+	}
+	userfuncMount := func(dir string) []bindMount {
+		return []bindMount{{HostDir: dir, ContainerDir: localMountPath}}
+	}
+
+	// Build leg: compile the source into a temp userfunc dir (re-built on reload).
+	// There is no zip-extract or direct directory mount.
+	if cfg.builderImage != "" {
+		dir := mkTemp("fission-run-", "mount dir")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		target := filepath.Join(dir, targetFilename(cfg.envVersion))
+		prepare = func() error { return runBuilder(ctx, rt, cfg, target, stderr) }
+		if err = prepare(); err != nil {
+			return nil, nil, nil, fmt.Errorf("preparing function code: %w", err)
+		}
+		return userfuncMount(dir), prepare, cleanup, nil
+	}
+
+	// Source leg: the Fission convention packages a multi-file function as a zip;
+	// extract it (zip-slip-safe, like the fetcher) and treat it as a directory.
+	source := cfg.codePath
+	if isZip, _ := utils.IsZip(ctx, source); isZip {
+		dir := mkTemp("fission-run-zip-", "extracted dir")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err = utils.Unarchive(ctx, source, dir); err != nil {
+			return nil, nil, nil, fmt.Errorf("extracting %q: %w", source, err)
+		}
+		source = dir
+	}
+
+	var info os.FileInfo
+	if info, err = os.Stat(source); err != nil {
+		return nil, nil, nil, fmt.Errorf("reading source %q: %w", source, err)
+	}
+	// A pre-built deploy directory (--deploy or an extracted zip) is bind-mounted
+	// live; --watch only re-specializes.
+	if info.IsDir() {
+		deployTarget := filepath.Join(localMountPath, targetFilename(cfg.envVersion))
+		return []bindMount{{HostDir: source, ContainerDir: deployTarget}}, func() error { return nil }, cleanup, nil
+	}
+
+	// A single --code file: copy it into a temp userfunc dir, re-copied on reload.
+	dir := mkTemp("fission-run-", "mount dir")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	target := filepath.Join(dir, targetFilename(cfg.envVersion))
+	prepare = func() error { return copyFile(source, target, 0o644) }
+	if err = prepare(); err != nil {
+		return nil, nil, nil, fmt.Errorf("preparing function code: %w", err)
+	}
+	return userfuncMount(dir), prepare, cleanup, nil
+}
+
+// tempDir creates a temp dir and returns a cleanup that removes it — unless keep
+// is set, in which case it prints the path for the developer and the cleanup is
+// a no-op. The cleanup decision thus lives in exactly one place.
+func tempDir(prefix, label string, keep bool, stderr io.Writer) (string, func(), error) {
+	dir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		return "", nil, fmt.Errorf("creating %s: %w", label, err)
+	}
+	if keep {
+		fmt.Fprintf(stderr, "Keeping %s %s\n", label, dir)
+		return dir, func() {}, nil
+	}
+	return dir, func() { _ = os.RemoveAll(dir) }, nil
 }
 
 // invokePath normalizes the optional --subpath into the request path.

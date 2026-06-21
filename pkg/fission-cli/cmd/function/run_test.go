@@ -320,13 +320,6 @@ func TestWriteBindingDirRejectsTraversalKey(t *testing.T) {
 	assert.Equal(t, "v", string(got))
 }
 
-func TestIsZipArchive(t *testing.T) {
-	assert.True(t, isZipArchive("pkg.zip"))
-	assert.True(t, isZipArchive("/a/b/PKG.ZIP"))
-	assert.False(t, isZipArchive("hello.py"))
-	assert.False(t, isZipArchive("dir"))
-}
-
 func TestRunLocalExtractsZipDeploy(t *testing.T) {
 	// A zip package (the documented Fission multi-file workflow) is extracted and
 	// the extracted directory — not the zip file — is mounted as the deployarchive.
