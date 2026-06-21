@@ -29,7 +29,11 @@ const (
 	builderBinary     = "/builder" // builder server entrypoint (buildermgr runs "/builder /packages")
 	builderPort       = 8001
 	builderSrcDirName = "src"
-	builderTimeout    = 30 * time.Second
+	// builderBuildTimeout bounds the synchronous build POST. A real build can take
+	// minutes (Maven downloading its dependency tree on first run, a large Go/Rust
+	// compile), so this is generous; the request is also cancellable via ctx
+	// (Ctrl-C). The in-cluster builder imposes no comparable short cap.
+	builderBuildTimeout = 15 * time.Minute
 )
 
 // buildRequest / buildResponse mirror pkg/builder.PackageBuild{Request,Response}.
@@ -125,7 +129,7 @@ func postBuild(ctx context.Context, hostPort int, req buildRequest) (buildRespon
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: builderTimeout}
+	client := &http.Client{Timeout: builderBuildTimeout}
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		return buildResponse{}, fmt.Errorf("calling builder: %w", err)
