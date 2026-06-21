@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/flag"
 )
 
@@ -151,6 +152,10 @@ func Commands() *cobra.Command {
 			"(--executor, default poolmgr) it runs the environment runtime image (from --env or --image) and " +
 			"replays the specialize contract over --code; for --executor=container it runs the user's own --image " +
 			"server directly. Either way it invokes the function the same way the cluster does.",
+		// Cluster-optional: `--image` runs entirely cluster-less (no kubeconfig
+		// needed); --env / --secret / --configmap require a cluster and error
+		// clearly when one is unavailable.
+		Annotations: map[string]string{cmd.ClusterOptionalAnnotation: "true"},
 	}, Run, flag.FlagSet{
 		Optional: []flag.Flag{
 			flag.FnName, flag.FnExecutorType, flag.PkgCode, flag.FnEnvName, flag.FnImageName,

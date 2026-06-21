@@ -125,6 +125,10 @@ func (opts *RunSubCommand) resolveRunConfig(input cli.Input) (runConfig, error) 
 	if err != nil {
 		return runConfig{}, err
 	}
+	if namespace == "" {
+		// Cluster-less runs have no kubeconfig namespace to fall back to.
+		namespace = metav1.NamespaceDefault
+	}
 
 	method := http.MethodGet
 	if methods := input.StringSlice(flagkey.HtMethod); len(methods) > 0 {
@@ -199,6 +203,9 @@ func (opts *RunSubCommand) resolveEnvRun(input cli.Input, namespace string, cfg 
 	case image != "":
 		// cluster-less: use the image directly with the supplied --env-version.
 	case input.String(flagkey.FnEnvironmentName) != "":
+		if !opts.ClusterAvailable() {
+			return fmt.Errorf("--%v needs a Kubernetes cluster to resolve the environment image; run cluster-less with --%v instead", flagkey.FnEnvironmentName, flagkey.FnImageName)
+		}
 		envName := input.String(flagkey.FnEnvironmentName)
 		env, err = opts.Client().FissionClientSet.CoreV1().Environments(namespace).Get(input.Context(), envName, metav1.GetOptions{})
 		if err != nil {
@@ -284,6 +291,9 @@ func (opts *RunSubCommand) materializeBindings(input cli.Input, namespace string
 	cfgMaps := input.StringSlice(flagkey.FnCfgMap)
 	if len(secrets) == 0 && len(cfgMaps) == 0 {
 		return nil, nil
+	}
+	if !opts.ClusterAvailable() {
+		return nil, fmt.Errorf("--%v/--%v need a Kubernetes cluster to read the referenced objects; omit them to run cluster-less", flagkey.FnSecret, flagkey.FnCfgMap)
 	}
 	// Don't leave decrypted Secret material on disk if a later read fails.
 	defer func() {

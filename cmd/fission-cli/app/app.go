@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -49,21 +48,28 @@ func App(clientOptions cmd.ClientOptions) *cobra.Command {
 		Use:  "fission",
 		Long: usage,
 		//SilenceUsage: true,
-		PersistentPreRunE: wrapper.Wrapper(
-			func(input cli.Input) error {
-				console.Verbosity = input.Int(flagkey.Verbosity)
-				clientOptions.KubeContext = input.String(flagkey.KubeContext)
-				// TODO: use fake rest client for offline spec generation
-				// if input.IsSet(flagkey.ClientOnly) || input.IsSet(flagkey.PreCheckOnly) {
-				// }
-				client, err := cmd.NewClient(clientOptions)
-				if err != nil {
-					return fmt.Errorf("failed to get fission client: %w", err)
+		// Raw cobra hook (not the cli.Input wrapper) so it can read the executed
+		// leaf command's annotations — used to let cluster-optional commands run
+		// without a kubeconfig.
+		PersistentPreRunE: func(c *cobra.Command, _ []string) error {
+			if v, err := c.Flags().GetInt(flagkey.Verbosity); err == nil {
+				console.Verbosity = v
+			}
+			clientOptions.KubeContext, _ = c.Flags().GetString(flagkey.KubeContext)
+			client, err := cmd.NewClient(clientOptions)
+			if err != nil {
+				// Commands marked cluster-optional (e.g. `function run-local
+				// --image`) can run without a kubeconfig; defer the failure to the
+				// cluster-dependent paths that actually need a client.
+				if c.Annotations[cmd.ClusterOptionalAnnotation] == "true" {
+					console.Verbose(2, "no Kubernetes configuration found (%v); continuing — cluster features are unavailable", err)
+					return nil
 				}
-				cmd.SetClientset(*client)
-				return nil
-			},
-		),
+				return fmt.Errorf("failed to get fission client: %w", err)
+			}
+			cmd.SetClientset(*client)
+			return nil
+		},
 	}
 
 	// Workaround fix for not to show help command

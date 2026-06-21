@@ -230,6 +230,7 @@ Gated Docker e2e tests cover the env, container-executor, and builder legs end-t
 
 - Entirely new, additive command — no existing behavior, CRD, server, or Helm surface is touched.
 - Works cluster-less (`--image`) and against existing clusters unchanged.
+  `run-local` is marked cluster-optional (`cmd.ClusterOptionalAnnotation`), so the root `PersistentPreRunE` does not require a kubeconfig for it; `--env`/`--secret`/`--configmap` (which do need a cluster) return a clear error guiding the user to `--image` when none is configured, and every other command keeps its existing hard-fail behavior.
 - Supports **both** the v1 `/specialize` and v2 `/v2/specialize` env contracts and honors `EnvVersion`, so it runs against older published env images.
 - A contract-regression test guards against the local mount layout drifting from what the in-cluster fetcher writes, so local and in-cluster loaders cannot silently diverge.
 

@@ -20,6 +20,13 @@ type (
 	CommandActioner struct{}
 )
 
+// ClusterOptionalAnnotation marks a cobra command that can run without a
+// Kubernetes configuration (e.g. `function run-local --image`, which runs
+// cluster-less). When it is set, the root PersistentPreRunE does not abort if a
+// Fission client cannot be built; the command's own cluster-dependent paths
+// surface a clear error via ClusterAvailable instead.
+const ClusterOptionalAnnotation = "fission.io/cluster-optional"
+
 var (
 	once          = sync.Once{}
 	defaultClient Client
@@ -42,6 +49,14 @@ func ResetClientsetForTest() {
 
 func (c *CommandActioner) Client() Client {
 	return defaultClient
+}
+
+// ClusterAvailable reports whether a Fission client was configured. It is false
+// only for a cluster-optional command (see ClusterOptionalAnnotation) invoked
+// without a usable kubeconfig; cluster-dependent paths should check it and
+// return a clear error rather than dereferencing a nil client.
+func (c *CommandActioner) ClusterAvailable() bool {
+	return defaultClient.FissionClientSet != nil
 }
 
 func (c *CommandActioner) GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
