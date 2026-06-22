@@ -19,7 +19,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.MqtFnName, flag.MqtTopic},
 		Optional: []flag.Flag{flag.MqtName, flag.MqtMQType, flag.MqtRespTopic,
 			flag.MqtErrorTopic, flag.MqtMaxRetries, flag.MqtMsgContentType,
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry, flag.MqtPollingInterval,
+			flag.SpecSave, flag.SpecDry, flag.MqtPollingInterval,
 			flag.MqtCooldownPeriod, flag.MqtMinReplicaCount, flag.MqtMaxReplicaCount, flag.MqtSecret,
 			flag.MqtMetadata, flag.MqtKind},
 	})
@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
 		Optional: []flag.Flag{flag.MqtFnName, flag.MqtTopic, flag.MqtRespTopic, flag.MqtErrorTopic,
-			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.NamespaceTrigger, flag.MqtPollingInterval,
+			flag.MqtMaxRetries, flag.MqtMsgContentType, flag.MqtPollingInterval,
 			flag.MqtCooldownPeriod, flag.MqtMinReplicaCount, flag.MqtMaxReplicaCount, flag.MqtMetadata,
 			flag.MqtSecret, flag.MqtKind},
 	})
@@ -42,7 +42,7 @@ func Commands() *cobra.Command {
 		Short:   "Delete a message queue trigger",
 	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -51,7 +51,7 @@ func Commands() *cobra.Command {
 		Short:   "List message queue triggers",
 		Long:    "List all message queue triggers in a namespace if specified, else, list message queue triggers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{
@@ -65,7 +65,7 @@ func Commands() *cobra.Command {
 		Short: "Wait for a message queue trigger to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.MqtName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, waitCmd)

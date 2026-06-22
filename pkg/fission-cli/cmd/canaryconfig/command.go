@@ -18,7 +18,7 @@ func Commands() *cobra.Command {
 		Short: "Create a canary config",
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName, flag.CanaryTriggerName, flag.CanaryNewFunc, flag.CanaryOldFunc},
-		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceFunction},
+		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
 	})
 
 	getCmd := wrapper.SubCommand(&cobra.Command{
@@ -27,7 +27,7 @@ func Commands() *cobra.Command {
 		Short:   "View parameters in a canary config",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.Output},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -36,7 +36,7 @@ func Commands() *cobra.Command {
 		Short:   "Update parameters of a canary config",
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold, flag.NamespaceCanary},
+		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
@@ -45,7 +45,7 @@ func Commands() *cobra.Command {
 		Short:   "Delete a canary config",
 	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName},
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -54,7 +54,7 @@ func Commands() *cobra.Command {
 		Short:   "List canary configs",
 		Long:    "List all canary configs in a namespace if specified, else, list canary configs across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{
@@ -68,7 +68,7 @@ func Commands() *cobra.Command {
 		Short: "Wait for a canary config to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespaceCanary, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, waitCmd)

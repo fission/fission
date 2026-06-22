@@ -17,8 +17,7 @@ func Commands() *cobra.Command {
 		Short: "Create a time trigger",
 	}, Create, flag.FlagSet{
 		Optional: []flag.Flag{flag.TtName, flag.TtFnName,
-			flag.TtCron, flag.NamespaceFunction,
-			flag.TtMethod, flag.FnSubPath,
+			flag.TtCron, flag.TtMethod, flag.FnSubPath,
 
 			flag.SpecSave, flag.SpecDry,
 		},
@@ -30,10 +29,7 @@ func Commands() *cobra.Command {
 		Short:   "Update a time trigger",
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
-		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.NamespaceTrigger,
-
-			flag.TtMethod, flag.FnSubPath,
-		},
+		Optional: []flag.Flag{flag.TtFnName, flag.TtCron, flag.TtMethod, flag.FnSubPath},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
@@ -42,7 +38,7 @@ func Commands() *cobra.Command {
 		Short:   "Delete a time trigger",
 	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -51,7 +47,7 @@ func Commands() *cobra.Command {
 		Short:   "List time triggers",
 		Long:    "List all time triggers in a namespace if specified, else, list time triggers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
 	})
 
 	showCmd := wrapper.SubCommand(&cobra.Command{
@@ -73,7 +69,7 @@ func Commands() *cobra.Command {
 		Short: "Wait for a time trigger to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.TtName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, showCmd, waitCmd)

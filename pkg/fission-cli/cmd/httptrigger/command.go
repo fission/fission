@@ -21,7 +21,7 @@ func Commands() *cobra.Command {
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
 			flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath, flag.HtRouteAnnotation,
 			flag.HtRouteTLS, flag.HtGateway,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+			flag.HtFnWeight, flag.HtHost, flag.SpecSave, flag.SpecDry,
 			flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
@@ -31,7 +31,7 @@ func Commands() *cobra.Command {
 		Short:   "Get HTTP trigger details",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.Output},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -44,8 +44,7 @@ func Commands() *cobra.Command {
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
 			flag.HtIngressTLS, flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath,
 			flag.HtRouteAnnotation, flag.HtRouteTLS, flag.HtGateway,
-			flag.HtFnWeight, flag.HtHost, flag.NamespaceTrigger,
-			flag.HtPrefix, flag.HtKeepPrefix},
+			flag.HtFnWeight, flag.HtHost, flag.HtPrefix, flag.HtKeepPrefix},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
@@ -53,7 +52,7 @@ func Commands() *cobra.Command {
 		Aliases: []string{},
 		Short:   "Delete an HTTP trigger",
 	}, Delete, flag.FlagSet{
-		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.NamespaceTrigger, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.HtName, flag.HtFnFilter, flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -62,7 +61,7 @@ func Commands() *cobra.Command {
 		Short:   "List HTTP triggers",
 		Long:    "List all HTTP triggers in a namespace if specified, else, list HTTP triggers across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.HtFnFilter, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.HtFnFilter, flag.AllNamespaces, flag.Output},
 	})
 
 	command := &cobra.Command{
@@ -76,7 +75,7 @@ func Commands() *cobra.Command {
 		Short: "Wait for an HTTP trigger to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.HtName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespaceTrigger, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, waitCmd)
