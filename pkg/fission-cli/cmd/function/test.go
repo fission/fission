@@ -182,7 +182,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 // so it degrades cleanly against a server that predates RFC-0015.
 func renderInvocationFailure(out io.Writer, fnName string, statusCode int, component string, body []byte) {
 	if component == "" {
-		fmt.Fprintf(out, "✗ function %q returned %d: %s\n", fnName, statusCode, strings.TrimSpace(string(body)))
+		fail(out, "✗ function %q returned %d: %s", fnName, statusCode, strings.TrimSpace(string(body)))
 		return
 	}
 	var ie ferror.InvocationError
@@ -195,9 +195,9 @@ func renderInvocationFailure(out io.Writer, fnName string, statusCode int, compo
 	if ie.RequestID != "" {
 		line += fmt.Sprintf(", request %s", ie.RequestID)
 	}
-	fmt.Fprintln(out, line)
+	fail(out, "%s", line)
 	if ie.Message != "" {
-		fmt.Fprintf(out, "  detail: %s\n", ie.Message)
+		note(out, "  detail: %s", ie.Message)
 	}
 }
 

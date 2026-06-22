@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/go-logr/logr"
 	"golang.org/x/term"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -187,8 +188,11 @@ func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
 // "N/M layers" line on a terminal, a one-line start/end otherwise. A pull/stream
 // error is treated as best-effort (the image may already be present locally).
 func streamPullProgress(ctx context.Context, resp client.ImagePullResponse, image string, w io.Writer) {
-	tty := term.IsTerminal(int(os.Stderr.Fd()))
-	fmt.Fprintf(w, "Pulling %s ...\n", image)
+	tty := false
+	if f, ok := w.(*os.File); ok {
+		tty = term.IsTerminal(int(f.Fd()))
+	}
+	step(w, "Pulling %s ...", image)
 
 	complete := map[string]bool{}
 	var lastPrint time.Time
@@ -201,14 +205,14 @@ func streamPullProgress(ctx context.Context, resp client.ImagePullResponse, imag
 		}
 		complete[msg.ID] = complete[msg.ID] || msg.Status == "Pull complete" || msg.Status == "Already exists"
 		if tty && time.Since(lastPrint) > 200*time.Millisecond {
-			fmt.Fprintf(w, "\r  %d/%d layers ", countTrue(complete), len(complete))
+			fmt.Fprintf(w, "\r  %s", paint(w, color.FgCyan, fmt.Sprintf("%d/%d layers ", countTrue(complete), len(complete))))
 			lastPrint = time.Now()
 		}
 	}
 	if tty {
-		fmt.Fprintf(w, "\r  pulled %d layers          \n", len(complete))
+		fmt.Fprintf(w, "\r  %s\n", paint(w, color.FgGreen, fmt.Sprintf("pulled %d layers          ", len(complete))))
 	} else {
-		fmt.Fprintf(w, "  pulled %d layers\n", len(complete))
+		step(w, "  pulled %d layers", len(complete))
 	}
 }
 
@@ -304,7 +308,7 @@ func dumpContainerLogs(ctx context.Context, rt localRuntime, id string, w io.Wri
 	if _, err := stdcopy.StdCopy(&buf, &buf, logs); err != nil || buf.Len() == 0 {
 		return
 	}
-	fmt.Fprintln(w, "--- container logs ---")
+	note(w, "--- container logs ---")
 	_, _ = io.Copy(w, &buf)
-	fmt.Fprintln(w, "--- end container logs ---")
+	note(w, "--- end container logs ---")
 }

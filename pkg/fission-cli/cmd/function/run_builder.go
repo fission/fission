@@ -74,7 +74,7 @@ func runBuilder(ctx context.Context, rt localRuntime, cfg runConfig, dstDeploy s
 	if err := rt.PullImage(ctx, cfg.builderImage); err != nil {
 		return fmt.Errorf("pulling builder image %q: %w", cfg.builderImage, err)
 	}
-	fmt.Fprintf(stderr, "Building with %s ...\n", cfg.builderImage)
+	step(stderr, "Building with %s ...", cfg.builderImage)
 	id, err := rt.StartContainer(ctx, containerSpec{
 		Image:  cfg.builderImage,
 		Mounts: []bindMount{{HostDir: sharedDir, ContainerDir: builderSharedPath}},

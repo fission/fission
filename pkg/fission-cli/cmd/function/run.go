@@ -100,7 +100,7 @@ func (opts *RunSubCommand) do(input cli.Input) error {
 	// leaking decrypted Secret material in /tmp.
 	for _, m := range cfg.extraMounts {
 		if cfg.keep {
-			fmt.Fprintf(os.Stderr, "Keeping mount dir %s\n", m.HostDir)
+			note(os.Stderr, "Keeping mount dir %s", m.HostDir)
 		} else {
 			defer os.RemoveAll(m.HostDir)
 		}
@@ -397,7 +397,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	ports := []portMapping{{Host: hostPort, Container: cfg.containerPort}}
 	if cfg.debugPort != 0 {
 		ports = append(ports, portMapping{Host: cfg.debugPort, Container: cfg.debugPort})
-		fmt.Fprintf(stderr, "Debugger port published on %s:%d\n", localhostAddr, cfg.debugPort)
+		note(stderr, "Debugger port published on %s:%d", localhostAddr, cfg.debugPort)
 	}
 
 	if err := rt.PullImage(ctx, cfg.image); err != nil {
@@ -410,7 +410,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 	// runtimes, or wait for a container image's own server. It returns the new
 	// container id, tearing the container down if it fails to come up.
 	launch := func() (string, error) {
-		fmt.Fprintf(stderr, "Starting %s on %s:%d ...\n", cfg.image, localhostAddr, hostPort)
+		step(stderr, "Starting %s on %s:%d ...", cfg.image, localhostAddr, hostPort)
 		id, err := rt.StartContainer(ctx, spec)
 		if err != nil {
 			return "", err
@@ -421,7 +421,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 			wrap = func(e error) error { return fmt.Errorf("specializing function: %w", e) }
 			msg = "Specializing function"
 		}
-		fmt.Fprintf(stderr, "%s ...\n", msg)
+		step(stderr, "%s ...", msg)
 		if err := ready(); err != nil {
 			dumpContainerLogs(ctx, rt, id, stderr)
 			stopQuietly(ctx, rt, id)
@@ -435,7 +435,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 		return err
 	}
 	if cfg.keep {
-		fmt.Fprintf(stderr, "Keeping container %s (remove it with: docker rm -f %s)\n", shortID(id), shortID(id))
+		note(stderr, "Keeping container %s (remove it with: docker rm -f %s)", shortID(id), shortID(id))
 	} else {
 		// Tear down the current container; --watch replaces id below.
 		defer func() { stopQuietly(ctx, rt, id) }()
@@ -471,7 +471,7 @@ func runLocal(ctx context.Context, rt localRuntime, cfg runConfig, stdout, stder
 // changes. File-change bursts are debounced so a save triggers one reload.
 func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func() error, stderr io.Writer) error {
 	url := fmt.Sprintf("http://%s:%d", localhostAddr, hostPort)
-	fmt.Fprintf(stderr, "Serving %s at %s — watching %s for changes (Ctrl-C to stop)\n", cfg.functionMeta.Name, url, cfg.codePath)
+	success(stderr, "Serving %s at %s — watching %s for changes (Ctrl-C to stop)", cfg.functionMeta.Name, url, cfg.codePath)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -504,7 +504,7 @@ func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func
 			if !ok {
 				return nil
 			}
-			fmt.Fprintf(stderr, "watch error: %v\n", werr)
+			fail(stderr, "watch error: %v", werr)
 		case ev, ok := <-watcher.Events:
 			if !ok {
 				return nil
@@ -522,10 +522,10 @@ func serveAndWatch(ctx context.Context, cfg runConfig, hostPort int, reload func
 				return nil
 			}
 			if err := reload(); err != nil {
-				fmt.Fprintf(stderr, "reload failed: %v\n", err)
+				fail(stderr, "reload failed: %v", err)
 				continue
 			}
-			fmt.Fprintln(stderr, "reloaded")
+			success(stderr, "reloaded")
 		}
 	}
 }
@@ -631,7 +631,7 @@ func invokeLocal(ctx context.Context, cfg runConfig, hostPort int, stdout, stder
 	}
 
 	if reqID := resp.Header.Get(correlation.HeaderRequestID); reqID != "" {
-		fmt.Fprintf(stderr, "Request ID: %s\n", reqID)
+		note(stderr, "Request ID: %s", reqID)
 	}
 	if resp.StatusCode >= 400 {
 		renderInvocationFailure(stderr, cfg.functionMeta.Name, resp.StatusCode, resp.Header.Get(correlation.HeaderComponent), body)
@@ -736,7 +736,7 @@ func tempDir(prefix, label string, keep bool, stderr io.Writer) (string, func(),
 		return "", nil, fmt.Errorf("creating %s: %w", label, err)
 	}
 	if keep {
-		fmt.Fprintf(stderr, "Keeping %s %s\n", label, dir)
+		note(stderr, "Keeping %s %s", label, dir)
 		return dir, func() {}, nil
 	}
 	return dir, func() { _ = os.RemoveAll(dir) }, nil
