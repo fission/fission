@@ -227,13 +227,6 @@ func (executor *Executor) ensureCapacityHandler(w http.ResponseWriter, r *http.R
 }
 
 // find funcSvc and update its atime
-// TODO: Deprecated tapService
-func (executor *Executor) tapService(w http.ResponseWriter, r *http.Request) {
-	// only for upgrade compatibility
-	w.WriteHeader(http.StatusOK)
-}
-
-// find funcSvc and update its atime
 func (executor *Executor) tapServices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := otelUtils.LoggerWithTraceID(ctx, executor.logger)
@@ -384,7 +377,6 @@ func (executor *Executor) GetHandler() http.Handler {
 	)
 	m.HandleFunc("/v2/getServiceForFunction", executor.getServiceForFunctionAPI).Methods("POST")
 	m.HandleFunc("/v2/ensureCapacity", executor.ensureCapacityHandler).Methods("POST")
-	m.HandleFunc("/v2/tapService", executor.tapService).Methods("POST") // for backward compatibility
 	m.HandleFunc("/v2/tapServices", executor.tapServices).Methods("POST")
 	m.HandleFunc("/v2/unTapService", executor.unTapService).Methods("POST")
 	m.HandleFunc("/v2/debugInfo", executor.dumpDebugInfo).Methods("GET")
