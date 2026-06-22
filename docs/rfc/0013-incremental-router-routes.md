@@ -129,7 +129,9 @@ Cross-trigger snapshot consistency was never client-observable, and the public/i
 
 ## Configuration
 
-- `ROUTER_INCREMENTAL_ROUTES` (default `true` once phase 1 ships) — escape hatch reinstating the legacy full-rebuild loop for one release; the legacy loop is ~80 lines and stays compiled.
+- `ROUTER_INCREMENTAL_ROUTES` — **removed.**
+  This shipped as a default-`true` escape hatch reinstating the legacy full-rebuild loop for one release; the legacy loop has since been deleted and incremental routing is now the only production route-update path.
+  The one-shot `buildMuxes` constructor is retained only as the test/parity builder (and the `fissionClient == nil` test-scaffolding path).
 - `ROUTER_MATCHER=gorilla|shadow|native` (phase 3 only), default `gorilla`.
 
 ## Backward compatibility
@@ -165,7 +167,8 @@ Differential fuzz; shadow burn-in; promotion per the gate.
   - trigger create/delete: phase-1 rebuild ≤ today's baseline CPU; phase-3 apply ≤ 100µs;
   - p99 proxy latency within ±5% of idle during 100 updates/s churn;
   - router RSS flat over a 10-minute churn soak (no old-handler leak).
-- CI: one leg pins `ROUTER_INCREMENTAL_ROUTES=false` through the deprecation release; phase 3 adds a `ROUTER_MATCHER=shadow` burn-in leg with mismatch==0 as the machine-checked promotion step.
+- CI: while the escape hatch existed, one leg pinned `ROUTER_INCREMENTAL_ROUTES=false` through the deprecation release; that pin was dropped when the legacy loop was removed.
+  Phase 3 adds a `ROUTER_MATCHER=shadow` burn-in leg with mismatch==0 as the machine-checked promotion step.
 
 ## Alternatives considered
 
@@ -188,7 +191,8 @@ The evidence is recorded in the PR; the gate stays armed — a user report or a 
 
 Measured on the shipped implementation (Apple M2, fake-cache resolver):
 
-- One canary weight tick with 10k routes in the table: **~15µs / 9.6KB / 97 allocs** through the incremental path, vs **~208ms / 303MB / 3.54M allocs** for the same event through the legacy full rebuild (BenchmarkIncrementalWeightTick vs BenchmarkBuildMuxes/triggers=10000) — the steady-churn class is O(1), roughly four orders of magnitude off the rebuild cost.
+- One canary weight tick with 10k routes in the table: **~15µs / 9.6KB / 97 allocs** through the incremental path, vs **~208ms / 303MB / 3.54M allocs** for the same event through the (now-removed) legacy full rebuild — the steady-churn class is O(1), roughly four orders of magnitude off the rebuild cost.
+  `BenchmarkIncrementalWeightTick` still asserts the O(1) handler swap; `BenchmarkBuildMuxes` was removed with the legacy loop.
 - The no-route-flap test drives sustained requests through a stable route while handler swaps and unrelated materializations churn concurrently under `-race`: zero non-200s.
 
 Differences from the proposal, decided during implementation and review:
@@ -201,7 +205,9 @@ Differences from the proposal, decided during implementation and review:
 - A second registration-level fix fell out of the no-flap race test: gorilla's `Route.Methods()` uppercases the slice it is handed **in place**, so the legacy path had been silently mutating informer-owned trigger objects; both paths now clone per registration.
 - `FunctionNotFound` became an explicit `RouteAdmitted=False` reason — previously an unresolvable trigger 404'd while its condition claimed the route was admitted.
 
-The escape hatch (`ROUTER_INCREMENTAL_ROUTES=false`, chart `router.incrementalRoutes`) ships active for this release with the v1.34 CI leg pinned to it (the same leg that pins the RFC-0002 legacy data plane), and is scheduled for removal one release later.
+The escape hatch (`ROUTER_INCREMENTAL_ROUTES=false`, chart `router.incrementalRoutes`) shipped active for one release with the v1.34 CI leg pinned to it (the same leg that pins the RFC-0002 legacy data plane).
+It has since been **removed**: the legacy full-rebuild loop, the env var, and the chart key are gone, and incremental routing is the only production path.
+The one-shot `buildMuxes` constructor remains as the test/parity builder.
 
 ## Risks (top 3, with mitigations)
 
