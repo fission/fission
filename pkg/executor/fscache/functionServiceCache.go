@@ -55,6 +55,12 @@ type (
 		// _touchByAddress Atime write against the ListOld/ListOldForPool/Log
 		// scans. The per-key stores (byFunction/byAddress/byFunctionUID and
 		// connFunctionCache) are independently synchronized.
+		//
+		// Boundary note: GetByFunction/GetFuncSvc/GetByFunctionUID/AddFunc
+		// also refresh fsvc.Atime, but WITHOUT this lock. That race predates
+		// the actor's removal (the actor never covered those paths either) and
+		// is intentionally left out of scope here; a new Atime writer that
+		// needs to be serialized against the scans must take this lock.
 		lock sync.Mutex
 	}
 )
@@ -311,7 +317,7 @@ func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) 
 	defer fsc.lock.Unlock()
 
 	fscs := fsc.byFunctionUID.Copy()
-	funcObjects := make([]*FuncSvc, 0)
+	funcObjects := make([]*FuncSvc, 0, len(fscs))
 	for _, m := range fscs {
 		fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
 		if err != nil {
@@ -335,7 +341,7 @@ func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, 
 	defer fsc.lock.Unlock()
 
 	fscs := fsc.connFunctionCache.ListAvailableValue()
-	funcObjects := make([]*FuncSvc, 0)
+	funcObjects := make([]*FuncSvc, 0, len(fscs))
 	for _, fsvc := range fscs {
 		if time.Since(fsvc.Atime) > age {
 			funcObjects = append(funcObjects, fsvc)

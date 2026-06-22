@@ -216,7 +216,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 	defer c.lock.Unlock()
 
 	vals := make([]*FuncSvc, 0)
-	latestFuncGen := make(map[types.UID]int64)
+	latestFuncGen := make(map[types.UID]int64, len(c.cache))
 
 	// find the latest generation of each function
 	for key := range c.cache {
@@ -283,6 +283,11 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, a
 				break
 			}
 			if popped.ctx.Err() == nil {
+				// Safe to send under c.lock: the matching receiver in
+				// GetSvcValue only waits on this channel AFTER its getSvcValue
+				// helper released the lock, so this unbuffered send cannot
+				// deadlock against it. Do not move it out of the lock — that
+				// reintroduces the race the serialization prevents.
 				popped.svcChannel <- value
 				c.cache[function].svcs[address].activeRequests++
 				i++
