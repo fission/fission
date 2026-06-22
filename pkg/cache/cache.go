@@ -6,20 +6,10 @@ package cache
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	ferror "github.com/fission/fission/pkg/error"
-)
-
-type requestType int
-
-const (
-	GET requestType = iota
-	SET
-	DELETE
-	EXPIRE
-	COPY
-	UPSERT
 )
 
 type (
@@ -29,24 +19,11 @@ type (
 		value V
 	}
 	Cache[K comparable, V any] struct {
+		lock                sync.RWMutex
 		cache               map[K]*Value[V]
 		ctimeExpiry         time.Duration
 		atimeExpiry         time.Duration
 		expiryCheckInterval time.Duration
-		requestChannel      chan *request[K, V]
-	}
-
-	request[K comparable, V any] struct {
-		requestType
-		key             K
-		value           V
-		responseChannel chan *response[K, V]
-	}
-	response[K comparable, V any] struct {
-		error
-		existingValue V
-		mapCopy       map[K]V
-		value         V
 	}
 )
 
@@ -80,148 +57,93 @@ func MakeCache[K comparable, V any](ctimeExpiry, atimeExpiry time.Duration) *Cac
 		ctimeExpiry:         ctimeExpiry,
 		atimeExpiry:         atimeExpiry,
 		expiryCheckInterval: interval,
-		requestChannel:      make(chan *request[K, V]),
 	}
-	go c.service()
 	if ctimeExpiry != time.Duration(0) || atimeExpiry != time.Duration(0) {
 		go c.expiryService()
 	}
 	return c
 }
 
-func (c *Cache[K, V]) service() {
-	for {
-		req := <-c.requestChannel
-		resp := &response[K, V]{}
-		switch req.requestType {
-		case GET:
-			val, ok := c.cache[req.key]
-			if !ok {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("key '%v' not found", req.key))
-			} else if c.IsOld(val) {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("key '%v' expired (atime %v)", req.key, val.atime))
-				delete(c.cache, req.key)
-			} else {
-				// update atime
-				val.atime = time.Now()
-				c.cache[req.key] = val
-				resp.value = val.value
-			}
-			req.responseChannel <- resp
-		case SET:
-			now := time.Now()
-			if _, ok := c.cache[req.key]; ok {
-				val := c.cache[req.key]
-				val.atime = time.Now()
-				resp.existingValue = val.value
-				resp.error = ferror.MakeError(ferror.ErrorNameExists, "key already exists")
-			} else {
-				c.cache[req.key] = &Value[V]{
-					value: req.value,
-					ctime: now,
-					atime: now,
-				}
-			}
-			req.responseChannel <- resp
-		case DELETE:
-			delete(c.cache, req.key)
-			req.responseChannel <- resp
-		case EXPIRE:
-			for k, v := range c.cache {
-				if c.IsOld(v) {
-					delete(c.cache, k)
-				}
-			}
-			// no response
-		case COPY:
-			resp.mapCopy = make(map[K]V)
-			for k, v := range c.cache {
-				resp.mapCopy[k] = v.value
-			}
-			req.responseChannel <- resp
-		case UPSERT:
-			now := time.Now()
-			if val, ok := c.cache[req.key]; ok {
-				resp.existingValue = val.value
-			}
-			c.cache[req.key] = &Value[V]{
-				value: req.value,
-				ctime: now,
-				atime: now,
-			}
-			req.responseChannel <- resp
-		default:
-			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
-				fmt.Sprintf("invalid request type: %v", req.requestType))
-			req.responseChannel <- resp
-		}
-	}
-}
-
 func (c *Cache[K, V]) Get(key K) (V, error) {
-	respChannel := make(chan *response[K, V])
-	c.requestChannel <- &request[K, V]{
-		requestType:     GET,
-		key:             key,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	var zero V
+	val, ok := c.cache[key]
+	if !ok {
+		return zero, ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("key '%v' not found", key))
 	}
-	resp := <-respChannel
-	return resp.value, resp.error
+	if c.IsOld(val) {
+		delete(c.cache, key)
+		return zero, ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("key '%v' expired (atime %v)", key, val.atime))
+	}
+	// update atime
+	val.atime = time.Now()
+	return val.value, nil
 }
 
 // if key exists in the cache, the new value is NOT set; instead an
 // error and the old value are returned
 func (c *Cache[K, V]) Set(key K, value V) (V, error) {
-	respChannel := make(chan *response[K, V])
-	c.requestChannel <- &request[K, V]{
-		requestType:     SET,
-		key:             key,
-		value:           value,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	now := time.Now()
+	if val, ok := c.cache[key]; ok {
+		val.atime = now
+		return val.value, ferror.MakeError(ferror.ErrorNameExists, "key already exists")
 	}
-	resp := <-respChannel
-	return resp.existingValue, resp.error
+	c.cache[key] = &Value[V]{
+		value: value,
+		ctime: now,
+		atime: now,
+	}
+	var zero V
+	return zero, nil
 }
 
 func (c *Cache[K, V]) Upsert(key K, value V) {
-	respChannel := make(chan *response[K, V])
-	c.requestChannel <- &request[K, V]{
-		requestType:     UPSERT,
-		key:             key,
-		value:           value,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	now := time.Now()
+	c.cache[key] = &Value[V]{
+		value: value,
+		ctime: now,
+		atime: now,
 	}
-	<-respChannel
 }
 
 func (c *Cache[K, V]) Delete(key K) {
-	respChannel := make(chan *response[K, V])
-	c.requestChannel <- &request[K, V]{
-		requestType:     DELETE,
-		key:             key,
-		responseChannel: respChannel,
-	}
-	<-respChannel
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	delete(c.cache, key)
 }
 
 func (c *Cache[K, V]) Copy() map[K]V {
-	respChannel := make(chan *response[K, V])
-	c.requestChannel <- &request[K, V]{
-		requestType:     COPY,
-		responseChannel: respChannel,
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	mapCopy := make(map[K]V, len(c.cache))
+	for k, v := range c.cache {
+		mapCopy[k] = v.value
 	}
-	resp := <-respChannel
-	return resp.mapCopy
+	return mapCopy
 }
 
 func (c *Cache[K, V]) expiryService() {
 	ticker := time.NewTicker(c.expiryCheckInterval)
 	defer ticker.Stop()
 	for range ticker.C {
-		c.requestChannel <- &request[K, V]{
-			requestType: EXPIRE,
+		c.lock.Lock()
+		for k, v := range c.cache {
+			if c.IsOld(v) {
+				delete(c.cache, k)
+			}
 		}
+		c.lock.Unlock()
 	}
 }
