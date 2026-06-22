@@ -17,7 +17,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/go-logr/logr"
-	"golang.org/x/term"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -188,10 +187,10 @@ func (d *dockerRuntime) PullImage(ctx context.Context, image string) error {
 // "N/M layers" line on a terminal, a one-line start/end otherwise. A pull/stream
 // error is treated as best-effort (the image may already be present locally).
 func streamPullProgress(ctx context.Context, resp client.ImagePullResponse, image string, w io.Writer) {
-	tty := false
-	if f, ok := w.(*os.File); ok {
-		tty = term.IsTerminal(int(f.Fd()))
-	}
+	// The live "\r N/M layers" redraw only makes sense on a color-capable
+	// terminal, which is exactly what colorEnabled answers (and it honors
+	// NO_COLOR, so NO_COLOR=1 falls back to the plain one-line form).
+	live := colorEnabled(w)
 	step(w, "Pulling %s ...", image)
 
 	complete := map[string]bool{}
@@ -204,12 +203,12 @@ func streamPullProgress(ctx context.Context, resp client.ImagePullResponse, imag
 			continue // non-layer line ("Pulling from ...", digest, etc.)
 		}
 		complete[msg.ID] = complete[msg.ID] || msg.Status == "Pull complete" || msg.Status == "Already exists"
-		if tty && time.Since(lastPrint) > 200*time.Millisecond {
+		if live && time.Since(lastPrint) > 200*time.Millisecond {
 			fmt.Fprintf(w, "\r  %s", paint(w, color.FgCyan, fmt.Sprintf("%d/%d layers ", countTrue(complete), len(complete))))
 			lastPrint = time.Now()
 		}
 	}
-	if tty {
+	if live {
 		fmt.Fprintf(w, "\r  %s\n", paint(w, color.FgGreen, fmt.Sprintf("pulled %d layers          ", len(complete))))
 	} else {
 		step(w, "  pulled %d layers", len(complete))
