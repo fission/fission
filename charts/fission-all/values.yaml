@@ -25,7 +25,7 @@ image: fission/fission-bundle
 ## It is also used by the chart to identify version of the few more images apart from fission-bundle.
 ## Keep it empty for using latest tag.
 ##
-imageTag: v1.26.0
+imageTag: v1.27.0
 
 ## pullPolicy represents the pull policy to use for images in the chart.
 ##
@@ -182,7 +182,7 @@ fetcher:
   ## image represents the image of the fetcher component.
   image: fission/fetcher
   ## imageTag represents the tag of the image of the fetcher component.
-  imageTag: v1.26.0
+  imageTag: v1.27.0
   ## allowInsecureRegistries is a comma-separated list of registry hosts
   ## (host[:port]) permitted to serve OCI package images over plain HTTP.
   ## Default empty: registries must serve TLS (localhost and private RFC-1918
@@ -1038,7 +1038,7 @@ preUpgradeChecks:
   image: fission/pre-upgrade-checks
   ## pre-install/pre-upgrade checks image version
   ##
-  imageTag: v1.26.0
+  imageTag: v1.27.0
 
 ## Fission post-install/post-upgrade reporting live in this image
 ##
