@@ -30,9 +30,9 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-// newIncrementalTS builds an HTTPTriggerSet in incremental mode, backed by a
-// fake cache client holding objs, with both mutable routers wired so
-// materialize() has swap targets.
+// newIncrementalTS builds an HTTPTriggerSet driving the incremental route path,
+// backed by a fake cache client holding objs, with both mutable routers wired
+// so materialize() has swap targets.
 func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, client.Client) {
 	t.Helper()
 	logger := loggerfactory.GetLogger()
@@ -44,7 +44,7 @@ func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, cli
 		syncDebouncer:              debounce.New(time.Millisecond),
 		resolver:                   makeFunctionReferenceResolver(logger, cl),
 	}
-	ts.enableIncrementalRoutes()
+	ts.initIncrementalRoutes()
 	ts.mutableRouter = newMutableRouter(logger, httpmux.New().Handler())
 	ts.internalMutableRouter = newMutableRouter(logger, httpmux.New().Handler())
 	return ts, cl
@@ -318,12 +318,13 @@ func TestIncrementalResyncHealsDrift(t *testing.T) {
 	assert.True(t, muxMatches(public, http.MethodGet, "/two"), "resync must add the missed create")
 }
 
-// TestIncrementalLegacyParity builds the same world through BOTH paths —
-// the legacy buildMuxes and the incremental table + materialize — and
+// TestBuildMuxesIncrementalParity builds the same world through BOTH builders —
+// the one-shot buildMuxes and the incremental table + materialize — and
 // asserts a corpus of requests is dispatched identically on both listeners.
-// This is the contract that lets the escape hatch be safe in either
-// direction.
-func TestIncrementalLegacyParity(t *testing.T) {
+// This is the contract that guarantees the one-shot builder (used by the
+// shape/security tests and the test-scaffolding path) and the production
+// incremental materializer register identical routes.
+func TestBuildMuxesIncrementalParity(t *testing.T) {
 	prefix := "/api"
 	slashPrefix := "/files/"
 	functions := []fv1.Function{
@@ -374,9 +375,9 @@ func TestIncrementalLegacyParity(t *testing.T) {
 		*incrTrigger("var", "default", 1, "/sessions/{id}", "fn"),
 	}
 
-	// Legacy path.
-	legacyTS := newShapeTS(t, functions, triggers)
-	legacyPublic, legacyInternal, err := legacyTS.buildMuxes(t.Context(), nil)
+	// One-shot builder (buildMuxes).
+	oneShotTS := newShapeTS(t, functions, triggers)
+	oneShotPublic, oneShotInternal, err := oneShotTS.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)
 
 	// Incremental path: applies + materialize.
@@ -419,7 +420,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 		return ok
 	}
 	for _, p := range corpus {
-		assert.Equal(t, matchOn(legacyPublic, p), matchOn(incrPublic, p),
+		assert.Equal(t, matchOn(oneShotPublic, p), matchOn(incrPublic, p),
 			"public dispatch parity for %s %s host=%q", p.method, p.path, p.host)
 	}
 
@@ -433,7 +434,7 @@ func TestIncrementalLegacyParity(t *testing.T) {
 		{http.MethodGet, "/router-healthz", ""},
 	}
 	for _, p := range internalCorpus {
-		assert.Equal(t, matchOn(legacyInternal, p), matchOn(incrInternal, p),
+		assert.Equal(t, matchOn(oneShotInternal, p), matchOn(incrInternal, p),
 			"internal dispatch parity for %s %s", p.method, p.path)
 	}
 }
