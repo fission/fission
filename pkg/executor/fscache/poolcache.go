@@ -283,11 +283,15 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, a
 				break
 			}
 			if popped.ctx.Err() == nil {
-				// Safe to send under c.lock: the matching receiver in
-				// GetSvcValue only waits on this channel AFTER its getSvcValue
-				// helper released the lock, so this unbuffered send cannot
-				// deadlock against it. Do not move it out of the lock — that
-				// reintroduces the race the serialization prevents.
+				// Safe to send under c.lock: every queued waiter was pushed by
+				// a prior getSvcValue call that has already returned (and so
+				// released the lock) before its caller reaches the receive in
+				// GetSvcValue. No in-flight getSvcValue holds the lock when its
+				// svcWait becomes poppable, so this unbuffered send cannot
+				// deadlock against the receiver. Do not move it out of the
+				// lock — that decouples activeRequests/svcWaiting accounting
+				// from the hand-off and reintroduces the race serialization
+				// prevents.
 				popped.svcChannel <- value
 				c.cache[function].svcs[address].activeRequests++
 				i++

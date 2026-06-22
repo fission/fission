@@ -237,6 +237,35 @@ func TestFunctionServiceCacheConcurrentTouchAndList(t *testing.T) {
 	wg.Wait()
 }
 
+// TestListOldPartialReturnOnDanglingIndex locks the one deliberate behavior
+// change in the actor->lock refactor: a byFunctionUID entry with no matching
+// byFunction entry (a TOCTOU gap under concurrent delete) must make ListOld
+// log and return the entries it did resolve — not hang. The old actor `return`ed
+// out of its service() loop on this byFunction.Get miss, never sent a response,
+// and permanently wedged every later cache request.
+func TestListOldPartialReturnOnDanglingIndex(t *testing.T) {
+	fsc := MakeFunctionServiceCache(loggerfactory.GetLogger())
+	require.NotNil(t, fsc)
+
+	// In-package access lets us forge the dangling secondary-index state the
+	// concurrent-delete race would otherwise produce: present in byFunctionUID,
+	// absent in byFunction.
+	fsc.byFunctionUID.Upsert(types.UID("ghost-uid"), metav1.ObjectMeta{Name: "ghost", UID: types.UID("ghost-uid")})
+
+	done := make(chan struct{})
+	go func() {
+		vals, err := fsc.ListOld(0)
+		require.NoError(t, err)
+		require.Empty(t, vals)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ListOld hung on a dangling byFunctionUID entry (the actor-wedge regression)")
+	}
+}
+
 // TestTouchByAddressPoolCacheFallback locks the RFC-0002 tap-liveness fix at
 // the FunctionServiceCache layer: poolmgr registers specialized pods only in
 // the pool cache (never byAddress), so a byAddress miss MUST fall through to
