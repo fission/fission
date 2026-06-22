@@ -5,6 +5,8 @@
 package fscache
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -179,6 +182,88 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	vals, err = fsc.ListOldForPool(0)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(vals))
+}
+
+// TestFunctionServiceCacheConcurrentTouchAndList validates that the operations
+// the removed actor used to mutually exclude — the TouchByAddress Atime write
+// and the ListOld/ListOldForPool/Log scans — stay race-free under the cache
+// lock. The race detector is the real assertion here.
+func TestFunctionServiceCacheConcurrentTouchAndList(t *testing.T) {
+	fsc := MakeFunctionServiceCache(loggerfactory.GetLogger())
+	require.NotNil(t, fsc)
+
+	now := time.Now()
+	const fns = 6
+	// Populate byFunction/byAddress/byFunctionUID (via Add) and the pool cache.
+	for i := range fns {
+		addr := fmt.Sprintf("10.0.0.%d:8888", i)
+		_, err := fsc.Add(FuncSvc{
+			Function: &metav1.ObjectMeta{Name: fmt.Sprintf("fn-%d", i), UID: types.UID(fmt.Sprintf("uid-%d", i))},
+			Address:  addr,
+			Ctime:    now,
+			Atime:    now,
+		})
+		require.NoError(t, err)
+
+		poolKey := crd.CacheKeyURG{UID: types.UID(fmt.Sprintf("pool-%d", i)), Generation: 1}
+		poolAddr := fmt.Sprintf("10.1.0.%d:8888", i)
+		fsc.connFunctionCache.SetSvcValue(t.Context(), poolKey, poolAddr,
+			&FuncSvc{Function: &metav1.ObjectMeta{Name: fmt.Sprintf("pool-fn-%d", i)}, Address: poolAddr, Atime: now},
+			resource.MustParse("45m"), 10, 0)
+		fsc.connFunctionCache.MarkAvailable(poolKey, poolAddr)
+	}
+
+	const workers = 24
+	const iters = 120
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range iters {
+				switch i % 4 {
+				case 0:
+					_ = fsc.TouchByAddress(fmt.Sprintf("10.0.0.%d:8888", (w+i)%fns))
+				case 1:
+					_, _ = fsc.ListOld(time.Millisecond)
+				case 2:
+					_, _ = fsc.ListOldForPool(time.Millisecond)
+				case 3:
+					fsc.Log()
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+}
+
+// TestListOldPartialReturnOnDanglingIndex locks the one deliberate behavior
+// change in the actor->lock refactor: a byFunctionUID entry with no matching
+// byFunction entry (a TOCTOU gap under concurrent delete) must make ListOld
+// log and return the entries it did resolve — not hang. The old actor `return`ed
+// out of its service() loop on this byFunction.Get miss, never sent a response,
+// and permanently wedged every later cache request.
+func TestListOldPartialReturnOnDanglingIndex(t *testing.T) {
+	fsc := MakeFunctionServiceCache(loggerfactory.GetLogger())
+	require.NotNil(t, fsc)
+
+	// In-package access lets us forge the dangling secondary-index state the
+	// concurrent-delete race would otherwise produce: present in byFunctionUID,
+	// absent in byFunction.
+	fsc.byFunctionUID.Upsert(types.UID("ghost-uid"), metav1.ObjectMeta{Name: "ghost", UID: types.UID("ghost-uid")})
+
+	done := make(chan struct{})
+	go func() {
+		vals, err := fsc.ListOld(0)
+		require.NoError(t, err)
+		require.Empty(t, vals)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ListOld hung on a dangling byFunctionUID entry (the actor-wedge regression)")
+	}
 }
 
 // TestTouchByAddressPoolCacheFallback locks the RFC-0002 tap-liveness fix at

@@ -26,18 +26,6 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 )
 
-type fscRequestType int
-
-// type executorType int
-
-// FunctionServiceCache Request Types
-const (
-	TOUCH fscRequestType = iota
-	LISTOLD
-	LOG
-	LISTOLDPOOL
-)
-
 type (
 	// FuncSvc represents a function service
 	FuncSvc struct {
@@ -62,19 +50,18 @@ type (
 		connFunctionCache *PoolCache // function-key -> funcSvc : map[string]*funcSvc
 		PodToFsvc         sync.Map   // pod-name -> funcSvc: map[string]*FuncSvc
 		WebsocketFsvc     sync.Map   // funcSvc-name -> bool: map[string]bool
-		requestChannel    chan *fscRequest
-	}
-
-	fscRequest struct {
-		requestType     fscRequestType
-		address         string
-		age             time.Duration
-		responseChannel chan *fscResponse
-	}
-
-	fscResponse struct {
-		objects []*FuncSvc
-		error
+		// lock serializes the composite read/modify operations that the
+		// removed single-goroutine actor used to mutually exclude: the
+		// _touchByAddress Atime write against the ListOld/ListOldForPool/Log
+		// scans. The per-key stores (byFunction/byAddress/byFunctionUID and
+		// connFunctionCache) are independently synchronized.
+		//
+		// Boundary note: GetByFunction/GetFuncSvc/GetByFunctionUID/AddFunc
+		// also refresh fsvc.Atime, but WITHOUT this lock. That race predates
+		// the actor's removal (the actor never covered those paths either) and
+		// is intentionally left out of scope here; a new Atime writer that
+		// needs to be serialized against the scans must take this lock.
+		lock sync.Mutex
 	}
 )
 
@@ -96,63 +83,12 @@ func IsNameExistError(err error) bool {
 
 // MakeFunctionServiceCache starts and returns an instance of FunctionServiceCache.
 func MakeFunctionServiceCache(logger logr.Logger) *FunctionServiceCache {
-	fsc := &FunctionServiceCache{
+	return &FunctionServiceCache{
 		logger:            logger.WithName("function_service_cache"),
 		byFunction:        cache.MakeCache[crd.CacheKeyUR, *FuncSvc](0, 0),
 		byAddress:         cache.MakeCache[string, metav1.ObjectMeta](0, 0),
 		byFunctionUID:     cache.MakeCache[types.UID, metav1.ObjectMeta](0, 0),
 		connFunctionCache: NewPoolCache(logger.WithName("conn_function_cache")),
-		requestChannel:    make(chan *fscRequest),
-	}
-	go fsc.service()
-	return fsc
-}
-
-func (fsc *FunctionServiceCache) service() {
-	for {
-		req := <-fsc.requestChannel
-		resp := &fscResponse{}
-		switch req.requestType {
-		case TOUCH:
-			// update atime for this function svc
-			resp.error = fsc._touchByAddress(req.address)
-		case LISTOLD:
-			// get svcs idle for > req.age
-			fscs := fsc.byFunctionUID.Copy()
-			funcObjects := make([]*FuncSvc, 0)
-			for _, m := range fscs {
-				fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
-				if err != nil {
-					fsc.logger.Error(err, "error while getting service")
-					return
-				}
-				if time.Since(fsvc.Atime) > req.age {
-					funcObjects = append(funcObjects, fsvc)
-				}
-			}
-			resp.objects = funcObjects
-		case LOG:
-			fsc.logger.Info("dumping function service cache")
-			funcCopy := fsc.byFunction.Copy()
-			info := []string{}
-			for key, fsvc := range funcCopy {
-				for _, kubeObj := range fsvc.KubernetesObjects {
-					info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
-				}
-			}
-			fsc.logger.Info("function service cache", "item_count", len(funcCopy), "cache", info)
-		case LISTOLDPOOL:
-			fscs := fsc.connFunctionCache.ListAvailableValue()
-			funcObjects := make([]*FuncSvc, 0)
-			for _, fsvc := range fscs {
-				if time.Since(fsvc.Atime) > req.age {
-					funcObjects = append(funcObjects, fsvc)
-				}
-			}
-			resp.objects = funcObjects
-
-		}
-		req.responseChannel <- resp
 	}
 }
 
@@ -298,19 +234,16 @@ func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
 // fallback every tap 404s and the idle reaper ages serving pods on their
 // specialization time.
 func (fsc *FunctionServiceCache) TouchByAddress(address string) error {
-	responseChannel := make(chan *fscResponse)
-	fsc.requestChannel <- &fscRequest{
-		requestType:     TOUCH,
-		address:         address,
-		responseChannel: responseChannel,
-	}
-	resp := <-responseChannel
-	if resp.error != nil {
+	fsc.lock.Lock()
+	err := fsc._touchByAddress(address)
+	fsc.lock.Unlock()
+	if err != nil {
 		// Only an unknown address falls through to the pool cache; any other
 		// error class must surface rather than be masked by the fallback's
-		// own not-found.
-		if !IsNotFoundError(resp.error) {
-			return resp.error
+		// own not-found. (The pool cache does its own locking, so the fallback
+		// runs without fsc.lock held.)
+		if !IsNotFoundError(err) {
+			return err
 		}
 		return fsc.connFunctionCache.TouchByAddress(address)
 	}
@@ -380,37 +313,57 @@ func (fsc *FunctionServiceCache) DeleteOldPoolCache(ctx context.Context, fsvc *F
 
 // ListOld returns a list of aged function services in cache.
 func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) {
-	responseChannel := make(chan *fscResponse)
-	fsc.requestChannel <- &fscRequest{
-		requestType:     LISTOLD,
-		age:             age,
-		responseChannel: responseChannel,
+	fsc.lock.Lock()
+	defer fsc.lock.Unlock()
+
+	fscs := fsc.byFunctionUID.Copy()
+	funcObjects := make([]*FuncSvc, 0, len(fscs))
+	for _, m := range fscs {
+		fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+		if err != nil {
+			// A byFunctionUID entry without a byFunction entry is a transient
+			// TOCTOU gap (concurrent delete). Skip it and return what we have;
+			// the previous actor implementation aborted the whole service loop
+			// here, which silently wedged every future cache request.
+			fsc.logger.Error(err, "error while getting service")
+			return funcObjects, nil
+		}
+		if time.Since(fsvc.Atime) > age {
+			funcObjects = append(funcObjects, fsvc)
+		}
 	}
-	resp := <-responseChannel
-	return resp.objects, resp.error
+	return funcObjects, nil
 }
 
 // ListOldForPool returns a list of aged function services in cache for pooling.
 func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, error) {
-	responseChannel := make(chan *fscResponse)
-	fsc.requestChannel <- &fscRequest{
-		requestType:     LISTOLDPOOL,
-		age:             age,
-		responseChannel: responseChannel,
+	fsc.lock.Lock()
+	defer fsc.lock.Unlock()
+
+	fscs := fsc.connFunctionCache.ListAvailableValue()
+	funcObjects := make([]*FuncSvc, 0, len(fscs))
+	for _, fsvc := range fscs {
+		if time.Since(fsvc.Atime) > age {
+			funcObjects = append(funcObjects, fsvc)
+		}
 	}
-	resp := <-responseChannel
-	return resp.objects, resp.error
+	return funcObjects, nil
 }
 
-// Log makes a LOG type cache request.
+// Log dumps the function service cache contents.
 func (fsc *FunctionServiceCache) Log() {
 	fsc.logger.Info("--- FunctionService Cache Contents")
-	responseChannel := make(chan *fscResponse)
-	fsc.requestChannel <- &fscRequest{
-		requestType:     LOG,
-		responseChannel: responseChannel,
+	fsc.logger.Info("dumping function service cache")
+	fsc.lock.Lock()
+	funcCopy := fsc.byFunction.Copy()
+	info := []string{}
+	for key, fsvc := range funcCopy {
+		for _, kubeObj := range fsvc.KubernetesObjects {
+			info = append(info, fmt.Sprintf("%v\t%v\t%v", key, kubeObj.Kind, kubeObj.Name))
+		}
 	}
-	<-responseChannel
+	fsc.lock.Unlock()
+	fsc.logger.Info("function service cache", "item_count", len(funcCopy), "cache", info)
 	fsc.logger.Info("--- FunctionService Cache Contents End")
 }
 

@@ -5,6 +5,8 @@
 package cache
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,6 +68,40 @@ func TestCacheUpsert(t *testing.T) {
 	new, err := c.Get("key")
 	require.NoError(t, err)
 	require.Equal(t, new, "val2")
+}
+
+// TestCacheConcurrentAccess hammers the cache from many goroutines so the race
+// detector validates that all exported operations are safe under contention.
+// It passes on both the channel-actor and the mutex implementations.
+func TestCacheConcurrentAccess(t *testing.T) {
+	c := MakeCache[string, int](0, 0)
+	const keys = 8
+	const workers = 32
+	const iters = 200
+
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := range iters {
+				k := fmt.Sprintf("k%d", (w+i)%keys)
+				switch i % 5 {
+				case 0:
+					_, _ = c.Set(k, i)
+				case 1:
+					_, _ = c.Get(k)
+				case 2:
+					c.Upsert(k, i)
+				case 3:
+					c.Delete(k)
+				case 4:
+					_ = c.Copy()
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
 }
 
 func TestCacheExpiryService(t *testing.T) {
