@@ -11,9 +11,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m,
-		// FunctionServiceCache still runs a lifetime service() loop with no
-		// shutdown hook (tracked as a Phase 2 backlog item).
-		goleak.IgnoreTopFunction("github.com/fission/fission/pkg/executor/fscache.(*FunctionServiceCache).service"),
-	)
+	// The fscache caches no longer run any background goroutine (the actor
+	// service loops were replaced with locks), so no goleak ignores are needed.
+	goleak.VerifyTestMain(m)
 }
