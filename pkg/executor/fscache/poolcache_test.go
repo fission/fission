@@ -298,9 +298,9 @@ func TestPoolCacheRequests(t *testing.T) {
 }
 
 // TestReserveCapacity locks the RFC-0002 ensureCapacity contract: the
-// check-and-reserve is atomic inside the cache actor, rejects at the
-// concurrency cap, and the reservation is symmetric with setValue /
-// markSpecializationFailure.
+// check-and-reserve is atomic under the cache lock, rejects at the
+// concurrency cap, and the reservation is symmetric with SetSvcValue /
+// MarkSpecializationFailure.
 func TestReserveCapacity(t *testing.T) {
 	key := crd.CacheKeyURG{UID: "reserve-fn", Generation: 1}
 	c := NewPoolCache(logr.Discard())
@@ -327,11 +327,11 @@ func TestReserveCapacity(t *testing.T) {
 
 // TestMarkSpecializationFailureUnknownKey guards the ensureCapacity error
 // path: failing a specialization for a function the cache has never seen must
-// be a no-op, not a nil-map panic that kills the cache actor.
+// be a no-op, not a nil-map panic that takes the executor down.
 func TestMarkSpecializationFailureUnknownKey(t *testing.T) {
 	c := NewPoolCache(logr.Discard())
 	c.MarkSpecializationFailure(crd.CacheKeyURG{UID: "never-seen", Generation: 1})
-	// The actor survives: a follow-up request still gets served.
+	// The cache survives: a follow-up request still gets served.
 	require.NoError(t, c.ReserveCapacity(crd.CacheKeyURG{UID: "never-seen", Generation: 1}, 0))
 }
 

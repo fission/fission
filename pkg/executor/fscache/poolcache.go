@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -20,22 +21,6 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-)
-
-type requestType int
-
-const (
-	getValue requestType = iota
-	listAvailableValue
-	setValue
-	markAvailable
-	deleteValue
-	setCPUUtilization
-	markSpecializationFailure
-	logFuncSvc
-	markDeleted
-	reserveCapacity
-	touchByAddress
 )
 
 type (
@@ -55,32 +40,19 @@ type (
 	}
 
 	// PoolCache implements a simple cache implementation having values mapped by two keys [function][address].
-	// As of now PoolCache is only used by poolmanager executor
+	// As of now PoolCache is only used by poolmanager executor.
+	//
+	// All operations are serialized by lock: it replaces an earlier
+	// single-goroutine "actor" (an unbuffered requestChannel drained by one
+	// service() loop), so the mutual exclusion is identical — every method runs
+	// to completion before another can start — without the per-cache goroutine
+	// or the channel round-trip on the tap/specialization hot path.
 	PoolCache struct {
-		cache          map[crd.CacheKeyURG]*funcSvcGroup
-		requestChannel chan *request
-		logger         logr.Logger
+		lock   sync.Mutex
+		cache  map[crd.CacheKeyURG]*funcSvcGroup
+		logger logr.Logger
 	}
 
-	request struct {
-		requestType
-		ctx             context.Context
-		function        crd.CacheKeyURG
-		address         string
-		dumpWriter      io.Writer
-		value           *FuncSvc
-		requestsPerPod  int
-		cpuUsage        resource.Quantity
-		responseChannel chan *response
-		concurrency     int
-		svcsRetain      int
-	}
-	response struct {
-		error
-		allValues    []*FuncSvc
-		value        *FuncSvc
-		svcWaitValue *svcWait
-	}
 	svcWait struct {
 		svcChannel chan *FuncSvc
 		ctx        context.Context
@@ -89,13 +61,10 @@ type (
 
 // NewPoolCache create a Cache object
 func NewPoolCache(logger logr.Logger) *PoolCache {
-	c := &PoolCache{
-		cache:          make(map[crd.CacheKeyURG]*funcSvcGroup),
-		requestChannel: make(chan *request),
-		logger:         logger,
+	return &PoolCache{
+		cache:  make(map[crd.CacheKeyURG]*funcSvcGroup),
+		logger: logger,
 	}
-	go c.service()
-	return c
 }
 
 func NewFuncSvcGroup() *funcSvcGroup {
@@ -105,312 +74,88 @@ func NewFuncSvcGroup() *funcSvcGroup {
 	}
 }
 
-func (c *PoolCache) service() {
-	for {
-		req := <-c.requestChannel
-		resp := &response{}
-		switch req.requestType {
-		case getValue:
-			funcSvcGroup, ok := c.cache[req.function]
-			if !ok {
-				// first request for this function, create a new group
-				c.cache[req.function] = NewFuncSvcGroup()
-				c.cache[req.function].svcWaiting++
-				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("function Name '%s' not found", req.function))
-				req.responseChannel <- resp
-				continue
-			}
-			found := false
-			totalActiveRequests := 0
-			// check if any specialized pod is available
-			for addr := range funcSvcGroup.svcs {
-				totalActiveRequests += funcSvcGroup.svcs[addr].activeRequests
-				if funcSvcGroup.svcs[addr].activeRequests < req.requestsPerPod &&
-					funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
-					// mark active
-					funcSvcGroup.svcs[addr].activeRequests++
-					if c.logger.V(1).Enabled() {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Increase active requests with getValue", "function", req.function.String(), "address", addr, "activeRequests", funcSvcGroup.svcs[addr].activeRequests)
-					}
-					resp.value = funcSvcGroup.svcs[addr].val
-					found = true
-					break
-				}
-			}
-			// if specialized pod is available then return svc
-			if found {
-				req.responseChannel <- resp
-				continue
-			}
-			concurrencyUsed := len(funcSvcGroup.svcs) + (funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len())
-			// if concurrency is available then be aggressive and use it as we are not sure if specialization will complete for other requests
-			if req.concurrency > 0 && concurrencyUsed < req.concurrency {
-				funcSvcGroup.svcWaiting++
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' not found", req.function))
-				req.responseChannel <- resp
-				continue
-			}
-			// if no concurrency is available then check if there is any virtual capacity in the existing pods to serve the request in future
-			// if specialization doesnt complete within request then request will be timeout
-			capacity := (concurrencyUsed * req.requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
-			if capacity > 0 {
-				funcSvcGroup.svcWaiting++
-				svcWait := &svcWait{
-					svcChannel: make(chan *FuncSvc),
-					ctx:        req.ctx,
-				}
-				resp.svcWaitValue = svcWait
-				funcSvcGroup.queue.Push(svcWait)
-				req.responseChannel <- resp
-				continue
-			}
+func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
-			// concurrency should not be set to zero and
-			// sum of specialization in progress and specialized pods should be less then req.concurrency
-			if req.concurrency > 0 && concurrencyUsed >= req.concurrency {
-				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
-			} else {
-				funcSvcGroup.svcWaiting++
-				resp.error = ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", req.function))
-			}
-			req.responseChannel <- resp
-		case setValue:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
-			}
-			if _, ok := c.cache[req.function].svcs[req.address]; !ok {
-				c.cache[req.function].svcs[req.address] = &funcSvcInfo{}
-			}
-			c.cache[req.function].svcRetain = req.svcsRetain
-			c.cache[req.function].svcs[req.address].val = req.value
-			c.cache[req.function].svcs[req.address].activeRequests++
-			if c.cache[req.function].svcWaiting > 0 {
-				c.cache[req.function].svcWaiting--
-				svcCapacity := req.requestsPerPod - c.cache[req.function].svcs[req.address].activeRequests
-				queueLen := c.cache[req.function].queue.Len()
-				if svcCapacity > queueLen {
-					svcCapacity = queueLen
-				}
-				for i := 0; i <= svcCapacity; {
-					popped := c.cache[req.function].queue.Pop()
-					if popped == nil {
-						break
-					}
-					if popped.ctx.Err() == nil {
-						popped.svcChannel <- req.value
-						c.cache[req.function].svcs[req.address].activeRequests++
-						i++
-					}
-					close(popped.svcChannel)
-					c.cache[req.function].svcWaiting--
-				}
-			}
-			if c.logger.V(1).Enabled() {
-				otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Increase active requests with setValue", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
-			}
-			c.cache[req.function].svcs[req.address].cpuLimit = req.cpuUsage
-		case markDeleted:
-			for key := range c.cache {
-				if key.UID == req.function.UID {
-					c.cache[key].deleted = true
-					break
-				}
-			}
-		case reserveCapacity:
-			// Atomic check-and-reserve for ensureCapacity (RFC-0002): evaluated
-			// inside the actor exactly like the getValue arm, so concurrent
-			// capacity requests cannot race past the function's concurrency cap.
-			// The svcWaiting reservation is symmetric with getValue's: a
-			// successful specialization decrements it in setValue, a failed one
-			// in markSpecializationFailure.
-			grp, ok := c.cache[req.function]
-			if !ok {
-				grp = NewFuncSvcGroup()
-				c.cache[req.function] = grp
-			}
-			concurrencyUsed := len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
-			if req.concurrency > 0 && concurrencyUsed >= req.concurrency {
-				resp.error = ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", req.function, req.concurrency))
-			} else {
-				grp.svcWaiting++
-			}
-			req.responseChannel <- resp
-		case touchByAddress:
-			// Refresh the Atime of every pod serving req.address (RFC-0002): the
-			// router's batched taps are poolmgr's only liveness signal once the
-			// warm path stops calling the executor per request, and the idle
-			// reaper ages on exactly this Atime (listAvailableValue).
-			found := false
-			for _, grp := range c.cache {
-				if info, ok := grp.svcs[req.address]; ok {
-					info.val.Atime = time.Now()
-					found = true
-				}
-			}
-			if !found {
-				resp.error = ferror.MakeError(ferror.ErrorNotFound,
-					fmt.Sprintf("address %s not found in pool cache", req.address))
-			}
-			req.responseChannel <- resp
-		case listAvailableValue:
-			vals := make([]*FuncSvc, 0)
-			latestFuncGen := make(map[types.UID]int64)
-
-			// find the latest generation of each function
-			for key := range c.cache {
-				if currentFuncGen, ok := latestFuncGen[key.UID]; ok {
-					if key.Generation > currentFuncGen {
-						latestFuncGen[key.UID] = key.Generation
-					}
-				} else {
-					latestFuncGen[key.UID] = key.Generation
-				}
-			}
-
-			for key1, values := range c.cache {
-				svcRetain := values.svcRetain
-				// if the function is not latest generation, then we don't need to retain any pods
-				if latestFuncGen[key1.UID] != key1.Generation || values.deleted {
-					svcRetain = 0
-				}
-				svcCleanQuota := len(values.svcs) - svcRetain
-				if svcCleanQuota <= 0 {
-					continue
-				}
-				for key2, value := range values.svcs {
-					debugLevel := c.logger.V(1).Enabled()
-					if debugLevel {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Reading active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
-					}
-					if value.activeRequests == 0 && svcCleanQuota > 0 {
-						if debugLevel {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Function service with no active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
-						}
-						vals = append(vals, value.val)
-						svcCleanQuota--
-					}
-				}
-			}
-			resp.allValues = vals
-			req.responseChannel <- resp
-		case setCPUUtilization:
-			if _, ok := c.cache[req.function]; !ok {
-				c.cache[req.function] = NewFuncSvcGroup()
-			}
-			if _, ok := c.cache[req.function].svcs[req.address]; ok {
-				c.cache[req.function].svcs[req.address].currentCPUUsage = req.cpuUsage
-			}
-		case markAvailable:
-			if _, ok := c.cache[req.function]; ok {
-				if _, ok = c.cache[req.function].svcs[req.address]; ok {
-					if c.cache[req.function].svcs[req.address].activeRequests > 0 {
-						c.cache[req.function].svcs[req.address].activeRequests--
-						if c.logger.V(1).Enabled() {
-							otelUtils.LoggerWithTraceID(req.ctx, c.logger).V(1).Info("Decrease active requests", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
-						}
-					} else {
-						otelUtils.LoggerWithTraceID(req.ctx, c.logger).Error(nil, "Invalid request to decrease active requests", "function", req.function.String(), "address", req.address, "activeRequests", c.cache[req.function].svcs[req.address].activeRequests)
-					}
-				}
-			}
-		case markSpecializationFailure:
-			// Guarded lookup: the ensureCapacity path can fail before the
-			// function ever had a getValue (which is what historically created
-			// the group) — an unguarded index here nil-panics the cache actor
-			// and takes the whole executor down.
-			if grp, ok := c.cache[req.function]; ok {
-				if grp.svcWaiting > grp.queue.Len() {
-					grp.svcWaiting--
-					if grp.svcWaiting == grp.queue.Len() {
-						expiredRequests := grp.queue.Expired()
-						grp.svcWaiting = grp.svcWaiting - expiredRequests
-					}
-				}
-			}
-		case deleteValue:
-			if funcSvcGroup, ok := c.cache[req.function]; ok {
-				delete(c.cache[req.function].svcs, req.address)
-				if funcSvcGroup.deleted && len(c.cache[req.function].svcs) == 0 {
-					delete(c.cache, req.function)
-				}
-			}
-			req.responseChannel <- resp
-		case logFuncSvc:
-			datawriter := bufio.NewWriter(req.dumpWriter)
-
-			writefnSvcGrp := func(svcGrp *funcSvcGroup) error {
-				_, err := fmt.Fprintf(datawriter, "svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len())
-				if err != nil {
-					return err
-				}
-
-				if len(svcGrp.svcs) == 0 {
-					_, err := datawriter.WriteString("\n")
-					if err != nil {
-						return err
-					}
-				}
-
-				for addr, fnSvc := range svcGrp.svcs {
-					_, err := fmt.Fprintf(datawriter, "\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
-						fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-
-			for _, fnSvcGrp := range c.cache {
-				err := writefnSvcGrp(fnSvcGrp)
-				if err != nil {
-					resp.error = err
-					break
-				}
-			}
-			err := datawriter.Flush()
-			if err != nil {
-				resp.error = errors.Join(resp.error, err)
-			}
-			req.responseChannel <- resp
-		default:
-			resp.error = ferror.MakeError(ferror.ErrorInvalidArgument,
-				fmt.Sprintf("invalid request type: %v", req.requestType))
-			req.responseChannel <- resp
+	for key := range c.cache {
+		if key.UID == function.UID {
+			c.cache[key].deleted = true
+			break
 		}
 	}
 }
 
-func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
-	c.requestChannel <- &request{
-		requestType: markDeleted,
-		function:    function,
+// getSvcValue runs the cache-side of GetSvcValue under the lock. When the
+// request is parked for capacity it returns a non-nil svcWait; the caller waits
+// on its channel *after* the lock is released (the matching setValue send must
+// be able to acquire the lock).
+func (c *PoolCache) getSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, *svcWait, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	funcSvcGroup, ok := c.cache[function]
+	if !ok {
+		// first request for this function, create a new group
+		c.cache[function] = NewFuncSvcGroup()
+		c.cache[function].svcWaiting++
+		return nil, nil, ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("function Name '%s' not found", function))
 	}
+	totalActiveRequests := 0
+	// check if any specialized pod is available
+	for addr := range funcSvcGroup.svcs {
+		totalActiveRequests += funcSvcGroup.svcs[addr].activeRequests
+		if funcSvcGroup.svcs[addr].activeRequests < requestsPerPod &&
+			funcSvcGroup.svcs[addr].currentCPUUsage.Cmp(funcSvcGroup.svcs[addr].cpuLimit) < 1 {
+			// mark active
+			funcSvcGroup.svcs[addr].activeRequests++
+			if c.logger.V(1).Enabled() {
+				otelUtils.LoggerWithTraceID(ctx, c.logger).V(1).Info("Increase active requests with getValue", "function", function.String(), "address", addr, "activeRequests", funcSvcGroup.svcs[addr].activeRequests)
+			}
+			return funcSvcGroup.svcs[addr].val, nil, nil
+		}
+	}
+	concurrencyUsed := len(funcSvcGroup.svcs) + (funcSvcGroup.svcWaiting - funcSvcGroup.queue.Len())
+	// if concurrency is available then be aggressive and use it as we are not sure if specialization will complete for other requests
+	if concurrency > 0 && concurrencyUsed < concurrency {
+		funcSvcGroup.svcWaiting++
+		return nil, nil, ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' not found", function))
+	}
+	// if no concurrency is available then check if there is any virtual capacity in the existing pods to serve the request in future
+	// if specialization doesnt complete within request then request will be timeout
+	capacity := (concurrencyUsed * requestsPerPod) - (totalActiveRequests + funcSvcGroup.svcWaiting)
+	if capacity > 0 {
+		funcSvcGroup.svcWaiting++
+		svcWait := &svcWait{
+			svcChannel: make(chan *FuncSvc),
+			ctx:        ctx,
+		}
+		funcSvcGroup.queue.Push(svcWait)
+		return nil, svcWait, nil
+	}
+
+	// concurrency should not be set to zero and
+	// sum of specialization in progress and specialized pods should be less then req.concurrency
+	if concurrency > 0 && concurrencyUsed >= concurrency {
+		return nil, nil, ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", function, concurrency))
+	}
+	funcSvcGroup.svcWaiting++
+	return nil, nil, ferror.MakeError(ferror.ErrorNotFound, fmt.Sprintf("function '%s' all functions are busy", function))
 }
 
 // GetSvcValue returns a function service with status in Active else return error
 func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		ctx:             ctx,
-		requestType:     getValue,
-		function:        function,
-		concurrency:     concurrency,
-		requestsPerPod:  requestsPerPod,
-		responseChannel: respChannel,
-	}
-	resp := <-respChannel
-
-	if resp.svcWaitValue != nil {
+	value, svcWaitValue, err := c.getSvcValue(ctx, function, requestsPerPod, concurrency)
+	if svcWaitValue != nil {
 		select {
 		case <-ctx.Done():
-			return resp.value, ctx.Err()
-		case funcSvc := <-resp.svcWaitValue.svcChannel:
+			return value, ctx.Err()
+		case funcSvc := <-svcWaitValue.svcChannel:
 			return funcSvc, nil
 		}
 	}
-	return resp.value, resp.error
+	return value, err
 }
 
 // ReserveCapacity atomically checks the function's concurrency cap against
@@ -419,110 +164,242 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 // cap (RFC-0002 ensureCapacity). The reservation must be released exactly
 // once: by setValue on a successful specialization, or
 // MarkSpecializationFailure on a failed one.
+//
+// The check-and-reserve runs under the lock exactly like the GetSvcValue arm,
+// so concurrent capacity requests cannot race past the function's concurrency
+// cap. The svcWaiting reservation is symmetric with GetSvcValue's: a
+// successful specialization decrements it in SetSvcValue, a failed one in
+// MarkSpecializationFailure.
 func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency int) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     reserveCapacity,
-		function:        function,
-		concurrency:     concurrency,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	grp, ok := c.cache[function]
+	if !ok {
+		grp = NewFuncSvcGroup()
+		c.cache[function] = grp
 	}
-	resp := <-respChannel
-	return resp.error
+	concurrencyUsed := len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
+	if concurrency > 0 && concurrencyUsed >= concurrency {
+		return ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", function, concurrency))
+	}
+	grp.svcWaiting++
+	return nil
 }
 
 // TouchByAddress refreshes the Atime of pool-cache entries serving the given
-// address (the router's batched tap path for poolmgr; RFC-0002).
+// address (the router's batched tap path for poolmgr; RFC-0002). The router's
+// batched taps are poolmgr's only liveness signal once the warm path stops
+// calling the executor per request, and the idle reaper ages on exactly this
+// Atime (ListAvailableValue).
 func (c *PoolCache) TouchByAddress(address string) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     touchByAddress,
-		address:         address,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	found := false
+	for _, grp := range c.cache {
+		if info, ok := grp.svcs[address]; ok {
+			info.val.Atime = time.Now()
+			found = true
+		}
 	}
-	resp := <-respChannel
-	return resp.error
+	if !found {
+		return ferror.MakeError(ferror.ErrorNotFound,
+			fmt.Sprintf("address %s not found in pool cache", address))
+	}
+	return nil
 }
 
 // ListAvailableValue returns a list of the available function services stored in the Cache
 func (c *PoolCache) ListAvailableValue() []*FuncSvc {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     listAvailableValue,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	vals := make([]*FuncSvc, 0)
+	latestFuncGen := make(map[types.UID]int64)
+
+	// find the latest generation of each function
+	for key := range c.cache {
+		if currentFuncGen, ok := latestFuncGen[key.UID]; ok {
+			if key.Generation > currentFuncGen {
+				latestFuncGen[key.UID] = key.Generation
+			}
+		} else {
+			latestFuncGen[key.UID] = key.Generation
+		}
 	}
-	resp := <-respChannel
-	return resp.allValues
+
+	for key1, values := range c.cache {
+		svcRetain := values.svcRetain
+		// if the function is not latest generation, then we don't need to retain any pods
+		if latestFuncGen[key1.UID] != key1.Generation || values.deleted {
+			svcRetain = 0
+		}
+		svcCleanQuota := len(values.svcs) - svcRetain
+		if svcCleanQuota <= 0 {
+			continue
+		}
+		for key2, value := range values.svcs {
+			debugLevel := c.logger.V(1).Enabled()
+			if debugLevel {
+				otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("Reading active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
+			}
+			if value.activeRequests == 0 && svcCleanQuota > 0 {
+				if debugLevel {
+					otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("Function service with no active requests", "function", key1.String(), "address", key2, "activeRequests", value.activeRequests)
+				}
+				vals = append(vals, value.val)
+				svcCleanQuota--
+			}
+		}
+	}
+	return vals
 }
 
 // SetSvcValue marks the value at key [function][address] as active(begin used)
 func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		ctx:             ctx,
-		requestType:     setValue,
-		function:        function,
-		address:         address,
-		value:           value,
-		cpuUsage:        cpuLimit,
-		requestsPerPod:  requestsPerPod,
-		svcsRetain:      svcsRetain,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if _, ok := c.cache[function]; !ok {
+		c.cache[function] = NewFuncSvcGroup()
 	}
+	if _, ok := c.cache[function].svcs[address]; !ok {
+		c.cache[function].svcs[address] = &funcSvcInfo{}
+	}
+	c.cache[function].svcRetain = svcsRetain
+	c.cache[function].svcs[address].val = value
+	c.cache[function].svcs[address].activeRequests++
+	if c.cache[function].svcWaiting > 0 {
+		c.cache[function].svcWaiting--
+		svcCapacity := requestsPerPod - c.cache[function].svcs[address].activeRequests
+		queueLen := c.cache[function].queue.Len()
+		if svcCapacity > queueLen {
+			svcCapacity = queueLen
+		}
+		for i := 0; i <= svcCapacity; {
+			popped := c.cache[function].queue.Pop()
+			if popped == nil {
+				break
+			}
+			if popped.ctx.Err() == nil {
+				popped.svcChannel <- value
+				c.cache[function].svcs[address].activeRequests++
+				i++
+			}
+			close(popped.svcChannel)
+			c.cache[function].svcWaiting--
+		}
+	}
+	if c.logger.V(1).Enabled() {
+		otelUtils.LoggerWithTraceID(ctx, c.logger).V(1).Info("Increase active requests with setValue", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
+	}
+	c.cache[function].svcs[address].cpuLimit = cpuLimit
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
 func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyURG, address string, cpuUsage resource.Quantity) {
-	c.requestChannel <- &request{
-		requestType:     setCPUUtilization,
-		function:        function,
-		address:         address,
-		cpuUsage:        cpuUsage,
-		responseChannel: make(chan *response),
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if _, ok := c.cache[function]; !ok {
+		c.cache[function] = NewFuncSvcGroup()
+	}
+	if _, ok := c.cache[function].svcs[address]; ok {
+		c.cache[function].svcs[address].currentCPUUsage = cpuUsage
 	}
 }
 
 // MarkAvailable marks the value at key [function][address] as available
 func (c *PoolCache) MarkAvailable(function crd.CacheKeyURG, address string) {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     markAvailable,
-		function:        function,
-		address:         address,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if _, ok := c.cache[function]; ok {
+		if _, ok = c.cache[function].svcs[address]; ok {
+			if c.cache[function].svcs[address].activeRequests > 0 {
+				c.cache[function].svcs[address].activeRequests--
+				if c.logger.V(1).Enabled() {
+					otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("Decrease active requests", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
+				}
+			} else {
+				otelUtils.LoggerWithTraceID(context.Background(), c.logger).Error(nil, "Invalid request to decrease active requests", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
+			}
+		}
 	}
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
 func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyURG, address string) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		ctx:             ctx,
-		requestType:     deleteValue,
-		function:        function,
-		address:         address,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if funcSvcGroup, ok := c.cache[function]; ok {
+		delete(c.cache[function].svcs, address)
+		if funcSvcGroup.deleted && len(c.cache[function].svcs) == 0 {
+			delete(c.cache, function)
+		}
 	}
-	resp := <-respChannel
-	return resp.error
+	return nil
 }
 
-// ReduceSpecializationInProgress reduces the svcWaiting count
+// MarkSpecializationFailure reduces the svcWaiting count
 func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyURG) {
-	c.requestChannel <- &request{
-		requestType:     markSpecializationFailure,
-		function:        function,
-		responseChannel: make(chan *response),
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	// Guarded lookup: the ensureCapacity path can fail before the function ever
+	// had a GetSvcValue (which is what historically created the group) — an
+	// unguarded index here nil-panics and takes the whole executor down.
+	if grp, ok := c.cache[function]; ok {
+		if grp.svcWaiting > grp.queue.Len() {
+			grp.svcWaiting--
+			if grp.svcWaiting == grp.queue.Len() {
+				expiredRequests := grp.queue.Expired()
+				grp.svcWaiting = grp.svcWaiting - expiredRequests
+			}
+		}
 	}
 }
 
 func (c *PoolCache) LogFnSvcGroup(ctx context.Context, file io.Writer) error {
-	respChannel := make(chan *response)
-	c.requestChannel <- &request{
-		requestType:     logFuncSvc,
-		dumpWriter:      file,
-		responseChannel: respChannel,
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	datawriter := bufio.NewWriter(file)
+
+	writefnSvcGrp := func(svcGrp *funcSvcGroup) error {
+		_, err := fmt.Fprintf(datawriter, "svc_waiting:%d\tqueue_len:%d", svcGrp.svcWaiting, svcGrp.queue.Len())
+		if err != nil {
+			return err
+		}
+
+		if len(svcGrp.svcs) == 0 {
+			_, err := datawriter.WriteString("\n")
+			if err != nil {
+				return err
+			}
+		}
+
+		for addr, fnSvc := range svcGrp.svcs {
+			_, err := fmt.Fprintf(datawriter, "\tfunction_name:%s\tfn_svc_address:%s\tactive_req:%d\tcurrent_cpu_usage:%v\tcpu_limit:%v\n",
+				fnSvc.val.Function.Name, addr, fnSvc.activeRequests, fnSvc.currentCPUUsage, fnSvc.cpuLimit)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	resp := <-respChannel
-	return resp.error
+
+	var err error
+	for _, fnSvcGrp := range c.cache {
+		if e := writefnSvcGrp(fnSvcGrp); e != nil {
+			err = e
+			break
+		}
+	}
+	if e := datawriter.Flush(); e != nil {
+		err = errors.Join(err, e)
+	}
+	return err
 }
