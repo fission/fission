@@ -26,7 +26,7 @@ func Get(input cli.Input) error {
 
 func (opts *GetSubCommand) do(input cli.Input) (err error) {
 
-	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error getting environment: %w", err)
 	}

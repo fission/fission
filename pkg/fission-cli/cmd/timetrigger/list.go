@@ -25,7 +25,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-	ttNs, err := opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
+	ttNs, err := opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in listing time triggers: %w", err)
 	}

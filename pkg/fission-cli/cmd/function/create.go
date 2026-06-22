@@ -100,7 +100,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}

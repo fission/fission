@@ -43,7 +43,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	newFunc := input.String(flagkey.CanaryNewFunc)
 	oldFunc := input.String(flagkey.CanaryOldFunc)
 
-	_, fnNs, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNs, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in creating canaryconfig: %w", err)
 	}

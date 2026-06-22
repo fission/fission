@@ -51,7 +51,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 
-	userDefinedNS, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	userDefinedNS, currentNS, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

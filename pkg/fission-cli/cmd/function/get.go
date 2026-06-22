@@ -24,7 +24,7 @@ func Get(input cli.Input) error {
 }
 
 func (opts *GetSubCommand) do(input cli.Input) error {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in get function : %w", err)
 	}

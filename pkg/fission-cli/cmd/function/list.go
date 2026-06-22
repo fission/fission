@@ -26,7 +26,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) error {
-	namespace, err := opts.ResolveNamespace(input, flagkey.NamespaceFunction)
+	namespace, err := opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in listing function : %w", err)
 	}

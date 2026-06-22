@@ -40,7 +40,7 @@ func (opts *UpdateContainerSubCommand) do(input cli.Input) error {
 func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	_, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, fnNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in updating container for function : %w", err)
 	}

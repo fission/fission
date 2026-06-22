@@ -25,7 +25,7 @@ func Get(input cli.Input) error {
 
 func (opts *GetSubCommand) run(input cli.Input) (err error) {
 
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error getting canary config: %w", err)
 	}

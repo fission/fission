@@ -34,7 +34,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) complete(input cli.Input) (err error) {
-	opts.namespace, err = opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
+	opts.namespace, err = opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error listing kubewatchers: %w", err)
 	}

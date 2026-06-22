@@ -44,7 +44,7 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 		return fmt.Errorf("need either of --%v or --%v and not both arguments", flagkey.HtName, flagkey.HtFnName)
 	}
 
-	_, opts.namespace, err = opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, opts.namespace, err = opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in deleting HTTP trigger : %w", err)
 	}

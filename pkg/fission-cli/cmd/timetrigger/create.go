@@ -52,7 +52,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		return errors.New("need a function name to create a trigger, use --function")
 	}
 
-	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in creating time trigger : %w", err)
 	}

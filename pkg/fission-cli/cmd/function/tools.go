@@ -28,7 +28,7 @@ func Tools(input cli.Input) error {
 }
 
 func (opts *ToolsSubCommand) do(input cli.Input) error {
-	namespace, err := opts.ResolveNamespace(input, flagkey.NamespaceFunction)
+	namespace, err := opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error listing MCP tools: %w", err)
 	}

@@ -46,7 +46,7 @@ func Test(input cli.Input) error {
 
 func (opts *TestSubCommand) do(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in testing function : %w", err)
 	}

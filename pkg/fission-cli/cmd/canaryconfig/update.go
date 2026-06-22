@@ -35,7 +35,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	// get the current config
-	_, ns, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	_, ns, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error updating canary config: %w", err)
 	}

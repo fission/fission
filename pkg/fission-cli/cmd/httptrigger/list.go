@@ -29,7 +29,7 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) run(input cli.Input) (err error) {
-	namespace, err := opts.ResolveNamespace(input, flagkey.NamespaceTrigger)
+	namespace, err := opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in listing HTTP triggers: %w", err)
 	}

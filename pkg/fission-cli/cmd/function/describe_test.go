@@ -79,7 +79,7 @@ func setDescribeClients(t *testing.T, fissionObjs []runtime.Object, pods ...runt
 func describeInput(name, ns string) dummy.Cli {
 	in := dummy.TestFlagSet()
 	in.Set(flagkey.FnName, name)
-	in.Set(flagkey.NamespaceFunction, ns)
+	in.Set(flagkey.Namespace, ns)
 	return in
 }
 
