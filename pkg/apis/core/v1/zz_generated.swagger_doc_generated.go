@@ -168,6 +168,43 @@ func (ExecutionStrategy) SwaggerDoc() map[string]string {
 	return map_ExecutionStrategy
 }
 
+var map_FissionTenant = map[string]string{
+	"": "FissionTenant onboards a Kubernetes namespace for Fission. It is the cluster-scoped source of truth the tenant-lifecycle controller reconciles into the live resource-namespace set (and, in later phases, per-namespace RBAC, service accounts, and auth keys). Setting the label fission.io/enabled=true on a Namespace is sugar the controller materializes into one of these. See docs/multiple-namespace/prd.md.",
+}
+
+func (FissionTenant) SwaggerDoc() map[string]string {
+	return map_FissionTenant
+}
+
+var map_FissionTenantList = map[string]string{
+	"": "FissionTenantList is a list of FissionTenants.",
+}
+
+func (FissionTenantList) SwaggerDoc() map[string]string {
+	return map_FissionTenantList
+}
+
+var map_FissionTenantSpec = map[string]string{
+	"":                  "FissionTenantSpec declares which namespace Fission manages and, optionally, where that tenant's function and builder workloads run.",
+	"namespace":         "Namespace is the Kubernetes namespace this tenant onboards. It is the immutable join key to the live Namespace.",
+	"functionNamespace": "FunctionNamespace, if set, is where this tenant's function pods and Services run; empty means they run in spec.namespace. Generalizes the deprecated cluster-global FISSION_FUNCTION_NAMESPACE to a per-tenant mapping.",
+	"builderNamespace":  "BuilderNamespace, if set, is where this tenant's builder pods run; empty means they run in spec.namespace.",
+}
+
+func (FissionTenantSpec) SwaggerDoc() map[string]string {
+	return map_FissionTenantSpec
+}
+
+var map_FissionTenantStatus = map[string]string{
+	"":                   "FissionTenantStatus reports the controller's progress onboarding the tenant.",
+	"observedGeneration": "ObservedGeneration is the spec generation the controller last reconciled.",
+	"conditions":         "Conditions are the latest observations of the tenant's state: RBACProvisioned, ServiceAccountsReady, AuthKeyProvisioned, WatchActive, and the Ready rollup.",
+}
+
+func (FissionTenantStatus) SwaggerDoc() map[string]string {
+	return map_FissionTenantStatus
+}
+
 var map_Function = map[string]string{
 	"": "Function is function runs within environment runtime with given package and secrets/configmaps.",
 }
