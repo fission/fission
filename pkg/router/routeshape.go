@@ -20,10 +20,10 @@ import (
 )
 
 // This file holds the route-shape derivation and mux-registration helpers
-// shared by the two route-update paths (RFC-0013): the legacy full rebuild
-// (buildMuxes, kept as the ROUTER_INCREMENTAL_ROUTES=false escape hatch) and
-// the incremental materializer. Keeping them shared is what lets the golden
-// shape tests guarantee both paths register identical routes.
+// shared by the incremental materializer (RFC-0013, the only production
+// route-update path) and the one-shot buildMuxes constructor (the
+// test/parity builder). Keeping them shared is what lets the golden shape
+// tests guarantee both builders register identical routes.
 
 // routeShape is the mux-visible part of a trigger: what buildMuxes registers
 // and what the route table treats as "shape" (changes rebuild the mux) as
@@ -128,8 +128,8 @@ func internalRoutePair(key types.NamespacedName) (exact, prefix string) {
 // registerInternalRoute registers a function's internal-listener route pair —
 // the exact /fission-function/... URL plus its slash subtree — onto the
 // internal mux. No method gate (the HMAC verifier the bundle wraps is the
-// access control). Shared by the legacy buildMuxes and the incremental
-// buildIncrementalMuxes so the two paths register the internal routes
+// access control). Shared by the one-shot buildMuxes and the incremental
+// buildIncrementalMuxes so the two builders register the internal routes
 // identically, mirroring registerRouteShape on the public side.
 func registerInternalRoute(m *httpmux.Mux, key types.NamespacedName, handler http.Handler) {
 	exact, prefix := internalRoutePair(key)
@@ -142,7 +142,7 @@ func registerInternalRoute(m *httpmux.Mux, key types.NamespacedName, handler htt
 // webhook and CEL cannot run the template parser, so a malformed template
 // (unbalanced braces, empty var name, an uncompilable regexp class) would
 // register a route that silently never matches. httpmux.CompilePattern returns
-// the compile error rather than panicking, and both apply paths (legacy
+// the compile error rather than panicking, and both builders (the one-shot
 // buildMuxes and the incremental materialize) reject the trigger through
 // triggerConfigError, surfacing RouteAdmitted=False/InvalidRouteTemplate.
 //
@@ -166,8 +166,8 @@ func validateRouteTemplate(shape routeShape) error {
 // buildTriggerHandler constructs the proxy handler for one trigger from its
 // resolve result: the functionHandler with hoisted per-route state
 // (RFC-0014) plus the per-trigger CORS wrap. fnTimeoutMap may be the global
-// map (legacy path) or a per-trigger map derived from the resolved functions
-// (incremental path) — the handler only ever looks up its own backends.
+// map (one-shot buildMuxes) or a per-trigger map derived from the resolved
+// functions (incremental path) — the handler only ever looks up its own backends.
 func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[types.UID]int) http.Handler {
 	var streamIdleDefault time.Duration
 	if ts.tsRoundTripperParams != nil {
@@ -236,7 +236,7 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 
 // newListenerMuxes creates the public + internal mux skeletons: encoded-path
 // handling and the middleware chains. USE_ENCODED_PATH must be applied here
-// — i.e. on EVERY build, legacy or materialized — because the routers are
+// — i.e. on EVERY build, one-shot or materialized — because the routers are
 // atomically swapped on reconciliation (the CLAUDE.md gotcha).
 func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) (public, internal *httpmux.Mux) {
 	// Public listener: per-route metrics (httpmux labels each request by the
