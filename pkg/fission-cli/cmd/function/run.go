@@ -122,7 +122,7 @@ func (opts *RunSubCommand) resolveRunConfig(input cli.Input) (runConfig, error) 
 	if fnName == "" {
 		fnName = defaultLocalFunctionName
 	}
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return runConfig{}, err
 	}

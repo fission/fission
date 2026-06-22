@@ -38,7 +38,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 }
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in updating message queue trigger : %w", err)
 	}

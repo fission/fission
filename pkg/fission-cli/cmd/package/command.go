@@ -19,7 +19,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd,
-			flag.NamespacePackage, flag.SpecSave, flag.SpecDry},
+			flag.SpecSave, flag.SpecDry},
 	})
 
 	getSrcCmd := wrapper.SubCommand(&cobra.Command{
@@ -27,7 +27,7 @@ func Commands() *cobra.Command {
 		Short: "Get package details",
 	}, GetSrc, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.PkgOutput},
+		Optional: []flag.Flag{flag.PkgOutput},
 	})
 
 	getDeployCmd := wrapper.SubCommand(&cobra.Command{
@@ -35,7 +35,7 @@ func Commands() *cobra.Command {
 		Short: "Get package details",
 	}, GetDeploy, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.PkgOutput},
+		Optional: []flag.Flag{flag.PkgOutput},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -44,15 +44,14 @@ func Commands() *cobra.Command {
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
 		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce,
-			flag.NamespacePackage, flag.NamespaceEnvironment},
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "delete",
 		Short: "Delete a package",
 	}, Delete, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgName, flag.PkgForce, flag.PkgOrphan, flag.NamespacePackage, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.PkgName, flag.PkgForce, flag.PkgOrphan, flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -60,7 +59,7 @@ func Commands() *cobra.Command {
 		Short: "List packages",
 		Long:  "List all packages in a namespace if specified, else, list packages across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.NamespacePackage, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.PkgOrphan, flag.PkgStatus, flag.AllNamespaces, flag.Output},
 	})
 
 	infoCmd := wrapper.SubCommand(&cobra.Command{
@@ -68,7 +67,7 @@ func Commands() *cobra.Command {
 		Short: "Show package information",
 	}, Info, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.Output},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	rebuildCmd := wrapper.SubCommand(&cobra.Command{
@@ -76,7 +75,7 @@ func Commands() *cobra.Command {
 		Short: "Rebuild a failed package",
 	}, Rebuild, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{flag.NamespacePackage},
+		Optional: []flag.Flag{},
 	})
 
 	command := &cobra.Command{
@@ -90,7 +89,7 @@ func Commands() *cobra.Command {
 		Short: "Wait for a package to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespacePackage, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	command.AddCommand(createCmd, getSrcCmd, getDeployCmd, updateCmd, deleteCmd, listCmd, infoCmd, rebuildCmd, waitCmd)

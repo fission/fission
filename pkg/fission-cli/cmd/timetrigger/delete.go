@@ -25,7 +25,7 @@ func Delete(input cli.Input) error {
 
 func (opts *DeleteSubCommand) do(input cli.Input) (err error) {
 
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in deleting time trigger : %w", err)
 	}

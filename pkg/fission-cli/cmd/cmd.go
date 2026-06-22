@@ -59,28 +59,23 @@ func (c *CommandActioner) ClusterAvailable() bool {
 	return defaultClient.FissionClientSet != nil
 }
 
-func (c *CommandActioner) GetResourceNamespace(input cli.Input, deprecatedFlag string) (namespace, currentNS string, err error) {
-	namespace = input.String(deprecatedFlag)
-	currentNS = namespace
-
-	if input.String(flagkey.Namespace) != "" {
-		namespace = input.String(flagkey.Namespace)
-		currentNS = namespace
-		console.Verbose(2, "Namespace for resource %s ", currentNS)
-		return namespace, currentNS, err
+// GetResourceNamespace resolves the namespace a resource command operates in.
+// Precedence: --namespace (also the returned "user-provided" namespace) wins;
+// otherwise FISSION_DEFAULT_NAMESPACE; otherwise the kube-context namespace.
+// The first return value is non-empty only when the user explicitly set
+// --namespace, which cross-namespace checks rely on.
+func (c *CommandActioner) GetResourceNamespace(input cli.Input) (namespace, currentNS string, err error) {
+	if ns := input.String(flagkey.Namespace); ns != "" {
+		console.Verbose(2, "Namespace for resource %s ", ns)
+		return ns, ns, nil
 	}
 
-	if namespace == "" {
-		if os.Getenv("FISSION_DEFAULT_NAMESPACE") != "" {
-			currentNS = os.Getenv("FISSION_DEFAULT_NAMESPACE")
-		} else {
-			currentNS = c.Client().Namespace
-			return namespace, currentNS, err
-		}
+	if env := os.Getenv("FISSION_DEFAULT_NAMESPACE"); env != "" {
+		console.Verbose(2, "Namespace for resource %s ", env)
+		return "", env, nil
 	}
 
-	console.Verbose(2, "Namespace for resource %s ", currentNS)
-	return namespace, currentNS, nil
+	return "", c.Client().Namespace, nil
 }
 
 // ResolveNamespace returns the namespace a list command should operate in. It
@@ -88,8 +83,8 @@ func (c *CommandActioner) GetResourceNamespace(input cli.Input, deprecatedFlag s
 // metav1.NamespaceAll when --all-namespaces is set. This replaces the
 // GetResourceNamespace + AllNamespaces block that was duplicated across every
 // list command.
-func (c *CommandActioner) ResolveNamespace(input cli.Input, deprecatedFlag string) (string, error) {
-	_, namespace, err := c.GetResourceNamespace(input, deprecatedFlag)
+func (c *CommandActioner) ResolveNamespace(input cli.Input) (string, error) {
+	_, namespace, err := c.GetResourceNamespace(input)
 	if err != nil {
 		return "", err
 	}

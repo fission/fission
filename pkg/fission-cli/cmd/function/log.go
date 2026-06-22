@@ -30,7 +30,7 @@ func Log(input cli.Input) error {
 }
 
 func (opts *LogSubCommand) do(input cli.Input) error {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in logs for function : %w", err)
 	}

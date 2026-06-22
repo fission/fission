@@ -21,16 +21,11 @@ const (
 
 	IgnoreNotFound = "ignorenotfound"
 
-	NamespaceFunction    = "fnNamespace"
-	NamespaceEnvironment = "envNamespace"
-	NamespacePackage     = "pkgNamespace"
-	NamespaceTrigger     = "triggerNamespace"
-	NamespaceCanary      = "canaryNamespace"
-	Namespace            = "namespace"
-	ForceNamespace       = "force-namespace"
-	AllNamespaces        = "all-namespaces"
-	NamespacePod         = "pod-namespace"
-	ForceDelete          = "force"
+	Namespace      = "namespace"
+	ForceNamespace = "force-namespace"
+	AllNamespaces  = "all-namespaces"
+	NamespacePod   = "pod-namespace"
+	ForceDelete    = "force"
 
 	RuntimeMincpu      = "mincpu"
 	RuntimeMaxcpu      = "maxcpu"

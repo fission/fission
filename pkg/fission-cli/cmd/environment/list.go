@@ -25,7 +25,7 @@ func List(input cli.Input) error {
 }
 
 func (opts *ListSubCommand) do(input cli.Input) (err error) {
-	currentNS, err := opts.ResolveNamespace(input, flagkey.NamespaceEnvironment)
+	currentNS, err := opts.ResolveNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error listing environments: %w", err)
 	}

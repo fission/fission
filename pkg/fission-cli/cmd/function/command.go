@@ -40,7 +40,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory,
 			flag.RunTimeMaxMemory, flag.ReplicasMin,
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry},
+			flag.SpecSave, flag.SpecDry},
 	})
 
 	getCmd := wrapper.SubCommand(&cobra.Command{
@@ -49,7 +49,7 @@ func Commands() *cobra.Command {
 		Short:   "Get function source code",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{},
 	})
 
 	getmetaCmd := wrapper.SubCommand(&cobra.Command{
@@ -58,7 +58,7 @@ func Commands() *cobra.Command {
 		Short:   "Get function metadata",
 	}, GetMeta, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	describeCmd := wrapper.SubCommand(&cobra.Command{
@@ -67,7 +67,7 @@ func Commands() *cobra.Command {
 		Short:   "Describe a function's health in one view (summary, conditions, build, pods)",
 	}, Describe, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{
@@ -95,7 +95,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
 			flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.NamespaceEnvironment, flag.SpecSave,
+			flag.SpecSave,
 		},
 	})
 
@@ -105,7 +105,7 @@ func Commands() *cobra.Command {
 		Short:   "Delete a function",
 	}, Delete, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.IgnoreNotFound},
+		Optional: []flag.Flag{flag.IgnoreNotFound},
 	})
 
 	listCmd := wrapper.SubCommand(&cobra.Command{
@@ -114,7 +114,7 @@ func Commands() *cobra.Command {
 		Short:   "List functions",
 		Long:    "List all functions in a namespace if specified, else, list functions across all namespaces",
 	}, List, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
 	})
 
 	logsCmd := wrapper.SubCommand(&cobra.Command{
@@ -125,7 +125,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
-			flag.FnLogDetail, flag.FnLogPod, flag.NamespaceFunction, flag.FnLogDBType, flag.NamespacePod, flag.FnLogAllPods,
+			flag.FnLogDetail, flag.FnLogPod, flag.FnLogDBType, flag.NamespacePod, flag.FnLogAllPods,
 			flag.FnLogRequestID, flag.FnLogTraceID, flag.FnLogLevel},
 	})
 
@@ -136,9 +136,8 @@ func Commands() *cobra.Command {
 	}, Test, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnTestQuery, flag.FnTestTimeout, flag.NamespaceFunction,
-			// for getting log from log database if
-			// we failed to get logs from function pod.
+			flag.FnTestQuery, flag.FnTestTimeout,
+			// for getting log from log database if we failed to get logs from function pod.
 			flag.FnLogDBType,
 			flag.FnSubPath,
 		},
@@ -166,7 +165,6 @@ func Commands() *cobra.Command {
 			flag.FnRunKeep, flag.FnRunWatch, flag.FnRunEnvVar, flag.FnRunEnvFile,
 			flag.FnSecret, flag.FnCfgMap, flag.FnRunDebugPort,
 			flag.FnRunBuild, flag.FnRunBuilderImage, flag.FnBuildCmd,
-			flag.NamespaceFunction,
 		},
 	})
 
@@ -190,7 +188,7 @@ func Commands() *cobra.Command {
 			flag.ReplicasMax, flag.RunTimeTargetCPU,
 			flag.RunImagePullSecret,
 
-			flag.NamespaceFunction, flag.SpecSave, flag.SpecDry,
+			flag.SpecSave, flag.SpecDry,
 		},
 	})
 
@@ -211,7 +209,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMaxMemory, flag.ReplicasMin, flag.ReplicasMax,
 			flag.RunTimeTargetCPU,
 
-			flag.NamespaceFunction, flag.SpecSave,
+			flag.SpecSave,
 		},
 	})
 
@@ -222,7 +220,7 @@ func Commands() *cobra.Command {
 		Long:    "List pods currently used by a function",
 	}, ListPods, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.NamespaceFunction},
+		Optional: []flag.Flag{},
 	})
 
 	waitCmd := wrapper.SubCommand(&cobra.Command{
@@ -230,14 +228,14 @@ func Commands() *cobra.Command {
 		Short: "Wait for a function to reach a status condition",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName, flag.WaitFor},
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.WaitTimeout},
+		Optional: []flag.Flag{flag.WaitTimeout},
 	})
 
 	toolsCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "tools",
 		Short: "List functions exposed as MCP (Model Context Protocol) tools",
 	}, Tools, flag.FlagSet{
-		Optional: []flag.Flag{flag.NamespaceFunction, flag.Output},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	command := &cobra.Command{

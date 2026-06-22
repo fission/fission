@@ -116,7 +116,7 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 // insertNSToResource provides a namespace to all resource which don't have a namespace specified
 // in resource
 func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionResources) error {
-	_, currentNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentNS, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Environment", err)
 	}

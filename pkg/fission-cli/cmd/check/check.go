@@ -25,7 +25,7 @@ func (opts *CheckSubCommand) do(input cli.Input) error {
 
 	checks := []healthcheck.CategoryID{}
 
-	userProvidedNS, _, err := opts.GetResourceNamespace(input, flagkey.Namespace)
+	userProvidedNS, _, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error retrieving user provided namespace: %w", err)
 	}

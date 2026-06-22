@@ -47,7 +47,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 	fnName := input.String(flagkey.MqtFnName)
 
-	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in creating message queue trigger : %w", err)
 	}

@@ -24,7 +24,7 @@ func Delete(input cli.Input) error {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceCanary)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in deleting canaryConfig: %w", err)
 	}

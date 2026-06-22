@@ -41,7 +41,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 
-	_, currentContextNS, err := opts.GetResourceNamespace(input, flagkey.NamespaceEnvironment)
+	_, currentContextNS, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error updating environment: %w", err)
 	}

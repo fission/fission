@@ -25,7 +25,7 @@ func Wait(input cli.Input) error {
 }
 
 func (opts *WaitSubCommand) do(input cli.Input) error {
-	_, namespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return err
 	}

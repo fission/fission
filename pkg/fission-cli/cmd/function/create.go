@@ -100,7 +100,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	fnName := input.String(flagkey.FnName)
 
-	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceFunction)
+	userProvidedNS, fnNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}
@@ -234,7 +234,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			_, err := opts.Client().FissionClientSet.CoreV1().Environments(fnNamespace).Get(input.Context(), envName, metav1.GetOptions{})
 			if err != nil {
 				if e, ok := err.(ferror.Error); ok && e.Code == ferror.ErrorNotFound {
-					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --envns %s --image <image>`\n", envName, envName, fnNamespace))
+					console.Warn(fmt.Sprintf("Environment \"%s\" does not exist. Please create the environment before executing the function. \nFor example: `fission env create --name %s --namespace %s --image <image>`\n", envName, envName, fnNamespace))
 				} else {
 					return fmt.Errorf("error retrieving environment information: %w", err)
 				}

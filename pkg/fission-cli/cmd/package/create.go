@@ -51,7 +51,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	envName := input.String(flagkey.PkgEnvironment)
 
-	userProvidedNS, pkgNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespacePackage)
+	userProvidedNS, pkgNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fv1.AggregateValidationErrors("Package", err)
 	}

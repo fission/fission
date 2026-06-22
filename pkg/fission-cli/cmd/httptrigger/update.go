@@ -42,7 +42,7 @@ func (opts *UpdateSubCommand) do(input cli.Input) error {
 func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 	htName := input.String(flagkey.HtName)
 
-	_, triggerNamespace, err := opts.GetResourceNamespace(input, flagkey.NamespaceTrigger)
+	_, triggerNamespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
 		return fmt.Errorf("error in updating HTTP trigger : %w", err)
 	}
