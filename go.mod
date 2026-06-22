@@ -23,6 +23,8 @@ require (
 	github.com/kedacore/keda/v2 v2.20.1
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.2.0
+	github.com/moby/moby/api v1.55.0
+	github.com/moby/moby/client v0.5.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
@@ -156,8 +158,6 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/moby/api v1.55.0
-	github.com/moby/moby/client v0.5.0
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/sys/user v0.3.0 // indirect
 	github.com/moby/term v0.5.2 // indirect
