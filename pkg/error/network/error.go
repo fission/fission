@@ -6,6 +6,7 @@ package network
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -64,6 +65,22 @@ func (e Error) IsConnRefusedError() bool {
 		return strings.Contains(urlErr.Error(), "connection refused")
 	}
 	return false
+}
+
+// IsConnResetError returns true when the peer accepted the connection but then
+// closed it before sending a complete response — a "connection reset by peer"
+// or a premature EOF. This is the startup symptom of a server reachable through
+// a port-proxy (Docker's userland proxy, or a freshly-Ready pod whose process
+// is still binding): the dial succeeds but the request is severed. Only callers
+// retrying an idempotent request should treat this as retryable, since the
+// server may have received the request before the reset.
+func (e Error) IsConnResetError() bool {
+	if errors.Is(e.err, syscall.ECONNRESET) ||
+		errors.Is(e.err, io.EOF) ||
+		errors.Is(e.err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	return strings.Contains(e.err.Error(), "connection reset")
 }
 
 // IsTimeoutError returns true if its a network timeout error

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/flag"
 )
 
@@ -143,6 +144,32 @@ func Commands() *cobra.Command {
 		},
 	})
 
+	runLocalCmd := wrapper.SubCommand(&cobra.Command{
+		Use:     "run-local",
+		Aliases: []string{"runl"},
+		Short:   "Alpha: Run a function locally in Docker (RFC-0018)",
+		Long: "Alpha: Run a function locally in Docker — no cluster round-trip. For poolmgr/newdeploy " +
+			"(--executor, default poolmgr) it runs the environment runtime image (from --env or --image) and " +
+			"replays the specialize contract over --code (single file) or --deploy (a pre-built directory for " +
+			"multi-file apps); for --executor=container it runs the user's own --image server directly. Either " +
+			"way it invokes the function the same way the cluster does.",
+		// Cluster-optional: `--image` runs entirely cluster-less (no kubeconfig
+		// needed); --env / --secret / --configmap require a cluster and error
+		// clearly when one is unavailable.
+		Annotations: map[string]string{cmd.ClusterOptionalAnnotation: "true"},
+	}, Run, flag.FlagSet{
+		Optional: []flag.Flag{
+			flag.FnName, flag.FnExecutorType, flag.PkgCode, flag.PkgDeployArchive,
+			flag.FnEnvName, flag.FnImageName,
+			flag.FnRunEnvVersion, flag.FnEntryPoint, flag.FnPort,
+			flag.HtMethod, flag.FnTestHeader, flag.FnTestBody, flag.FnSubPath,
+			flag.FnRunKeep, flag.FnRunWatch, flag.FnRunEnvVar, flag.FnRunEnvFile,
+			flag.FnSecret, flag.FnCfgMap, flag.FnRunDebugPort,
+			flag.FnRunBuild, flag.FnRunBuilderImage, flag.FnBuildCmd,
+			flag.NamespaceFunction,
+		},
+	})
+
 	runContainerCmd := wrapper.SubCommand(&cobra.Command{
 		Use:     "run-container",
 		Aliases: []string{"runc"},
@@ -219,7 +246,7 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
+		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
 
 	return command
 }

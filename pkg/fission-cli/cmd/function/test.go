@@ -130,7 +130,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	resp, err := doHTTPRequest(ctx, fnURL.String(),
+	resp, err := DoHTTPRequest(ctx, fnURL.String(),
 		input.StringSlice(flagkey.FnTestHeader),
 		method,
 		input.String(flagkey.FnTestBody))
@@ -182,7 +182,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 // so it degrades cleanly against a server that predates RFC-0015.
 func renderInvocationFailure(out io.Writer, fnName string, statusCode int, component string, body []byte) {
 	if component == "" {
-		fmt.Fprintf(out, "✗ function %q returned %d: %s\n", fnName, statusCode, strings.TrimSpace(string(body)))
+		fail(out, "✗ function %q returned %d: %s", fnName, statusCode, strings.TrimSpace(string(body)))
 		return
 	}
 	var ie ferror.InvocationError
@@ -195,13 +195,18 @@ func renderInvocationFailure(out io.Writer, fnName string, statusCode int, compo
 	if ie.RequestID != "" {
 		line += fmt.Sprintf(", request %s", ie.RequestID)
 	}
-	fmt.Fprintln(out, line)
+	fail(out, "%s", line)
 	if ie.Message != "" {
-		fmt.Fprintf(out, "  detail: %s\n", ie.Message)
+		note(out, "  detail: %s", ie.Message)
 	}
 }
 
-func doHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
+// DoHTTPRequest performs the shared CLI function-invoke request: it sets up the
+// OTel transport, injects the auth token and the caller's headers, optionally
+// dumps the request/response in verbose mode, and returns the response. Shared
+// by `function test` and `function run` (RFC-0018) so the local and in-cluster
+// invoke paths are byte-identical.
+func DoHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
 	shutdown, err := otelUtils.InitProvider(ctx, logr.Logger{}, "fission-cli")
 	if err != nil {
 		return nil, err

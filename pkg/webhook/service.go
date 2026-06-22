@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -39,6 +40,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 	if metricsAddr[0] != ':' {
 		metricsAddr = fmt.Sprintf(":%s", metricsAddr)
+	}
+	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
+		// In-process e2e harness: bind an ephemeral metrics port so the manager
+		// can't lose a TOCTOU race for a fixed port against the other in-process
+		// managers — matching executor/buildermgr/router (pkg/.../start.go).
+		metricsAddr = ":0"
 	}
 	mgrOpt := manager.Options{
 		Scheme: scheme.Scheme,
