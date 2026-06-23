@@ -5,25 +5,24 @@
 package buildermgr
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
+	"context"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
-var (
-	// ociPublishes counts OCI producer outcomes per build (RFC-0012):
-	// result="published" (the Package carries a digest-pinned OCI archive)
-	// or result="degraded" (the push failed and the build fell back to the
-	// storagesvc tarball). A fleet-wide registry outage shows up here.
-	ociPublishes = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_buildermgr_oci_publish_total",
-			Help: "OCI package publish outcomes by result (published|degraded).",
-		},
-		[]string{"result"},
-	)
+// ociPublishes counts OCI producer outcomes per build (RFC-0012):
+// result="published" (the Package carries a digest-pinned OCI archive)
+// or result="degraded" (the push failed and the build fell back to the
+// storagesvc tarball). A fleet-wide registry outage shows up here.
+var ociPublishes = metrics.Int64Counter(
+	"fission_buildermgr_oci_publish_total",
+	"OCI package publish outcomes by result (published|degraded).",
 )
 
-func init() {
-	metrics.Registry.MustRegister(ociPublishes)
+// recordOCIPublish counts one OCI publish outcome by result (published|degraded).
+func recordOCIPublish(ctx context.Context, result string) {
+	ociPublishes.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }

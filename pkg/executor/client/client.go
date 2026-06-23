@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -37,10 +36,10 @@ const tapFailureEscalation = 3
 // batch of liveness taps; a sustained non-zero rate means index-admitted pods
 // are invisible to the executor's idle reaper and at risk of being reaped
 // while serving.
-var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "fission_router_tap_flush_errors_total",
-	Help: "Failed batched tap flushes from the router to the executor.",
-})
+var tapFlushErrors = metrics.Int64Counter(
+	"fission_router_tap_flush_errors_total",
+	"Failed batched tap flushes from the router to the executor.",
+)
 
 // tapFlushNotFound counts tap flushes the executor answered 404 — every
 // tapped address had expired or was unknown. Occasional increments are
@@ -49,15 +48,10 @@ var tapFlushErrors = prometheus.NewCounter(prometheus.CounterOpts{
 // idle reaper would otherwise silently let age out. Kept distinct from
 // tapFlushErrors so churn doesn't trip the failure alarm while a persistent
 // 404 rate stays observable.
-var tapFlushNotFound = prometheus.NewCounter(prometheus.CounterOpts{
-	Name: "fission_router_tap_flush_notfound_total",
-	Help: "Batched tap flushes the executor answered 404 (expired/unknown addresses).",
-})
-
-func init() {
-	metrics.Registry.MustRegister(tapFlushErrors)
-	metrics.Registry.MustRegister(tapFlushNotFound)
-}
+var tapFlushNotFound = metrics.Int64Counter(
+	"fission_router_tap_flush_notfound_total",
+	"Batched tap flushes the executor answered 404 (expired/unknown addresses).",
+)
 
 type (
 	// ClientInterface is the interface for executor client.
@@ -295,11 +289,11 @@ func (c *client) flushTaps(urls map[string]TapServiceRequest) {
 	// genuine failures (unreachable executor, timeout, 5xx) escalate.
 	if ferror.IsNotFound(err) {
 		c.tapFailures.Store(0)
-		tapFlushNotFound.Inc()
+		tapFlushNotFound.Add(context.Background(), 1)
 		c.logger.V(1).Info("tap flush skipped expired entries", "error", err.Error())
 		return
 	}
-	tapFlushErrors.Inc()
+	tapFlushErrors.Add(context.Background(), 1)
 	if failures := c.tapFailures.Add(1); failures >= tapFailureEscalation {
 		c.logger.Error(err, "tap flush failing persistently; idle reaper may reap serving pods",
 			"consecutive_failures", failures, "service_count", len(urls))

@@ -134,10 +134,10 @@ func (gpm *GenericPoolManager) handleReapIdlePools(req *request) {
 			// CleanupOldExecutorObjects sweeps it on restart; count it
 			// separately so the Gate C reap counter never lies.
 			gpm.logger.Error(err, "error destroying reaped pool; the deployment is orphaned until adoption or restart cleanup", "poolKey", key)
-			metrics.OCIPoolReapFailures.Inc()
+			metrics.RecordOCIPoolReapFailure(context.Background())
 			continue
 		}
-		metrics.OCIPoolsReaped.Inc()
+		metrics.RecordOCIPoolReaped(context.Background())
 	}
 }
 

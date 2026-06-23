@@ -160,7 +160,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	totalMemoryUsage.WithLabelValues().Add(float64(fileSize))
+	totalMemoryUsage.Add(r.Context(), int64(fileSize))
 
 	// respond with an ID that can be used to retrieve the file
 	ur := &UploadResponse{
@@ -179,7 +179,7 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 		)
 	}
 
-	totalArchives.WithLabelValues().Inc()
+	totalArchives.Add(r.Context(), 1)
 }
 
 // getOrListHandler dispatches GET /v1/archive: a request carrying an `id` query
@@ -231,8 +231,8 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	totalArchives.WithLabelValues().Dec()
-	totalMemoryUsage.WithLabelValues().Sub(float64(filesize))
+	totalArchives.Add(r.Context(), -1)
+	totalMemoryUsage.Add(r.Context(), -filesize)
 	w.WriteHeader(http.StatusOK)
 }
 

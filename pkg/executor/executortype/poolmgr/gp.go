@@ -230,7 +230,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		// runs on the cold-start hot path and may see many transient
 		// failures in quick succession. Status flapping there is noisy
 		// and not useful — those signals belong in logs / metrics
-		// (already covered by metrics.ColdStartsError). Status only
+		// (already covered by metrics.RecordColdStartError). Status only
 		// transitions on durable state (specialized successfully, or
 		// the buildermgr reporting a permanent PackageBuildFailed).
 		return nil, err

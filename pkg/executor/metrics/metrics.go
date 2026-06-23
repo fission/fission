@@ -5,78 +5,91 @@
 package metrics
 
 import (
+	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
+func functionLabels(name, namespace string) metric.MeasurementOption {
+	return metric.WithAttributes(
+		attribute.String("function_name", name),
+		attribute.String("function_namespace", namespace),
+	)
+}
+
 var (
-	// function_name: the function's name
-	// function_uid: the function's version id
-	// function_address: the address of the pod from which the function was called
-	functionLabels = []string{"function_name", "function_namespace"}
-	ColdStarts     = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_function_cold_starts_total",
-			Help: "How many cold starts are made by function_name, function_namespace.",
-		},
-		functionLabels,
+	coldStarts = metrics.Int64Counter(
+		"fission_function_cold_starts_total",
+		"How many cold starts are made by function_name, function_namespace.",
 	)
-	FuncRunningSeconds = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name: "fission_function_running_seconds",
-			Help: "The running time (last access - create) in seconds of the function.",
-			// Histogram instead of Summary: avoids the per-series quantile stream
-			// memory; quantiles are derived with histogram_quantile(). This is a
-			// function lifetime (seconds to hours), so use exponential buckets
-			// from 1s to ~9h rather than DefBuckets (which top out at 10s).
-			Buckets: prometheus.ExponentialBuckets(1, 2, 16),
-		},
-		functionLabels,
+	// Histogram instead of Summary: avoids the per-series quantile stream
+	// memory; quantiles are derived with histogram_quantile(). This is a
+	// function lifetime (seconds to hours), so the buckets stay exponential
+	// from 1s to ~9h verbatim rather than DefBuckets (which top out at 10s).
+	funcRunningSeconds = metrics.Float64Histogram(
+		"fission_function_running_seconds",
+		"The running time (last access - create) in seconds of the function.",
+		prometheus.ExponentialBuckets(1, 2, 16),
 	)
-	ColdStartsError = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_function_cold_start_errors_total",
-			Help: "Count of fission cold start errors",
-		},
-		functionLabels,
+	coldStartErrors = metrics.Int64Counter(
+		"fission_function_cold_start_errors_total",
+		"Count of fission cold start errors",
 	)
-	// FunctionServiceEnsures counts per-function Service ensure outcomes
+	// functionServiceEnsures counts per-function Service ensure outcomes
 	// (RFC-0002 EndpointSlice data plane). No function-name labels by design —
 	// same cardinality discipline as the router metrics.
-	FunctionServiceEnsures = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_executor_function_service_ensures_total",
-			Help: "Count of per-function Service ensure operations by result (created|updated|exists|error).",
-		},
-		[]string{"result"},
+	functionServiceEnsures = metrics.Int64Counter(
+		"fission_executor_function_service_ensures_total",
+		"Count of per-function Service ensure operations by result (created|updated|exists|error).",
 	)
-	// OCIPoolsReaped counts per-image pool deployments destroyed by the idle
+	// ociPoolsReaped counts per-image pool deployments destroyed by the idle
 	// pool reaper (RFC-0012). The Gate C signal: at many-package scale this
 	// moving (and warm-pod count staying bounded) is the design working.
-	OCIPoolsReaped = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "fission_executor_oci_pools_reaped_total",
-			Help: "Per-image (OCI) warm pools destroyed by the idle pool reaper.",
-		},
+	ociPoolsReaped = metrics.Int64Counter(
+		"fission_executor_oci_pools_reaped_total",
+		"Per-image (OCI) warm pools destroyed by the idle pool reaper.",
 	)
-	// OCIPoolReapFailures counts reap passes whose deployment delete failed
+	// ociPoolReapFailures counts reap passes whose deployment delete failed
 	// (the pool entry is dropped and the deployment orphaned until adoption
-	// or restart cleanup) — kept separate so OCIPoolsReaped never lies.
-	OCIPoolReapFailures = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "fission_executor_oci_pool_reap_failures_total",
-			Help: "Idle-pool reap attempts whose deployment delete failed (deployment orphaned until adoption or restart cleanup).",
-		},
+	// or restart cleanup) — kept separate so ociPoolsReaped never lies.
+	ociPoolReapFailures = metrics.Int64Counter(
+		"fission_executor_oci_pool_reap_failures_total",
+		"Idle-pool reap attempts whose deployment delete failed (deployment orphaned until adoption or restart cleanup).",
 	)
 )
 
-func init() {
-	registry := metrics.Registry
-	registry.MustRegister(ColdStarts)
-	registry.MustRegister(FuncRunningSeconds)
-	registry.MustRegister(ColdStartsError)
-	registry.MustRegister(FunctionServiceEnsures)
-	registry.MustRegister(OCIPoolsReaped)
-	registry.MustRegister(OCIPoolReapFailures)
+// RecordColdStart counts one cold start for the function.
+func RecordColdStart(ctx context.Context, fnName, fnNamespace string) {
+	coldStarts.Add(ctx, 1, functionLabels(fnName, fnNamespace))
+}
+
+// RecordColdStartError counts one cold-start failure for the function.
+func RecordColdStartError(ctx context.Context, fnName, fnNamespace string) {
+	coldStartErrors.Add(ctx, 1, functionLabels(fnName, fnNamespace))
+}
+
+// ObserveFunctionRunningSeconds records a function's lifetime (last access -
+// create) in seconds.
+func ObserveFunctionRunningSeconds(ctx context.Context, fnName, fnNamespace string, seconds float64) {
+	funcRunningSeconds.Record(ctx, seconds, functionLabels(fnName, fnNamespace))
+}
+
+// RecordFunctionServiceEnsure counts one Service-ensure outcome by result
+// (created|updated|exists|error).
+func RecordFunctionServiceEnsure(ctx context.Context, result string) {
+	functionServiceEnsures.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
+}
+
+// RecordOCIPoolReaped counts one idle per-image pool destroyed by the reaper.
+func RecordOCIPoolReaped(ctx context.Context) {
+	ociPoolsReaped.Add(ctx, 1)
+}
+
+// RecordOCIPoolReapFailure counts one reap pass whose deployment delete failed.
+func RecordOCIPoolReapFailure(ctx context.Context) {
+	ociPoolReapFailures.Add(ctx, 1)
 }

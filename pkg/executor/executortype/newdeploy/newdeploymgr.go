@@ -554,11 +554,11 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 	_, err = deploy.fsCache.Add(*fsvc)
 	if err != nil {
 		deploy.logger.Error(err, "error adding function to cache", "function", fsvc.Function)
-		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
+		metrics.RecordColdStartError(ctx, fn.Name, fn.Namespace)
 		return fsvc, err
 	}
 
-	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
+	metrics.RecordColdStart(ctx, fn.Name, fn.Namespace)
 	executorUtils.SetFunctionReady(ctx, deploy.logger, deploy.fissionClient, fn, fv1.FunctionReasonReady, "newdeploy deployment is ready")
 
 	return fsvc, nil

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -17,114 +19,70 @@ import (
 )
 
 var (
-	// function + http labels as strings
-	labelsStrings = []string{"function_namespace", "function_name", "path", "method", "code"}
-
-	// Function http calls count
-	// function_namespace: function namespace
-	// function_name: function name
-	// code: http status code
-	// path: the client call the function on which http path
-	// method: the function's http method
-	functionCalls = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_function_calls_total",
-			Help: "Count of Fission function calls",
-		},
-		labelsStrings,
+	// Function http call counters and the Fission-attributed overhead histogram,
+	// labelled by function_namespace, function_name, path (the client-called
+	// http path), method, and code (http status). Recorded on the request path
+	// with the request context, so the overhead histogram carries trace
+	// exemplars when the invocation is sampled.
+	functionCalls = metrics.Int64Counter(
+		"fission_function_calls_total",
+		"Count of Fission function calls",
 	)
-	functionCallErrors = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_function_errors_total",
-			Help: "Count of Fission function errors",
-		},
-		labelsStrings,
+	functionCallErrors = metrics.Int64Counter(
+		"fission_function_errors_total",
+		"Count of Fission function errors",
 	)
-	functionCallOverhead = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name: "fission_function_overhead_seconds",
-			Help: "The function call delay caused by fission.",
-			// Histogram instead of Summary: a summary keeps a per-series quantile
-			// stream, and with these high-cardinality labels that was the largest
-			// router heap consumer. Buckets are fixed-size and aggregatable across
-			// replicas. Quantiles are derived with histogram_quantile().
-			Buckets: prometheus.DefBuckets,
-		},
-		labelsStrings,
+	// Histogram instead of Summary: a summary keeps a per-series quantile
+	// stream, and with these high-cardinality labels that was the largest
+	// router heap consumer. Buckets stay prometheus.DefBuckets verbatim so the
+	// exposed series are unchanged; quantiles are derived with
+	// histogram_quantile().
+	functionCallOverhead = metrics.Float64Histogram(
+		"fission_function_overhead_seconds",
+		"The function call delay caused by fission.",
+		prometheus.DefBuckets,
 	)
 
 	// Route-update observability (RFC-0013). muxRebuilds is the headline:
 	// it must NOT move under canary-weight / function churn — only route
 	// shape changes (trigger create/delete/path edits) increment it.
-	routeTableApplies = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_router_route_table_applies_total",
-			Help: "Route table applications by result (no_change, handler_swapped, shape_changed, rejected).",
-		},
-		[]string{"result"},
+	routeTableApplies = metrics.Int64Counter(
+		"fission_router_route_table_applies_total",
+		"Route table applications by result (no_change, handler_swapped, shape_changed, rejected).",
 	)
-	muxRebuilds = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_router_mux_rebuilds_total",
-			Help: "Full mux rebuilds by listener and reason (shape_change when the route-table materializer rebuilds a listener mux).",
-		},
-		[]string{"listener", "reason"},
+	muxRebuilds = metrics.Int64Counter(
+		"fission_router_mux_rebuilds_total",
+		"Full mux rebuilds by listener and reason (shape_change when the route-table materializer rebuilds a listener mux).",
 	)
-	routesTotal = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_router_routes",
-			Help: "Routes currently in the route table (public = HTTP triggers, internal = functions).",
-		},
-		[]string{"listener"},
+	routesTotal = metrics.Int64Gauge(
+		"fission_router_routes",
+		"Routes currently in the route table (public = HTTP triggers, internal = functions).",
 	)
-	resyncDrift = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "fission_router_route_resync_drift_total",
-			Help: "Routes the periodic resync had to correct — a nonzero value means a watch event was missed (the table self-healed).",
-		},
+	resyncDrift = metrics.Int64Counter(
+		"fission_router_route_resync_drift_total",
+		"Routes the periodic resync had to correct — a nonzero value means a watch event was missed (the table self-healed).",
 	)
 	// The drift guard's own failure modes must be observable: the safety
 	// story of the incremental path rests on the resync, so a resync that
 	// cannot run (or a materialize that cannot build) needs an alertable
 	// signal beyond a log line.
-	resyncFailures = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "fission_router_route_resync_failures_total",
-			Help: "Resync passes that failed (list error or per-trigger apply errors); the drift guard was unable to verify the table this tick.",
-		},
+	resyncFailures = metrics.Int64Counter(
+		"fission_router_route_resync_failures_total",
+		"Resync passes that failed (list error or per-trigger apply errors); the drift guard was unable to verify the table this tick.",
 	)
-	materializeFailures = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "fission_router_mux_materialize_failures_total",
-			Help: "Mux materializations that failed before the swap; the served mux is stale until a retry succeeds (the resync loop re-arms it).",
-		},
+	materializeFailures = metrics.Int64Counter(
+		"fission_router_mux_materialize_failures_total",
+		"Mux materializations that failed before the swap; the served mux is stale until a retry succeeds (the resync loop re-arms it).",
 	)
 	// Failure attribution (RFC-0015). component: router|executor|fetcher|
 	// function|timeout; reason: a stable taxonomy value. A spike in executor/*
 	// is an alertable platform problem, vs function/* (user code). Client
 	// disconnects (499) are excluded as benign churn.
-	invocationFailures = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_invocation_failures_total",
-			Help: "Count of failed function invocations attributed by component and reason (RFC-0015).",
-		},
-		[]string{"component", "reason"},
+	invocationFailures = metrics.Int64Counter(
+		"fission_invocation_failures_total",
+		"Count of failed function invocations attributed by component and reason (RFC-0015).",
 	)
 )
-
-func init() {
-	registry := metrics.Registry
-	registry.MustRegister(functionCalls)
-	registry.MustRegister(functionCallErrors)
-	registry.MustRegister(functionCallOverhead)
-	registry.MustRegister(routeTableApplies)
-	registry.MustRegister(muxRebuilds)
-	registry.MustRegister(routesTotal)
-	registry.MustRegister(resyncDrift)
-	registry.MustRegister(resyncFailures)
-	registry.MustRegister(materializeFailures)
-	registry.MustRegister(invocationFailures)
-}
 
 // collectFunctionMetric records the per-call counters and the
 // Fission-attributed overhead histogram. Pure observation: the cached-address
@@ -142,20 +100,22 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 		}
 	}
 
-	functionCalls.WithLabelValues(fh.function.ObjectMeta.Namespace,
-		fh.function.ObjectMeta.Name, path, req.Method,
-		fmt.Sprint(resp.StatusCode)).Inc()
+	// Same label set for all three; recorded with the request context so the
+	// overhead histogram attaches a trace exemplar on sampled invocations.
+	ctx := req.Context()
+	attrs := metric.WithAttributes(
+		attribute.String("function_namespace", fh.function.Namespace),
+		attribute.String("function_name", fh.function.Name),
+		attribute.String("path", path),
+		attribute.String("method", req.Method),
+		attribute.String("code", fmt.Sprint(resp.StatusCode)),
+	)
 
+	functionCalls.Add(ctx, 1, attrs)
 	if resp.StatusCode >= 400 {
-		functionCallErrors.WithLabelValues(fh.function.ObjectMeta.Namespace,
-			fh.function.ObjectMeta.Name, path, req.Method,
-			fmt.Sprint(resp.StatusCode)).Inc()
+		functionCallErrors.Add(ctx, 1, attrs)
 	}
-
-	functionCallOverhead.WithLabelValues(fh.function.ObjectMeta.Namespace,
-		fh.function.ObjectMeta.Name, path, req.Method,
-		fmt.Sprint(resp.StatusCode)).
-		Observe(float64(duration.Nanoseconds()) / 1e9)
+	functionCallOverhead.Record(ctx, float64(duration.Nanoseconds())/1e9, attrs)
 
 	fh.logger.V(1).Info("Request complete", "function", fh.function.Name,
 		"retry", rrt.totalRetry, "total-time", duration,

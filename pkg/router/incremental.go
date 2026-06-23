@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -67,7 +69,7 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	// cleared too.
 	if reason, cfgErr := triggerConfigError(trigger); cfgErr != nil {
 		res := ts.routeTable.DeleteTriggerByName(key)
-		routeTableApplies.WithLabelValues("rejected").Inc()
+		routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "rejected")))
 		if res == routetable.ShapeChanged {
 			ts.signalMaterialize()
 		}
@@ -87,7 +89,7 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 			// create event re-admits the route immediately via the cascade.
 			res := ts.routeTable.DeleteTriggerByName(key)
 			ts.routeTable.MarkUnresolved(key, referencedFunctions(trigger))
-			routeTableApplies.WithLabelValues("rejected").Inc()
+			routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "rejected")))
 			if res == routetable.ShapeChanged {
 				ts.signalMaterialize()
 			}
@@ -104,7 +106,7 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	if rr.resolveResultType != resolveResultSingleFunction && rr.resolveResultType != resolveResultMultipleFunctions {
 		ts.logger.Error(nil, "resolve result type not implemented", "type", rr.resolveResultType)
 		res := ts.routeTable.DeleteTriggerByName(key)
-		routeTableApplies.WithLabelValues("rejected").Inc()
+		routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "rejected")))
 		if res == routetable.ShapeChanged {
 			ts.signalMaterialize()
 		}
@@ -137,7 +139,7 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	res := ts.routeTable.ApplyTrigger(spec, func() http.Handler {
 		return ts.buildTriggerHandler(trigger, rr, fnTimeout)
 	})
-	routeTableApplies.WithLabelValues(res.String()).Inc()
+	routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res.String())))
 
 	switch res {
 	case routetable.ShapeChanged:
@@ -187,7 +189,7 @@ func (ts *HTTPTriggerSet) applyFunctionIncremental(ctx context.Context, fn *fv1.
 	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
-	routeTableApplies.WithLabelValues(res.String()).Inc()
+	routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res.String())))
 	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
 	}
@@ -284,8 +286,8 @@ func (ts *HTTPTriggerSet) setConflictLosers(current map[types.NamespacedName]rou
 // updateRoutesGauge publishes the table sizes.
 func (ts *HTTPTriggerSet) updateRoutesGauge() {
 	pub, internal := ts.routeTable.Sizes()
-	routesTotal.WithLabelValues("public").Set(float64(pub))
-	routesTotal.WithLabelValues("internal").Set(float64(internal))
+	routesTotal.Record(context.Background(), int64(pub), metric.WithAttributes(attribute.String("listener", "public")))
+	routesTotal.Record(context.Background(), int64(internal), metric.WithAttributes(attribute.String("listener", "internal")))
 }
 
 // materializeLoop consumes debounced shape-change signals and rebuilds the
@@ -345,7 +347,7 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	featureConfig, err := ts.featureConfigFn(ts.logger)
 	if err != nil {
 		ts.logger.Error(err, "error reading feature config; mux materialization failed (will retry)")
-		materializeFailures.Inc()
+		materializeFailures.Add(ctx, 1)
 		ts.materializeDirty.Store(true)
 		for _, trigger := range ts.drainPendingConditions() {
 			ts.markTriggerCondition(ctx, trigger,
@@ -369,8 +371,8 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 		ts.internalMutableRouter.updateRouter(internalMux.Handler())
 	}
 	ts.materializeDirty.Store(false)
-	muxRebuilds.WithLabelValues("public", "shape_change").Inc()
-	muxRebuilds.WithLabelValues("internal", "shape_change").Inc()
+	muxRebuilds.Add(ctx, 1, metric.WithAttributes(attribute.String("listener", "public"), attribute.String("reason", "shape_change")))
+	muxRebuilds.Add(ctx, 1, metric.WithAttributes(attribute.String("listener", "internal"), attribute.String("reason", "shape_change")))
 	// The mux now serves user routes — report ready (gates /readyz).
 	ts.ready.Store(true)
 
@@ -459,7 +461,7 @@ func (ts *HTTPTriggerSet) resyncLoop(ctx context.Context) {
 			ts.signalMaterialize()
 		}
 		if err := ts.resync(ctx, false); err != nil {
-			resyncFailures.Inc()
+			resyncFailures.Add(ctx, 1)
 			ts.logger.Error(err, "route table resync failed; routes keep serving from the last good state")
 		}
 	}
@@ -555,7 +557,7 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) error {
 
 	ts.updateRoutesGauge()
 	if !initial && drift > 0 {
-		resyncDrift.Add(float64(drift))
+		resyncDrift.Add(ctx, int64(drift))
 		ts.logger.Info("route table resync corrected drift (a watch event was missed)", "corrections", drift)
 	}
 	return errs

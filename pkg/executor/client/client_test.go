@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -117,7 +116,7 @@ func TestFlushTapsNotFoundDoesNotEscalate(t *testing.T) {
 	c := newTestClient(sink, srv.URL)
 	batch := map[string]TapServiceRequest{"u": {ServiceURL: "http://10.0.0.1:8888"}}
 
-	before := testutil.ToFloat64(tapFlushNotFound)
+	before := counterValue(t, "fission_router_tap_flush_notfound_total")
 	rounds := tapFailureEscalation + 3
 	for range rounds {
 		c.flushTaps(batch)
@@ -127,7 +126,7 @@ func TestFlushTapsNotFoundDoesNotEscalate(t *testing.T) {
 	// The 404s stay observable via a distinct counter, so a SUSTAINED rate
 	// (an index/registration drift, not churn) is still visible without
 	// tripping the failure alarm.
-	assert.Equal(t, float64(rounds), testutil.ToFloat64(tapFlushNotFound)-before,
+	assert.Equal(t, float64(rounds), counterValue(t, "fission_router_tap_flush_notfound_total")-before,
 		"each 404 flush must increment the NotFound counter")
 }
 

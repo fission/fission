@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -282,7 +284,10 @@ func (fh functionHandler) getProxyErrorHandler(start time.Time, rrt *RetryingRou
 		// A client disconnect (499) is benign churn, not a server-side failure,
 		// so it is excluded from the failure-attribution counter.
 		if status != 499 {
-			invocationFailures.WithLabelValues(string(component), reason).Inc()
+			invocationFailures.Add(req.Context(), 1, metric.WithAttributes(
+				attribute.String("component", string(component)),
+				attribute.String("reason", reason),
+			))
 		}
 
 		fh.writeInvocationError(rw, req, status, component, reason, msg, err)

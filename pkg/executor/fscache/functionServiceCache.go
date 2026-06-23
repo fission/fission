@@ -268,7 +268,7 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 	fsc.byFunction.Delete(crd.CacheKeyURFromMeta(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
 	fsc.byFunctionUID.Delete(fsvc.Function.UID)
-	metrics.FuncRunningSeconds.WithLabelValues(fsvc.Function.Name, fsvc.Function.Namespace).Observe(fsvc.Atime.Sub(fsvc.Ctime).Seconds())
+	metrics.ObserveFunctionRunningSeconds(context.Background(), fsvc.Function.Name, fsvc.Function.Namespace, fsvc.Atime.Sub(fsvc.Ctime).Seconds())
 }
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].
