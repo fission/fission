@@ -63,6 +63,7 @@ jobs:
         run: |
           go mod verify
           go mod download
+          make verify-gomod
 
       - name: Check license headers
         run: make license-check
