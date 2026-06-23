@@ -38,11 +38,15 @@ func newReconcilerTS(t *testing.T, crObjs ...client.Object) (*HTTPTriggerSet, cl
 		syncDebouncer:              debounce.New(time.Millisecond),
 		resolver:                   makeFunctionReferenceResolver(logger, cl),
 	}
+	// The reconcilers drive the incremental route path (RFC-0013); wire its
+	// route table so applyTriggerIncremental / applyFunctionIncremental have a
+	// table to mutate.
+	ts.initIncrementalRoutes()
 	return ts, cl, kc
 }
 
-// requireRebuildSignal asserts the debounced syncTriggers pushed a rebuild
-// request onto the channel.
+// requireRebuildSignal asserts the incremental path's debounced materialize
+// pushed a rebuild request onto the channel (a shape change happened).
 func requireRebuildSignal(t *testing.T, ts *HTTPTriggerSet) {
 	t.Helper()
 	select {
@@ -52,16 +56,30 @@ func requireRebuildSignal(t *testing.T, ts *HTTPTriggerSet) {
 	}
 }
 
+// requireNoRebuildSignal asserts the incremental path did NOT signal a
+// materialize — the change was handler-only (e.g. a route-provider switch with
+// an unchanged route shape), so no mux rebuild is owed.
+func requireNoRebuildSignal(t *testing.T, ts *HTTPTriggerSet) {
+	t.Helper()
+	select {
+	case <-ts.updateRouterRequestChannel:
+		t.Fatal("expected no mux rebuild signal for a handler-only change, got one")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
 	trigger := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "default"},
 		Spec: fv1.HTTPTriggerSpec{
-			CreateIngress: true,
-			RelativeURL:   "/t1",
-			Methods:       []string{"GET"},
+			CreateIngress:     true,
+			RelativeURL:       "/t1",
+			Methods:           []string{"GET"},
+			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
 		},
 	}
-	ts, cl, kc := newReconcilerTS(t, trigger)
+	ts, cl, kc := newReconcilerTS(t, fn, trigger)
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "t1", Namespace: "default"}}
 
@@ -87,10 +105,12 @@ func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
 // then switching it to the ingress provider must delete the HTTPRoute and create
 // the Ingress in a single reconcile pass (cross-provider self-clean).
 func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
 	trigger := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "tg", Namespace: "default"},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/tg", Methods: []string{"GET"},
+			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
 			RouteConfig: &fv1.RouteConfig{
 				Provider:  fv1.RouteProviderGateway,
 				Hostnames: []string{"tg.example.com"},
@@ -98,7 +118,7 @@ func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
 			},
 		},
 	}
-	ts, cl, kc := newReconcilerTS(t, trigger)
+	ts, cl, kc := newReconcilerTS(t, fn, trigger)
 	gw := gatewayfake.NewClientset()
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{
 		newIngressRouteProvider(ts.logger, kc),
@@ -125,15 +145,22 @@ func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err), "HTTPRoute must be removed after switching to the ingress provider")
 	_, err = kc.NetworkingV1().Ingresses(podNamespace).Get(t.Context(), "tg", metav1.GetOptions{})
 	require.NoError(t, err, "Ingress must be created after switching to the ingress provider")
-	requireRebuildSignal(t, ts)
+	// A route-provider switch leaves the route shape (/tg GET) unchanged, so the
+	// incremental path performs no mux rebuild — only the external route object
+	// (HTTPRoute → Ingress) moves.
+	requireNoRebuildSignal(t, ts)
 }
 
 func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
 	trigger := &fv1.HTTPTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "t2", Namespace: "default"},
-		Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/t2", Methods: []string{"GET"}},
+		Spec: fv1.HTTPTriggerSpec{
+			RelativeURL: "/t2", Methods: []string{"GET"},
+			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
+		},
 	}
-	ts, cl, kc := newReconcilerTS(t, trigger)
+	ts, cl, kc := newReconcilerTS(t, fn, trigger)
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
 
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "t2", Namespace: "default"}})
@@ -168,12 +195,14 @@ func TestFunctionReconcilerRebuildsAndResolvesFresh(t *testing.T) {
 		"resolution must read the function's current state from the Manager cache")
 }
 
-func TestFunctionReconcilerDeletedRebuilds(t *testing.T) {
+func TestFunctionReconcilerDeletedUnknownNoSignal(t *testing.T) {
 	ts, cl, _ := newReconcilerTS(t)
 	r := &functionReconciler{logger: ts.logger, client: cl, ts: ts}
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "gone", Namespace: "default"}})
 	require.NoError(t, err)
-	requireRebuildSignal(t, ts)
+	// The deleted function was never in the route table (no route referenced it),
+	// so the incremental delete is a no-op shape-wise and signals no rebuild.
+	requireNoRebuildSignal(t, ts)
 }
 
 func TestResolverResolveByNameViaCache(t *testing.T) {

@@ -54,9 +54,8 @@ var (
 	)
 
 	// Route-update observability (RFC-0013). muxRebuilds is the headline:
-	// in incremental mode it must NOT move under canary-weight / function
-	// churn — only shape changes (trigger create/delete/path edits) and the
-	// legacy mode's full rebuilds increment it.
+	// it must NOT move under canary-weight / function churn — only route
+	// shape changes (trigger create/delete/path edits) increment it.
 	routeTableApplies = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_router_route_table_applies_total",
@@ -67,7 +66,7 @@ var (
 	muxRebuilds = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "fission_router_mux_rebuilds_total",
-			Help: "Full mux rebuilds by listener and reason (shape_change for the incremental materializer, legacy for the full-rebuild mode).",
+			Help: "Full mux rebuilds by listener and reason (shape_change when the route-table materializer rebuilds a listener mux).",
 		},
 		[]string{"listener", "reason"},
 	)

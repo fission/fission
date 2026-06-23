@@ -21,16 +21,16 @@ import (
 	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
-// This file is the incremental route-update path (RFC-0013 phase 1), the
-// default since ROUTER_INCREMENTAL_ROUTES landed. The reconcilers feed
-// per-event diffs into the route table; handler-only changes (canary weight
-// ticks, function updates) swap an atomic pointer and never rebuild a mux;
-// shape changes signal the debounced materializer, which rebuilds the httpmux
-// muxes from a table snapshot through the same registration helpers as the
-// legacy path (routeshape.go).
+// This file is the incremental route-update path (RFC-0013 phase 1), the only
+// production route-update path. The reconcilers feed per-event diffs into the
+// route table; handler-only changes (canary weight ticks, function updates)
+// swap an atomic pointer and never rebuild a mux; shape changes signal the
+// debounced materializer, which rebuilds the httpmux muxes from a table
+// snapshot through the registration helpers in routeshape.go.
 //
-// The legacy full-rebuild loop (updateRouter + buildMuxes) is retained behind
-// ROUTER_INCREMENTAL_ROUTES=false for one release as the escape hatch.
+// buildMuxes (httpTriggers.go) is the one-shot mux constructor those same
+// registration helpers also back; it is the test/parity builder, not a
+// production route-update path.
 
 // resyncInterval is how often the drift guard re-lists triggers + functions
 // and diffs them against the route table. Both lists come from the Manager's
@@ -57,13 +57,12 @@ func referencedFunctions(trigger *fv1.HTTPTrigger) []types.NamespacedName {
 // applyTriggerIncremental reconciles one trigger into the route table:
 // validate → resolve → apply. Returns the apply result so the resync loop
 // can count drift, and an error only for transient resolve failures (the
-// reconciler requeues; the last-known-good route keeps serving — parity with
-// the legacy path, where a LIST error kept the old mux).
+// reconciler requeues; the last-known-good route keeps serving).
 func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *fv1.HTTPTrigger) (routetable.ApplyResult, error) {
 	key := types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}
 
-	// Invalid CORS/ingress config: the route must not serve (parity with the
-	// legacy skip), and the user sees why on the trigger's conditions.
+	// Invalid CORS/ingress config: the route must not serve (the one-shot
+	// buildMuxes skips it too), and the user sees why on the trigger's conditions.
 	// Delete-by-name so a previously-unresolved trigger's index entry is
 	// cleared too.
 	if reason, cfgErr := triggerConfigError(trigger); cfgErr != nil {
@@ -143,8 +142,8 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 	switch res {
 	case routetable.ShapeChanged:
 		// The route becomes observable only after the debounced materialize;
-		// queue the condition so it is marked after the swap (parity with the
-		// legacy path, which marks after updateRouter's swap).
+		// queue the condition so it is marked after the swap (the mux swap
+		// is where the route becomes live).
 		ts.queuePendingCondition(trigger)
 		ts.signalMaterialize()
 	default:
@@ -230,9 +229,8 @@ func (ts *HTTPTriggerSet) reapplyTriggersForFunction(ctx context.Context, key ty
 	return errs
 }
 
-// signalMaterialize requests a debounced mux rebuild — same channel and
-// debouncer the legacy syncTriggers path uses, consumed by materializeLoop
-// in incremental mode.
+// signalMaterialize requests a debounced mux rebuild on the
+// updateRouterRequestChannel, consumed by materializeLoop.
 func (ts *HTTPTriggerSet) signalMaterialize() {
 	ts.syncDebouncer(func() {
 		ts.updateRouterRequestChannel <- struct{}{}
@@ -291,8 +289,7 @@ func (ts *HTTPTriggerSet) updateRoutesGauge() {
 }
 
 // materializeLoop consumes debounced shape-change signals and rebuilds the
-// muxes from the route table. The incremental-mode counterpart of
-// updateRouter.
+// muxes from the route table — the router's only production mux-rebuild loop.
 func (ts *HTTPTriggerSet) materializeLoop(ctx context.Context) {
 	for {
 		select {
@@ -308,7 +305,7 @@ func (ts *HTTPTriggerSet) materializeLoop(ctx context.Context) {
 // route-table materialization snapshot: the precedence-ordered public routes,
 // the internal function-invocation routes (GHSA split — never on the public
 // mux), and the router-owned routes. Registration goes through the same helpers
-// as the legacy buildMuxes (routeshape.go), so the two paths cannot drift.
+// as the one-shot buildMuxes (routeshape.go), so the two paths cannot drift.
 // materialize swaps in .Handler() of each; tests introspect the *httpmux.Mux.
 func (ts *HTTPTriggerSet) buildIncrementalMuxes(featureConfig *config.FeatureConfig, m routetable.Materialization) (public, internal *httpmux.Mux) {
 	publicMux, internalMux := ts.newListenerMuxes(featureConfig)
@@ -338,7 +335,7 @@ func (ts *HTTPTriggerSet) buildIncrementalMuxes(featureConfig *config.FeatureCon
 // materialize rebuilds both listener muxes from a route-table snapshot and
 // swaps them in, then marks the conditions of the triggers whose shape
 // changes were in this batch. Registration goes through the same helpers as
-// the legacy buildMuxes (routeshape.go), so the two paths cannot drift.
+// the one-shot buildMuxes (routeshape.go), so the two paths cannot drift.
 //
 // A failed materialize is STICKY: the drained conditions are re-queued, the
 // dirty flag stays set, and the resync loop re-signals every tick until a
@@ -367,7 +364,7 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	m := ts.routeTable.Materialization()
 	publicMux, internalMux := ts.buildIncrementalMuxes(featureConfig, m)
 
-	ts.mutableRouter.updateRouter(publicMux.Handler())
+	ts.updateRouter(publicMux.Handler())
 	if ts.internalMutableRouter != nil {
 		ts.internalMutableRouter.updateRouter(internalMux.Handler())
 	}
@@ -380,7 +377,8 @@ func (ts *HTTPTriggerSet) materialize(ctx context.Context) {
 	ts.reportConflicts(ctx, m.Conflicts)
 
 	// Mark the batch's triggers admitted now that their routes are
-	// observable (parity with the legacy post-swap loop). A trigger that is
+	// observable (the conditions are marked after the mux swap so they reflect
+	// observable state). A trigger that is
 	// shadowed by a conflict keeps the False condition reportConflicts set.
 	for _, trigger := range ts.drainPendingConditions() {
 		if ts.isConflictLoser(types.NamespacedName{Namespace: trigger.Namespace, Name: trigger.Name}) {
@@ -445,9 +443,9 @@ func (ts *HTTPTriggerSet) reportConflicts(ctx context.Context, conflicts []route
 
 // resyncLoop is the drift guard: it periodically re-lists triggers +
 // functions from the Manager cache and re-applies them. Anything it corrects
-// is a missed watch event; today's full-rebuild path self-heals every event,
-// so the incremental path must demonstrably do the same. It also re-arms the
-// materializer after a failed build (the sticky dirty flag).
+// is a missed watch event; the incremental path must self-heal from one
+// regardless. It also re-arms the materializer after a failed build (the
+// sticky dirty flag).
 func (ts *HTTPTriggerSet) resyncLoop(ctx context.Context) {
 	ticker := time.NewTicker(resyncInterval)
 	defer ticker.Stop()

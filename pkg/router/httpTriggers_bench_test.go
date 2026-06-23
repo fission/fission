@@ -4,14 +4,13 @@
 
 package router
 
-// Mux build + match benchmarks (RFC-0013 phase 0 baselines).
+// Mux match + incremental-churn benchmarks (RFC-0013).
 //
-// BenchmarkBuildMuxes measures the cost of one full mux rebuild (registration
-// + Handler() compile) at N triggers + N functions — which on the legacy path
-// is also the cost of a single canary weight tick, since any trigger or
-// function event rebuilds everything.
 // BenchmarkMuxMatch pins httpmux's per-request linear route scan at 10k routes
 // (first/last/miss positions) — the native matcher built in RFC-0013 phase 3.
+// BenchmarkIncrementalWeightTick measures the steady-churn unit: one canary
+// weight tick applied through the incremental path (an O(1) handler swap, not
+// an O(full rebuild)).
 
 import (
 	"fmt"
@@ -29,8 +28,7 @@ import (
 )
 
 // benchRouteSet builds N functions and N triggers (trigger bench-i routes
-// /bench-i to function bench-fn-i) plus the function-timeout map updateRouter
-// would pass to buildMuxes.
+// /bench-i to function bench-fn-i) plus the function-timeout map.
 func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[types.UID]int) {
 	fns := make([]fv1.Function, 0, n)
 	triggers := make([]fv1.HTTPTrigger, 0, n)
@@ -56,27 +54,6 @@ func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[types.UID]int)
 		})
 	}
 	return fns, triggers, fnTimeout
-}
-
-func BenchmarkBuildMuxes(b *testing.B) {
-	for _, n := range []int{100, 1000, 10000} {
-		b.Run(fmt.Sprintf("triggers=%d", n), func(b *testing.B) {
-			fns, triggers, fnTimeout := benchRouteSet(n)
-			ts := newShapeTS(b, fns, triggers)
-			ctx := b.Context()
-			b.ReportAllocs()
-			for b.Loop() {
-				public, internal, err := ts.buildMuxes(ctx, fnTimeout)
-				if err != nil {
-					b.Fatal(err)
-				}
-				// Handler() is where templates compile and the dispatcher is
-				// assembled — part of the real rebuild cost the swap pays.
-				_ = public.Handler()
-				_ = internal.Handler()
-			}
-		})
-	}
 }
 
 // nopResponseWriter discards everything: a reusable sink so the match loop
@@ -130,8 +107,8 @@ func BenchmarkMuxMatch(b *testing.B) {
 
 // BenchmarkIncrementalWeightTick measures the RFC-0013 steady-churn unit: one
 // canary weight tick applied through the incremental path while the table
-// holds 10k other routes. Compare with BenchmarkBuildMuxes/triggers=10000 —
-// the legacy cost of the same event — to see the O(full rebuild) → O(1) move.
+// holds 10k other routes. It asserts the tick is an O(1) handler swap rather
+// than an O(full rebuild) of the whole mux.
 func BenchmarkIncrementalWeightTick(b *testing.B) {
 	const n = 10000
 	fns, triggers, _ := benchRouteSet(n)

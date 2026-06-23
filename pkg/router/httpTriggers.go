@@ -48,9 +48,9 @@ type HTTPTriggerSet struct {
 	fissionClient versioned.Interface
 	kubeClient    kubernetes.Interface
 	// client is the Manager's cache-backed client. The trigger/function
-	// reconcilers and updateRouter read HTTPTriggers + Functions through it,
-	// replacing the per-namespace SharedIndexInformers the router used before
-	// the controller-runtime migration.
+	// reconcilers and the incremental resync read HTTPTriggers + Functions
+	// through it, replacing the per-namespace SharedIndexInformers the router
+	// used before the controller-runtime migration.
 	client   client.Client
 	resolver *functionReferenceResolver
 	// addressResolver and tapper are the proxy path's injected seams
@@ -74,14 +74,11 @@ type HTTPTriggerSet struct {
 	// Service endpoints until its mux is populated.
 	ready atomic.Bool
 
-	// Incremental route updates (RFC-0013). When incremental is true the
+	// Incremental route updates (RFC-0013) are the only production path: the
 	// reconcilers feed per-event diffs into routeTable and the materializer
-	// rebuilds muxes only on shape changes; when false the legacy
-	// full-rebuild loop (updateRouter) runs — the ROUTER_INCREMENTAL_ROUTES
-	// escape hatch. enableIncrementalRoutes flips the mode before the
-	// Manager starts.
-	incremental bool
-	routeTable  *routetable.Table
+	// rebuilds muxes only on shape changes. initIncrementalRoutes wires the
+	// table before the Manager starts.
+	routeTable *routetable.Table
 	// pendingConditions holds triggers whose shape change is waiting on the
 	// debounced materialize; their RouteAdmitted conditions are marked after
 	// the swap so conditions reflect observable state. conflictLosers tracks
@@ -100,10 +97,10 @@ type HTTPTriggerSet struct {
 	featureConfigFn func(logr.Logger) (*config.FeatureConfig, error)
 }
 
-// enableIncrementalRoutes switches the trigger set to the incremental route
-// path. Must be called before subscribeRouter / the Manager starts.
-func (ts *HTTPTriggerSet) enableIncrementalRoutes() {
-	ts.incremental = true
+// initIncrementalRoutes wires the route table and feature-config source for the
+// incremental route path (the only production path). Must be called before
+// subscribeRouter / the Manager starts.
+func (ts *HTTPTriggerSet) initIncrementalRoutes() {
 	ts.routeTable = routetable.New()
 	ts.featureConfigFn = config.GetFeatureConfig
 }
@@ -170,17 +167,10 @@ func (ts *HTTPTriggerSet) subscribeRouter(ctx context.Context, mgr *errgroup.Gro
 	// rebuilds through updateRouterRequestChannel; this goroutine consumes them.
 	// The Manager owns the informer caches, so there are no informers to Run
 	// here. The initial mux build is kicked off by Start once the cache syncs.
-	// Incremental mode (RFC-0013) consumes the same channel with the
-	// materializer (rebuild-from-table) instead of the legacy full rebuild.
-	if ts.incremental {
-		mgr.Go(func() error {
-			ts.materializeLoop(ctx)
-			return nil
-		})
-		return nil
-	}
+	// The materializer (RFC-0013) consumes the channel and rebuilds the muxes
+	// from a route-table snapshot on shape changes.
 	mgr.Go(func() error {
-		ts.updateRouter(ctx)
+		ts.materializeLoop(ctx)
 		return nil
 	})
 	return nil
@@ -257,7 +247,14 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// buildMuxes constructs the two mux.Router instances that back the router
+// buildMuxes is the one-shot mux constructor: it builds both listener muxes
+// from the current trigger + function snapshot in a single pass. Production
+// route updates go through the incremental materializer (incremental.go);
+// buildMuxes is the test/parity builder and the test-scaffolding path in
+// subscribeRouter (fissionClient == nil), sharing the registration helpers in
+// routeshape.go so it stays byte-identical with the materializer.
+//
+// It constructs the two mux.Router instances that back the router
 // process: one for the public listener (user HTTPTriggers + healthz +
 // version + optional auth) and one for the internal listener
 // (`/fission-function/<ns>/<name>` and its prefix variant). Splitting
@@ -306,8 +303,8 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 
 		// Skip triggers whose CORS / ingress config is invalid. Registering a
 		// route for one would apply broken CORS or a malformed ingress path;
-		// the RouteAdmitted=False condition (set by the post-build loop in
-		// updateRouter) tells the user why the route is not served. The
+		// the RouteAdmitted=False condition (set by the incremental apply path
+		// in incremental.go) tells the user why the route is not served. The
 		// httptrigger admission webhook used to reject these.
 		if _, err := triggerConfigError(&trigger); err != nil {
 			continue
@@ -317,8 +314,8 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 		rr, err := ts.resolver.resolve(ctx, trigger)
 		if err != nil {
 			// Unresolvable function reference: skip the route and let it 404.
-			// The post-build loop in updateRouter reports it on the trigger's
-			// conditions.
+			// The incremental apply path (incremental.go) reports it on the
+			// trigger's conditions.
 			ts.logger.Error(err, "skipping trigger with unresolvable function reference",
 				"trigger", trigger.Name, "namespace", trigger.Namespace)
 			continue
@@ -425,8 +422,8 @@ func triggerConfigError(trigger *fv1.HTTPTrigger) (reason string, err error) {
 // Fast-path: the trigger snapshot from the informer is checked against
 // the desired condition; we only Get + UpdateStatus when this trigger
 // would actually transition (matches the user's "key transitions only"
-// expectation). updateRouter runs on every debounced trigger/function
-// event, so the fast path is what keeps API traffic bounded.
+// expectation). The incremental apply path runs on every reconciled
+// trigger/function event, so the fast path is what keeps API traffic bounded.
 func (ts *HTTPTriggerSet) markTriggerCondition(ctx context.Context, trigger *fv1.HTTPTrigger, status metav1.ConditionStatus, reason, admittedMessage, readyMessage string) {
 	if ts.fissionClient == nil {
 		return // unit-test wiring without a real client
@@ -462,95 +459,5 @@ func (ts *HTTPTriggerSet) markTriggerCondition(ctx context.Context, trigger *fv1
 	conditions.Set(&cur.Status.Conditions, wantReady)
 	if _, err := ts.fissionClient.CoreV1().HTTPTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
 		ts.logger.V(1).Info("httptrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
-	}
-}
-
-func (ts *HTTPTriggerSet) syncTriggers() {
-	ts.syncDebouncer(func() {
-		ts.updateRouterRequestChannel <- struct{}{}
-	})
-}
-
-func (ts *HTTPTriggerSet) updateRouter(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ts.updateRouterRequestChannel:
-		}
-		// get triggers + functions from the Manager's cache (scoped to the
-		// Fission-watched namespaces via FissionCacheOptions).
-		var triggerList fv1.HTTPTriggerList
-		if err := ts.client.List(ctx, &triggerList); err != nil {
-			ts.logger.Error(err, "error listing http triggers; skipping mux rebuild")
-			continue
-		}
-		ts.triggers = triggerList.Items
-
-		var functionList fv1.FunctionList
-		if err := ts.client.List(ctx, &functionList); err != nil {
-			ts.logger.Error(err, "error listing functions; skipping mux rebuild")
-			continue
-		}
-		allfunctions := functionList.Items
-		functionTimeout := make(map[types.UID]int, len(allfunctions))
-		for i := range allfunctions {
-			functionTimeout[allfunctions[i].UID] = allfunctions[i].Spec.FunctionTimeout
-		}
-		ts.functions = allfunctions
-		alltriggers := ts.triggers
-
-		// Rebuild both muxes from the same function snapshot then swap
-		// each in turn. The two updateRouter calls are sequential, not
-		// transactional — a request that arrives between the two swaps
-		// could see an updated public mux and a stale internal mux for
-		// a few microseconds, but both muxes derive from the same
-		// `functions` snapshot so the function set served by either
-		// listener is consistent in steady state. True atomicity across
-		// listeners would require a shared atomic.Pointer holding both
-		// muxes; not worth the complexity for this case.
-		public, internal, err := ts.buildMuxes(ctx, functionTimeout)
-		if err != nil {
-			ts.logger.Error(err, "error updating router")
-			// Flip every trigger to Ready=False so consumers polling
-			// conditions don't see a stale True after a failed resync.
-			// Fast-path inside markTriggerCondition skips no-op writes.
-			for i := range alltriggers {
-				ts.markTriggerCondition(ctx, &alltriggers[i],
-					metav1.ConditionFalse, fv1.HTTPTriggerReasonMuxBuildFail,
-					"router failed to build mux: "+err.Error(),
-					"trigger is not serving due to router mux error")
-			}
-			continue
-		}
-		ts.mutableRouter.updateRouter(public.Handler())
-		if ts.internalMutableRouter != nil {
-			ts.internalMutableRouter.updateRouter(internal.Handler())
-		}
-		muxRebuilds.WithLabelValues("public", "legacy").Inc()
-		muxRebuilds.WithLabelValues("internal", "legacy").Inc()
-		// The mux now serves user routes — report ready (gates /readyz).
-		ts.ready.Store(true)
-
-		// Mark each trigger admitted now that its routes are live. We
-		// do this after the swap so the condition reflects observable
-		// state, not just intent. Best-effort; never blocks subsequent
-		// mux updates.
-		for i := range alltriggers {
-			// Triggers with invalid CORS/ingress config were skipped in
-			// buildMuxes; report that as RouteAdmitted=False (the Go-parser
-			// checks CEL can't express) instead of a stale True.
-			if reason, cfgErr := triggerConfigError(&alltriggers[i]); cfgErr != nil {
-				ts.markTriggerCondition(ctx, &alltriggers[i],
-					metav1.ConditionFalse, reason,
-					"router rejected the trigger configuration: "+cfgErr.Error(),
-					"trigger is not serving due to invalid configuration")
-				continue
-			}
-			ts.markTriggerCondition(ctx, &alltriggers[i],
-				metav1.ConditionTrue, fv1.HTTPTriggerReasonRouteAdmitted,
-				"router accepted the trigger and installed its mux entry",
-				"trigger is serving")
-		}
 	}
 }

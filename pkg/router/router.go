@@ -404,8 +404,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: routerScheme,
 		// Scope the shared cache to the Fission-watched namespaces. The
-		// reconcilers and updateRouter read HTTPTriggers + Functions through it,
-		// and the router's RBAC is per-namespace Roles (not a ClusterRole) — a
+		// reconcilers and the incremental resync read HTTPTriggers + Functions
+		// through it, and the router's RBAC is per-namespace Roles (not a ClusterRole) — a
 		// cluster-wide cache's list/watch is forbidden, so its sync would time out
 		// and the manager would exit. See routerCacheOptions.
 		Cache:                  routerCacheOptions(cfg.endpointSliceCacheMode),
@@ -436,14 +436,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// it builds inherits it; the escape hatch restores the legacy plain-text body.
 	triggers.structuredErrors = cfg.structuredErrors
 	triggers.accessLog = cfg.accessLog
-	// Incremental route updates (RFC-0013): per-event route-table diffs +
-	// handler indirection; muxes rebuild only on shape changes. The escape
-	// hatch (ROUTER_INCREMENTAL_ROUTES=false) reinstates the legacy
-	// full-rebuild loop.
-	if cfg.incrementalRoutes {
-		triggers.enableIncrementalRoutes()
-	}
-	logger.Info("router route-update mode configured", "incrementalRoutes", cfg.incrementalRoutes)
+	// Incremental route updates (RFC-0013) are the only production path:
+	// per-event route-table diffs + handler indirection; muxes rebuild only on
+	// shape changes.
+	triggers.initIncrementalRoutes()
 
 	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
 	// independently (no leader election — that is the point: warm-path state is
@@ -526,22 +522,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// The reconcilers also fire for every existing object; the debouncer
 		// coalesces these into a single rebuild.
 		if crMgr.GetCache().WaitForCacheSync(rctx) {
-			if triggers.incremental {
-				// Initial table population; idempotent against the reconciler
-				// replay that is happening concurrently. The explicit signal
-				// covers the zero-object install (router-owned routes must
-				// still materialize) and the resync loop is the drift guard.
-				if err := triggers.resync(rctx, true); err != nil {
-					logger.Error(err, "initial route table resync failed; reconciler replay will converge the table")
-				}
-				triggers.signalMaterialize()
-				gm.Go(func() error {
-					triggers.resyncLoop(rctx)
-					return nil
-				})
-			} else {
-				triggers.syncTriggers()
+			// Initial table population; idempotent against the reconciler
+			// replay that is happening concurrently. The explicit signal
+			// covers the zero-object install (router-owned routes must
+			// still materialize) and the resync loop is the drift guard.
+			if err := triggers.resync(rctx, true); err != nil {
+				logger.Error(err, "initial route table resync failed; reconciler replay will converge the table")
 			}
+			triggers.signalMaterialize()
+			gm.Go(func() error {
+				triggers.resyncLoop(rctx)
+				return nil
+			})
 		}
 		<-rctx.Done()
 		_ = gm.Wait()
