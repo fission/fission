@@ -451,11 +451,11 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 	_, err = caaf.fsCache.Add(*fsvc)
 	if err != nil {
 		caaf.logger.Error(nil, "error adding function to cache", "function", fsvc.Function)
-		metrics.ColdStartsError.WithLabelValues(fn.Name, fn.Namespace).Inc()
+		metrics.RecordColdStartError(ctx, fn.Name, fn.Namespace)
 		return fsvc, err
 	}
 
-	metrics.ColdStarts.WithLabelValues(fn.Name, fn.Namespace).Inc()
+	metrics.RecordColdStart(ctx, fn.Name, fn.Namespace)
 	executorUtils.SetFunctionReady(ctx, caaf.logger, caaf.fissionClient, fn, fv1.FunctionReasonReady, "container deployment is ready")
 
 	return fsvc, nil

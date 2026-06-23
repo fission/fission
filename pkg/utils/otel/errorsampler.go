@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -31,22 +30,18 @@ var (
 	// errorSpanExportFailures counts error spans the error-biased exporter
 	// failed to send: the RFC-0015 "errors are always traced" guarantee was
 	// not met for these, so a nonzero rate means the safety net has a hole.
-	errorSpanExportFailures = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "fission_error_span_export_failures_total",
-		Help: "Error spans the error-biased exporter failed to send (RFC-0015).",
-	})
+	errorSpanExportFailures = metrics.Int64Counter(
+		"fission_error_span_export_failures_total",
+		"Error spans the error-biased exporter failed to send (RFC-0015).",
+	)
 	// errorSpanExportDrops counts error spans dropped without export because
 	// the error-biased exporter was saturated (e.g. a mass-failure storm) —
 	// distinct from failures so backpressure is visible separately.
-	errorSpanExportDrops = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "fission_error_span_export_drops_total",
-		Help: "Error spans dropped without export because the error-biased exporter was saturated (RFC-0015).",
-	})
+	errorSpanExportDrops = metrics.Int64Counter(
+		"fission_error_span_export_drops_total",
+		"Error spans dropped without export because the error-biased exporter was saturated (RFC-0015).",
+	)
 )
-
-func init() {
-	metrics.Registry.MustRegister(errorSpanExportFailures, errorSpanExportDrops)
-}
 
 // errorBiasedSampler wraps a base head sampler so that failed invocations are
 // never lost to sampling (RFC-0015). It keeps the base sampler's sampled/drop
@@ -106,7 +101,7 @@ func (p *errorExportProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	case p.sem <- struct{}{}:
 	default:
 		// Saturated (storm): drop rather than block the span-ending goroutine.
-		errorSpanExportDrops.Inc()
+		errorSpanExportDrops.Add(context.Background(), 1)
 		return
 	}
 	go func() {
@@ -114,7 +109,7 @@ func (p *errorExportProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		ctx, cancel := context.WithTimeout(context.Background(), errorExportTimeout)
 		defer cancel()
 		if err := p.exporter.ExportSpans(ctx, []sdktrace.ReadOnlySpan{s}); err != nil {
-			errorSpanExportFailures.Inc()
+			errorSpanExportFailures.Add(context.Background(), 1)
 			p.logger.V(1).Info("error-biased span export failed", "error", err.Error())
 		}
 	}()

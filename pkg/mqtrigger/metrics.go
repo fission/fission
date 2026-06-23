@@ -5,86 +5,79 @@
 package mqtrigger
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
+	"context"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 var (
-	subscriptionCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_mqt_subscriptions",
-			Help: "Total number of subscriptions to mq currently",
-		},
-		[]string{},
+	// Inc/Dec gauges map to UpDownCounters (exposed by the Prometheus bridge as
+	// gauges); the set-to-value lag gauge maps to a synchronous gauge.
+	subscriptionCount = metrics.Int64UpDownCounter(
+		"fission_mqt_subscriptions",
+		"Total number of subscriptions to mq currently",
 	)
-	messageCount = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "fission_mqt_messages_processed_total",
-			Help: "Total number of messages processed",
-		},
-		[]string{"trigger_name", "trigger_namespace"},
+	messageCount = metrics.Int64Counter(
+		"fission_mqt_messages_processed_total",
+		"Total number of messages processed",
 	)
-	messageLagCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_mqt_message_lag",
-			Help: "Total number of messages lag per topic and partition",
-		},
-		[]string{"trigger_name", "trigger_namespace", "topic", "partition"},
+	messageLagCount = metrics.Int64Gauge(
+		"fission_mqt_message_lag",
+		"Total number of messages lag per topic and partition",
 	)
-	triggerStatus = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_mqt_status",
-			Help: "Status of an individual trigger 1 if processing otherwise 0",
-		},
-		[]string{"trigger_name", "trigger_namespace"},
+	triggerStatus = metrics.Int64UpDownCounter(
+		"fission_mqt_status",
+		"Status of an individual trigger 1 if processing otherwise 0",
 	)
-	mqtInprocessCount = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "fission_mqt_inprocess",
-			Help: "Total number of MQTs in active processing",
-		},
-		[]string{},
+	mqtInprocessCount = metrics.Int64UpDownCounter(
+		"fission_mqt_inprocess",
+		"Total number of MQTs in active processing",
 	)
 )
 
+func triggerLabels(trigname, trignamespace string) metric.MeasurementOption {
+	return metric.WithAttributes(
+		attribute.String("trigger_name", trigname),
+		attribute.String("trigger_namespace", trignamespace),
+	)
+}
+
 func IncreaseSubscriptionCount() {
-	subscriptionCount.WithLabelValues().Inc()
+	subscriptionCount.Add(context.Background(), 1)
 }
 
 func DecreaseSubscriptionCount() {
-	subscriptionCount.WithLabelValues().Dec()
+	subscriptionCount.Add(context.Background(), -1)
 }
 
 func SetTriggerStatus(trigname, trignamespace string) {
-	triggerStatus.WithLabelValues(trigname, trignamespace).Inc()
+	triggerStatus.Add(context.Background(), 1, triggerLabels(trigname, trignamespace))
 }
 
 func ResetTriggerStatus(trigname, trignamespace string) {
-	triggerStatus.WithLabelValues(trigname, trignamespace).Dec()
+	triggerStatus.Add(context.Background(), -1, triggerLabels(trigname, trignamespace))
 }
 
 func IncreaseInprocessCount() {
-	mqtInprocessCount.WithLabelValues().Inc()
+	mqtInprocessCount.Add(context.Background(), 1)
 }
 
 func DecreaseInprocessCount() {
-	mqtInprocessCount.WithLabelValues().Dec()
+	mqtInprocessCount.Add(context.Background(), -1)
 }
 
 func IncreaseMessageCount(trigname, trignamespace string) {
-	messageCount.WithLabelValues(trigname, trignamespace).Inc()
+	messageCount.Add(context.Background(), 1, triggerLabels(trigname, trignamespace))
 }
 
 func SetMessageLagCount(trigname, trignamespace, topic, partition string, lag int64) {
-	messageLagCount.WithLabelValues(trigname, trignamespace, topic, partition).Set(float64(lag))
-}
-
-func init() {
-	registry := metrics.Registry
-	registry.MustRegister(subscriptionCount)
-	registry.MustRegister(messageCount)
-	registry.MustRegister(messageLagCount)
-	registry.MustRegister(mqtInprocessCount)
-	registry.MustRegister(triggerStatus)
+	messageLagCount.Record(context.Background(), lag, metric.WithAttributes(
+		attribute.String("trigger_name", trigname),
+		attribute.String("trigger_namespace", trignamespace),
+		attribute.String("topic", topic),
+		attribute.String("partition", partition),
+	))
 }

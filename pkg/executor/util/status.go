@@ -25,7 +25,7 @@ import (
 // succession (image pull retries, specialize timeouts, HPA conflicts) —
 // flipping Ready=False on each would generate condition flapping that
 // is more noise than signal. Transient failure observability is covered
-// by `metrics.ColdStartsError` and structured logs.
+// by `metrics.RecordColdStartError` and structured logs.
 //
 // Fast-path: the caller passes an in-memory fn; if its Status.Conditions
 // already record Ready=True with the same Reason/ObservedGeneration we

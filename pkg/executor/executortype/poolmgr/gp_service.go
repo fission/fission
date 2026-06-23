@@ -170,7 +170,7 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 			return nil
 		}
 		if err == nil {
-			metrics.FunctionServiceEnsures.WithLabelValues("created").Inc()
+			metrics.RecordFunctionServiceEnsure(ctx, "created")
 		}
 		return err
 	}
@@ -182,7 +182,7 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	// executor restarts) so a steady-state ensure is read-only.
 	if equality.Semantic.DeepEqual(existing.Spec.Selector, selector) &&
 		existing.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] == gpm.instanceID {
-		metrics.FunctionServiceEnsures.WithLabelValues("exists").Inc()
+		metrics.RecordFunctionServiceEnsure(ctx, "exists")
 		return nil
 	}
 	updated := existing.DeepCopy()
@@ -193,7 +193,7 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	updated.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL] = gpm.instanceID
 	_, err = gpm.kubernetesClient.CoreV1().Services(ns).Update(ctx, updated, metav1.UpdateOptions{})
 	if err == nil {
-		metrics.FunctionServiceEnsures.WithLabelValues("updated").Inc()
+		metrics.RecordFunctionServiceEnsure(ctx, "updated")
 	}
 	return err
 }
@@ -241,7 +241,7 @@ func (gpm *GenericPoolManager) ensureFunctionServiceAsync(fn *fv1.Function) {
 	time.Sleep(2 * time.Second)
 	if err := gpm.ensureFunctionService(ctx, fn); err != nil {
 		gpm.fnSvcEnsured.Delete(fn.UID)
-		metrics.FunctionServiceEnsures.WithLabelValues("error").Inc()
+		metrics.RecordFunctionServiceEnsure(ctx, "error")
 		gpm.logger.Error(err, "failed to ensure function service; warm-path endpoint discovery degrades to executor RPC for this function",
 			"function", fn.Name, "namespace", fn.Namespace)
 	}

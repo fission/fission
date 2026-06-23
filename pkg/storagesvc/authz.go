@@ -90,7 +90,7 @@ func (ss *StorageService) authorizedFor(r *http.Request, id string) bool {
 	}
 	arcNS := archiveNamespace(id)
 	if arcNS == "" {
-		legacyArchiveAccess.WithLabelValues().Inc()
+		legacyArchiveAccess.Add(r.Context(), 1)
 		return true
 	}
 	return arcNS == authNS

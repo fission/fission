@@ -24,6 +24,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"google.golang.org/grpc/credentials"
 	apiv1 "k8s.io/api/core/v1"
+
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 const (
@@ -129,6 +131,17 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
 
+	// Metrics: always register the OTel->Prometheus bridge reader against the
+	// shared registry, so the /metrics scrape is byte-for-byte unchanged whether
+	// or not OTLP push is configured. SetMeterProvider wires every metric
+	// instrument created at package-init time via the global provider's
+	// delegation (the same mechanism as SetTracerProvider above).
+	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry)
+	if err != nil {
+		return nil, err
+	}
+	otel.SetMeterProvider(meterProvider)
+
 	// Control-plane OTLP log push (RFC-0016 phase 4): when an OTLP endpoint is
 	// configured, stand up a LoggerProvider and register it globally so the zap
 	// bridge in loggerfactory pushes control-plane logs (carrying trace_id) as
@@ -157,6 +170,9 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 		err := tracerProvider.Shutdown(ctx)
 		if err != nil {
 			logger.Error(err, "error shutting down trace provider")
+		}
+		if err = meterProvider.Shutdown(ctx); err != nil {
+			logger.Error(err, "error shutting down meter provider")
 		}
 		if traceExporter != nil {
 			if err = traceExporter.Shutdown(ctx); err != nil {
