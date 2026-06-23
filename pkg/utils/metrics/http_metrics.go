@@ -7,6 +7,7 @@ package metrics
 import (
 	"context"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,6 +37,44 @@ var (
 	)
 )
 
+// Attribute sets are cached by their low-cardinality label tuple (the matched
+// route pattern + method [+ status code]) so the per-request path does not
+// rebuild — and re-sort/de-dupe — an attribute.Set on every call. This is the
+// OTel equivalent of the child-cache the prior WithLabelValues path hit;
+// without it the router's busiest path allocates ~4 sets per request. The keys
+// are comparable arrays so the lookup itself allocates nothing.
+var (
+	pmAttrs  sync.Map // [2]string{path, method} -> metric.MeasurementOption
+	pmcAttrs sync.Map // [3]string{path, method, code} -> metric.MeasurementOption
+)
+
+func pathMethodAttrs(path, method string) metric.MeasurementOption {
+	key := [2]string{path, method}
+	if v, ok := pmAttrs.Load(key); ok {
+		return v.(metric.MeasurementOption)
+	}
+	opt := metric.WithAttributes(
+		attribute.String("path", path),
+		attribute.String("method", method),
+	)
+	pmAttrs.Store(key, opt)
+	return opt
+}
+
+func pathMethodCodeAttrs(path, method, code string) metric.MeasurementOption {
+	key := [3]string{path, method, code}
+	if v, ok := pmcAttrs.Load(key); ok {
+		return v.(metric.MeasurementOption)
+	}
+	opt := metric.WithAttributes(
+		attribute.String("path", path),
+		attribute.String("method", method),
+		attribute.String("code", code),
+	)
+	pmcAttrs.Store(key, opt)
+	return opt
+}
+
 // HTTPRecorder records HTTP request metrics into this package's instruments,
 // labelled by a low-cardinality path (the matched route pattern). It exists so
 // routing packages can drive HTTP metrics without this package knowing anything
@@ -45,28 +84,15 @@ var (
 type HTTPRecorder struct{}
 
 func (HTTPRecorder) InFlightInc(path, method string) {
-	httpRequestInFlight.Add(context.Background(), 1, metric.WithAttributes(
-		attribute.String("path", path),
-		attribute.String("method", method),
-	))
+	httpRequestInFlight.Add(context.Background(), 1, pathMethodAttrs(path, method))
 }
 
 func (HTTPRecorder) InFlightDec(path, method string) {
-	httpRequestInFlight.Add(context.Background(), -1, metric.WithAttributes(
-		attribute.String("path", path),
-		attribute.String("method", method),
-	))
+	httpRequestInFlight.Add(context.Background(), -1, pathMethodAttrs(path, method))
 }
 
 func (HTTPRecorder) Observe(path, method string, statusCode int, duration time.Duration) {
 	ctx := context.Background()
-	httpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(
-		attribute.String("path", path),
-		attribute.String("method", method),
-	))
-	httpRequestsTotal.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("path", path),
-		attribute.String("method", method),
-		attribute.String("code", strconv.Itoa(statusCode)),
-	))
+	httpRequestDuration.Record(ctx, duration.Seconds(), pathMethodAttrs(path, method))
+	httpRequestsTotal.Add(ctx, 1, pathMethodCodeAttrs(path, method, strconv.Itoa(statusCode)))
 }

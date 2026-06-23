@@ -19,7 +19,6 @@ import (
 	otellogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -159,15 +158,11 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	// scrape (RFC-0019 ph4). SetMeterProvider wires every metric instrument
 	// created at package-init time via the global provider's delegation (the
 	// same mechanism as SetTracerProvider above).
-	var metricReaders []sdkmetric.Reader
 	metricReader, err := getMetricReader(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	if metricReader != nil {
-		metricReaders = append(metricReaders, metricReader)
-	}
-	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry, metricReaders...)
+	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry, metricReader)
 	if err != nil {
 		return nil, err
 	}

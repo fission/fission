@@ -44,7 +44,9 @@ func NewMeterProvider(res *resource.Resource, reg prometheus.Registerer, extraRe
 		sdkmetric.WithReader(promExp),
 	}
 	for _, r := range extraReaders {
-		opts = append(opts, sdkmetric.WithReader(r))
+		if r != nil {
+			opts = append(opts, sdkmetric.WithReader(r))
+		}
 	}
 	return sdkmetric.NewMeterProvider(opts...), nil
 }
