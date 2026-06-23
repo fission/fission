@@ -125,7 +125,7 @@ Each manager (router, executor, buildermgr, trigger controllers) runs a lightwei
 Cross-process propagation is "every manager watches the tenant CR," not RPC coupling to the tenant controller.
 
 Consumers that today snapshot the static set at startup and must re-read the live set (representative, not exhaustive):
-`pkg/utils/crmanager/crmanager.go:58` (`FissionCacheOptions`, shared by 6 managers — the central change), `pkg/executor/start.go:73` (`executorCacheOptions`), `pkg/router/router.go:85` (`sliceWatchNamespaces`/`routerCacheOptions`/`checkSliceWatchRBAC`), `pkg/logger/logger.go:248`, `pkg/utils/informer.go:23`, plus the per-pass adoption/reaper loops in `pkg/executor/executortype/poolmgr/gpm.go` and `pkg/executor/reaper/`.
+`pkg/utils/crmanager/crmanager.go:58` (`FissionCacheOptions`, shared by 6 managers — the central change), `pkg/executor/start.go:73` (`executorCacheOptions`), `pkg/router/router.go:85` (`sliceWatchNamespaces`/`routerCacheOptions`/`checkSliceWatchRBAC`), `pkg/utils/informer.go:23`, plus the per-pass adoption/reaper loops in `pkg/executor/executortype/poolmgr/gpm.go` and `pkg/executor/reaper/`.
 The router's data-plane lookups are already namespace-agnostic (`resolver_executor.go` keys on `fn.Namespace`; `endpointcache/index.go` keys on `FnKey{Namespace,Name}`), so only the *watch set* widens — no index rework.
 
 ### 4.3 The tenant-lifecycle controller

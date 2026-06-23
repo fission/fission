@@ -59,7 +59,7 @@ Key points: use `testify` (`require` for preconditions, `assert` for independent
 
 ## Architecture
 
-`cmd/fission-bundle/main.go` is the dispatch point — the same binary becomes a different service depending on which `--<flag>` is passed (`--routerPort`, `--executorPort`, `--kubewatcher`, `--timer`, `--mqt`, `--mqt_keda`, `--builderMgr`, `--canaryConfig`, `--webhookPort`, `--storageServicePort`, `--mcpPort`, `--logger`).
+`cmd/fission-bundle/main.go` is the dispatch point — the same binary becomes a different service depending on which `--<flag>` is passed (`--routerPort`, `--executorPort`, `--kubewatcher`, `--timer`, `--mqt`, `--mqt_keda`, `--builderMgr`, `--canaryConfig`, `--webhookPort`, `--storageServicePort`, `--mcpPort`).
 Each flag dispatches to a `Start` function in the corresponding `pkg/` package.
 The Helm chart deploys this binary multiple times with different flags.
 Other binaries: `cmd/fission-cli` (user CLI), `cmd/builder` (per-env build sidecar), `cmd/fetcher` (per-env code-fetch sidecar), `cmd/preupgradechecks`, `cmd/reporter`.
