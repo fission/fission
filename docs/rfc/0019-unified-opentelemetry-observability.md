@@ -24,7 +24,7 @@ Metrics are the outlier: every one of the 39 metrics is a `prometheus.NewCounter
 
 This RFC closes that gap and tidies the footprint, in three pillars:
 
-1. **Metrics on the OpenTelemetry Metrics API**, exposed through the OTel→Prometheus bridge exporter so the `/metrics` output is scrape-compatible (same names, labels, types, buckets, HELP), plus a second reader that pushes the same metrics over OTLP, plus trace exemplars for free.
+1. **Metrics on the OpenTelemetry Metrics API**, exposed through the OTel→Prometheus bridge exporter so the `/metrics` output is scrape-compatible (same names, labels, types, buckets, HELP), plus a second reader that pushes the same metrics over OTLP, plus trace exemplars on the request-path histograms (enabled when a trace exporter is configured).
 2. **Aggressive footprint reduction** — drop `autoprop` (and the four propagator modules it drags in) for an explicit W3C composite, and bump `semconv` from the ancient v1.4.0 to current (the `autoexport` bootstrap consolidation is the deferred part — see Pillar 2).
 3. **One unified provider** — a single initialization in `pkg/utils/otel` that stands up the tracer, meter, and logger providers from one resource and returns one shutdown that flushes all three.
 
@@ -151,9 +151,10 @@ The instrument option is simpler than a reader View and replays correctly throug
 Attach a second reader — `sdkmetric.NewPeriodicReader(otlpmetricgrpc-exporter)` — to the same meter provider, gated by the metrics exporter config (default `prometheus`-only; `otlp` opt-in, or both).
 One instrumentation then feeds both the `/metrics` scrape and the OTLP push, so an operator on a pure OTLP pipeline no longer needs the Prometheus-receiver scrape hop in `test/integration/otel/metrics-collector.reference.yaml`.
 
-**Exemplars for free.**
-The OTel metrics SDK's default exemplar filter records an exemplar (with `trace_id`/`span_id`) whenever a measurement happens inside a sampled span; the Prometheus exporter renders them in the OpenMetrics output Fission already serves.
-No per-call-site plumbing — histograms recorded on the request path gain trace exemplars by virtue of being migrated.
+**Exemplars, gated on trace export.**
+The OTel metrics SDK's default trace-based exemplar filter records an exemplar (with `trace_id`/`span_id`) whenever a measurement happens inside a sampled span; the Prometheus exporter renders them in the OpenMetrics output Fission already serves, so histograms recorded on the request path gain trace exemplars with no per-call-site plumbing.
+The catch is that the SDK allocates a per-series exemplar reservoir to hold them — real router heap that scales with metric cardinality (measured at ~+9 MB router heap on a CI leg via the prom-dump/pprof comparison), and wasted entirely when no traces are exported.
+So exemplar storage is enabled only when a trace exporter is configured (`OTEL_EXPORTER_OTLP_ENDPOINT` set); otherwise `NewMeterProvider` installs `exemplar.AlwaysOffFilter` and pays nothing, keeping the heap cost off the default scrape-only install.
 
 **Registry-collision caution.**
 `pkg/utils/metrics/registry.go` documents that composing Fission's registry into controller-runtime's is atomic, so a duplicate collector silently drops *every* Fission metric.
@@ -213,6 +214,10 @@ This is the linchpin, and the reason the earlier "keep Prometheus" decision is s
   This is the concrete safety net the prior decision worried was missing.
 - **Dashboards, alerts, ServiceMonitors, PodMonitors: unchanged.**
   Nothing in the scrape path or the series identity changes, so existing Grafana boards and Prometheus rules keep working without edits.
+- **One documented exception — zero-valued series appear lazily.**
+  The OTel SDK exports a counter or gauge series only after its first recording, whereas `client_golang` exposes a registered metric at `0` from process start.
+  A metric never touched in a given window is therefore *absent* from `/metrics` rather than present at `0` — observed in CI as `fission_router_endpointcache_hits_total` having no series on a leg with no warm-path traffic.
+  `rate()` / `increase()` and any series that does get recorded are unaffected; only an alert or panel that asserts a raw series exists from boot needs `<metric> or vector(0)`.
 - **Helm values: additive only.**
   Defaults reproduce current behavior; no existing key changes meaning.
 - **Documented observable changes (traces only, operator-facing, not a stable API):** the `semconv` bump shifts some span attribute keys to current conventions, and dropping `autoprop` removes env-driven selection of non-W3C propagators (the W3C default is unchanged).
@@ -248,7 +253,9 @@ Each phase is independently shippable and lands CI-green on its own, matching th
 - **Double-registration during migration.**
   A metric instrumented on both APIs at once would collide on the atomic registry composition and silently drop the Fission set.
   Mitigated by migrating each metric's `MustRegister` removal in the same change as its meter instrument, per subsystem.
-- **Exemplar cardinality / OpenMetrics negotiation.**
-  Exemplars ride the existing OpenMetrics exposition and the default trace-based filter, so volume is bounded by the sampled-span rate; low risk, but called out for scrapers that do not request OpenMetrics (they simply receive no exemplars).
+- **Exemplar reservoir heap / OpenMetrics negotiation.**
+  The OTel SDK allocates a per-series exemplar reservoir, so the router's metric heap scales ~2× faster with cardinality than the old `client_golang` path (≈+9 MB on a CI leg).
+  Mitigated by gating exemplar storage on a configured trace exporter — `exemplar.AlwaysOffFilter` when none is set — so the default scrape-only install pays nothing.
+  Exemplars also ride the existing OpenMetrics exposition; scrapers that do not request OpenMetrics simply receive no exemplars.
 - **Trace-attribute and propagator changes.**
   The `semconv` bump and `autoprop` removal change trace-side behavior; documented above and release-noted, never affecting the metrics contract.
