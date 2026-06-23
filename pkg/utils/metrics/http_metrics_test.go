@@ -24,7 +24,7 @@ import (
 func setupMeter(t *testing.T) *prometheus.Registry {
 	t.Helper()
 	reg := prometheus.NewRegistry()
-	mp, err := NewMeterProvider(resource.Default(), reg)
+	mp, err := NewMeterProvider(resource.Default(), reg, true)
 	require.NoError(t, err)
 	otel.SetMeterProvider(mp)
 	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })

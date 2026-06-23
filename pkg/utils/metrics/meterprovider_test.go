@@ -24,7 +24,7 @@ import (
 func TestExporterInstrumentKinds(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	mp, err := NewMeterProvider(resource.Default(), reg)
+	mp, err := NewMeterProvider(resource.Default(), reg, true)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
 	m := mp.Meter("test")

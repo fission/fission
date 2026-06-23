@@ -21,7 +21,7 @@ var testMetricsReg *prometheus.Registry
 
 func TestMain(m *testing.M) {
 	testMetricsReg = prometheus.NewRegistry()
-	mp, err := metrics.NewMeterProvider(resource.Default(), testMetricsReg)
+	mp, err := metrics.NewMeterProvider(resource.Default(), testMetricsReg, true)
 	if err != nil {
 		panic(err)
 	}

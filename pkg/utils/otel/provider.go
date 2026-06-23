@@ -162,7 +162,10 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	if err != nil {
 		return nil, err
 	}
-	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry, metricReader)
+	// Enable exemplar storage only when a trace exporter is configured —
+	// exemplars are unreachable without exported traces, and the SDK otherwise
+	// allocates a per-series reservoir that costs router heap at cardinality.
+	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry, cfg.endpoint != "", metricReader)
 	if err != nil {
 		return nil, err
 	}

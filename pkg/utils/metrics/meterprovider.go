@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/otlptranslator"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/exemplar"
 	"go.opentelemetry.io/otel/sdk/resource"
 )
 
@@ -34,7 +35,13 @@ func PromExporterOptions(reg prometheus.Registerer) []otelprom.Option {
 // /metrics), so the scrape contract holds whether or not OTLP push is
 // configured. extraReaders (e.g. an OTLP periodic reader) are appended by the
 // caller.
-func NewMeterProvider(res *resource.Resource, reg prometheus.Registerer, extraReaders ...sdkmetric.Reader) (*sdkmetric.MeterProvider, error) {
+//
+// exemplars gates trace-exemplar storage. The OTel SDK otherwise allocates a
+// per-series exemplar reservoir for every metric, a measurable router heap cost
+// that scales with metric cardinality. Exemplars are only reachable when traces
+// are exported, so the caller passes false when no trace exporter is configured
+// to keep that heap cost off the default (scrape-only) install.
+func NewMeterProvider(res *resource.Resource, reg prometheus.Registerer, exemplars bool, extraReaders ...sdkmetric.Reader) (*sdkmetric.MeterProvider, error) {
 	promExp, err := otelprom.New(PromExporterOptions(reg)...)
 	if err != nil {
 		return nil, err
@@ -42,6 +49,9 @@ func NewMeterProvider(res *resource.Resource, reg prometheus.Registerer, extraRe
 	opts := []sdkmetric.Option{
 		sdkmetric.WithResource(res),
 		sdkmetric.WithReader(promExp),
+	}
+	if !exemplars {
+		opts = append(opts, sdkmetric.WithExemplarFilter(exemplar.AlwaysOffFilter))
 	}
 	for _, r := range extraReaders {
 		if r != nil {
