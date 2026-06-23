@@ -66,6 +66,16 @@ When adding, upgrading, or removing Go dependencies, follow `.claude/resources/g
 Key point: `go.mod` keeps **direct** requirements in the first `require (...)` block and **indirect** (`// indirect`) ones in a second block — `go mod tidy` does NOT move entries between blocks, so a `go get` that lands a direct dep in the indirect block must be moved by hand.
 `make verify-gomod` (CI-enforced in `lint.yaml`) guards the layout.
 
+## Repo-specific playbooks
+
+Deep operational knowledge lives under `.claude/resources/fission-*.md`, loaded on demand by the generic CI/dep/triage skills (`debug-ci`, `go-deps-security-sweep`, `bump-ci-tool-versions`, etc.).
+Start there when CI is red or you're touching the build/dependency machinery:
+- `fission-ci-failure-patterns.md` — symptom→cause tables, NetworkPolicy selectors/allowlist, CI-only Helm flags via the kind-ci profile.
+- `fission-build-pipeline.md` — buildermgr→builder→fetcher→storagesvc flow, `/packages` permissions, why env-builder images aren't rebuilt per-PR.
+- `fission-integration-test-quirks.md` — builder/runtime readiness races, pod-label conventions, framework gotchas.
+- `fission-dep-groups.md` — k8s/controller-runtime/KEDA/code-generator lockstep, the `prometheus/common` exclude, codegen after a platform bump.
+- `fission-workflow-tools.md` — pinned CI tool inventory and intentional stale pins.
+
 ## Architecture
 
 `cmd/fission-bundle/main.go` is the dispatch point — the same binary becomes a different service depending on which `--<flag>` is passed (`--routerPort`, `--executorPort`, `--kubewatcher`, `--timer`, `--mqt`, `--mqt_keda`, `--builderMgr`, `--canaryConfig`, `--webhookPort`, `--storageServicePort`, `--mcpPort`).
@@ -83,9 +93,9 @@ Request path for an HTTP-triggered function:
 
 Router listener split (post-GHSA-3g33-6vg6-27m8): the router runs **two** HTTP listeners — public (port 8888 on `svc/router`) for user HTTPTriggers + `/router-healthz` + `/_version`, and internal (port 8889 on the ClusterIP-only `svc/router-internal`) for `/fission-function/<ns>/<name>` invocations.
 The internal listener is wrapped with `pkg/auth/hmac.ServiceVerifier` (key derived for `ServiceRouterInternal` from `FISSION_INTERNAL_AUTH_SECRET`); empty secret = pass-through.
-Route updates are incremental since RFC-0013 — the only production route-update path (the `ROUTER_INCREMENTAL_ROUTES` escape hatch was removed): reconcilers apply per-event diffs to `pkg/router/routetable` (handlers behind an atomic `HandlerRef` — canary weight ticks and function updates are pointer swaps with zero mux rebuild), and only route-SHAPE changes signal the debounced materializer; a 60s cache-fed resync is the drift guard (`fission_router_route_resync_drift_total`, CI bar zero) and also re-arms a failed materialize (sticky dirty flag).
-Change detection keys on **Generation**, matching the reconcilers' `GenerationChangedPredicate` — keying on ResourceVersion would count every status-only write as drift.
-The one-shot `buildMuxes` constructor survives as the test/parity builder (and the `fissionClient == nil` test-scaffolding path in `subscribeRouter`) and shares registration helpers with the materializer (`pkg/router/routeshape.go`), so anything that affects mux construction (e.g. `USE_ENCODED_PATH`) must be applied **inside `newListenerMuxes`** (called per build by both builders) — applying it only at startup gets silently dropped on the first atomic mux swap.
+Route updates are incremental (RFC-0013): reconcilers apply per-event diffs to `pkg/router/routetable` (handlers behind an atomic `HandlerRef`, so canary weight ticks and function updates are pointer swaps with no mux rebuild), only route-SHAPE changes signal the debounced materializer, and a 60s cache-fed resync is the drift guard (`fission_router_route_resync_drift_total`, CI bar zero) that also re-arms a failed materialize.
+Change detection keys on **Generation** (matching the reconcilers' `GenerationChangedPredicate`), not ResourceVersion.
+Anything affecting mux construction (e.g. `USE_ENCODED_PATH`) must be applied **inside `newListenerMuxes`** — applied only at startup it's silently dropped on the first atomic mux swap.
 Route precedence is specified (hosted > host-less, exact > prefix, longest prefix, creationTimestamp tiebreak); duplicate shapes shadow the younger trigger and mark it `RouteAdmitted=False/RouteConflict`.
 
 Other trigger paths invoke the router URL: `pkg/kubewatcher` (watches arbitrary k8s resources), `pkg/timer` (cron), `pkg/mqtrigger` (Kafka/NATS/etc., plus a KEDA-driven scaler manager via `--mqt_keda`), `pkg/canaryconfigmgr` (gradual traffic shifting between two functions on an HTTPTrigger).
@@ -98,10 +108,10 @@ A function opts in via the optional `FunctionSpec.Tool *ToolConfig` field (prese
 AuthZ: bearer JWT (`JWT_SIGNING_KEY`, shared with the router secret) whose `allowed_namespaces` claim scopes `tools/list`/`tools/call`; it **fails closed** — `Start` refuses to run without a key unless `MCP_ALLOW_INSECURE=true`, and the chart fails render when `mcp.enabled && !authentication.enabled && !mcp.allowInsecure`.
 RBAC is read-only on functions + functions/status; `/readyz` gates on the Function cache sync (via a manager `RunnableFunc`) so a warming replica isn't added to the Service.
 
-EndpointSlice data plane (RFC-0002, ON by default since phase 4): with `executor.functionServices.enabled` (default true) + `router.endpointSliceCache.mode=on` (default; `off` keeps the legacy executor-RPC plane, the migration-era `shadow` mode was removed), the router serves poolmgr **warm** traffic from a slice-fed endpoint index (`pkg/router/endpointcache`, one label-filtered EndpointSlice informer per replica, no leader election) instead of RPC-ing the executor per request — "router admits, executor provisions".
-The executor creates an async headless selector Service per invoked poolmgr function (`fn-<name>-<uid8>`, `pkg/executor/executortype/poolmgr/gp_service.go`); the built-in EndpointSlice controller publishes specialized pods via the `fission.io/served` + `fission.io/function-generation` labels, which ride the two existing pod patches — the cold-start path (synchronous `getServiceForFunction` RPC, ~100ms budget) is byte-identical with gates on or off.
-Address resolution is behind `AddressResolver` (`pkg/router/resolver*.go`): `mode=on` wires `fallbackResolver` (index admit → `/v2/ensureCapacity` on saturation → legacy RPC on miss/strict/degrade); `router.endpointSliceCache.endpointLB` (default false) additionally dials newdeploy/container pod IPs directly with least-outstanding spread, tapping the Service address (`ResolvedEntry.TapURL`) so idle scale-down accounting stays correct.
-One non-coverage CI leg pins the gates off post-deploy (the "Pin legacy data plane" step in `push_pr.yaml`) so the legacy path stays covered; the PoolCache admission arms and `functionServiceMap` deliberately survive phase 4 because mode=off, strict mode, and cold starts still drive them.
+EndpointSlice data plane (RFC-0002, ON by default): with `router.endpointSliceCache.mode=on` (default; `off` keeps the legacy executor-RPC plane) the router serves poolmgr **warm** traffic from a slice-fed endpoint index (`pkg/router/endpointcache`, one informer per replica, no leader election) instead of RPC-ing the executor per request — "router admits, executor provisions".
+The executor publishes specialized pods via an async headless selector Service per function (`pkg/executor/executortype/poolmgr/gp_service.go`) and the `fission.io/served` + `fission.io/function-generation` labels; the cold-start RPC path (~100ms) is byte-identical with gates on or off.
+Resolution is behind `AddressResolver` (`pkg/router/resolver*.go`); `endpointLB` (default false) additionally dials newdeploy/container pod IPs directly.
+One CI leg pins the gates off (`push_pr.yaml` "Pin legacy data plane") so the legacy path stays covered.
 
 CRDs live in `pkg/apis/core/v1/` (`Function`, `Package`, `Environment`, `HTTPTrigger`, `KubernetesWatchTrigger`, `MessageQueueTrigger`, `TimeTrigger`, `CanaryConfig`).
 Validation lives in the same package (`validation.go`).
@@ -124,11 +134,10 @@ The CLI (`cmd/fission-cli` + `pkg/fission-cli/`) talks to Kubernetes directly th
 - New source files need an SPDX license header or the `lint` CI job fails (`make license-check`).
   Run `make license` to add it (template in `hack/license-header.tmpl`); the legacy 15-line Apache block is gone — do not reintroduce it.
   Generated code gets its header from `hack/boilerplate.go.txt`, so that file (not the output) is the source of truth for generated headers.
-- Any **new pod that calls the router internal listener** (port 8889) must be added to the `from` allowlist in `charts/fission-all/templates/router/networkpolicy.yaml` by its `svc:` label — `networkPolicy.enabled=true` in kind-ci, so a missing entry surfaces only in CI as `dial tcp <clusterIP>:8889: i/o timeout` (the request is silently dropped, not refused).
-  This is how the MCP pod (`svc: mcp`) was wired.
+- Any **new pod that calls the router internal listener** (port 8889) must be added to the `from` allowlist in `charts/fission-all/templates/router/networkpolicy.yaml` by its `svc:` label, or its requests are silently dropped in CI (`dial tcp <clusterIP>:8889: i/o timeout`).
+  Full debugging detail — and the gotcha that `fission`-namespace pod logs (e.g. MCP) are in the CI `kind-logs-<run>-<ver>` artifact, not the `default`-scoped dump — is in `.claude/resources/fission-ci-failure-patterns.md` / `fission-integration-test-quirks.md`.
 - When building a `/fission-function/<ns>/<name>` URL in Go, use `utils.UrlForFunction(name, namespace)` — it **folds the default namespace** to `/fission-function/<name>`, which is the form the router actually registers.
   A hardcoded `/fission-function/default/<name>` does not resolve.
-- MCP test pod logs live in the `fission` namespace, which the integration-test diagnostics dump (scoped to `default`) does NOT capture — pull the CI `kind-logs-<run>-<ver>` artifact and read `.../containers/mcp-*.log` instead.
 - Poolmgr request accounting has **two disjoint modes that must never mix**: router-admitted requests (index `Admit`) decrement via the `ResolvedEntry.Release` closure, executor-resolved requests via the UnTap RPC into `PoolCache.activeRequests`.
   Calling Release for an executor-resolved entry (or skipping UnTap for one) corrupts the executor's concurrency accounting — when touching `pkg/router/transport.go` or the resolvers, check which mode owns the entry (`Release != nil` ⟺ router-admitted).
 - gorilla/mux's `Route.Methods()` **uppercases the slice it is handed in place** and keeps it as the route's matcher — passing a shared slice (an informer-owned object's field, or the route table's canonical spec) mutates the owner AND races the still-serving previous mux's matcher under churn.
