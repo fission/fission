@@ -128,7 +128,6 @@ With 1.15.x release, following changes are made:
 - In the `fission-all` chart, the following components are disabled which were enabled by default earlier. If you want to enable them, please use `--set` flag.
 
   - nats - Set `nats.enabled=true` to enable Fission Nats integration
-  - influxdb - Set `influxdb.enabled=true` to enable Fission InfluxDB and logger component
   - prometheus - Set `prometheus.enabled=true` to install Prometheus with Fission
   - canaryDeployment - Set `canaryDeployment.enabled=true` to enable Canary Deployment
 
