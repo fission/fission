@@ -87,6 +87,8 @@ Helper template to construct image names with repository and tag
   value: "{{ .Values.openTelemetry.tracesSamplingRate }}"
 - name: OTEL_PROPAGATORS
   value: "{{ .Values.openTelemetry.propagators }}"
+- name: OTEL_METRICS_EXPORTER
+  value: "{{ .Values.openTelemetry.metricsExporter }}"
 {{- end }}
 
 {{- define "fission-resource-namespace.envs" }}

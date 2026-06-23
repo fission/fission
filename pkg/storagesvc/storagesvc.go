@@ -232,7 +232,7 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	totalArchives.Add(r.Context(), -1)
-	totalMemoryUsage.Add(r.Context(), -int64(filesize))
+	totalMemoryUsage.Add(r.Context(), -filesize)
 	w.WriteHeader(http.StatusOK)
 }
 

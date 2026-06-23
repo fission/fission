@@ -104,8 +104,8 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	// overhead histogram attaches a trace exemplar on sampled invocations.
 	ctx := req.Context()
 	attrs := metric.WithAttributes(
-		attribute.String("function_namespace", fh.function.ObjectMeta.Namespace),
-		attribute.String("function_name", fh.function.ObjectMeta.Name),
+		attribute.String("function_namespace", fh.function.Namespace),
+		attribute.String("function_name", fh.function.Name),
 		attribute.String("path", path),
 		attribute.String("method", req.Method),
 		attribute.String("code", fmt.Sprint(resp.StatusCode)),

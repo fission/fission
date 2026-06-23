@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"go.opentelemetry.io/contrib/propagators/autoprop"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otellogglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"google.golang.org/grpc/credentials"
 	apiv1 "k8s.io/api/core/v1"
 
@@ -29,11 +30,11 @@ import (
 )
 
 const (
-	OtelEnvPrefix         = "OTEL_"
-	OtelEndpointEnvVar    = "OTEL_EXPORTER_OTLP_ENDPOINT"
-	OtelInsecureEnvVar    = "OTEL_EXPORTER_OTLP_INSECURE"
-	OtelPropagaters       = "OTEL_PROPAGATORS"
-	OtelLogsEnabledEnvVar = "OTEL_LOGS_ENABLED"
+	OtelEnvPrefix             = "OTEL_"
+	OtelEndpointEnvVar        = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	OtelInsecureEnvVar        = "OTEL_EXPORTER_OTLP_INSECURE"
+	OtelLogsEnabledEnvVar     = "OTEL_LOGS_ENABLED"
+	OtelMetricsExporterEnvVar = "OTEL_METRICS_EXPORTER"
 )
 
 type OtelConfig struct {
@@ -42,9 +43,15 @@ type OtelConfig struct {
 	// logsEnabled opts control-plane logs into the OTLP push (RFC-0016 ph4);
 	// off by default so enabling traces alone does not change log behavior.
 	logsEnabled bool
+	// metricsOTLP opts metrics into the native OTLP push (RFC-0019 ph4),
+	// alongside (never instead of) the always-on Prometheus scrape; off by
+	// default so a current install keeps scrape-only behavior.
+	metricsOTLP bool
 }
 
-// parseOtelConfig parses the environment variables OTEL_EXPORTER_OTLP_ENDPOINT and
+// parseOtelConfig parses the OTEL_* environment variables that configure the
+// exporters. OTEL_METRICS_EXPORTER follows the OpenTelemetry convention
+// (comma-separated exporter names); "otlp" anywhere in it turns on metric push.
 func parseOtelConfig() OtelConfig {
 	config := OtelConfig{}
 	config.endpoint = os.Getenv(OtelEndpointEnvVar)
@@ -54,6 +61,7 @@ func parseOtelConfig() OtelConfig {
 	}
 	config.insecure = insecure
 	config.logsEnabled, _ = strconv.ParseBool(os.Getenv(OtelLogsEnabledEnvVar))
+	config.metricsOTLP = strings.Contains(os.Getenv(OtelMetricsExporterEnvVar), "otlp")
 	return config
 }
 
@@ -129,14 +137,32 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	}
 
 	otel.SetTracerProvider(tracerProvider)
-	otel.SetTextMapPropagator(autoprop.NewTextMapPropagator())
+	// W3C Trace Context + Baggage, set explicitly rather than via autoprop: this
+	// is the chart default and the interop standard, and dropping autoprop keeps
+	// the aws/b3/jaeger/ot propagator modules out of the build (RFC-0019). The
+	// env-driven OTEL_PROPAGATORS selection of non-W3C propagators is the
+	// documented trade-off.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	// Metrics: always register the OTel->Prometheus bridge reader against the
 	// shared registry, so the /metrics scrape is byte-for-byte unchanged whether
-	// or not OTLP push is configured. SetMeterProvider wires every metric
-	// instrument created at package-init time via the global provider's
-	// delegation (the same mechanism as SetTracerProvider above).
-	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry)
+	// or not OTLP push is configured. When OTEL_METRICS_EXPORTER selects otlp,
+	// also attach an OTLP periodic reader so metrics push natively alongside the
+	// scrape (RFC-0019 ph4). SetMeterProvider wires every metric instrument
+	// created at package-init time via the global provider's delegation (the
+	// same mechanism as SetTracerProvider above).
+	var metricReaders []sdkmetric.Reader
+	metricReader, err := getMetricReader(ctx, parseOtelConfig())
+	if err != nil {
+		return nil, err
+	}
+	if metricReader != nil {
+		metricReaders = append(metricReaders, metricReader)
+	}
+	meterProvider, err := metrics.NewMeterProvider(res, metrics.Registry, metricReaders...)
 	if err != nil {
 		return nil, err
 	}

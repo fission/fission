@@ -1116,6 +1116,10 @@ openTelemetry:
   ## Sampling probability, a number in the [0..1] range, e.g. "0.1". Default is 0.1.
   ##
   tracesSamplingRate: "0.1"
+  ## NOTE (RFC-0019): the propagator is now fixed to W3C Trace Context + Baggage;
+  ## the non-W3C options below are no longer honored (the b3/jaeger/aws/ot
+  ## propagator modules were dropped to reduce footprint). This key is retained
+  ## for values-schema compatibility.
   ## Supported providers:
   ## tracecontext - W3C Trace Context
   ## baggage - W3C Baggage
@@ -1128,6 +1132,13 @@ openTelemetry:
   ## See https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/sdk-environment-variables.md#general-sdk-configuration
   ##
   propagators: "tracecontext,baggage"
+  ## RFC-0019: metrics exporter selection (OpenTelemetry OTEL_METRICS_EXPORTER).
+  ## The Prometheus /metrics scrape is ALWAYS served regardless of this value, so
+  ## existing ServiceMonitors and dashboards keep working unchanged. Set to
+  ## "otlp" (or "prometheus,otlp") to ALSO push metrics natively over OTLP to
+  ## otlpCollectorEndpoint. Default "prometheus" keeps scrape-only behavior.
+  ##
+  metricsExporter: "prometheus"
 
 ## Message Queue Trigger Kind, KEDA: enable and configuration
 ##
