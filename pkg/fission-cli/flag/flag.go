@@ -103,8 +103,8 @@ var (
 	FnLogPod                = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
 	FnLogFollow             = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
 	FnLogDetail             = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
-	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default), loki, or influxdb (deprecated)", DefaultValue: "kubernetes"}
-	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as influxdb or loki"}
+	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default) or loki", DefaultValue: "kubernetes"}
+	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as loki"}
 	FnLogCount              = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
 	FnLogRequestID          = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
 	FnLogTraceID            = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
