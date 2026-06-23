@@ -7,6 +7,8 @@ package endpointcache
 import (
 	"context"
 	"strconv"
+	"sync"
+	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -93,15 +95,29 @@ func RegisterModeInfo(requested, effective string, endpointLB bool) {
 	))
 }
 
+var (
+	sizeIndex     atomic.Pointer[Index]
+	sizeGaugeOnce sync.Once
+)
+
 // RegisterSizeGauge publishes an observable gauge reporting the number of
-// functions in the index. It closes over a live Index, read on each collection.
+// functions in the index. It is idempotent: the observable instrument is
+// registered exactly once and always reports the most recently registered
+// Index, so a repeat call (e.g. an in-process router restart in tests)
+// re-points the gauge at the live Index instead of stacking a second callback
+// on a now-dead one.
 func RegisterSizeGauge(ix *Index) {
-	metrics.Int64ObservableGauge(
-		"fission_router_endpointcache_size",
-		"Number of functions with at least one EndpointSlice in the router's endpoint index.",
-		func(_ context.Context, o metric.Int64Observer) error {
-			o.Observe(int64(ix.Size()))
-			return nil
-		},
-	)
+	sizeIndex.Store(ix)
+	sizeGaugeOnce.Do(func() {
+		metrics.Int64ObservableGauge(
+			"fission_router_endpointcache_size",
+			"Number of functions with at least one EndpointSlice in the router's endpoint index.",
+			func(_ context.Context, o metric.Int64Observer) error {
+				if ix := sizeIndex.Load(); ix != nil {
+					o.Observe(int64(ix.Size()))
+				}
+				return nil
+			},
+		)
+	})
 }

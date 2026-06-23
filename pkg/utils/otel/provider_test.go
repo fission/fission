@@ -59,7 +59,7 @@ func TestGetTraceExporter(t *testing.T) {
 	for _, tt := range tests {
 		os.Setenv(OtelEndpointEnvVar, tt.oltpEndpoint)
 		os.Setenv(OtelInsecureEnvVar, tt.oltpInsecure)
-		exporter, err := getTraceExporter(ctx, logger)
+		exporter, err := getTraceExporter(ctx, logger, parseOtelConfig())
 		if !reflect.DeepEqual(exporter, tt.wantExporter) {
 			t.Errorf("getTraceExporter() exporter = %#v, want %#v", exporter, tt.wantExporter)
 		}

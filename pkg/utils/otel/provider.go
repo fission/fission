@@ -51,7 +51,8 @@ type OtelConfig struct {
 
 // parseOtelConfig parses the OTEL_* environment variables that configure the
 // exporters. OTEL_METRICS_EXPORTER follows the OpenTelemetry convention
-// (comma-separated exporter names); "otlp" anywhere in it turns on metric push.
+// (comma-separated exporter names); the exact token "otlp" turns on metric push
+// (a token match, not a substring, so "otlphttp"/"notlp" do not enable it).
 func parseOtelConfig() OtelConfig {
 	config := OtelConfig{}
 	config.endpoint = os.Getenv(OtelEndpointEnvVar)
@@ -61,12 +62,15 @@ func parseOtelConfig() OtelConfig {
 	}
 	config.insecure = insecure
 	config.logsEnabled, _ = strconv.ParseBool(os.Getenv(OtelLogsEnabledEnvVar))
-	config.metricsOTLP = strings.Contains(os.Getenv(OtelMetricsExporterEnvVar), "otlp")
+	for exporter := range strings.SplitSeq(os.Getenv(OtelMetricsExporterEnvVar), ",") {
+		if strings.TrimSpace(exporter) == "otlp" {
+			config.metricsOTLP = true
+		}
+	}
 	return config
 }
 
-func getTraceExporter(ctx context.Context, logger logr.Logger) (*otlptrace.Exporter, error) {
-	otelConfig := parseOtelConfig()
+func getTraceExporter(ctx context.Context, logger logr.Logger, otelConfig OtelConfig) (*otlptrace.Exporter, error) {
 	if otelConfig.endpoint == "" {
 		logger.Info("OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping Opentelemtry tracing")
 		return nil, nil
@@ -114,7 +118,8 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	if err != nil {
 		return nil, err
 	}
-	traceExporter, err := getTraceExporter(ctx, logger)
+	cfg := parseOtelConfig()
+	traceExporter, err := getTraceExporter(ctx, logger, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +160,7 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	// created at package-init time via the global provider's delegation (the
 	// same mechanism as SetTracerProvider above).
 	var metricReaders []sdkmetric.Reader
-	metricReader, err := getMetricReader(ctx, parseOtelConfig())
+	metricReader, err := getMetricReader(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +178,7 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 	// bridge in loggerfactory pushes control-plane logs (carrying trace_id) as
 	// OTLP records. Inert when the endpoint is unset (the global stays no-op).
 	var loggerProvider *sdklog.LoggerProvider
-	logExporter, err := getLogExporter(ctx, parseOtelConfig())
+	logExporter, err := getLogExporter(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
