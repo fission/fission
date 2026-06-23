@@ -7,7 +7,7 @@
   A reference OpenTelemetry Collector + Loki wiring exercises the full round-trip on one CI leg (`test/integration/otel/`, not the chart).
   Streaming `--follow` is implemented (the kubernetes driver follows the pod stream, the loki driver opens the `/tail` WebSocket).
   Control-plane OTLP **log push** is implemented (opt-in via `OTEL_LOGS_ENABLED`): a `LoggerProvider` + `otlploggrpc` exporter in `pkg/utils/otel`, and a zap→OTLP bridge in `loggerfactory` so control-plane logs (carrying `trace_id`) are pushed alongside traces.
-  InfluxDB is deprecated (the driver warns and is disabled by default).
+  InfluxDB has since been **removed**: the `influxdb` logdb driver and the bundled Fluent-Bit/InfluxDB stack are gone — read logs with the `kubernetes` (default) or `loki` driver, and ship via an external collector.
   Everything in this repo is now implemented; only the env-image per-line helpers remain, and those live in the separate `fission/environments` repo.
   See "As implemented".
 - Tracking issue: —

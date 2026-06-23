@@ -215,17 +215,6 @@ rules:
   - get
   - list
 {{- end }}
-{{- define "fluentbit-kuberules" }}
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-{{- end }}
 {{- define "kubewatcher-kuberules" }}
 rules:
 {{- include "leases-kuberules" . }}

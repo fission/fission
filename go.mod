@@ -19,7 +19,6 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260617220028-c68d89978269
 	github.com/google/uuid v1.6.0
-	github.com/influxdata/influxdb v1.12.4
 	github.com/kedacore/keda/v2 v2.20.1
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.2.0

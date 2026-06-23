@@ -60,33 +60,4 @@ roleRef:
   name: "{{ .Release.Name }}-router-dataplane-cluster"
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
-{{- if .Values.influxdb.enabled }}
----
-# Fluentbit log collector (DaemonSet, deployed when influxdb.enabled), cluster-wide:
-# in cluster mode function pods
-# run in any namespace, so the collector reads Pods cluster-wide (the per-namespace
-# fluentbit Role covers static/dynamic). Read-only.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: "{{ .Release.Name }}-fluentbit-cluster"
-  labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-{{- include "fluentbit-kuberules" . }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: "{{ .Release.Name }}-fluentbit-cluster"
-  labels:
-    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
-subjects:
-  - kind: ServiceAccount
-    name: fission-fluentbit
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: "{{ .Release.Name }}-fluentbit-cluster"
-  apiGroup: rbac.authorization.k8s.io
-{{- end }}
 {{- end }}

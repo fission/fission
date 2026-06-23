@@ -972,44 +972,6 @@ analyticsNonHelmInstall: false
 ##
 gaTrackingID: UA-196546703-1
 
-## Logger config
-## This would be used if influxdb is enabled
-##
-logger:
-  influxdbAdmin: "admin"
-  fluentdImageRepository: index.docker.io
-  fluentdImage: fluent/fluent-bit
-  fluentdImageTag: 1.8.8
-
-  ## Fluent-bit writes/reads it’s own sqlite database to record a history of tracked
-  ## files and a state of offsets, this is very useful to resume a state if the ser-
-  ## vice is restarted.
-  ##
-  ## For Kubernetes environment with constraints like OpenShift,
-  ## the containers are limited to write hostPath volume. Hence, we have to enable
-  ## security context and set privileged to true.
-  ##
-  ## The user ID in runAsUser should have access to the `/var/log` and
-  ## `/var/lib/docker/containers` directories on your host.
-  ## On many hosts, this user might be root ,i.e., `runAsUser: 0`.
-  ## Although it is recommended not to use root user for security reasons.
-  ##
-  ## The `/var/log` and `/var/lib/docker/containers` directories on host are mounted
-  ## to logger container with volumeType `HostPath`.
-  securityContext: {}
-    # privileged: true
-    # runAsUser: 0
-
-## Enable InfluxDB
-##
-influxdb:
-  enabled: false
-  image: influxdb:1.8
-
-## Allow user to override busybox image used in fluent-bit init container
-##
-busyboxImage: busybox
-
 ## Archive pruner is a garbage collector for archives on the fission storage service.
 ## This interval configures the frequency at which it runs inside the storagesvc pod.
 ## The value is in minutes.
@@ -1229,11 +1191,7 @@ pprof:
 ##
 ## Wired into the fission-bundle control-plane Deployments that run as the
 ## standard uid 10001: router, executor, buildermgr, kubewatcher, timer,
-## mqtrigger (kafka/keda), storagesvc, canary-config and webhook. The
-## `--logger` DaemonSet (templates/fluentbit) is intentionally excluded: it
-## runs as the image-default/root uid (to read host log paths), not 10001,
-## so it cannot write the uid-owned/0700 coverage dir without making it
-## world-writable.
+## mqtrigger (kafka/keda), storagesvc, canary-config and webhook.
 ##
 coverage:
   enabled: false

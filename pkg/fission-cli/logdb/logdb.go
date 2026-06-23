@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	INFLUXDB   = "influxdb"
 	KUBERNETES = "kubernetes"
 	LOKI       = "loki"
 )
@@ -51,7 +50,7 @@ type LogFilter struct {
 	AllPods        bool
 	// Correlation filters (RFC-0015 / RFC-0016). Backends that index these
 	// fields (e.g. the Loki adapter) narrow the query to a single invocation;
-	// backends that do not (kubernetes, influxdb) ignore them.
+	// backends that do not (kubernetes) ignore them.
 	RequestID string
 	TraceID   string
 	Level     string

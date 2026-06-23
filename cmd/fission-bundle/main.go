@@ -23,7 +23,6 @@ import (
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/kubewatcher"
-	functionLogger "github.com/fission/fission/pkg/logger"
 	"github.com/fission/fission/pkg/mcp"
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
@@ -48,7 +47,6 @@ type CommandLineArgs struct {
 	mqt_keda         bool
 	builderMgr       bool
 	showVersion      bool
-	logger           bool
 	tenantController bool
 	seedTenants      bool
 
@@ -100,7 +98,6 @@ Usage:
   fission-bundle --mqt   [--routerUrl=<url>]
   fission-bundle --mqt_keda [--routerUrl=<url>]
   fission-bundle --webhookPort=<port>
-  fission-bundle --logger
   fission-bundle --version
 Options:
   --canaryConfig		  		  Start canary config server.
@@ -184,7 +181,6 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.BoolVar(&args.tenantController, "tenantController", false, "Start the multi-namespace tenant lifecycle controller")
 	flag.BoolVar(&args.seedTenants, "seedTenants", false, "Seed FissionTenant CRs from the env namespace config, then exit (migration hook)")
 	flag.BoolVar(&args.showVersion, "version", false, "Print version information")
-	flag.BoolVar(&args.logger, "logger", false, "Start logger")
 
 	// Port flags
 	flag.IntVar(&args.webhookPort, "webhookPort", 0, "Port that the webhook should listen on")
@@ -355,14 +351,6 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		err = buildermgr.Start(ctx, clientGen, logger, mgr, args.storageSvcUrl)
 		if err != nil {
 			logger.Error(err, "builder manager exited")
-		}
-		return
-	}
-
-	if args.logger {
-		err = functionLogger.Start(ctx, clientGen, logger)
-		if err != nil {
-			logger.Error(err, "logger exited")
 		}
 		return
 	}

@@ -45,13 +45,6 @@ func TestByTimestampSort(t *testing.T) {
 }
 
 func TestGetLogDB(t *testing.T) {
-	t.Run("influxdb", func(t *testing.T) {
-		t.Setenv("influxdb_URL", "http://influxdb.example/query")
-		db, err := GetLogDB(INFLUXDB, t.Context(), LogDBOptions{})
-		require.NoError(t, err)
-		assert.IsType(t, InfluxDB{}, db)
-	})
-
 	t.Run("kubernetes", func(t *testing.T) {
 		db, err := GetLogDB(KUBERNETES, t.Context(), LogDBOptions{})
 		require.NoError(t, err)
@@ -68,7 +61,6 @@ func TestLogDBRegistry(t *testing.T) {
 	// Built-in drivers self-register via init().
 	supported := supportedDrivers()
 	assert.Contains(t, supported, KUBERNETES, "kubernetes driver must be registered")
-	assert.Contains(t, supported, INFLUXDB, "influxdb driver must be registered")
 	assert.Contains(t, supported, LOKI, "loki driver must be registered")
 
 	// A registered driver is resolved by GetLogDB.
