@@ -32,8 +32,15 @@ debug-vars: print-GOOS print-GOARCH print-GOAMD64 print-VERSION print-TIMESTAMP 
 ### Static checks
 check: test-run build-fission-cli clean
 
-code-checks:
+code-checks: verify-gomod
 	golangci-lint run
+
+# Fail if go.mod does not keep direct and indirect requirements in separate
+# blocks. `go mod tidy` does not enforce this layout, so this guard does.
+# Convention: .claude/resources/go-mod-conventions.md
+.PHONY: verify-gomod
+verify-gomod:
+	@hack/verify-gomod.sh
 
 ### License headers
 # Files that should carry an SPDX license header. Shared by the license
