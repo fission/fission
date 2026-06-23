@@ -14,14 +14,14 @@ import (
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
-var (
-	functionLabels = func(name, namespace string) metric.MeasurementOption {
-		return metric.WithAttributes(
-			attribute.String("function_name", name),
-			attribute.String("function_namespace", namespace),
-		)
-	}
+func functionLabels(name, namespace string) metric.MeasurementOption {
+	return metric.WithAttributes(
+		attribute.String("function_name", name),
+		attribute.String("function_namespace", namespace),
+	)
+}
 
+var (
 	coldStarts = metrics.Int64Counter(
 		"fission_function_cold_starts_total",
 		"How many cold starts are made by function_name, function_namespace.",
