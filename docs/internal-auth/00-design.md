@@ -285,6 +285,9 @@ The verifier reads the entire request body into memory before computing the sign
 That cost is bounded by `VerifierOpts.MaxBodyBytes` (default 256 MiB, set on each registration).
 Bodies that exceed the cap are rejected with `413 Request Entity Too Large` *before* signature verification — i.e. an unauthenticated attacker cannot use a giant unsigned body to DoS a signed service.
 Operators that legitimately need to upload archives larger than 256 MiB should bump the cap rather than disable enforcement; the cap is the largest archive size we expect to see in practice.
+For the one bulk-data endpoint, `storagesvc /v1/archive`, the cap is operator-tunable: set the Helm value `storagesvc.maxArchiveSizeMib` (env var `STORAGE_MAX_ARCHIVE_SIZE_MIB`), and size the storagesvc memory request/limit to match, since the body is held in memory during verification.
+The other registrations (fetcher, builder, executor, router-internal) carry small control-plane payloads and keep the 256 MiB default.
+For very large packages, OCI-native delivery (`packageRegistry`) is the better-managed alternative to raising the cap — the code is pulled and mounted from a registry rather than buffered through storagesvc.
 
 **Replay within the skew window.**
 A captured signed request can be replayed any number of times within the `SkewSec` window (default 60s) and will pass verification each time.

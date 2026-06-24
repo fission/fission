@@ -52,6 +52,10 @@ spec:
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
           value: {{ .Values.pprof.enabled | quote }}
+        {{- if .Values.storagesvc.maxArchiveSizeMib }}
+        - name: STORAGE_MAX_ARCHIVE_SIZE_MIB
+          value: {{ .Values.storagesvc.maxArchiveSizeMib | quote }}
+        {{- end }}
         {{- if and (.Values.persistence.enabled) (eq (.Values.persistence.storageType | default "local") "s3") }}
         - name: STORAGE_S3_ENDPOINT
           value: {{ .Values.persistence.s3.endPoint }}
