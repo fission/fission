@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,27 +187,10 @@ func (c *client) Upload(ctx context.Context, filePath string, metadata *map[stri
 // example through an os.Root on the server-side fetch path — passes the open
 // file directly so no second, path-based open is needed.
 func (c *client) UploadReader(ctx context.Context, fileName string, r io.Reader, fileSize int64, metadata *map[string]string) (string, error) {
-	buf := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(buf)
-	fileWriter, err := bodyWriter.CreateFormFile("uploadfile", fileName)
+	req, err := newUploadRequest(ctx, c.url+"/archive", fileName, r, fileSize)
 	if err != nil {
 		return "", err
 	}
-
-	_, err = io.Copy(fileWriter, r)
-	if err != nil {
-		return "", err
-	}
-
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	req, err := http.NewRequest(http.MethodPost, c.url+"/archive", buf)
-	if err != nil {
-		return "", err
-	}
-	req.Header["X-File-Size"] = []string{fmt.Sprintf("%v", fileSize)}
-	req.Header["Content-Type"] = []string{contentType}
 
 	resp, err := ctxhttp.Do(ctx, c.httpClient, req)
 	if err != nil {
@@ -230,6 +214,96 @@ func (c *client) UploadReader(ctx context.Context, fileName string, r io.Reader,
 
 	return ur.ID, nil
 }
+
+// newUploadRequest builds the POST /archive multipart request for fileName +
+// the contents of r (fileSize bytes). When r is an io.ReadSeeker (the common
+// case — an *os.File), the body is streamed: the multipart envelope is assembled
+// around the file without buffering it, and req.GetBody re-streams it (seeking
+// back to the start) so the HMAC signer can hash without buffering either.
+// A non-seekable r falls back to buffering the whole multipart body in memory.
+func newUploadRequest(ctx context.Context, archiveURL, fileName string, r io.Reader, fileSize int64) (*http.Request, error) {
+	var (
+		req         *http.Request
+		contentType string
+		err         error
+	)
+
+	if rs, ok := r.(io.ReadSeeker); ok {
+		start, serr := rs.Seek(0, io.SeekCurrent)
+		if serr != nil {
+			return nil, serr
+		}
+		// Assemble the multipart envelope once (part header + closing boundary)
+		// using multipart.Writer's own boundary, then stream prefix + file +
+		// suffix. The bytes are identical to multipart.Writer's output for that
+		// boundary, but the file is never copied into memory.
+		var hdr bytes.Buffer
+		mw := multipart.NewWriter(&hdr)
+		if _, err = mw.CreateFormFile("uploadfile", fileName); err != nil {
+			return nil, err
+		}
+		prefix := append([]byte(nil), hdr.Bytes()...)
+		suffix := []byte("\r\n--" + mw.Boundary() + "--\r\n")
+		contentType = mw.FormDataContentType()
+
+		newBody := func() io.ReadCloser {
+			return &seekingMultipartBody{prefix: prefix, suffix: suffix, rs: rs, start: start}
+		}
+		if req, err = http.NewRequestWithContext(ctx, http.MethodPost, archiveURL, newBody()); err != nil {
+			return nil, err
+		}
+		req.GetBody = func() (io.ReadCloser, error) { return newBody(), nil }
+		req.ContentLength = int64(len(prefix)) + fileSize + int64(len(suffix))
+	} else {
+		buf := &bytes.Buffer{}
+		mw := multipart.NewWriter(buf)
+		fw, ferr := mw.CreateFormFile("uploadfile", fileName)
+		if ferr != nil {
+			return nil, ferr
+		}
+		if _, ferr = io.Copy(fw, r); ferr != nil {
+			return nil, ferr
+		}
+		contentType = mw.FormDataContentType()
+		if ferr = mw.Close(); ferr != nil {
+			return nil, ferr
+		}
+		if req, err = http.NewRequestWithContext(ctx, http.MethodPost, archiveURL, buf); err != nil {
+			return nil, err
+		}
+	}
+
+	// The backend needs the original file size (distinct from the encoded
+	// multipart Content-Length); see uploadHandler's X-File-Size handling.
+	req.Header.Set("X-File-Size", strconv.FormatInt(fileSize, 10))
+	req.Header.Set("Content-Type", contentType)
+	return req, nil
+}
+
+// seekingMultipartBody streams a single-file multipart body — prefix + the
+// seekable file + closing boundary — seeking the file to its captured start
+// offset on the first read. A fresh instance is used for req.Body and for each
+// req.GetBody call, so the sign pass and the send pass each replay the body from
+// the start without buffering it or interfering with one another (they run
+// sequentially: the signer hashes GetBody fully before the transport sends Body).
+type seekingMultipartBody struct {
+	prefix, suffix []byte
+	rs             io.ReadSeeker
+	start          int64
+	mr             io.Reader // assembled on first Read, after seeking
+}
+
+func (b *seekingMultipartBody) Read(p []byte) (int, error) {
+	if b.mr == nil {
+		if _, err := b.rs.Seek(b.start, io.SeekStart); err != nil {
+			return 0, err
+		}
+		b.mr = io.MultiReader(bytes.NewReader(b.prefix), b.rs, bytes.NewReader(b.suffix))
+	}
+	return b.mr.Read(p)
+}
+
+func (b *seekingMultipartBody) Close() error { return nil }
 
 // GetUrl returns an HTTP URL that can be used to download the file pointed to by ID
 func (c *client) GetUrl(id string) string {
