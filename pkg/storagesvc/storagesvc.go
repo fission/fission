@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"errors"
@@ -49,6 +51,10 @@ type (
 		authSecret []byte
 		// authSecretOld is accepted alongside authSecret during rotation.
 		authSecretOld []byte
+		// maxUploadBytes is passed to VerifierOpts.MaxBodyBytes for /v1/archive;
+		// 0 (the default, and the only non-positive value maxUploadBytesFromEnv
+		// produces) means hmacauth.DefaultMaxBodyBytes (256 MiB).
+		maxUploadBytes int64
 	}
 
 	UploadResponse struct {
@@ -301,17 +307,25 @@ func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port int, authSecret, authSecretOld []byte) *StorageService {
+func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port int, authSecret, authSecretOld []byte, maxUploadBytes int64) *StorageService {
 	return &StorageService{
-		logger:        logger.WithName("storage_service"),
-		storageClient: storageClient,
-		port:          port,
-		authSecret:    authSecret,
-		authSecretOld: authSecretOld,
+		logger:         logger.WithName("storage_service"),
+		storageClient:  storageClient,
+		port:           port,
+		authSecret:     authSecret,
+		authSecretOld:  authSecretOld,
+		maxUploadBytes: maxUploadBytes,
 	}
 }
 
 func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port int) {
+	httpserver.StartServer(ctx, ss.logger, mgr, "storagesvc", fmt.Sprintf("%d", port), ss.makeHandler())
+}
+
+// makeHandler builds the storagesvc HTTP handler chain (auth + routes +
+// security headers + OTEL). Split out from Start so the wiring — in particular
+// the configurable upload body cap — is exercisable without binding a listener.
+func (ss *StorageService) makeHandler() http.Handler {
 	// Per-route metrics always; the HMAC verifier wraps the whole mux as the
 	// OUTERMOST middleware (so 401s are handled at the auth layer and metrics
 	// see only post-verification requests) only when a master is configured.
@@ -336,10 +350,10 @@ func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port i
 		opts = append(opts, httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 			SkewSec: 60,
 			Bypass:  []string{"/healthz"},
-			// 256 MiB caps the verifier's in-memory body buffer; this is
-			// larger than any realistic Fission archive but bounds the cost
-			// of an unsigned/malicious upload to /v1/archive.
-			MaxBodyBytes: hmacauth.DefaultMaxBodyBytes,
+			// Caps the body the verifier buffers to check its signature; the
+			// verifier resolves 0 to 256 MiB. Operator-tunable via
+			// STORAGE_MAX_ARCHIVE_SIZE_MIB — see the maxUploadBytes field and values.yaml.
+			MaxBodyBytes: ss.maxUploadBytes,
 			Logger:       ss.logger.WithName("hmac"),
 		})))
 	}
@@ -358,12 +372,45 @@ func (ss *StorageService) Start(ctx context.Context, mgr *errgroup.Group, port i
 	// SecurityHeaders + DenyAllCORS as defense-in-depth: a future
 	// regression exposing this port via Ingress must not become a
 	// browser-readable archive store.
-	handler := httpsecurity.SecurityHeaders(
+	return httpsecurity.SecurityHeaders(
 		httpsecurity.DenyAllCORS(
 			otelUtils.GetHandlerWithOTEL(m.Handler(), "fission-storagesvc", otelUtils.UrlsToIgnore("/healthz")),
 		),
 	)
-	httpserver.StartServer(ctx, ss.logger, mgr, "storagesvc", fmt.Sprintf("%d", port), handler)
+}
+
+// maxArchiveSizeMiBCeil is the largest STORAGE_MAX_ARCHIVE_SIZE_MIB we accept
+// before the `<< 20` MiB→bytes conversion would overflow int64; larger values
+// are treated as misconfiguration and fall back to the default cap.
+const maxArchiveSizeMiBCeil = math.MaxInt64 >> 20
+
+// maxUploadBytesFromEnv reads STORAGE_MAX_ARCHIVE_SIZE_MIB — a plain integer
+// number of MiB, no unit suffix — and returns the corresponding /v1/archive
+// upload body cap in bytes. Unset, zero, or invalid values return 0, which the
+// verifier resolves to hmacauth.DefaultMaxBodyBytes (256 MiB). The cap bounds
+// the multipart-wrapped request body, marginally larger than the raw archive.
+func maxUploadBytesFromEnv(logger logr.Logger) int64 {
+	v := strings.TrimSpace(os.Getenv("STORAGE_MAX_ARCHIVE_SIZE_MIB"))
+	if v == "" {
+		return 0
+	}
+	defaultMiB := hmacauth.DefaultMaxBodyBytes >> 20
+	mib, err := strconv.ParseInt(v, 10, 64)
+	switch {
+	case err != nil:
+		logger.Error(err, "STORAGE_MAX_ARCHIVE_SIZE_MIB is not a plain integer number of MiB; using the default upload cap",
+			"value", v, "defaultMiB", defaultMiB)
+		return 0
+	case mib < 0:
+		logger.Info("ignoring negative STORAGE_MAX_ARCHIVE_SIZE_MIB; using the default upload cap",
+			"value", v, "defaultMiB", defaultMiB)
+		return 0
+	case mib > maxArchiveSizeMiBCeil:
+		logger.Info("STORAGE_MAX_ARCHIVE_SIZE_MIB is too large; using the default upload cap",
+			"value", v, "maxMiB", maxArchiveSizeMiBCeil, "defaultMiB", defaultMiB)
+		return 0
+	}
+	return mib << 20
 }
 
 // Start runs storage service
@@ -385,7 +432,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	authSecretOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 
 	// create http handlers
-	storageService := MakeStorageService(logger, storageClient, port, authSecret, authSecretOld)
+	storageService := MakeStorageService(logger, storageClient, port, authSecret, authSecretOld, maxUploadBytesFromEnv(logger))
 	mgr.Go(func() error {
 		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
 		return nil
