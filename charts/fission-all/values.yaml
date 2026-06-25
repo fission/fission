@@ -774,15 +774,17 @@ storagesvc:
 
   ## maxArchiveSizeMib caps the size (in MiB) of a single package archive
   ## uploaded to /v1/archive. With internalAuth enabled, the HMAC verifier
-  ## buffers the upload body in memory to check its signature and rejects
-  ## anything larger with 413 Request Entity Too Large. (With internalAuth
-  ## disabled there is no verifier, so this cap has no effect.)
+  ## checks the upload's signature and rejects anything larger with 413
+  ## Request Entity Too Large. (With internalAuth disabled there is no
+  ## verifier, so this cap has no effect.)
   ## Use a plain integer number of MiB — no unit suffix (512, not 512Mi).
   ## 0 or unset means the 256 MiB default; there is no "unlimited" setting.
-  ## Raise it for large packages instead of disabling internalAuth, and size
-  ## the storagesvc memory request/limit to match, since the body is held in
-  ## memory during verification. The cap applies to the multipart-wrapped
-  ## request body, which is marginally larger than the raw archive.
+  ## Raise it for large packages instead of disabling internalAuth. Uploads
+  ## above ~32 MiB are stream-verified through a temporary file, so verification
+  ## holds only a bounded amount in memory regardless of archive size (it does
+  ## use ephemeral disk); the cap then bounds disk rather than RAM. The cap
+  ## applies to the multipart-wrapped request body, marginally larger than the
+  ## raw archive.
   ##
   ## For very large packages, prefer publishing them as OCI images
   ## (packageRegistry.enabled + repositoryPrefix) over raising this cap: the

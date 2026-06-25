@@ -55,6 +55,11 @@ type (
 		// 0 (the default, and the only non-positive value maxUploadBytesFromEnv
 		// produces) means hmacauth.DefaultMaxBodyBytes (256 MiB).
 		maxUploadBytes int64
+		// uploadSpillThreshold is the VerifierOpts.SpillThreshold for /v1/archive:
+		// bodies above it are streamed through a temp file during verification
+		// rather than buffered in RAM. 0 means defaultUploadSpillThresholdBytes;
+		// tests lower it to exercise the spill path without a multi-MiB body.
+		uploadSpillThreshold int64
 	}
 
 	UploadResponse struct {
@@ -347,6 +352,10 @@ func (ss *StorageService) makeHandler() http.Handler {
 		// master-derived key for callers that send no namespace header (existing
 		// fetchers, the CLI, the pruner), so this is safe to adopt unconditionally
 		// — multi-namespace tenancy doesn't have to be enabled for it to be inert.
+		spillThreshold := ss.uploadSpillThreshold
+		if spillThreshold <= 0 {
+			spillThreshold = defaultUploadSpillThresholdBytes
+		}
 		opts = append(opts, httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 			SkewSec: 60,
 			Bypass:  []string{"/healthz"},
@@ -354,7 +363,11 @@ func (ss *StorageService) makeHandler() http.Handler {
 			// verifier resolves 0 to 256 MiB. Operator-tunable via
 			// STORAGE_MAX_ARCHIVE_SIZE_MIB — see the maxUploadBytes field and values.yaml.
 			MaxBodyBytes: ss.maxUploadBytes,
-			Logger:       ss.logger.WithName("hmac"),
+			// Stream-verify bodies above the threshold (spill to a temp file)
+			// so verification RAM stays bounded regardless of archive size; the
+			// cap above then bounds disk, not memory.
+			SpillThreshold: spillThreshold,
+			Logger:         ss.logger.WithName("hmac"),
 		})))
 	}
 	m := httpmux.New(opts...)
@@ -383,6 +396,12 @@ func (ss *StorageService) makeHandler() http.Handler {
 // before the `<< 20` MiB→bytes conversion would overflow int64; larger values
 // are treated as misconfiguration and fall back to the default cap.
 const maxArchiveSizeMiBCeil = math.MaxInt64 >> 20
+
+// defaultUploadSpillThresholdBytes is the VerifierOpts.SpillThreshold used for
+// /v1/archive uploads: bodies above it are stream-verified through a temp file
+// instead of buffered in RAM. 32 MiB keeps typical small uploads fully in
+// memory while bounding verification RAM for large archives.
+const defaultUploadSpillThresholdBytes int64 = 32 << 20
 
 // maxUploadBytesFromEnv reads STORAGE_MAX_ARCHIVE_SIZE_MIB — a plain integer
 // number of MiB, no unit suffix — and returns the corresponding /v1/archive
