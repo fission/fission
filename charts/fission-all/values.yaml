@@ -796,7 +796,8 @@ storagesvc:
   ## Above thresholdMib the HMAC verifier streams the upload body through a temp
   ## file in a dedicated emptyDir (mounted at dir) instead of buffering it in
   ## RAM, so verification memory stays bounded regardless of archive size and
-  ## works under a read-only root filesystem. sizeLimit caps that volume (the
+  ## it keeps working if the root filesystem is later made read-only. sizeLimit
+  ## caps that volume (the
   ## pod is evicted if exceeded) — bounding the disk a burst of concurrent
   ## uploads can consume; raise it if you raise maxArchiveSizeMib. Set sizeLimit
   ## to "" to leave the volume unbounded.

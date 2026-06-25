@@ -57,8 +57,8 @@ spec:
           value: {{ .Values.storagesvc.maxArchiveSizeMib | quote }}
         {{- end }}
         # Stream-verify large uploads to a dedicated writable, size-limited
-        # volume so verification RAM stays bounded and it works under a
-        # read-only root filesystem.
+        # volume so verification RAM stays bounded, the spill disk is capped,
+        # and it keeps working if the root filesystem is later made read-only.
         - name: STORAGE_SPILL_DIR
           value: {{ .Values.storagesvc.uploadSpill.dir | default "/tmp/fission-spill" | quote }}
         {{- if .Values.storagesvc.uploadSpill.thresholdMib }}

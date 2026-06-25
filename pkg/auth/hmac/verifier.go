@@ -7,6 +7,8 @@ package hmac
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -253,8 +255,12 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 					}
 					r.Body = io.NopCloser(bytes.NewReader(body))
 				}
+				// Hash once (not per candidate key) and verify via the same
+				// primitive as the spill path, so both staging paths converge.
+				h := sha256.Sum256(body)
+				bodyHashHex := hex.EncodeToString(h[:])
 				verifyBody = func(key []byte) bool {
-					return Verify(key, r.Method, ru, body, tsNum, sig)
+					return VerifyWithBodyHash(key, r.Method, ru, bodyHashHex, tsNum, sig)
 				}
 			}
 
