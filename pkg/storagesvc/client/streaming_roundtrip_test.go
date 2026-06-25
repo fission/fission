@@ -6,7 +6,6 @@ package client
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -49,7 +48,7 @@ func TestUploadStreamingRoundTripThroughSpillVerifier(t *testing.T) {
 	require.NoError(t, os.WriteFile(fp, content, 0o600))
 
 	c := MakeClient(srv.URL, master)
-	id, err := c.Upload(context.Background(), fp, nil)
+	id, err := c.Upload(t.Context(), fp, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "stored-id", id)
 	assert.Equal(t, content, gotFile, "server must receive the streamed file intact")

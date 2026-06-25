@@ -792,6 +792,19 @@ storagesvc:
   ## through storagesvc, which scales and manages better.
   maxArchiveSizeMib: 256
 
+  ## uploadSpill controls stream-verification of large /v1/archive uploads.
+  ## Above thresholdMib the HMAC verifier streams the upload body through a temp
+  ## file in a dedicated emptyDir (mounted at dir) instead of buffering it in
+  ## RAM, so verification memory stays bounded regardless of archive size and
+  ## works under a read-only root filesystem. sizeLimit caps that volume (the
+  ## pod is evicted if exceeded) — bounding the disk a burst of concurrent
+  ## uploads can consume; raise it if you raise maxArchiveSizeMib. Set sizeLimit
+  ## to "" to leave the volume unbounded.
+  uploadSpill:
+    thresholdMib: 32
+    dir: /tmp/fission-spill
+    sizeLimit: 2Gi
+
   ## Security Context
   ## It holds pod-level and container level security configuration.
   ## This is an experimental section, please verify before enabling in production.

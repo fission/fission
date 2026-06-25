@@ -243,11 +243,16 @@ func newUploadRequest(ctx context.Context, archiveURL, fileName string, r io.Rea
 			return nil, err
 		}
 		prefix := append([]byte(nil), hdr.Bytes()...)
+		// multipart.Writer.Close() can't emit the closing boundary here because
+		// using the Writer would mean io.Copy-ing the file through it (buffering
+		// — the exact thing this path avoids), so reconstruct the delimiter by
+		// hand. The streamed bytes are asserted byte-identical to the Writer's
+		// output in client_request_test.go.
 		suffix := []byte("\r\n--" + mw.Boundary() + "--\r\n")
 		contentType = mw.FormDataContentType()
 
 		newBody := func() io.ReadCloser {
-			return &seekingMultipartBody{prefix: prefix, suffix: suffix, rs: rs, start: start}
+			return &seekingMultipartBody{prefix: prefix, suffix: suffix, rs: rs, start: start, limit: fileSize}
 		}
 		if req, err = http.NewRequestWithContext(ctx, http.MethodPost, archiveURL, newBody()); err != nil {
 			return nil, err
@@ -281,16 +286,21 @@ func newUploadRequest(ctx context.Context, archiveURL, fileName string, r io.Rea
 }
 
 // seekingMultipartBody streams a single-file multipart body — prefix + the
-// seekable file + closing boundary — seeking the file to its captured start
-// offset on the first read. A fresh instance is used for req.Body and for each
-// req.GetBody call, so the sign pass and the send pass each replay the body from
-// the start without buffering it or interfering with one another (they run
-// sequentially: the signer hashes GetBody fully before the transport sends Body).
+// seekable file (capped at limit bytes) + closing boundary — seeking the file
+// to its captured start offset on the first read. A fresh instance is used for
+// req.Body and for each req.GetBody call, so the sign pass and the send pass
+// each replay the body from the start without buffering it.
+//
+// NOT safe for concurrent reads: req.Body and the GetBody instances share one
+// underlying *os.File and seek the same offset. Correctness relies on the passes
+// being strictly sequential — the signer hashes GetBody to EOF before the
+// transport reads req.Body. The streaming round-trip test is the guardrail.
 type seekingMultipartBody struct {
 	prefix, suffix []byte
 	rs             io.ReadSeeker
 	start          int64
-	mr             io.Reader // assembled on first Read, after seeking
+	limit          int64 // bytes of rs to stream (the stat-time file size)
+	mr             io.Reader
 }
 
 func (b *seekingMultipartBody) Read(p []byte) (int, error) {
@@ -298,7 +308,9 @@ func (b *seekingMultipartBody) Read(p []byte) (int, error) {
 		if _, err := b.rs.Seek(b.start, io.SeekStart); err != nil {
 			return 0, err
 		}
-		b.mr = io.MultiReader(bytes.NewReader(b.prefix), b.rs, bytes.NewReader(b.suffix))
+		// Cap the file read to limit so the streamed length always matches the
+		// ContentLength derived from it, even if the file grew after stat.
+		b.mr = io.MultiReader(bytes.NewReader(b.prefix), io.LimitReader(b.rs, b.limit), bytes.NewReader(b.suffix))
 	}
 	return b.mr.Read(p)
 }

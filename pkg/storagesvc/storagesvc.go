@@ -57,9 +57,14 @@ type (
 		maxUploadBytes int64
 		// uploadSpillThreshold is the VerifierOpts.SpillThreshold for /v1/archive:
 		// bodies above it are streamed through a temp file during verification
-		// rather than buffered in RAM. 0 means defaultUploadSpillThresholdBytes;
-		// tests lower it to exercise the spill path without a multi-MiB body.
+		// rather than buffered in RAM. 0 means defaultUploadSpillThresholdBytes.
+		// Set from STORAGE_UPLOAD_SPILL_THRESHOLD_MIB; tests lower it to exercise
+		// the spill path without a multi-MiB body.
 		uploadSpillThreshold int64
+		// uploadSpillDir is the VerifierOpts.SpillDir — the directory for spill
+		// temp files (empty → os.TempDir()). Set from STORAGE_SPILL_DIR to a
+		// writable, size-limited volume so spill works under a read-only root FS.
+		uploadSpillDir string
 	}
 
 	UploadResponse struct {
@@ -363,10 +368,11 @@ func (ss *StorageService) makeHandler() http.Handler {
 			// verifier resolves 0 to 256 MiB. Operator-tunable via
 			// STORAGE_MAX_ARCHIVE_SIZE_MIB — see the maxUploadBytes field and values.yaml.
 			MaxBodyBytes: ss.maxUploadBytes,
-			// Stream-verify bodies above the threshold (spill to a temp file)
-			// so verification RAM stays bounded regardless of archive size; the
-			// cap above then bounds disk, not memory.
+			// Stream-verify bodies above the threshold (spill to a temp file in
+			// SpillDir) so verification RAM stays bounded regardless of archive
+			// size; the cap above then bounds disk, not memory.
 			SpillThreshold: spillThreshold,
+			SpillDir:       ss.uploadSpillDir,
 			Logger:         ss.logger.WithName("hmac"),
 		})))
 	}
@@ -403,33 +409,43 @@ const maxArchiveSizeMiBCeil = math.MaxInt64 >> 20
 // memory while bounding verification RAM for large archives.
 const defaultUploadSpillThresholdBytes int64 = 32 << 20
 
-// maxUploadBytesFromEnv reads STORAGE_MAX_ARCHIVE_SIZE_MIB — a plain integer
-// number of MiB, no unit suffix — and returns the corresponding /v1/archive
-// upload body cap in bytes. Unset, zero, or invalid values return 0, which the
-// verifier resolves to hmacauth.DefaultMaxBodyBytes (256 MiB). The cap bounds
-// the multipart-wrapped request body, marginally larger than the raw archive.
-func maxUploadBytesFromEnv(logger logr.Logger) int64 {
-	v := strings.TrimSpace(os.Getenv("STORAGE_MAX_ARCHIVE_SIZE_MIB"))
+// mibEnvToBytes reads envVar as a plain integer number of MiB (no unit suffix)
+// and returns it in bytes. Unset, zero, negative, non-integer, or
+// int64-overflowing values return 0, which callers resolve to their own
+// default. Each rejection is logged distinctly.
+func mibEnvToBytes(logger logr.Logger, envVar string) int64 {
+	v := strings.TrimSpace(os.Getenv(envVar))
 	if v == "" {
 		return 0
 	}
-	defaultMiB := hmacauth.DefaultMaxBodyBytes >> 20
 	mib, err := strconv.ParseInt(v, 10, 64)
 	switch {
 	case err != nil:
-		logger.Error(err, "STORAGE_MAX_ARCHIVE_SIZE_MIB is not a plain integer number of MiB; using the default upload cap",
-			"value", v, "defaultMiB", defaultMiB)
+		logger.Error(err, "env var is not a plain integer number of MiB; using the default", "envVar", envVar, "value", v)
 		return 0
 	case mib < 0:
-		logger.Info("ignoring negative STORAGE_MAX_ARCHIVE_SIZE_MIB; using the default upload cap",
-			"value", v, "defaultMiB", defaultMiB)
+		logger.Info("ignoring negative env var; using the default", "envVar", envVar, "value", v)
 		return 0
 	case mib > maxArchiveSizeMiBCeil:
-		logger.Info("STORAGE_MAX_ARCHIVE_SIZE_MIB is too large; using the default upload cap",
-			"value", v, "maxMiB", maxArchiveSizeMiBCeil, "defaultMiB", defaultMiB)
+		logger.Info("env var too large; using the default", "envVar", envVar, "value", v, "maxMiB", maxArchiveSizeMiBCeil)
 		return 0
 	}
 	return mib << 20
+}
+
+// maxUploadBytesFromEnv reads STORAGE_MAX_ARCHIVE_SIZE_MIB and returns the
+// /v1/archive upload body cap in bytes; 0 (unset/invalid) → the verifier's
+// hmacauth.DefaultMaxBodyBytes (256 MiB). The cap bounds the multipart-wrapped
+// request body, marginally larger than the raw archive.
+func maxUploadBytesFromEnv(logger logr.Logger) int64 {
+	return mibEnvToBytes(logger, "STORAGE_MAX_ARCHIVE_SIZE_MIB")
+}
+
+// uploadSpillThresholdFromEnv reads STORAGE_UPLOAD_SPILL_THRESHOLD_MIB and
+// returns the spill threshold in bytes; 0 (unset/invalid) → makeHandler's
+// defaultUploadSpillThresholdBytes (32 MiB).
+func uploadSpillThresholdFromEnv(logger logr.Logger) int64 {
+	return mibEnvToBytes(logger, "STORAGE_UPLOAD_SPILL_THRESHOLD_MIB")
 }
 
 // Start runs storage service
@@ -452,6 +468,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// create http handlers
 	storageService := MakeStorageService(logger, storageClient, port, authSecret, authSecretOld, maxUploadBytesFromEnv(logger))
+	// Spill config for stream-verification of large uploads (0 dir/threshold
+	// resolve to os.TempDir() and the 32 MiB default respectively).
+	storageService.uploadSpillThreshold = uploadSpillThresholdFromEnv(logger)
+	storageService.uploadSpillDir = strings.TrimSpace(os.Getenv("STORAGE_SPILL_DIR"))
 	mgr.Go(func() error {
 		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
 		return nil
