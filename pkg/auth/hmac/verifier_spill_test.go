@@ -49,7 +49,9 @@ func TestVerifierSpillAcceptsLargeSignedBody(t *testing.T) {
 	h := Verifier(VerifierOpts{
 		Secret: []byte(spillTestSecret), SkewSec: 60, Now: spillNow, SpillThreshold: 1024,
 	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close() // simulate the net/http server closing the request body
+		// Deliberately do NOT close r.Body — the real uploadHandler doesn't, and
+		// net/http closes the ORIGINAL request body, not the re-injected
+		// spillReader. The verifier must clean up its own temp file regardless.
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(200)
 	}))
@@ -96,7 +98,6 @@ func TestVerifierSpillSmallBodyStaysInMemory(t *testing.T) {
 	h := Verifier(VerifierOpts{
 		Secret: []byte(spillTestSecret), SkewSec: 60, Now: spillNow, SpillThreshold: 1 << 20,
 	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
 		gotBody, _ = io.ReadAll(r.Body)
 		w.WriteHeader(200)
 	}))

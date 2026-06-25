@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"hash"
 	"io"
 	"os"
@@ -23,22 +24,23 @@ const spillChunkSize = 32 * 1024
 //
 // Lifecycle: newSpillReader consumes src fully (staging + hashing); the caller
 // then reads BodyHashHex() and may Read() the body back. Close() releases the
-// temp file and MUST be called on every path — the http server closes the
-// re-injected request body on the success path, and the verifier closes it
-// itself on any non-handoff exit (signature mismatch, etc.). Close is idempotent.
+// temp file and MUST be called on every path. The net/http server closes the
+// ORIGINAL captured request body, not the spillReader the verifier re-injects,
+// so the verifier owns this lifetime and defers Close() on every exit. Close is
+// idempotent.
 type spillReader struct {
 	hasher hash.Hash
 	file   *os.File  // non-nil once spilled; the staged body lives here
-	buf    []byte    // retained in-memory body when never spilled
 	reader io.Reader // replay source (bytes.Reader or the seeked file)
 }
 
 // newSpillReader reads src to completion, teeing every byte through SHA-256 and
 // staging it in memory until it would exceed threshold, after which it spills to
-// an os.CreateTemp file. A read error (including *http.MaxBytesError from a
-// MaxBytesReader-wrapped src) is returned after cleaning up any temp file, so
-// the caller can map it to the right status before any handler runs.
-func newSpillReader(src io.Reader, threshold int64) (*spillReader, error) {
+// an os.CreateTemp file in dir (empty dir → os.TempDir()). A read error
+// (including *http.MaxBytesError from a MaxBytesReader-wrapped src) is returned
+// after cleaning up any temp file, so the caller can map it to the right status
+// before any handler runs.
+func newSpillReader(src io.Reader, threshold int64, dir string) (*spillReader, error) {
 	sr := &spillReader{hasher: sha256.New()}
 	mem := &bytes.Buffer{}
 	chunk := make([]byte, spillChunkSize)
@@ -49,7 +51,7 @@ func newSpillReader(src io.Reader, threshold int64) (*spillReader, error) {
 			sr.hasher.Write(chunk[:n])
 			size += int64(n)
 			if sr.file == nil && size > threshold {
-				f, ferr := os.CreateTemp("", "fission-hmac-body-*")
+				f, ferr := os.CreateTemp(dir, "fission-hmac-body-*")
 				if ferr != nil {
 					return nil, ferr
 				}
@@ -84,8 +86,7 @@ func newSpillReader(src io.Reader, threshold int64) (*spillReader, error) {
 		}
 		sr.reader = sr.file
 	} else {
-		sr.buf = mem.Bytes()
-		sr.reader = bytes.NewReader(sr.buf)
+		sr.reader = bytes.NewReader(mem.Bytes())
 	}
 	return sr, nil
 }
@@ -115,8 +116,9 @@ func (sr *spillReader) discard() error {
 	closeErr := sr.file.Close()
 	sr.file = nil
 	sr.reader = nil
-	if rmErr := os.Remove(name); rmErr != nil && !os.IsNotExist(rmErr) {
-		return rmErr
+	rmErr := os.Remove(name)
+	if os.IsNotExist(rmErr) {
+		rmErr = nil
 	}
-	return closeErr
+	return errors.Join(closeErr, rmErr)
 }
