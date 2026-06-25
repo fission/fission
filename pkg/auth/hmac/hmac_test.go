@@ -5,10 +5,46 @@
 package hmac
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestBodyHashPrimitivesMatchSliceForms locks in the backward-compat invariant:
+// the *WithBodyHash forms (used by the streaming verifier/signer) produce a
+// byte-identical canonical string, signature, and verification result to the
+// slice-based Canonical/Sign/Verify when fed hex(sha256(body)).
+func TestBodyHashPrimitivesMatchSliceForms(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	bodies := map[string][]byte{
+		"nil":   nil,
+		"empty": {},
+		"small": []byte("hello"),
+		"large": make([]byte, 5<<20), // 5 MiB of zeros
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			h := sha256.Sum256(body)
+			bodyHashHex := hex.EncodeToString(h[:])
+			const (
+				method = "POST"
+				uri    = "/v1/archive?id=abc"
+				ts     = int64(1715000000)
+			)
+
+			assert.Equal(t, Canonical(method, uri, body, ts),
+				CanonicalFromBodyHash(method, uri, bodyHashHex, ts))
+
+			sliceSig := Sign(secret, method, uri, body, ts)
+			assert.Equal(t, sliceSig, SignWithBodyHash(secret, method, uri, bodyHashHex, ts))
+
+			assert.True(t, VerifyWithBodyHash(secret, method, uri, bodyHashHex, ts, sliceSig))
+			assert.False(t, VerifyWithBodyHash(secret, method, uri, bodyHashHex, ts, sliceSig+"00"))
+		})
+	}
+}
 
 func TestCanonicalString(t *testing.T) {
 	got := Canonical("POST", "/v1/archive", []byte("hello"), 1715000000)
