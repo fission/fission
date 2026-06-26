@@ -695,17 +695,11 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			// Apply the spec, re-getting on conflict: the buildermgr writes a
 			// package's build status concurrently, which can bump the
 			// ResourceVersion between our read and this Update.
-			var n *fv1.Package
-			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-				live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
-				if gerr != nil {
-					return gerr
-				}
-				desired.ResourceVersion = live.ResourceVersion
-				var uerr error
-				n, uerr = packages(desired.Namespace).Update(ctx, desired, metav1.UpdateOptions{})
-				return uerr
-			}); err != nil {
+			n, err := util.UpdateOnConflict(ctx, packages(desired.Namespace), desired.Name, func(cur *fv1.Package) {
+				desired.ResourceVersion = cur.ResourceVersion
+				*cur = *desired
+			})
+			if err != nil {
 				return nil, err
 			}
 			// Re-trigger a build if the previous one failed. This is a status
@@ -758,9 +752,11 @@ func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResource
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.Function) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := functions(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.Function) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, functions(d.Namespace), d.Name, func(cur *fv1.Function) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -796,9 +792,11 @@ func applyEnvironments(ctx context.Context, fclient cmd.Client, fr *FissionResou
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.Environment) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := environments(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.Environment) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, environments(d.Namespace), d.Name, func(cur *fv1.Environment) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -839,9 +837,11 @@ func applyHTTPTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := triggers(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.HTTPTrigger) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, triggers(d.Namespace), d.Name, func(cur *fv1.HTTPTrigger) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -877,9 +877,11 @@ func applyKubernetesWatchTriggers(ctx context.Context, fclient cmd.Client, fr *F
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := watches(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.KubernetesWatchTrigger) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, watches(d.Namespace), d.Name, func(cur *fv1.KubernetesWatchTrigger) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -915,9 +917,11 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.TimeTrigger) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := triggers(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.TimeTrigger) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, triggers(d.Namespace), d.Name, func(cur *fv1.TimeTrigger) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -953,9 +957,11 @@ func applyMessageQueueTriggers(ctx context.Context, fclient cmd.Client, fr *Fiss
 			}
 			return &n.ObjectMeta, nil
 		},
-		update: func(ctx context.Context, e, d *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
-			d.ResourceVersion = e.ResourceVersion
-			n, err := triggers(d.Namespace).Update(ctx, d, metav1.UpdateOptions{})
+		update: func(ctx context.Context, _, d *fv1.MessageQueueTrigger) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, triggers(d.Namespace), d.Name, func(cur *fv1.MessageQueueTrigger) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
 			if err != nil {
 				return nil, err
 			}

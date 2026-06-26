@@ -11,7 +11,6 @@ import (
 	"errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
@@ -213,24 +212,9 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("error while creating HTTP Trigger: %w", err)
 	}
 
-	// Retry on conflict — Fission controllers (router's
-	// markTriggerCondition, etc.) write to HTTPTrigger.Status concurrently
-	// with this CLI command, which bumps ResourceVersion and causes the
-	// straight Update to 409 if the controller writes between our Get
-	// (in complete) and the Update here. On conflict, re-fetch and
-	// re-apply the same Spec — the user's intended changes are already
-	// captured in opts.trigger.Spec; controller-only status mutations
-	// don't affect Spec.
-	tgClient := opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace)
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		cur, getErr := tgClient.Get(input.Context(), opts.trigger.Name, metav1.GetOptions{})
-		if getErr != nil {
-			return getErr
-		}
-		cur.Spec = opts.trigger.Spec
-		_, updErr := tgClient.Update(input.Context(), cur, metav1.UpdateOptions{})
-		return updErr
-	})
+	_, err = util.UpdateOnConflict(input.Context(),
+		opts.Client().FissionClientSet.CoreV1().HTTPTriggers(opts.trigger.Namespace),
+		opts.trigger.Name, func(cur *fv1.HTTPTrigger) { cur.Spec = opts.trigger.Spec })
 	if err != nil {
 		return fmt.Errorf("error updating the HTTP trigger: %w", err)
 	}

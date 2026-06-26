@@ -13,6 +13,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 func Enable(input cli.Input) error {
@@ -46,11 +47,12 @@ func (opts *EnableSubCommand) do(input cli.Input) error {
 		if list.Items[i].Spec.Namespace != namespace {
 			continue
 		}
-		existing := &list.Items[i]
-		existing.Spec.FunctionNamespace = fnNS
-		existing.Spec.BuilderNamespace = builderNS
-		if _, err := tenants.Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
-			return fmt.Errorf("error updating tenant %q: %w", existing.Name, err)
+		name := list.Items[i].Name
+		if _, err := util.UpdateOnConflict(ctx, tenants, name, func(cur *v1.FissionTenant) {
+			cur.Spec.FunctionNamespace = fnNS
+			cur.Spec.BuilderNamespace = builderNS
+		}); err != nil {
+			return fmt.Errorf("error updating tenant %q: %w", name, err)
 		}
 		fmt.Printf("tenant for namespace %q updated\n", namespace)
 		return nil

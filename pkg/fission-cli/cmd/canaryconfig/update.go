@@ -9,16 +9,21 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type UpdateSubCommand struct {
 	cmd.CommandActioner
 	canary *fv1.CanaryConfig
+	// rearm is set when a spec field changed, so run() resets the rollout status
+	// to pending (via UpdateStatus) after applying the spec.
+	rearm bool
 }
 
 func Update(input cli.Input) error {
@@ -74,21 +79,38 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		}
 	}
 
-	// When any spec field changed, re-arm the rollout by resetting the status to
-	// pending so the canary controller re-evaluates from the start.
-	if updateNeeded {
-		canaryCfg.Status.Status = fv1.CanaryConfigStatusPending
-	}
-
+	// When any spec field changed, re-arm the rollout so the canary controller
+	// re-evaluates from the start. The reset is applied in run() via UpdateStatus
+	// (CanaryConfig has a /status subresource, so a plain Update can't carry it).
+	opts.rearm = updateNeeded
 	opts.canary = canaryCfg
 
 	return nil
 }
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.ObjectMeta.Namespace).Update(input.Context(), opts.canary, metav1.UpdateOptions{})
+	canaries := opts.Client().FissionClientSet.CoreV1().CanaryConfigs(opts.canary.Namespace)
+	_, err := util.UpdateOnConflict(input.Context(), canaries, opts.canary.Name,
+		func(cur *fv1.CanaryConfig) { cur.Spec = opts.canary.Spec })
 	if err != nil {
 		return fmt.Errorf("error updating canary config: %w", err)
+	}
+
+	// Re-arm the rollout when a spec field changed: CanaryConfig has a /status
+	// subresource, so the spec Update above ignores .status — the reset must go
+	// through UpdateStatus (also conflict-retried).
+	if opts.rearm {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			cur, gerr := canaries.Get(input.Context(), opts.canary.Name, metav1.GetOptions{})
+			if gerr != nil {
+				return gerr
+			}
+			cur.Status.Status = fv1.CanaryConfigStatusPending
+			_, uerr := canaries.UpdateStatus(input.Context(), cur, metav1.UpdateOptions{})
+			return uerr
+		}); err != nil {
+			return fmt.Errorf("error re-arming canary config rollout: %w", err)
+		}
 	}
 	fmt.Printf("canary config '%v' updated\n", opts.canary.Name)
 	return nil

@@ -200,21 +200,9 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 
 	packages := client.FissionClientSet.CoreV1().Packages(pkg.Namespace)
 
-	// Apply the desired spec, re-getting on conflict: the buildermgr writes a
-	// package's initial build status shortly after create, which bumps the
-	// ResourceVersion between our Get and this Update.
-	desiredSpec := pkg.Spec
-	var newPkg *fv1.Package
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		fresh, gerr := packages.Get(input.Context(), pkg.Name, metav1.GetOptions{})
-		if gerr != nil {
-			return gerr
-		}
-		fresh.Spec = desiredSpec
-		var uerr error
-		newPkg, uerr = packages.Update(input.Context(), fresh, metav1.UpdateOptions{})
-		return uerr
-	}); err != nil {
+	newPkg, err := util.UpdateOnConflict(input.Context(), packages, pkg.Name,
+		func(cur *fv1.Package) { cur.Spec = pkg.Spec })
+	if err != nil {
 		return nil, fmt.Errorf("update package: %w", err)
 	}
 
@@ -271,8 +259,9 @@ func UpdateFunctionPackageResourceVersion(ctx context.Context, client cmd.Client
 
 	// update resource version of package reference of functions that shared the same package
 	for _, fn := range fnList {
-		fn.Spec.Package.PackageRef.ResourceVersion = pkgMeta.ResourceVersion
-		_, err := client.FissionClientSet.CoreV1().Functions(fn.Namespace).Update(ctx, &fn, metav1.UpdateOptions{})
+		rv := pkgMeta.ResourceVersion
+		_, err := util.UpdateOnConflict(ctx, client.FissionClientSet.CoreV1().Functions(fn.Namespace), fn.Name,
+			func(cur *fv1.Function) { cur.Spec.Package.PackageRef.ResourceVersion = rv })
 		if err != nil {
 			errs = errors.Join(errs, fmt.Errorf("error updating package resource version of function '%v': %w", fn.Name, err))
 		}
