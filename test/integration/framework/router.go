@@ -48,35 +48,18 @@ func (f *Framework) Router(t *testing.T) *RouterClient {
 	// configured). Other paths (HTTPTriggers, /router-healthz) go
 	// through unsigned to match end-user behaviour against the public
 	// listener.
+	// Sign requests to /fission-function/... with the ServiceRouterInternal key
+	// (when configured); other paths (HTTPTriggers, /router-healthz) pass through
+	// unsigned. Shared with the benchmark harness via pkg/auth/hmac.
 	rt := http.DefaultTransport
 	if len(f.internalAuthSecret) > 0 {
-		rt = &routerSigningTransport{
-			master: f.internalAuthSecret,
-			inner:  rt,
-		}
+		rt = hmacauth.NewServiceSigningTransport(f.internalAuthSecret, hmacauth.ServiceRouterInternal, rt, "/fission-function/")
 	}
 	return &RouterClient{
 		baseURL:  f.router,
 		internal: f.routerInternal,
 		http:     &http.Client{Timeout: 30 * time.Second, Transport: rt},
 	}
-}
-
-// routerSigningTransport wraps the framework's outbound transport so
-// that any request whose path begins with /fission-function/ is signed
-// with the ServiceRouterInternal HMAC key. Other paths pass through
-// unsigned.
-type routerSigningTransport struct {
-	master []byte
-	inner  http.RoundTripper
-}
-
-func (t *routerSigningTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if !strings.HasPrefix(r.URL.Path, "/fission-function/") {
-		return t.inner.RoundTrip(r)
-	}
-	signer := hmacauth.ServiceSigner(t.master, hmacauth.ServiceRouterInternal, t.inner, time.Now)
-	return signer.RoundTrip(r)
 }
 
 // BaseURL returns the configured router base URL (e.g. "http://127.0.0.1:8888").
