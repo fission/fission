@@ -128,10 +128,18 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 		// Pin the head sampler explicitly from OTEL_TRACES_SAMPLER (previously
 		// ignored) and wrap it so failed invocations are always recorded
 		// (RFC-0015): the base decides export volume for successful traces, and
-		// errorExportProcessor force-exports error spans the base dropped. Only
-		// applied when an exporter exists, so tracing stays fully inert (no span
-		// recording) when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+		// errorExportProcessor force-exports error spans the base dropped.
 		tpOpts = append(tpOpts, sdktrace.WithSampler(errorBiasedSampler{base: baseSamplerFromEnv()}))
+	} else {
+		// No exporter: force NeverSample so spans are non-recording. Without an
+		// explicit sampler the SDK defaults to ParentBased(AlwaysSample), which
+		// records a server+client span (with attributes and message events) on
+		// every request — ~355ns/528B per span that can never be exported, pure
+		// overhead on the data-plane hot path. NeverSample still extracts and
+		// propagates incoming W3C trace context (only local recording is
+		// suppressed), and otelhttp metrics are sampling-independent, so the
+		// /metrics scrape is unchanged.
+		tpOpts = append(tpOpts, sdktrace.WithSampler(sdktrace.NeverSample()))
 	}
 	tracerProvider := sdktrace.NewTracerProvider(tpOpts...)
 

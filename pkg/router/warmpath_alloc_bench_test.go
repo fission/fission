@@ -5,6 +5,7 @@
 package router
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // These benchmarks pin the per-request allocation wins on the router warm path.
@@ -94,5 +97,32 @@ func BenchmarkWarmPathProxyBufferOld(b *testing.B) {
 		buf := make([]byte, 32*1024)
 		buf[0] = 1
 		benchSink = buf
+	}
+}
+
+// When no OTLP exporter is configured the span is non-recording (NeverSample),
+// so guarding the event emission with SpanIsRecording skips building the
+// attribute map + slice entirely. ctx with no span is non-recording.
+func BenchmarkWarmPathTrackEventGuardedNew(b *testing.B) {
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		if otelUtils.SpanIsRecording(ctx) {
+			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+				"function-name": "hello", "function-namespace": "default",
+			})...)
+		}
+	}
+}
+
+func BenchmarkWarmPathTrackEventUnguardedOld(b *testing.B) {
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		// Previous behavior: build the map + slice every request, then AddEvent
+		// no-ops on the non-recording span — the construction is wasted.
+		otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+			"function-name": "hello", "function-namespace": "default",
+		})...)
 	}
 }

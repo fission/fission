@@ -190,9 +190,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// set service url of target service of request only when
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
-			otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
-				"function-name":      fnMeta.Name,
-				"function-namespace": fnMeta.Namespace})...)
+			if otelUtils.SpanIsRecording(ctx) {
+				otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
+					"function-name":      fnMeta.Name,
+					"function-namespace": fnMeta.Namespace})...)
+			}
 			// get function service url from cache or executor
 			var entry ResolvedEntry
 			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
@@ -248,10 +250,12 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				executingTimeout = executingTimeout * time.Duration(roundTripper.params.timeoutExponent)
 				continue
 			}
-			otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
-				"function-name":      fnMeta.Name,
-				"function-namespace": fnMeta.Namespace,
-				"service-entry":      roundTripper.serviceURL.String()})...)
+			if otelUtils.SpanIsRecording(ctx) {
+				otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
+					"function-name":      fnMeta.Name,
+					"function-namespace": fnMeta.Namespace,
+					"service-entry":      roundTripper.serviceURL.String()})...)
+			}
 			// Streaming functions settle in the handler (after ServeHTTP fully
 			// drains the stream), not here at RoundTrip return (which fires at
 			// headers, while the body is still streaming). One defer per
@@ -283,11 +287,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 
 		// forward the request to the function service
-		otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
-			"function-name":      fnMeta.Name,
-			"function-namespace": fnMeta.Namespace,
-			"function-url":       newReq.URL.String(),
-			"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
+		if otelUtils.SpanIsRecording(ctx) {
+			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"function-url":       newReq.URL.String(),
+				"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
+		}
 		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
 		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
 		// response. Forward upgrade requests on the raw transport so the

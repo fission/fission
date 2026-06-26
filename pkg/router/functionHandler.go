@@ -197,7 +197,9 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}()
 
-	otelUtils.SpanTrackEvent(request.Context(), "functionRequestProxy", otelUtils.GetAttributesForFunction(fh.function)...)
+	if otelUtils.SpanIsRecording(request.Context()) {
+		otelUtils.SpanTrackEvent(request.Context(), "functionRequestProxy", otelUtils.GetAttributesForFunction(fh.function)...)
+	}
 	proxy.ServeHTTP(responseWriter, request)
 }
 
