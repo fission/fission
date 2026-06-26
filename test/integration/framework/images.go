@@ -6,7 +6,11 @@
 
 package framework
 
-import "os"
+import (
+	"os"
+
+	storageclient "github.com/fission/fission/pkg/storagesvc/client"
+)
 
 // RuntimeImages holds the runtime/builder images used by tests, sourced
 // from environment variables set in the "Go integration tests" step of
@@ -172,12 +176,10 @@ func mcpBaseURLFromEnv() string {
 // requests against the router internal listener. Empty when
 // internalAuth is disabled in the cluster — the framework still issues
 // requests, just without auth headers, and the verifier short-circuits
-// to pass-through.
+// to pass-through. Delegates to the shared storagesvc client helper so the
+// env-var contract stays in one place.
 func internalAuthSecretFromEnv() []byte {
-	if v := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); v != "" {
-		return []byte(v)
-	}
-	return nil
+	return storageclient.HMACSecretFromEnv()
 }
 
 func hasScheme(s string) bool {

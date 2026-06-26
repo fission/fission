@@ -1,17 +1,19 @@
 # Test suites
 
-Three flavors of tests live under `test/`. Pick the one matching the layer you're touching.
+Three flavors of tests live under `test/`.
+Pick the one matching the layer you're touching.
 
 | Directory | Framework | When to use |
 |---|---|---|
 | `test/integration/` | Go + `testify`, build tag `//go:build integration` | End-to-end Fission behavior against a real Kind cluster (router, executor, buildermgr, storagesvc, CRDs). |
 | `test/e2e/` | Go + envtest (in-process kube-apiserver) | Controller-level reconcile loops that don't need a real cluster. |
 | `test/upgrade_test/` | Bash + helm | Upgrade-from-stable smoke run via `.github/workflows/upgrade_test.yaml`. |
-| `test/benchmark/` | Go | Throughput / latency benchmarks (`picasso.go`). |
+| `test/benchmark/` | Go | E2E performance benchmarking suite (RFC-0020): the `fission-benchmark` CLI + engine. See `test/benchmark/README.md`. |
 
 ## Integration tests (`test/integration/`)
 
-The Go integration suite replaced the previous bash test runner. Every PR runs it on Kind across three Kubernetes versions (1.28, 1.32, 1.34) via `.github/workflows/push_pr.yaml`.
+The Go integration suite replaced the previous bash test runner.
+Every PR runs it on Kind across three Kubernetes versions (1.28, 1.32, 1.34) via `.github/workflows/push_pr.yaml`.
 
 ### Running locally
 
@@ -67,4 +69,6 @@ Uses `setup-envtest` from kubebuilder; `hack/runtests.sh` fetches the right bina
 
 ## Upgrade tests (`test/upgrade_test/`)
 
-Driven by `.github/workflows/upgrade_test.yaml` on push/PR with path filters. Installs a stable release, builds the candidate images locally, helm-upgrades, then exercises a small set of fission objects against the upgraded cluster. Not typically run locally.
+Driven by `.github/workflows/upgrade_test.yaml` on push/PR with path filters.
+Installs a stable release, builds the candidate images locally, helm-upgrades, then exercises a small set of fission objects against the upgraded cluster.
+Not typically run locally.
