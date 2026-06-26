@@ -1,0 +1,15 @@
+# Absolute pass/fail bounds for `fission-benchmark report --thresholds`.
+# These are conservative starting points so CI does not false-fail; the gh-pages
+# trend dashboard catches gradual regressions that absolute bars miss. Tighten
+# as a stable baseline is established. Relative version-vs-version regression
+# checks live in `fission-benchmark compare --fail-on-regression`.
+scenarios:
+  warm-path:
+    metrics:
+      error_rate: { max: 0.02 } # <2% failed requests under steady load
+  concurrency-sweep:
+    metrics:
+      c50_error_rate: { max: 0.05 }
+  cold-start-poolmgr:
+    metrics:
+      failures: { max: 5 } # at most 5 of N iterations may fail to specialize

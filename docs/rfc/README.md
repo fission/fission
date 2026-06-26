@@ -26,13 +26,15 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0017](0017-function-developer-debugging-toolkit.md) | Function Developer Debugging Toolkit (CLI) | Partially implemented ([#3519](https://github.com/fission/fission/pull/3519), [#3520](https://github.com/fission/fission/pull/3520): `describe` + data-plane invocability, `test` enrichment, `logs` correlation + streaming `--follow`); only the cold-start metrics panel remains (needs a new metric + a CLI→Prometheus path) |
 | [0018](0018-local-development-inner-loop.md) | Local-Development Inner Loop (`fission function run-local`) | Implemented (phases 0–5 except `--remote`): local Docker loop — runtime image → `/v2/specialize` → invoke → teardown, cluster-less with `--image`, all executor types via `--executor`, `--watch` hot reload, `--build` builder leg, `--secret`/`--configmap` + `-e`/`--env-from` bridges, `--debug-port`; `--remote` (approach C) deferred to its own RFC |
 | [0019](0019-unified-opentelemetry-observability.md) | Unified OpenTelemetry Observability | Implemented (phases 0–2, 4; phase 3 footprint cuts except `autoexport`): migrated the 39 metrics from Prometheus `client_golang` to the OTel Metrics API behind the OTel→Prometheus bridge exporter (scrape-compatible `/metrics`), added opt-in native OTLP metric push + trace exemplars, dropped `autoprop` (−4 propagator modules), bumped `semconv` |
+| [0020](0020-e2e-benchmarking-suite.md) | End-to-End Benchmarking Suite & Continuous Performance Tracking | Proposed: Go-native e2e benchmark engine + portable `fission-benchmark` CLI + `go test -tags=benchmark` CI entry in the separate `test/benchmark` module (pure-Go loadgen, HDR percentiles), replacing the legacy bash/k6/picasso assets; threshold gate + gh-pages trend; multi-version baselining |
 
 ## Companion material
 
 - [0002-implementation-plan.md](0002-implementation-plan.md) — RFC-0002's PR-by-PR phasing, test inventories, and risk register.
 - [0002-perf-runbook-results.md](0002-perf-runbook-results.md) — RFC-0002 pre-phase-4 performance verification (all acceptance bars passed); raw data in [0002-perf-data/](0002-perf-data/).
 - [0004-reconciler-map.html](0004-reconciler-map.html) — interactive map of the consolidated reconciler topology.
-- Reusable benchmarks live in [`test/benchmark/tests/cold-start`](../../test/benchmark/tests/cold-start) and [`test/benchmark/tests/warm-path`](../../test/benchmark/tests/warm-path), driven by [`test/benchmark/rfc0002-perf-runbook.sh`](../../test/benchmark/rfc0002-perf-runbook.sh).
+- The e2e benchmarking suite lives in [`test/benchmark/`](../../test/benchmark/) (RFC-0020): the `fission-benchmark` CLI runs cold-start, warm-path, autoscaling, build, and control-plane-scale scenarios against any cluster.
+  The raw RFC-0002 data in [0002-perf-data/](0002-perf-data/) is kept as historical evidence.
 
 ## Numbering
 
