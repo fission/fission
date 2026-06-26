@@ -340,7 +340,13 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 		"podIP", pod.Status.PodIP)
 
 	otelUtils.SpanTrackEvent(ctx, "getFuncSvcComplete", fscache.GetAttributesForFuncSvc(fsvc)...)
-	executorUtil.SetFunctionReady(ctx, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+pod.Name)
+	// Mark the function Ready off the cold-start path. This is a best-effort
+	// status write (Get + UpdateStatus) that nothing in the request path or the
+	// returned fsvc depends on, yet run synchronously it added ~10-25ms to every
+	// first cold start of a (function, generation). Fire it on a detached context
+	// (the RPC's ctx is cancelled once getFuncSvc returns) so the write still
+	// completes after the address is handed back to the router.
+	go executorUtil.SetFunctionReady(context.WithoutCancel(ctx), gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+pod.Name)
 	return fsvc, nil
 }
 
