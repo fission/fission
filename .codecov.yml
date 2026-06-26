@@ -4,12 +4,16 @@ ignore:
   - "tools"
   - "pkg/generated" # generated code
   - "pkg/apis/*/*/zz_generated*" # generated code
-# Two upload streams: 'unittests' (go test, lint.yaml) and 'integration'
-# (fission-bundle binary coverage from the integration suite, push_pr.yaml).
+# Three upload streams: 'unittests' (go test, lint.yaml), 'integration'
+# (fission-bundle binary coverage from the integration suite, push_pr.yaml), and
+# 'benchmark' (fission-bundle coverage from the e2e benchmark smoke,
+# benchmark.yaml — the data path exercised under load).
 flags:
   unittests:
     carryforward: true
   integration:
+    carryforward: true
+  benchmark:
     carryforward: true
 coverage:
   status:
@@ -17,12 +21,12 @@ coverage:
       default:
         # Blocking gate on COMBINED coverage: no flag filter means codecov
         # measures total project coverage from all uploads (unittests +
-        # integration). threshold:2 absorbs the run-to-run variability of
-        # integration coverage; carryforward (above) keeps the number stable
-        # if the integration leg ever skips its upload.
+        # integration + benchmark, combined as a union — extra flags only ever
+        # raise it). threshold:2 absorbs the run-to-run variability;
+        # carryforward (above) keeps the number stable if a leg skips its upload.
         threshold: 2
-      # Per-flag breakdown kept informational so a flaky/incomplete
-      # integration upload posts a signal without separately blocking.
+      # Per-flag breakdown kept informational so a flaky/incomplete or
+      # not-run-this-time upload posts a signal without separately blocking.
       integration:
         informational: true
         flags:
@@ -31,5 +35,9 @@ coverage:
         informational: true
         flags:
           - unittests
+      benchmark:
+        informational: true
+        flags:
+          - benchmark
     # Disable patch coverage check since we focus on project coverage.
     patch: off
