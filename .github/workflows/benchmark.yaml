@@ -375,7 +375,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: benchmark
-          file: ./benchmark-coverage.txt
+          files: ./benchmark-coverage.txt
           fail_ci_if_error: false
 
       # github-action-benchmark stores each run on gh-pages and draws a chart;
