@@ -98,7 +98,9 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		return nil
 	}
-	_, err := opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
+	_, err := util.UpdateOnConflict(input.Context(),
+		opts.Client().FissionClientSet.CoreV1().TimeTriggers(opts.trigger.Namespace),
+		opts.trigger.Name, func(cur *fv1.TimeTrigger) { cur.Spec = opts.trigger.Spec })
 	if err != nil {
 		return fmt.Errorf("error updating Time trigger: %w", err)
 	}
@@ -106,9 +108,6 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	fmt.Printf("trigger '%v' updated\n", opts.trigger.Name)
 
 	t := util.GetServerInfo(input, opts.Client()).ServerTime.CurrentTime.UTC()
-	if err != nil {
-		return err
-	}
 
 	err = getCronNextNActivationTime(opts.trigger.Spec.Cron, t, 1)
 	if err != nil {

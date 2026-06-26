@@ -236,7 +236,19 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		return nil
 	}
-	_, err := opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace).Update(input.Context(), opts.function, metav1.UpdateOptions{})
+	// The package update already ran in complete(); only the function write is retried here.
+	_, err := util.UpdateOnConflict(input.Context(),
+		opts.Client().FissionClientSet.CoreV1().Functions(opts.function.Namespace),
+		opts.function.Name, func(cur *fv1.Function) {
+			cur.Spec = opts.function.Spec
+			// Only overwrite metadata the command was actually given (see env update).
+			if input.IsSet(flagkey.Labels) {
+				cur.Labels = opts.function.Labels
+			}
+			if input.IsSet(flagkey.Annotation) {
+				cur.Annotations = opts.function.Annotations
+			}
+		})
 	if err != nil {
 		return fmt.Errorf("error updating function: %w", err)
 	}

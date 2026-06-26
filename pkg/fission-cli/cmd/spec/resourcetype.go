@@ -40,8 +40,9 @@ type resourceOps[T any, PT Object[T]] struct {
 	// dry-run too, so a preview surfaces errors a real apply would hit.
 	validate func(ctx context.Context, desired PT) error
 	create   func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error)
-	// update receives the existing object so it can carry the ResourceVersion
-	// forward (and, for packages, wait out an in-flight build).
+	// update applies desired to the cluster. It receives the existing (live)
+	// object so the Package closure can wait out an in-flight build; the
+	// ResourceVersion is re-read on conflict inside util.UpdateOnConflict.
 	update func(ctx context.Context, existing, desired PT) (*metav1.ObjectMeta, error)
 	delete func(ctx context.Context, namespace, name string) error
 }

@@ -151,7 +151,9 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		return nil
 	}
-	_, err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.ObjectMeta.Namespace).Update(input.Context(), opts.trigger, metav1.UpdateOptions{})
+	_, err := util.UpdateOnConflict(input.Context(),
+		opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.trigger.Namespace),
+		opts.trigger.Name, func(cur *fv1.MessageQueueTrigger) { cur.Spec = opts.trigger.Spec })
 	if err != nil {
 		return fmt.Errorf("error updating message queue trigger: %w", err)
 	}

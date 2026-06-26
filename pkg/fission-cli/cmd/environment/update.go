@@ -79,7 +79,20 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 		return nil
 	}
-	enew, err := opts.Client().FissionClientSet.CoreV1().Environments(opts.env.ObjectMeta.Namespace).Update(input.Context(), opts.env, metav1.UpdateOptions{})
+	enew, err := util.UpdateOnConflict(input.Context(),
+		opts.Client().FissionClientSet.CoreV1().Environments(opts.env.Namespace),
+		opts.env.Name, func(cur *fv1.Environment) {
+			cur.Spec = opts.env.Spec
+			// Only overwrite metadata the command was actually given, so an update
+			// without --labels/--annotation keeps whatever is on the freshly
+			// fetched object instead of clobbering it with a stale snapshot.
+			if input.IsSet(flagkey.Labels) {
+				cur.Labels = opts.env.Labels
+			}
+			if input.IsSet(flagkey.Annotation) {
+				cur.Annotations = opts.env.Annotations
+			}
+		})
 	if err != nil {
 		return fmt.Errorf("error updating environment: %w", err)
 	}
