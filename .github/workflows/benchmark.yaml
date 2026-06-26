@@ -39,20 +39,26 @@ on:
   schedule:
     # Mondays 06:00 UTC — full suite + released baselines + trend publish.
     - cron: "0 6 * * 1"
+  # Run the warn-only smoke on every commit/PR that touches code, charts, or
+  # tests — same breadth as the integration suite — so a regression in the data
+  # path (or the benchmark harness) is caught against a real cluster before merge.
   push:
     branches: [main]
     paths:
       - "**.go"
       - "charts/**"
-      - "test/benchmark/**"
+      - "test/**"
+      - go.mod
+      - go.sum
       - ".github/workflows/benchmark.yaml"
-  # Validate the benchmark suite itself on PRs that change it (warn-only smoke),
-  # so a change to the harness/scenarios is exercised against a real cluster
-  # before merge. Path-filtered so it only fires when the suite changes.
   pull_request:
     branches: [main]
     paths:
-      - "test/benchmark/**"
+      - "**.go"
+      - "charts/**"
+      - "test/**"
+      - go.mod
+      - go.sum
       - ".github/workflows/benchmark.yaml"
 
 env:
@@ -215,6 +221,13 @@ jobs:
       - name: Build and install Fission (HEAD via skaffold)
         if: ${{ matrix.fission_version == 'HEAD' }}
         timeout-minutes: 12
+        env:
+          # Instrument the control plane for coverage on the every-commit smoke
+          # only. The authoritative perf numbers come from the weekly/dispatch
+          # run, which is left uninstrumented (empty GOFLAGS) so the trend is
+          # never skewed by counter overhead. The fission-benchmark CLI is built
+          # in a later step without GOFLAGS, so it stays uninstrumented/excluded.
+          GOFLAGS: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && '-cover -coverpkg=github.com/fission/fission/...' || '' }}
         run: |
           set -euo pipefail
           kubectl create ns fission
@@ -333,6 +346,37 @@ jobs:
             --trend-smaller "$GITHUB_WORKSPACE/trend-smaller.json" \
             --trend-bigger "$GITHUB_WORKSPACE/trend-bigger.json" \
             --fail-on-breach="${BM_FAIL_ON_BREACH}"
+
+      # Capture control-plane coverage from the smoke run's data-path exercise
+      # (router proxy, poolmgr specialization, fetcher) and add it to Codecov
+      # under its own flag. Only on the instrumented smoke legs; the weekly run
+      # is uninstrumented. Graceful delete flushes the coverage counters
+      # fission-bundle writes on SIGTERM.
+      - name: Collect benchmark coverage
+        if: ${{ matrix.fission_version == 'HEAD' && (github.event_name == 'pull_request' || github.event_name == 'push') }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          kubectl delete deploy --all -n fission --cascade=foreground --timeout=120s || true
+          mkdir -p covdata
+          docker cp kind-control-plane:/fission-coverage/. covdata/ || true
+          if ls covdata/covmeta.* >/dev/null 2>&1; then
+            go tool covdata percent -i=covdata || true
+            go tool covdata textfmt -i=covdata -o=benchmark-coverage.txt
+            echo "wrote benchmark-coverage.txt ($(wc -l < benchmark-coverage.txt) lines)"
+          else
+            echo "no coverage meta files collected"
+          fi
+
+      - name: Upload benchmark coverage to Codecov
+        if: ${{ matrix.fission_version == 'HEAD' && (github.event_name == 'pull_request' || github.event_name == 'push') && hashFiles('benchmark-coverage.txt') != '' }}
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: benchmark
+          file: ./benchmark-coverage.txt
+          fail_ci_if_error: false
 
       # github-action-benchmark stores each run on gh-pages and draws a chart;
       # one direction per file, one series per fission version. Pinned to a

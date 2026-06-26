@@ -21,7 +21,8 @@ Load is generated in pure Go (open- and closed-loop drivers with HDR-histogram p
 Resource setup goes through the version-stable typed clientset, so the **same binary** can benchmark HEAD or a released chart (1.26, 1.27, …) to establish baselines.
 Every scenario correlates client-side latency/throughput with server-side Prometheus metrics and pprof captures.
 Results are emitted as structured JSON, gated against configurable regression thresholds, summarized into the GitHub step summary, and published to a gh-pages time-series dashboard with alert-on-regression.
-A new `benchmark.yaml` workflow runs on manual dispatch, a weekly schedule, a smoke subset on `main` pushes, and the same smoke subset on PRs that change the benchmark suite (warn-only) so the harness itself is validated against a real cluster before merge.
+A new `benchmark.yaml` workflow runs on manual dispatch, a weekly schedule, and a warn-only smoke subset on every commit/PR that touches code, charts, or tests (the same breadth as the integration suite) so a data-path regression is caught against a real cluster before merge.
+The every-commit smoke leg also captures control-plane coverage (a `benchmark` Codecov flag); the weekly run is left uninstrumented so its trend numbers are never skewed.
 
 ## Motivation
 
@@ -239,7 +240,9 @@ fission-benchmark compare --base v1.26.json --head head.json   # version-vs-vers
 
 Modeled on `push_pr.yaml`'s kind + skaffold setup.
 
-- **Triggers**: `workflow_dispatch` (inputs: scenarios/tags, fission_versions, duration, concurrency, publish_trend); `schedule` weekly (full suite, all versions, publish trend); `push` to `main` path-filtered → **smoke subset** (short, headline scenarios, warn-only, no trend publish) to catch gross regressions cheaply; `pull_request` path-filtered to the benchmark suite → the same warn-only smoke, so changes to the harness/scenarios are exercised against a real cluster before merge (`workflow_dispatch` can't validate an unmerged workflow — GitHub only dispatches workflows already on the default branch).
+- **Triggers**: `workflow_dispatch` (inputs: scenarios/tags, fission_versions, duration, concurrency, publish_trend); `schedule` weekly (full suite, all versions, publish trend); `push` to `main` and `pull_request`, both path-filtered to code/charts/tests (the integration-suite breadth) → **smoke subset** (short, headline scenarios, warn-only, no trend publish) running on every commit to catch gross regressions cheaply (`workflow_dispatch` can't validate an unmerged workflow — GitHub only dispatches workflows already on the default branch).
+- **Coverage**: the every-commit smoke leg builds the control plane with `-cover` and uploads the data-path coverage to Codecov under a `benchmark` flag (added to, not replacing, the integration coverage).
+  It is confined to the smoke leg precisely so the authoritative weekly trend run stays uninstrumented and its numbers are not skewed by counter overhead; the `fission-benchmark` CLI is built without `-cover`, so it stays excluded.
 - **Matrix**: `fission_version` × one pinned `k8s_version`; `fail-fast: false`.
 - **Reused steps**: disk cleanup; setup-go/helm/skaffold/goreleaser; kube-prometheus-stack + metrics-server; CRDs; deploy (skaffold for HEAD / helm for released); DNS `single-request-reopen` hardening; self-healing port-forwards (router 8888 / router-internal 8889); `FISSION_INTERNAL_AUTH_SECRET` extraction; pprof capture; `hack/backup-prometheus.sh`.
 - **Bench step**: build the CLI from the sub-module (`cd test/benchmark && go build ./cmd/fission-benchmark`) or `go test -tags=benchmark ./suites/...`; produce `results.json` + `summary.md`.
