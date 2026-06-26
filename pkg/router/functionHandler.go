@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -25,6 +26,20 @@ import (
 	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
+
+// proxyResponseBufferPool backs every ReverseProxy's response-copy buffer. A
+// fresh ReverseProxy is built per request, but the copy buffer is process-wide
+// and reused: with a nil BufferPool the proxy allocates a 32 KiB scratch buffer
+// per response (httputil.ReverseProxy.copyResponse), which at warm-path RPS is
+// pure GC pressure. Pooling reuses one buffer per concurrent copy instead.
+var proxyResponseBufferPool httputil.BufferPool = &bufferPool{
+	pool: sync.Pool{New: func() any { b := make([]byte, 32*1024); return &b }},
+}
+
+type bufferPool struct{ pool sync.Pool }
+
+func (b *bufferPool) Get() []byte  { return *b.pool.Get().(*[]byte) }
+func (b *bufferPool) Put(s []byte) { b.pool.Put(&s) }
 
 // functionHandler orchestrates one trigger's (or one internal route's) request
 // path: canary backend selection, proxy policy resolution, and the reverse
@@ -132,6 +147,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	proxy := &httputil.ReverseProxy{
 		Director:     director,
 		Transport:    rrt,
+		BufferPool:   proxyResponseBufferPool,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
 			// One goroutine for metric collection + the cached-URL tap (the

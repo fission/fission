@@ -5,8 +5,9 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -84,6 +85,30 @@ var (
 	)
 )
 
+// functionCallAttrsCache memoizes the metric.MeasurementOption (which wraps a
+// sorted, deduped attribute.Set) per (namespace,name,path,method,code) so the
+// warm path does a map lookup instead of building and sorting a 5-attribute Set
+// on every request. The key space is bounded by deployed functions × paths ×
+// methods × observed status codes, so the cache stays small and stable.
+var functionCallAttrsCache sync.Map // string -> metric.MeasurementOption
+
+func functionCallAttrs(namespace, name, path, method string, code int) metric.MeasurementOption {
+	codeStr := strconv.Itoa(code)
+	key := namespace + "|" + name + "|" + path + "|" + method + "|" + codeStr
+	if v, ok := functionCallAttrsCache.Load(key); ok {
+		return v.(metric.MeasurementOption)
+	}
+	opt := metric.WithAttributes(
+		attribute.String("function_namespace", namespace),
+		attribute.String("function_name", name),
+		attribute.String("path", path),
+		attribute.String("method", method),
+		attribute.String("code", codeStr),
+	)
+	actual, _ := functionCallAttrsCache.LoadOrStore(key, opt)
+	return actual.(metric.MeasurementOption)
+}
+
 // collectFunctionMetric records the per-call counters and the
 // Fission-attributed overhead histogram. Pure observation: the cached-address
 // tap that historically hid in here now fires from the ModifyResponse hook and
@@ -103,13 +128,7 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	// Same label set for all three; recorded with the request context so the
 	// overhead histogram attaches a trace exemplar on sampled invocations.
 	ctx := req.Context()
-	attrs := metric.WithAttributes(
-		attribute.String("function_namespace", fh.function.Namespace),
-		attribute.String("function_name", fh.function.Name),
-		attribute.String("path", path),
-		attribute.String("method", req.Method),
-		attribute.String("code", fmt.Sprint(resp.StatusCode)),
-	)
+	attrs := functionCallAttrs(fh.function.Namespace, fh.function.Name, path, req.Method, resp.StatusCode)
 
 	functionCalls.Add(ctx, 1, attrs)
 	if resp.StatusCode >= 400 {
