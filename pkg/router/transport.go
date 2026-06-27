@@ -442,11 +442,11 @@ type dialTimeoutKey struct{}
 
 const (
 	// defaultMaxIdleConnsPerHost: each poolmgr pod is its own host (ip:8888),
-	// so this is effectively the per-pod pooled-connection ceiling. Sized well
-	// above typical per-pod concurrency so keep-alive connections stay warm
-	// under load instead of being re-dialed once in-flight requests exceed the
-	// idle pool (the stdlib default of 2 — and even 32 — throttles reuse and
-	// caps RPS); override via ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST.
+	// so this is effectively the per-pod pooled-connection ceiling. Sized above
+	// typical per-pod concurrency so keep-alive connections stay warm under load
+	// instead of being re-dialed once in-flight requests exceed the idle pool
+	// (which throttles reuse and caps RPS); override via
+	// ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST.
 	defaultMaxIdleConnsPerHost = 256
 	// transportIdleConnTimeout is deliberately shorter than the poolmgr idle
 	// reap window (120s) and aligned with the RFC-0002 drain grace floor

@@ -87,14 +87,15 @@ var (
 
 // functionCallAttrsCache memoizes the metric.MeasurementOption (which wraps a
 // sorted, deduped attribute.Set) per (namespace,name,path,method,code) so the
-// warm path does a map lookup instead of building and sorting a 5-attribute Set
-// on every request. The key space is bounded by deployed functions × paths ×
-// methods × observed status codes, so the cache stays small and stable.
-var functionCallAttrsCache sync.Map // string -> metric.MeasurementOption
+// warm path does a comparable-array map lookup — allocating nothing — instead of
+// building and sorting a 5-attribute Set on every request. Mirrors pmcAttrs in
+// pkg/utils/metrics. `path` is the trigger pattern (not the raw request URL), so
+// the cache's cardinality tracks the metric series this option already feeds.
+var functionCallAttrsCache sync.Map // [5]string{namespace, name, path, method, code} -> metric.MeasurementOption
 
 func functionCallAttrs(namespace, name, path, method string, code int) metric.MeasurementOption {
 	codeStr := strconv.Itoa(code)
-	key := namespace + "|" + name + "|" + path + "|" + method + "|" + codeStr
+	key := [5]string{namespace, name, path, method, codeStr}
 	if v, ok := functionCallAttrsCache.Load(key); ok {
 		return v.(metric.MeasurementOption)
 	}
@@ -105,8 +106,8 @@ func functionCallAttrs(namespace, name, path, method string, code int) metric.Me
 		attribute.String("method", method),
 		attribute.String("code", codeStr),
 	)
-	actual, _ := functionCallAttrsCache.LoadOrStore(key, opt)
-	return actual.(metric.MeasurementOption)
+	functionCallAttrsCache.Store(key, opt)
+	return opt
 }
 
 // collectFunctionMetric records the per-call counters and the

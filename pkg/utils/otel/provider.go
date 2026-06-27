@@ -134,11 +134,11 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 		// No exporter: force NeverSample so spans are non-recording. Without an
 		// explicit sampler the SDK defaults to ParentBased(AlwaysSample), which
 		// records a server+client span (with attributes and message events) on
-		// every request — ~355ns/528B per span that can never be exported, pure
-		// overhead on the data-plane hot path. NeverSample still extracts and
-		// propagates incoming W3C trace context (only local recording is
-		// suppressed), and otelhttp metrics are sampling-independent, so the
-		// /metrics scrape is unchanged.
+		// every request that can never be exported — pure overhead on the
+		// data-plane hot path. NeverSample still extracts and propagates the
+		// incoming W3C trace ID (only local recording is suppressed), and
+		// otelhttp metrics are sampling-independent, so the /metrics scrape is
+		// unchanged.
 		tpOpts = append(tpOpts, sdktrace.WithSampler(sdktrace.NeverSample()))
 	}
 	tracerProvider := sdktrace.NewTracerProvider(tpOpts...)
