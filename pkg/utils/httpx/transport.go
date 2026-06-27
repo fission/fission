@@ -19,8 +19,19 @@ import "net/http"
 // the per-host bound exceeds it, so the global cap can't clamp it). Each call
 // returns an independent transport with its own pool, so give each client its
 // own rather than mutating the process-wide http.DefaultTransport.
+//
+// maxIdleConnsPerHost should be > 0; a non-positive value leaves net/http's
+// default of 2 (the churn this helper exists to avoid), so callers pass a real
+// concurrency-sized bound.
 func PooledTransport(maxIdleConnsPerHost int) *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
+	// Clone the stdlib *http.Transport (the normal case) to inherit its dial
+	// timeouts/proxy/HTTP2 attempt; fall back to a zero transport if a dependency
+	// has replaced http.DefaultTransport, so construction never panics at startup.
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		base = &http.Transport{}
+	}
+	t := base.Clone()
 	t.MaxIdleConnsPerHost = maxIdleConnsPerHost
 	if maxIdleConnsPerHost > t.MaxIdleConns {
 		t.MaxIdleConns = maxIdleConnsPerHost

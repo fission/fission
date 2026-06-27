@@ -33,6 +33,12 @@ import (
 // switches from a V(1) note to an error log (3 failures = ~15s of lost taps).
 const tapFailureEscalation = 3
 
+// executorIdleConnsPerHost sizes the RPC client's idle connection pool. The
+// router fires many concurrent RPCs (getServiceForFunction, ensureCapacity,
+// batched tap/untap) at the single executor host during cold-start bursts, far
+// above http.DefaultTransport's 2 idle conns/host.
+const executorIdleConnsPerHost = 128
+
 // tapFlushErrors counts failed tap-flush batches. Each failure drops one 5s
 // batch of liveness taps; a sustained non-zero rate means index-admitted pods
 // are invisible to the executor's idle reaper and at risk of being reaped
@@ -112,11 +118,7 @@ type (
 // storagesvcClient.HMACSecretFromEnv(); the same env var
 // (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
 func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) ClientInterface {
-	// Dedicated pooled transport: the router fires many concurrent RPCs
-	// (getServiceForFunction, ensureCapacity, batched tap/untap) at the single
-	// executor host during cold-start bursts; http.DefaultTransport's 2 idle
-	// conns/host would churn connections under that load.
-	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(128))
+	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(executorIdleConnsPerHost))
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceExecutor, rt, time.Now)
 	}

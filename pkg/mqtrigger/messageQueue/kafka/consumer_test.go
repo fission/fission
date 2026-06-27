@@ -28,7 +28,11 @@ func TestNewKafkaHTTPClient(t *testing.T) {
 		tr, ok := c.Transport.(*http.Transport)
 		require.True(t, ok, "expected a *http.Transport")
 		assert.NotSame(t, http.DefaultTransport, c.Transport, "must not share the global default transport")
-		assert.Equal(t, 64, tr.MaxIdleConnsPerHost)
+		assert.Equal(t, kafkaIdleConnsPerHost, tr.MaxIdleConnsPerHost)
+		// The pool is process-wide, not per trigger: every client shares it, so an
+		// mqtrigger pod with many triggers keeps a bounded idle-conn footprint.
+		assert.Same(t, kafkaTransport, c.Transport, "all Kafka clients must share one transport")
+		assert.Same(t, newKafkaHTTPClient().Transport, c.Transport, "repeated construction must reuse the shared transport")
 	})
 
 	t.Run("auth secret wraps the transport with a signer", func(t *testing.T) {
