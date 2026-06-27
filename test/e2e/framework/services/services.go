@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"golang.org/x/sync/errgroup"
+	ctrl "sigs.k8s.io/controller-runtime"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/fission/fission/pkg/buildermgr"
@@ -27,6 +28,12 @@ import (
 )
 
 func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Group) error {
+	// This harness runs several controller-runtime managers (webhook, executor,
+	// router, ...) in ONE process, so set controller-runtime's global logger once
+	// here — the entrypoint — rather than in each subsystem's Start (which would
+	// re-set the global per manager). Mirrors cmd/fission-bundle main().
+	ctrl.SetLogger(f.Logger().WithName("controller-runtime"))
+
 	os.Setenv("DEBUG_ENV", "true")
 	// The executor and buildermgr run under controller-runtime Managers whose
 	// metrics server binds hard (and buildermgr's health-probe server too;

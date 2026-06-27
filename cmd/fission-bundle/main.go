@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -131,6 +132,13 @@ func main() {
 
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
+
+	// ctrl.SetLogger targets controller-runtime's process-global logger. Set it
+	// once here, before any subsystem's Start builds its manager, so every
+	// subsystem routes controller-runtime's own logs (cache-sync, reconcile,
+	// leader-election) through our logger instead of dropping them with a one-off
+	// "log.SetLogger was never called" stack trace.
+	ctrl.SetLogger(logger.WithName("controller-runtime"))
 
 	// Set up signal handling for graceful shutdown
 	ctx := signals.SetupSignalHandler()

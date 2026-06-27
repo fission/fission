@@ -347,12 +347,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 
-	// Route controller-runtime's internal logs (reflector list/watch failures,
-	// cache sync problems) through the router logger. Without this they are
-	// suppressed entirely — a forbidden informer LIST then manifests only as
-	// the router hanging not-ready, with nothing in the logs to say why.
-	ctrl.SetLogger(logger.WithName("controller-runtime"))
-
 	// The slice informer needs read RBAC in the function namespaces (the chart
 	// renders it when the mode isn't off). A missing grant would wedge the
 	// manager cache sync and hang the router not-ready, so degrade to the
