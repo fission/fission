@@ -347,11 +347,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 
-	// controller-runtime's global logger (reflector list/watch failures, cache
-	// sync problems) is set once by the process entrypoint — cmd/fission-bundle
-	// main() for the binary, StartServices for the in-process e2e harness — not
-	// here, so multiple managers sharing a process don't each re-set the global.
-
 	// The slice informer needs read RBAC in the function namespaces (the chart
 	// renders it when the mode isn't off). A missing grant would wedge the
 	// manager cache sync and hang the router not-ready, so degrade to the

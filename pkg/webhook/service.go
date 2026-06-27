@@ -31,10 +31,6 @@ type WebhookInjector interface {
 
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, options webhook.Options) (err error) {
 	wLogger := logger.WithName("webhook")
-	// controller-runtime's global logger is set once by the process entrypoint
-	// (cmd/fission-bundle main(), or StartServices for the in-process e2e
-	// harness), not here — so it isn't re-set when several managers share a
-	// process.
 
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {

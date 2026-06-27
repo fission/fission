@@ -133,13 +133,11 @@ func main() {
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
 
-	// Route controller-runtime's own logs (manager cache-sync, reconcile,
-	// leader-election) through our logger for EVERY subsystem. Each subsystem
-	// builds its own controller-runtime manager in its Start; without a global
-	// logger the ones that don't set it themselves (kubewatcher, timer,
-	// mqtrigger, mqt_keda, canaryconfig, buildermgr, mcp) silently drop those
-	// logs and print a one-off "log.SetLogger was never called" stack trace.
-	// Setting it once here, before any Start, covers them all.
+	// ctrl.SetLogger targets controller-runtime's process-global logger. Set it
+	// once here, before any subsystem's Start builds its manager, so every
+	// subsystem routes controller-runtime's own logs (cache-sync, reconcile,
+	// leader-election) through our logger instead of dropping them with a one-off
+	// "log.SetLogger was never called" stack trace.
 	ctrl.SetLogger(logger.WithName("controller-runtime"))
 
 	// Set up signal handling for graceful shutdown

@@ -374,11 +374,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		metricsBind = ":0"
 	}
 
-	// controller-runtime's global logger (reflector list/watch failures, cache
-	// sync problems) is set once by the process entrypoint — cmd/fission-bundle
-	// main() for the binary, StartServices for the in-process e2e harness — not
-	// here, so multiple managers sharing a process don't each re-set the global.
-
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: executorScheme,
 		// Scope the cache to the executor's watched namespaces (builder +
