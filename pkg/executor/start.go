@@ -374,10 +374,10 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		metricsBind = ":0"
 	}
 
-	// Route controller-runtime's internal logs (reflector list/watch failures,
-	// cache sync problems) through the executor logger — otherwise they are
-	// suppressed and informer problems manifest only as a not-ready pod.
-	ctrl.SetLogger(logger.WithName("controller-runtime"))
+	// controller-runtime's global logger (reflector list/watch failures, cache
+	// sync problems) is set once by the process entrypoint — cmd/fission-bundle
+	// main() for the binary, StartServices for the in-process e2e harness — not
+	// here, so multiple managers sharing a process don't each re-set the global.
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: executorScheme,
