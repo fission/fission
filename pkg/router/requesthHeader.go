@@ -16,14 +16,22 @@ import (
 const (
 	// HEADERS_FISSION_FUNCTION_PREFIX represents a function prefix request header
 	HEADERS_FISSION_FUNCTION_PREFIX = "Fission-Function"
+
+	// Per-request function-metadata header names. Kept as constants (rather than
+	// rebuilt with fmt.Sprintf on every request) since they derive from the
+	// compile-time HEADERS_FISSION_FUNCTION_PREFIX above.
+	headerFissionFunctionUID             = "X-" + HEADERS_FISSION_FUNCTION_PREFIX + "-Uid"
+	headerFissionFunctionName            = "X-" + HEADERS_FISSION_FUNCTION_PREFIX + "-Name"
+	headerFissionFunctionNamespace       = "X-" + HEADERS_FISSION_FUNCTION_PREFIX + "-Namespace"
+	headerFissionFunctionResourceVersion = "X-" + HEADERS_FISSION_FUNCTION_PREFIX + "-ResourceVersion"
 )
 
 // setFunctionMetadataToHeaders set function metadata to request header
 func setFunctionMetadataToHeader(meta *metav1.ObjectMeta, request *http.Request) {
-	request.Header.Set(fmt.Sprintf("X-%s-Uid", HEADERS_FISSION_FUNCTION_PREFIX), string(meta.UID))
-	request.Header.Set(fmt.Sprintf("X-%s-Name", HEADERS_FISSION_FUNCTION_PREFIX), meta.Name)
-	request.Header.Set(fmt.Sprintf("X-%s-Namespace", HEADERS_FISSION_FUNCTION_PREFIX), meta.Namespace)
-	request.Header.Set(fmt.Sprintf("X-%s-ResourceVersion", HEADERS_FISSION_FUNCTION_PREFIX), meta.ResourceVersion)
+	request.Header.Set(headerFissionFunctionUID, string(meta.UID))
+	request.Header.Set(headerFissionFunctionName, meta.Name)
+	request.Header.Set(headerFissionFunctionNamespace, meta.Namespace)
+	request.Header.Set(headerFissionFunctionResourceVersion, meta.ResourceVersion)
 }
 
 // setPathInfoToHeaders set URL path params and full URL path to request header

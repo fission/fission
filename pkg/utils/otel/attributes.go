@@ -112,3 +112,12 @@ func MapToAttributes(m map[string]string) []attribute.KeyValue {
 func SpanTrackEvent(ctx context.Context, event string, attributes ...attribute.KeyValue) {
 	trace.SpanFromContext(ctx).AddEvent(event, trace.WithAttributes(attributes...))
 }
+
+// SpanIsRecording reports whether the span in ctx is recording. Callers use it
+// to skip building event attribute maps/slices on the hot path when tracing is
+// not active (e.g. NeverSample when no OTLP endpoint is configured) — AddEvent
+// itself already no-ops on a non-recording span, but the argument construction
+// at the call site does not.
+func SpanIsRecording(ctx context.Context) bool {
+	return trace.SpanFromContext(ctx).IsRecording()
+}

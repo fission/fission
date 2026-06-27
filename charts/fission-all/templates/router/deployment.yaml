@@ -82,7 +82,7 @@ spec:
         - name: ROUTER_ROUND_TRIP_DISABLE_KEEP_ALIVE
           value: {{ if .Values.router.roundTrip.disableKeepAlive }}"true"{{ else }}"false"{{ end }}
         - name: ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST
-          value: {{ .Values.router.roundTrip.maxIdleConnsPerHost | default 32 | quote }}
+          value: {{ .Values.router.roundTrip.maxIdleConnsPerHost | default 256 | quote }}
         - name: ROUTER_ROUND_TRIP_MAX_RETRIES
           value: {{ .Values.router.roundTrip.maxRetries | default 10 | quote }}
         - name: ROUTER_SVC_ADDRESS_MAX_RETRIES

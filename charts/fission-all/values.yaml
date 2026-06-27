@@ -466,9 +466,11 @@ router:
     disableKeepAlive: false
 
     ## maxIdleConnsPerHost bounds the router's pooled idle connections per
-    ## function address (each poolmgr pod is its own address).
+    ## function address (each poolmgr pod is its own address). Sized above
+    ## typical per-pod concurrency so keep-alive connections stay warm under
+    ## load instead of being re-dialed (which throttles RPS).
     ##
-    maxIdleConnsPerHost: 32
+    maxIdleConnsPerHost: 256
 
     ## keepAliveTime is period for an active network connection to function pod.
     ##

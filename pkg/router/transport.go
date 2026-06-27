@@ -190,9 +190,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// set service url of target service of request only when
 		// trying to get new service url from cache/executor.
 		if retryCounter == 0 {
-			otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
-				"function-name":      fnMeta.Name,
-				"function-namespace": fnMeta.Namespace})...)
+			if otelUtils.SpanIsRecording(ctx) {
+				otelUtils.SpanTrackEvent(ctx, "getServiceEntry", otelUtils.MapToAttributes(map[string]string{
+					"function-name":      fnMeta.Name,
+					"function-namespace": fnMeta.Namespace})...)
+			}
 			// get function service url from cache or executor
 			var entry ResolvedEntry
 			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
@@ -248,10 +250,12 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				executingTimeout = executingTimeout * time.Duration(roundTripper.params.timeoutExponent)
 				continue
 			}
-			otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
-				"function-name":      fnMeta.Name,
-				"function-namespace": fnMeta.Namespace,
-				"service-entry":      roundTripper.serviceURL.String()})...)
+			if otelUtils.SpanIsRecording(ctx) {
+				otelUtils.SpanTrackEvent(ctx, "serviceEntryReceived", otelUtils.MapToAttributes(map[string]string{
+					"function-name":      fnMeta.Name,
+					"function-namespace": fnMeta.Namespace,
+					"service-entry":      roundTripper.serviceURL.String()})...)
+			}
 			// Streaming functions settle in the handler (after ServeHTTP fully
 			// drains the stream), not here at RoundTrip return (which fires at
 			// headers, while the body is still streaming). One defer per
@@ -283,11 +287,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		}
 
 		// forward the request to the function service
-		otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
-			"function-name":      fnMeta.Name,
-			"function-namespace": fnMeta.Namespace,
-			"function-url":       newReq.URL.String(),
-			"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
+		if otelUtils.SpanIsRecording(ctx) {
+			otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
+				"function-name":      fnMeta.Name,
+				"function-namespace": fnMeta.Namespace,
+				"function-url":       newReq.URL.String(),
+				"retryCounter":       fmt.Sprintf("%d", retryCounter)})...)
+		}
 		// otelhttp wraps the response body, which breaks the io.ReadWriteCloser
 		// that ReverseProxy needs to hijack a 101 Switching Protocols (WebSocket)
 		// response. Forward upgrade requests on the raw transport so the
@@ -436,8 +442,12 @@ type dialTimeoutKey struct{}
 
 const (
 	// defaultMaxIdleConnsPerHost: each poolmgr pod is its own host (ip:8888),
-	// so this is effectively the per-pod pooled-connection ceiling.
-	defaultMaxIdleConnsPerHost = 32
+	// so this is effectively the per-pod pooled-connection ceiling. Sized above
+	// typical per-pod concurrency so keep-alive connections stay warm under load
+	// instead of being re-dialed once in-flight requests exceed the idle pool
+	// (which throttles reuse and caps RPS); override via
+	// ROUTER_ROUND_TRIP_MAX_IDLE_CONNS_PER_HOST.
+	defaultMaxIdleConnsPerHost = 256
 	// transportIdleConnTimeout is deliberately shorter than the poolmgr idle
 	// reap window (120s) and aligned with the RFC-0002 drain grace floor
 	// (30s), bounding how long a pooled connection can outlive its pod.
