@@ -334,31 +334,58 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// The address handed to the router (svcHost) and the cached fsvc are complete,
 	// so the two best-effort writes below are moved OFF the cold-start path —
 	// synchronously they added ~20-50ms to every first cold start of a (function,
-	// generation). Both run on a detached context, since the RPC's ctx is
-	// cancelled once getFuncSvc returns.
-	detached := context.WithoutCancel(ctx)
+	// generation). runDetached runs each past the (about-to-be-cancelled) RPC ctx
+	// on a deadline-bounded context, with a panic guard.
 	podName, podNS, fnRV := pod.Name, pod.Namespace, fn.ResourceVersion
 
 	// (1) Patch the pod's svc-host + function-RV annotations (so a restarted
 	// executor can adopt it) and the served label (RFC-0002: admits the pod into
 	// its function Service's EndpointSlices for subsequent warm requests). The
 	// cold-start request itself uses the RPC-returned address, not the slice, and
-	// adoption only matters on a restart that is seconds away — far longer than
-	// this patch takes — so deferring it off the response path is safe.
-	go func() {
+	// adoption only matters on a restart seconds away — far longer than this patch
+	// takes — so deferring it off the response path is safe. On failure the pod is
+	// not admitted to its slice (warm requests fall back to the executor RPC) and
+	// is not adoptable on a later restart — the same outcome a failed *synchronous*
+	// patch had before this change. It is logged, not retried.
+	gp.runDetached(ctx, "patch svc-host/served label on pod "+podName, func(dctx context.Context) {
 		patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"},"labels":{"%s":"%s"}}}`,
 			fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fnRV, fv1.SERVED_LABEL, fv1.SERVED_VALUE)
-		if _, err := gp.kubernetesClient.CoreV1().Pods(podNS).Patch(detached, podName, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
-			// log only: it does not affect serving this cold start, and the next
-			// resync/adoption pass re-derives the pod's state.
+		if _, err := gp.kubernetesClient.CoreV1().Pods(podNS).Patch(dctx, podName, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
 			logger.Error(err, "error patching svc-host to pod", "pod", podName, "ns", podNS)
 		}
-	}()
+	})
 
 	// (2) Mark the function Ready: a best-effort status condition that nothing in
 	// the request path or the returned fsvc reads.
-	go executorUtil.SetFunctionReady(detached, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+podName)
+	gp.runDetached(ctx, "set function ready", func(dctx context.Context) {
+		executorUtil.SetFunctionReady(dctx, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+podName)
+	})
 	return fsvc, nil
+}
+
+// detachedWriteTimeout bounds a best-effort post-specialization write started by
+// runDetached. The original synchronous calls inherited the specialization
+// deadline (~130s); the detached copies need their own so a hung apiserver under
+// a cold-start storm cannot leak goroutines/connections without bound.
+const detachedWriteTimeout = 30 * time.Second
+
+// runDetached runs a best-effort write that must outlive the request that
+// triggered it (the caller's RPC ctx is cancelled the moment getFuncSvc
+// returns). The context is detached from cancellation but kept on a deadline
+// (detachedWriteTimeout), and a recover guards the bare goroutine — unlike the
+// previous synchronous calls there is no net/http handler recover here, so an
+// unguarded panic would take down the whole executor.
+func (gp *GenericPool) runDetached(ctx context.Context, op string, fn func(context.Context)) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				gp.logger.Error(fmt.Errorf("panic: %v", r), "recovered panic in detached operation", "op", op)
+			}
+		}()
+		dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachedWriteTimeout)
+		defer cancel()
+		fn(dctx)
+	}()
 }
 
 // destroys the pool -- the deployment, replicaset and pods
