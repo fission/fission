@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -341,24 +342,33 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	// (1) Patch the pod's svc-host + function-RV annotations (so a restarted
 	// executor can adopt it) and the served label (RFC-0002: admits the pod into
 	// its function Service's EndpointSlices for subsequent warm requests). The
-	// cold-start request itself uses the RPC-returned address, not the slice, and
-	// adoption only matters on a restart seconds away — far longer than this patch
-	// takes — so deferring it off the response path is safe. On failure the pod is
-	// not admitted to its slice (warm requests fall back to the executor RPC) and
-	// is not adoptable on a later restart — the same outcome a failed *synchronous*
-	// patch had before this change. It is logged, not retried.
+	// cold-start request itself uses the RPC-returned address, not the slice, so
+	// deferring this off the response path doesn't affect the cold start. This
+	// goroutine is the SOLE writer of the served label, and a restarted executor
+	// adopts the pod from these annotations — so a dropped patch would keep the
+	// pod off its slice (warm requests falling back to the executor RPC) for the
+	// pod's life. Retry transient errors on the bounded backoff; give up only when
+	// the pod is gone (NotFound). A restart inside the now-short write window still
+	// self-heals — the next request just pays a fresh cold start.
 	gp.runDetached(ctx, "patch svc-host/served label on pod "+podName, func(dctx context.Context) {
 		patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s","%s":"%s"},"labels":{"%s":"%s"}}}`,
 			fv1.ANNOTATION_SVC_HOST, svcHost, fv1.FUNCTION_RESOURCE_VERSION, fnRV, fv1.SERVED_LABEL, fv1.SERVED_VALUE)
-		if _, err := gp.kubernetesClient.CoreV1().Pods(podNS).Patch(dctx, podName, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
-			logger.Error(err, "error patching svc-host to pod", "pod", podName, "ns", podNS)
+		err := retry.OnError(retry.DefaultBackoff, func(err error) bool { return !k8s_err.IsNotFound(err) }, func() error {
+			_, perr := gp.kubernetesClient.CoreV1().Pods(podNS).Patch(dctx, podName, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+			return perr
+		})
+		if err != nil {
+			logger.Error(err, "error patching svc-host to pod after retries", "pod", podName, "ns", podNS)
 		}
 	})
 
 	// (2) Mark the function Ready: a best-effort status condition that nothing in
-	// the request path or the returned fsvc reads.
+	// the request path or the returned fsvc reads. Hand the goroutine its own deep
+	// copy of fn — the caller's *fn is read-only today, but copying keeps this
+	// detached read off the shared object (symmetric with the scalars captured above).
+	fnReady := fn.DeepCopy()
 	gp.runDetached(ctx, "set function ready", func(dctx context.Context) {
-		executorUtil.SetFunctionReady(dctx, gp.logger, gp.fissionClient, fn, fv1.FunctionReasonReady, "function is serving via specialized pod "+podName)
+		executorUtil.SetFunctionReady(dctx, gp.logger, gp.fissionClient, fnReady, fv1.FunctionReasonReady, "function is serving via specialized pod "+podName)
 	})
 	return fsvc, nil
 }
