@@ -25,6 +25,7 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/httpretry"
+	"github.com/fission/fission/pkg/utils/httpx"
 	"github.com/fission/fission/pkg/utils/metrics"
 )
 
@@ -111,7 +112,11 @@ type (
 // storagesvcClient.HMACSecretFromEnv(); the same env var
 // (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel.
 func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) ClientInterface {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	// Dedicated pooled transport: the router fires many concurrent RPCs
+	// (getServiceForFunction, ensureCapacity, batched tap/untap) at the single
+	// executor host during cold-start bursts; http.DefaultTransport's 2 idle
+	// conns/host would churn connections under that load.
+	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(128))
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceExecutor, rt, time.Now)
 	}

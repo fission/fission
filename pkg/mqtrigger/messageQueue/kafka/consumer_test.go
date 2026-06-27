@@ -19,11 +19,16 @@ import (
 )
 
 func TestNewKafkaHTTPClient(t *testing.T) {
-	t.Run("no auth secret uses the default transport", func(t *testing.T) {
+	t.Run("no auth secret uses an unsigned pooled transport", func(t *testing.T) {
 		t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "")
 		c := newKafkaHTTPClient()
 		require.NotNil(t, c)
-		assert.Equal(t, http.DefaultTransport, c.Transport)
+		// A dedicated pooled transport (not the shared 2-conn default) sized for
+		// per-partition concurrency to the single router-internal host.
+		tr, ok := c.Transport.(*http.Transport)
+		require.True(t, ok, "expected a *http.Transport")
+		assert.NotSame(t, http.DefaultTransport, c.Transport, "must not share the global default transport")
+		assert.Equal(t, 64, tr.MaxIdleConnsPerHost)
 	})
 
 	t.Run("auth secret wraps the transport with a signer", func(t *testing.T) {
@@ -31,6 +36,8 @@ func TestNewKafkaHTTPClient(t *testing.T) {
 		c := newKafkaHTTPClient()
 		require.NotNil(t, c)
 		assert.NotEqual(t, http.DefaultTransport, c.Transport)
+		_, isPlainTransport := c.Transport.(*http.Transport)
+		assert.False(t, isPlainTransport, "signer should wrap the transport")
 	})
 }
 

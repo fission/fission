@@ -22,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // newKafkaHTTPClient builds the http.Client used to invoke functions
@@ -34,7 +35,11 @@ import (
 // requests on other Fission internal channels (storagesvc, fetcher,
 // builder, executor). See docs/internal-auth/00-design.md.
 func newKafkaHTTPClient() *http.Client {
-	rt := http.DefaultTransport
+	// Dedicated pooled transport: ConsumeClaim runs one invocation goroutine per
+	// partition, all hitting the single router-internal host; the stdlib default
+	// of 2 idle conns/host would churn connections for any trigger with >2 active
+	// partitions.
+	var rt http.RoundTripper = httpx.PooledTransport(64)
 	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
 		return &http.Client{Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)}
 	}
