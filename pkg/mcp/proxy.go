@@ -21,6 +21,7 @@ import (
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 const (
@@ -56,9 +57,11 @@ type Proxy struct {
 // NewProxy builds a proxy targeting routerInternalURL. When hmacMaster is
 // non-empty the outbound transport signs requests for ServiceRouterInternal
 // (HKDF-derived key); empty leaves requests unsigned, matching the verifier's
-// pass-through mode. The transport stack mirrors publisher.newWebhookHTTPClient.
+// pass-through mode.
 func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger) *Proxy {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	// Pooled transport sized to defaultMaxConcurrent in-flight tool calls, all to
+	// the single router-internal host (see httpx.PooledTransport).
+	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(defaultMaxConcurrent))
 	if len(hmacMaster) > 0 {
 		rt = hmacauth.ServiceSigner(hmacMaster, hmacauth.ServiceRouterInternal, rt, time.Now)
 	}

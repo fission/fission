@@ -22,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // newKafkaHTTPClient builds the http.Client used to invoke functions
@@ -33,8 +34,21 @@ import (
 // key keeps a leak of this consumer's runtime memory from forging
 // requests on other Fission internal channels (storagesvc, fetcher,
 // builder, executor). See docs/internal-auth/00-design.md.
+// kafkaIdleConnsPerHost sizes the idle connection pool to the single
+// router-internal host. ConsumeClaim runs one invocation goroutine per partition,
+// so the pool must exceed http.DefaultTransport's 2 idle conns/host; 64 covers
+// typical partition counts (the pool only retains what concurrency actually uses).
+const kafkaIdleConnsPerHost = 64
+
+// kafkaTransport is the process-wide pooled transport shared by every Kafka
+// trigger's HTTP client — ONE connection pool to the single router-internal
+// host. Built once (not per trigger) so an mqtrigger pod hosting many triggers
+// keeps a bounded idle-conn footprint and reuses connections across triggers;
+// the per-trigger HMAC signer wraps it without forking the pool.
+var kafkaTransport = httpx.PooledTransport(kafkaIdleConnsPerHost)
+
 func newKafkaHTTPClient() *http.Client {
-	rt := http.DefaultTransport
+	var rt http.RoundTripper = kafkaTransport
 	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
 		return &http.Client{Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)}
 	}
