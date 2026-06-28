@@ -85,6 +85,11 @@ type Params struct {
 	PayloadSizes      []int              `json:"payloadSizes"` // bytes
 	Executors         []fv1.ExecutorType `json:"executors"`
 
+	// Number of Secrets/ConfigMaps the cold-start-poolmgr-configdeps scenario's
+	// function references, sizing the per-reference specialization-time lookups.
+	ConfigDepsSecrets    int `json:"configDepsSecrets"`
+	ConfigDepsConfigMaps int `json:"configDepsConfigmaps"`
+
 	AutoscaleMaxScale int      `json:"autoscaleMaxScale"`
 	AutoscaleObserve  Duration `json:"autoscaleObserve"`
 	IndexScaleCount   int      `json:"indexScaleCount"`
@@ -95,20 +100,22 @@ type Params struct {
 // DefaultParams returns the standard full-run parameters.
 func DefaultParams() Params {
 	return Params{
-		Poolsize:          3,
-		ColdIterations:    20,
-		WarmDuration:      Duration(60 * time.Second),
-		WarmWarmup:        Duration(10 * time.Second),
-		WarmConcurrency:   50,
-		ConcurrencyLevels: []int{10, 50, 100, 250, 500},
-		RPSLevels:         []int{100, 250, 500, 1000},
-		PayloadSizes:      []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
-		Executors:         []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
-		AutoscaleMaxScale: 5,
-		AutoscaleObserve:  Duration(3 * time.Minute),
-		IndexScaleCount:   1000,
-		RouteChurnCount:   500,
-		BuildTimeout:      Duration(5 * time.Minute),
+		Poolsize:             3,
+		ColdIterations:       20,
+		WarmDuration:         Duration(60 * time.Second),
+		WarmWarmup:           Duration(10 * time.Second),
+		WarmConcurrency:      50,
+		ConcurrencyLevels:    []int{10, 50, 100, 250, 500},
+		RPSLevels:            []int{100, 250, 500, 1000},
+		PayloadSizes:         []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
+		Executors:            []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
+		ConfigDepsSecrets:    5,
+		ConfigDepsConfigMaps: 5,
+		AutoscaleMaxScale:    5,
+		AutoscaleObserve:     Duration(3 * time.Minute),
+		IndexScaleCount:      1000,
+		RouteChurnCount:      500,
+		BuildTimeout:         Duration(5 * time.Minute),
 	}
 }
 
@@ -141,6 +148,12 @@ func (p Params) normalize() Params {
 	if len(p.Executors) == 0 {
 		p.Executors = d.Executors
 	}
+	if p.ConfigDepsSecrets == 0 {
+		p.ConfigDepsSecrets = d.ConfigDepsSecrets
+	}
+	if p.ConfigDepsConfigMaps == 0 {
+		p.ConfigDepsConfigMaps = d.ConfigDepsConfigMaps
+	}
 	if p.AutoscaleMaxScale == 0 {
 		p.AutoscaleMaxScale = d.AutoscaleMaxScale
 	}
@@ -166,6 +179,7 @@ func BuildAll(p Params) []Scenario {
 	for _, ex := range p.Executors {
 		out = append(out, &coldStart{executor: ex, iterations: p.ColdIterations, poolsize: p.Poolsize})
 	}
+	out = append(out, &coldStartConfigDeps{iterations: p.ColdIterations, poolsize: p.Poolsize, secrets: p.ConfigDepsSecrets, configMaps: p.ConfigDepsConfigMaps})
 	out = append(out, &warmPath{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &concurrencySweep{levels: p.ConcurrencyLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &rpsSweep{levels: p.RPSLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
