@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-logr/logr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -32,7 +31,6 @@ type WebhookInjector interface {
 
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, options webhook.Options) (err error) {
 	wLogger := logger.WithName("webhook")
-	log.SetLogger(wLogger)
 
 	metricsAddr := os.Getenv("METRICS_ADDR")
 	if metricsAddr == "" {
