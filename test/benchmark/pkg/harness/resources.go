@@ -77,6 +77,13 @@ type FunctionOptions struct {
 	FunctionTimeout      int // seconds; default 60
 	MinCPU, MaxCPU       int
 	MinMemory, MaxMemory int
+
+	// Secrets/ConfigMaps name objects (in the function namespace) the function
+	// references; the caller is responsible for creating them (see
+	// Scope.CreateSecret / Scope.CreateConfigMap). They drive the executor's
+	// per-reference pre-flight existence check on the specialization path.
+	Secrets    []string
+	ConfigMaps []string
 }
 
 // CreateCodeFunction creates a literal Package and a Function referencing it,
@@ -151,11 +158,53 @@ func (s *Scope) CreateCodeFunction(ctx context.Context, o FunctionOptions) error
 			RequestsPerPod:  o.RequestsPerPod,
 		},
 	}
+	for _, name := range o.Secrets {
+		fn.Spec.Secrets = append(fn.Spec.Secrets, fv1.SecretReference{Namespace: ns, Name: name})
+	}
+	for _, name := range o.ConfigMaps {
+		fn.Spec.ConfigMaps = append(fn.Spec.ConfigMaps, fv1.ConfigMapReference{Namespace: ns, Name: name})
+	}
 	if _, err := s.env.Clients.Fission.CoreV1().Functions(ns).Create(ctx, fn, metav1.CreateOptions{}); err != nil {
 		return fmt.Errorf("create function %q: %w", o.Name, err)
 	}
 	s.addCleanup("function "+o.Name, func(c context.Context) error {
 		return ignoreNotFound(s.env.Clients.Fission.CoreV1().Functions(ns).Delete(c, o.Name, metav1.DeleteOptions{}))
+	})
+	return nil
+}
+
+// CreateSecret creates an opaque Secret in the scope namespace and registers its
+// cleanup. Scenarios use it to exercise the executor's per-reference existence
+// check on the cold-start path (see FunctionOptions.Secrets).
+func (s *Scope) CreateSecret(ctx context.Context, name string, data map[string]string) error {
+	ns := s.env.Namespace
+	sec := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Type:       apiv1.SecretTypeOpaque,
+		StringData: data,
+	}
+	if _, err := s.env.Clients.Kube.CoreV1().Secrets(ns).Create(ctx, sec, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create secret %q: %w", name, err)
+	}
+	s.addCleanup("secret "+name, func(c context.Context) error {
+		return ignoreNotFound(s.env.Clients.Kube.CoreV1().Secrets(ns).Delete(c, name, metav1.DeleteOptions{}))
+	})
+	return nil
+}
+
+// CreateConfigMap creates a ConfigMap in the scope namespace and registers its
+// cleanup (the ConfigMap counterpart to CreateSecret).
+func (s *Scope) CreateConfigMap(ctx context.Context, name string, data map[string]string) error {
+	ns := s.env.Namespace
+	cm := &apiv1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Data:       data,
+	}
+	if _, err := s.env.Clients.Kube.CoreV1().ConfigMaps(ns).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+		return fmt.Errorf("create configmap %q: %w", name, err)
+	}
+	s.addCleanup("configmap "+name, func(c context.Context) error {
+		return ignoreNotFound(s.env.Clients.Kube.CoreV1().ConfigMaps(ns).Delete(c, name, metav1.DeleteOptions{}))
 	})
 	return nil
 }
