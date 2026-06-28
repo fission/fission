@@ -144,3 +144,29 @@ func TestWebhookPublisherDoesNotRetryOtherClientErrors(t *testing.T) {
 		return hits > 1
 	}, 3*time.Second, 100*time.Millisecond, "publisher should not retry non-404 client errors")
 }
+
+// TestWebhookPublisherTransportFailureRetriesQuietly verifies that a
+// transport-level failure (nothing listening → connection refused) is retried
+// like a transient 404 — quietly at V(1) per attempt — and surfaces exactly
+// one error on the final give-up, rather than one error per attempt.
+func TestWebhookPublisherTransportFailureRetriesQuietly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close() // nothing is listening now: POSTs fail at the transport level
+
+	sink := &countingSink{}
+	p := MakeWebhookPublisher(logr.New(sink), url)
+	// Keep the give-up fast: 3 attempts, ~10ms+20ms of backoff.
+	p.maxRetries = 3
+	p.retryDelay = 10 * time.Millisecond
+	p.Publish(t.Context(), "", map[string]string{}, http.MethodPost, "test-fn")
+
+	require.Eventually(t, func() bool {
+		return sink.errorCount() == 1
+	}, 5*time.Second, 10*time.Millisecond,
+		"a transport failure should surface exactly one error on the final give-up")
+	require.Never(t, func() bool {
+		return sink.errorCount() > 1
+	}, 300*time.Millisecond, 30*time.Millisecond,
+		"transport retries must log quietly (V(1)), not one error per attempt")
+}
