@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	k8s_err "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiv1 "k8s.io/api/core/v1"
 
@@ -102,6 +103,29 @@ func (gp *GenericPool) specializePod(ctx context.Context, pod *apiv1.Pod, fn *fv
 	return err
 }
 
+// existsInFnNamespace confirms a function-referenced Secret/ConfigMap is present
+// in the function namespace. It reads through the executor Manager's cache
+// (crClient) to keep this pre-flight check off the API server on the cold path,
+// and falls back to a direct API read on any cache miss or error — so a
+// just-created object the informer cache hasn't observed yet (or a namespace
+// outside the cache's scope) is confirmed authoritatively rather than spuriously
+// reported missing. cached must be an empty object of the type being checked.
+func (gp *GenericPool) existsInFnNamespace(ctx context.Context, cached client.Object, name string, directGet func(context.Context) error) (bool, error) {
+	if err := gp.crClient.Get(ctx, client.ObjectKey{Namespace: gp.fnNamespace, Name: name}, cached); err == nil {
+		return true, nil
+	}
+	// Cache miss / unwatched namespace / unsynced cache: confirm against the API
+	// server before concluding the object is missing.
+	err := directGet(ctx)
+	if err == nil {
+		return true, nil
+	}
+	if k8s_err.IsNotFound(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 // doSpecializePod chooses a pod, copies the required user-defined function to that pod
 // (via fetcher), and calls the function-run container to load it, resulting in a
 // specialized pod.
@@ -124,34 +148,37 @@ func (gp *GenericPool) doSpecializePod(ctx context.Context, pod *apiv1.Pod, fn *
 		return gp.loadOnlySpecialize(ctx, podIP, fn)
 	}
 	for _, cm := range fn.Spec.ConfigMaps {
-		_, err := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
+		exists, err := gp.existsInFnNamespace(ctx, &apiv1.ConfigMap{}, cm.Name, func(ctx context.Context) error {
+			_, e := gp.kubernetesClient.CoreV1().ConfigMaps(gp.fnNamespace).Get(ctx, cm.Name, metav1.GetOptions{})
+			return e
+		})
 		if err != nil {
-			if k8s_err.IsNotFound(err) {
-				logger.Error(nil, "configmap namespace mismatch", "error", "configmap must be in same namespace as function namespace",
-					"configmap_name", cm.Name,
-					"configmap_namespace", cm.Namespace,
-					"function_name", fn.Name,
-					"function_namespace", gp.fnNamespace)
-				return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
-			} else {
-				return err
-			}
+			return err
+		}
+		if !exists {
+			logger.Error(nil, "configmap namespace mismatch", "error", "configmap must be in same namespace as function namespace",
+				"configmap_name", cm.Name,
+				"configmap_namespace", cm.Namespace,
+				"function_name", fn.Name,
+				"function_namespace", gp.fnNamespace)
+			return fmt.Errorf("configmap %s must be in same namespace as function namespace", cm.Name)
 		}
 	}
 	for _, sec := range fn.Spec.Secrets {
-		_, err := gp.kubernetesClient.CoreV1().Secrets(gp.fnNamespace).Get(ctx, sec.Name, metav1.GetOptions{})
+		exists, err := gp.existsInFnNamespace(ctx, &apiv1.Secret{}, sec.Name, func(ctx context.Context) error {
+			_, e := gp.kubernetesClient.CoreV1().Secrets(gp.fnNamespace).Get(ctx, sec.Name, metav1.GetOptions{})
+			return e
+		})
 		if err != nil {
-			if k8s_err.IsNotFound(err) {
-				logger.Error(nil, "secret namespace mismatch", "error", "secret must be in same namespace as function namespace",
-					"secret_name", sec.Name,
-					"secret_namespace", sec.Namespace,
-					"function_name", fn.Name,
-					"function_namespace", gp.fnNamespace)
-				return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
-			} else {
-				return err
-			}
-
+			return err
+		}
+		if !exists {
+			logger.Error(nil, "secret namespace mismatch", "error", "secret must be in same namespace as function namespace",
+				"secret_name", sec.Name,
+				"secret_namespace", sec.Namespace,
+				"function_name", fn.Name,
+				"function_namespace", gp.fnNamespace)
+			return fmt.Errorf("secret %s must be in same namespace as function namespace", sec.Name)
 		}
 	}
 	// specialize pod with service
