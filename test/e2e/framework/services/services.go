@@ -34,6 +34,23 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// re-set the global per manager). Mirrors cmd/fission-bundle main().
 	ctrl.SetLogger(f.Logger().WithName("controller-runtime"))
 
+	// runService runs a blocking subsystem Start in the harness errgroup. A
+	// subsystem that fails to come up must abort the run immediately (os.Exit).
+	// But once ctx is cancelled the run is tearing down, and a Start returning
+	// then is shutdown noise — e.g. a controller-runtime manager whose runnables
+	// exceed the 30s graceful-shutdown grace period under CI load — so it must
+	// not fail the test. The ctx.Err() guard also drops a data race on the
+	// shared err that the inline goroutines used to write.
+	runService := func(name string, start func() error) {
+		mgr.Go(func() error {
+			if err := start(); err != nil && ctx.Err() == nil {
+				f.Logger().Error(err, "error starting "+name)
+				os.Exit(1)
+			}
+			return nil
+		})
+	}
+
 	os.Setenv("DEBUG_ENV", "true")
 	// The executor and buildermgr run under controller-runtime Managers whose
 	// metrics server binds hard (and buildermgr's health-probe server too;
@@ -49,16 +66,11 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %w", err)
 	}
-	mgr.Go(func() error {
-		err = webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
+	runService("webhook", func() error {
+		return webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
 			Port:    webhookPort,
 			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
 		})
-		if err != nil {
-			f.Logger().Error(err, "error starting webhook")
-			os.Exit(1)
-		}
-		return nil
 	})
 	f.AddServiceInfo("webhook", framework.ServiceInfo{Port: webhookPort})
 
@@ -85,12 +97,8 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// executor now runs under a controller-runtime Manager, so StartExecutor
 	// blocks (like webhook.Start). Run it in a goroutine so the remaining
 	// services still come up.
-	mgr.Go(func() error {
-		if err := executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort); err != nil {
-			f.Logger().Error(err, "error starting executor")
-			os.Exit(1)
-		}
-		return nil
+	runService("executor", func() error {
+		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
 	})
 	f.AddServiceInfo("executor", framework.ServiceInfo{Port: executorPort})
 
@@ -116,12 +124,8 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// goroutine; FISSION_TEST_EPHEMERAL_SERVERS (set at the top) makes its
 	// Manager servers bind ephemeral ports.
 	storageSvcURL := fmt.Sprintf("http://localhost:%d", storageSvcPort)
-	mgr.Go(func() error {
-		if err := buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL); err != nil {
-			f.Logger().Error(err, "error starting builder manager")
-			os.Exit(1)
-		}
-		return nil
+	runService("builder manager", func() error {
+		return buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL)
 	})
 	f.AddServiceInfo("buildermgr", framework.ServiceInfo{})
 
@@ -158,12 +162,8 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// router now runs under a controller-runtime Manager, so Start blocks. Run
 	// it in a goroutine so the harness can continue; FISSION_TEST_EPHEMERAL_SERVERS
 	// (set at the top) makes its Manager metrics server bind an ephemeral port.
-	mgr.Go(func() error {
-		if err := router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor); err != nil {
-			f.Logger().Error(err, "error starting router")
-			os.Exit(1)
-		}
-		return nil
+	runService("router", func() error {
+		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
 	})
 	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
 	f.AddServiceInfo("router-internal", framework.ServiceInfo{Port: internalRouterPort})
@@ -190,30 +190,18 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// timer, mqt_keda and kubewatcher now run under controller-runtime Managers,
 	// so their Start funcs block until ctx is cancelled. Run each in a goroutine
 	// so the harness can continue.
-	mgr.Go(func() error {
-		if err := timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
-			f.Logger().Error(err, "error starting timer")
-			os.Exit(1)
-		}
-		return nil
+	runService("timer", func() error {
+		return timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
 	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
-	mgr.Go(func() error {
-		if err := mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
-			f.Logger().Error(err, "error starting mqt scaler manager")
-			os.Exit(1)
-		}
-		return nil
+	runService("mqt scaler manager", func() error {
+		return mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
 	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
-	mgr.Go(func() error {
-		if err := kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL); err != nil {
-			f.Logger().Error(err, "error starting kubewatcher")
-			os.Exit(1)
-		}
-		return nil
+	runService("kubewatcher", func() error {
+		return kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
 	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 
