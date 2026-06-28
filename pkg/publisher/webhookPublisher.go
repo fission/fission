@@ -180,14 +180,25 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 	defer cancel()
 	resp, err := ctxhttp.Do(ctx, p.httpClient, req)
 	if err != nil {
-		logger = logger.WithValues("request", r)
+		// Transport-level failure (connection refused, timeout, DNS). Attach the
+		// real error — r marshals to {} because its fields are unexported, so it
+		// carried no information — and retry like the 404 path so a transient
+		// blip (router rollout, route still propagating) doesn't flood the error
+		// log on every attempt; the final give-up surfaces it once.
+		logger = logger.WithValues("error", err)
+		msg = "request failed, will retry"
+		msgType = "retry"
 	} else {
 		defer resp.Body.Close()
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
-			logger = logger.WithValues("request", r)
-			msg = "read response body error"
+			// Response arrived but its body couldn't be read (e.g. the
+			// connection dropped mid-stream). Retry quietly like the transport
+			// and 404 paths rather than logging an error on every attempt.
+			logger = logger.WithValues("error", err)
+			msg = "reading response body failed, will retry"
+			msgType = "retry"
 		} else {
 			logger = logger.WithValues("status_code", resp.StatusCode, "body", string(body))
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
