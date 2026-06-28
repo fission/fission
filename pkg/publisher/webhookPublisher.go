@@ -193,8 +193,12 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 		var body []byte
 		body, err = io.ReadAll(resp.Body)
 		if err != nil {
+			// Response arrived but its body couldn't be read (e.g. the
+			// connection dropped mid-stream). Retry quietly like the transport
+			// and 404 paths rather than logging an error on every attempt.
 			logger = logger.WithValues("error", err)
-			msg = "read response body error"
+			msg = "reading response body failed, will retry"
+			msgType = "retry"
 		} else {
 			logger = logger.WithValues("status_code", resp.StatusCode, "body", string(body))
 			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
