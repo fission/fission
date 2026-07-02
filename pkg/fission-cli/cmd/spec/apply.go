@@ -668,6 +668,14 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			// would re-apply unchanged deploy packages on every run.
 			ready := existing.Status.BuildStatus == fv1.BuildStatusSucceeded ||
 				existing.Status.BuildStatus == fv1.BuildStatusNone
+			// A source-build package that has "succeeded" but no deployment
+			// archive is in a broken state (the deploy URL was wiped by a
+			// previous spec apply). Force a re-apply so the update path can
+			// retrigger the build.
+			if ready && existing.Spec.BuildCommand != "" &&
+				!existing.Spec.Source.IsEmpty() && existing.Spec.Deployment.IsEmpty() {
+				ready = false
+			}
 			return specMatches &&
 				isObjectMetaEqual(existing.ObjectMeta, desired.ObjectMeta) &&
 				ready
@@ -690,7 +698,22 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 				console.Warn(fmt.Sprintf("Error waiting for package '%v' build, ignoring", desired.Name))
 				current = existing
 			}
-			retrigger := current.Status.BuildStatus == fv1.BuildStatusFailed
+
+			// Determine whether a build must be (re)triggered after the spec
+			// Update below. With the /status subresource the main-resource
+			// Update cannot touch BuildStatus, so we must issue a separate
+			// UpdateStatus to set it back to "pending".
+			//
+			// A retrigger is needed when:
+			//  1. The previous build failed (existing behaviour), OR
+			//  2. This is a source-build package (has a build command and
+			//     source archive). The spec Update overwrites spec.Deployment
+			//     with the empty value from the spec file, wiping the deploy
+			//     archive URL that the buildermgr wrote on the last successful
+			//     build. Without a retrigger the package would be stuck with
+			//     buildstatus=succeeded but no deploy archive.
+			retrigger := current.Status.BuildStatus == fv1.BuildStatusFailed ||
+				(desired.Spec.BuildCommand != "" && !desired.Spec.Source.IsEmpty())
 
 			// Apply the spec, re-getting on conflict: the buildermgr writes a
 			// package's build status concurrently, which can bump the
@@ -702,10 +725,10 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			if err != nil {
 				return nil, err
 			}
-			// Re-trigger a build if the previous one failed. This is a status
-			// write; with the /status subresource it must go through
-			// UpdateStatus, separately from the spec Update above (also
-			// conflict-retried).
+			// Re-trigger a build via the /status subresource. This is
+			// separate from the spec Update above because the apiserver
+			// ignores status fields on a main-resource write when the
+			// /status subresource is enabled.
 			if retrigger {
 				if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 					live, gerr := packages(desired.Namespace).Get(ctx, desired.Name, metav1.GetOptions{})
