@@ -436,6 +436,10 @@ router:
   ## router resource utilization when under heavy workloads.
   ##
   displayAccessLog: false
+  ## svcLabels is the labels to be added to the service resource created for router.
+  ##
+  # svcLabels:
+  #   cloud.google.com/load-balancer-type: Internal
   ## svcAnnotations is the annotations to be added to the service resource created for router.
   ##
   # svcAnnotations:
