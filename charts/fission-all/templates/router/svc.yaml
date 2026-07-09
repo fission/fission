@@ -7,7 +7,7 @@ metadata:
     application: fission-router
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     {{- if .Values.router.svcLabels }}
-    {{- toYaml .Values.router.svcLabels | nindent 4 }}
+    {{- toYaml (omit .Values.router.svcLabels "svc" "application" "chart") | nindent 4 }}
     {{- end }}
 {{- if .Values.router.svcAnnotations }}
   annotations:
