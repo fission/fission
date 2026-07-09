@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"go.uber.org/automaxprocs/maxprocs"
 	"golang.org/x/sync/errgroup"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
@@ -132,6 +133,17 @@ func main() {
 
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
+
+	// Match GOMAXPROCS to the container's cgroup CPU quota. The Go default is
+	// the node's core count, so under a CPU limit the runtime schedules more
+	// OS threads than the quota allows and the kernel throttles them —
+	// surfacing as tail latency on the router/executor hot paths. No-op when
+	// no limit is set.
+	if _, err := maxprocs.Set(maxprocs.Logger(func(format string, args ...any) {
+		logger.Info(fmt.Sprintf(format, args...))
+	})); err != nil {
+		logger.Error(err, "failed to adjust GOMAXPROCS to cpu quota")
+	}
 
 	// ctrl.SetLogger targets controller-runtime's process-global logger. Set it
 	// once here, before any subsystem's Start builds its manager, so every

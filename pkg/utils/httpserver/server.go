@@ -38,6 +38,16 @@ func StartServer(ctx context.Context, log logr.Logger, mgr *errgroup.Group, svc 
 	server := http.Server{
 		Addr:    port,
 		Handler: handler,
+		// ReadHeaderTimeout bounds only the header read (slowloris hardening);
+		// request bodies and long-running/streaming responses are unaffected —
+		// deliberately no ReadTimeout/WriteTimeout, which would cut both.
+		ReadHeaderTimeout: 10 * time.Second,
+		// IdleTimeout reaps idle keep-alive connections. It must exceed the
+		// 90s IdleConnTimeout of http.DefaultTransport (which the internal
+		// pooled clients inherit): if the server closed first, a client could
+		// reuse a connection the server is tearing down and see spurious
+		// failures on non-idempotent internal POSTs.
+		IdleTimeout: 120 * time.Second,
 	}
 	l := log.WithValues("service", svc, "addr", server.Addr)
 	l.Info("starting server")
