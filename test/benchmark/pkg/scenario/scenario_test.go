@@ -149,3 +149,16 @@ func TestColdBurstScenariosRegistered(t *testing.T) {
 	p := DefaultParams()
 	assert.Greater(t, p.BurstSize, p.Poolsize)
 }
+
+func TestWarmPathPerExecutor(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "warm-path")
+	assert.Contains(t, names, "warm-path-newdeploy")
+	// Only the poolmgr variant runs in the per-PR smoke.
+	for _, s := range BuildAll(DefaultParams()) {
+		if s.Name() == "warm-path-newdeploy" {
+			assert.NotContains(t, s.Tags(), "smoke")
+		}
+	}
+}

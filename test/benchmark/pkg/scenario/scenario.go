@@ -198,7 +198,9 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &coldStartConfigDeps{iterations: p.ColdIterations, poolsize: p.Poolsize, secrets: p.ConfigDepsSecrets, configMaps: p.ConfigDepsConfigMaps})
 	out = append(out, &coldBurst{distinct: false, burst: p.BurstSize, poolsize: p.Poolsize})
 	out = append(out, &coldBurst{distinct: true, burst: p.BurstSize, poolsize: p.Poolsize})
-	out = append(out, &warmPath{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
+	for _, ex := range p.Executors {
+		out = append(out, &warmPath{executor: ex, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
+	}
 	out = append(out, &concurrencySweep{levels: p.ConcurrencyLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &rpsSweep{levels: p.RPSLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &payloadSweep{sizes: p.PayloadSizes, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
@@ -421,11 +423,13 @@ func addServerMetrics(ctx context.Context, env *harness.Env, res *report.Scenari
 	}
 }
 
-// provisionWarmFunction creates a poolmgr env + code function + route sized to
-// serve concurrent requests from a single warm pod (high requestsPerPod, so the
+// provisionWarmFunction creates an env + code function + route sized to serve
+// concurrent requests from a single warm pod (high requestsPerPod, so the
 // measurement isolates router/proxy overhead), and waits until it is routable —
-// which also warms it. methods controls the route's allowed HTTP methods.
-func provisionWarmFunction(ctx context.Context, sc *harness.Scope, poolsize, requestsPerPod int, methods []string) (route string, err error) {
+// which also warms it. For newdeploy/container the function pins minScale=1 so
+// a backing pod exists before load starts (poolmgr warms via its generic
+// pool). methods controls the route's allowed HTTP methods.
+func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, poolsize, requestsPerPod int, methods []string) (route string, err error) {
 	env := sc.Env()
 	if env.Images.Python == "" {
 		return "", skip("PYTHON_RUNTIME_IMAGE unset")
@@ -434,11 +438,15 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, poolsize, req
 	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: env.Images.Python, Version: 1, Poolsize: poolsize}); err != nil {
 		return "", err
 	}
+	minScale := 0
+	if executor != fv1.ExecutorTypePoolmgr {
+		minScale = 1
+	}
 	fnName := sc.Name("fn")
 	route = "/" + fnName
 	if err = sc.CreateCodeFunction(ctx, harness.FunctionOptions{
 		Name: fnName, Env: envName, Code: []byte(pythonHello), Entrypoint: "main",
-		ExecutorType: fv1.ExecutorTypePoolmgr, RequestsPerPod: requestsPerPod,
+		ExecutorType: executor, MinScale: minScale, RequestsPerPod: requestsPerPod,
 	}); err != nil {
 		return "", err
 	}
