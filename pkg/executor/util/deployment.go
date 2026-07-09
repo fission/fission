@@ -47,6 +47,21 @@ func ScaleDeployment(ctx context.Context, kubeClient kubernetes.Interface, logge
 	return err
 }
 
+// waitPollInitialDelay/waitPollMaxDelay shape WaitForDeployment's adaptive
+// poll: scale-from-zero deployments usually become available well under a
+// second, so polling starts fine-grained and backs off ×1.5 to the old 1s
+// interval — a fixed 1s tick quantized every newdeploy/container cold start
+// up to a full second.
+const (
+	waitPollInitialDelay = 50 * time.Millisecond
+	waitPollMaxDelay     = time.Second
+)
+
+// nextWaitPollDelay returns the poll interval following cur.
+func nextWaitPollDelay(cur time.Duration) time.Duration {
+	return min(cur*3/2, waitPollMaxDelay)
+}
+
 // WaitForDeployment polls the deployment until it has at least replicas
 // AvailableReplicas, or until specializationTimeout seconds elapse. Shared by
 // the newdeploy and container managers. specializationTimeout is floored at
@@ -62,12 +77,12 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 
 	logger = otelUtils.LoggerWithTraceID(ctx, logger)
 
-	// A single Ticker keeps the 1s poll interval without allocating a timer per
-	// iteration (the loop runs up to specializationTimeout times).
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	// The timeout is a wall-clock deadline (the poll interval varies, so an
+	// iteration count would silently shrink or stretch it).
+	deadline := time.Now().Add(time.Duration(specializationTimeout) * time.Second)
+	delay := waitPollInitialDelay
 
-	for i := 0; i < specializationTimeout; i++ {
+	for {
 		latestDepl, err = kubeClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
 		if err != nil {
 			return nil, err
@@ -77,14 +92,19 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
 		// Wait before the next poll, but stay responsive to cancellation
-		// (executor shutdown / loss of leadership) instead of blocking for a
-		// full second.
+		// (executor shutdown / loss of leadership) instead of blocking for the
+		// full interval.
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
+		case <-time.After(min(delay, remaining)):
 		}
+		delay = nextWaitPollDelay(delay)
 	}
 
 	logger.Error(nil, "Deployment provision failed within timeout window", "name", latestDepl.Name, "old_status", oldStatus,
