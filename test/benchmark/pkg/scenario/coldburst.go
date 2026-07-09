@@ -79,7 +79,10 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 		}); err != nil {
 			return res, err
 		}
-		if err := sc.CreateRoute(ctx, harness.RouteOptions{Function: fnName, URL: route}); err != nil {
+		// Route names must be per-function: CreateRoute's default name is
+		// scope-unique, not call-unique, and the distinct-fn variant creates N
+		// triggers in one scope.
+		if err := sc.CreateRoute(ctx, harness.RouteOptions{Name: sc.Name(fmt.Sprintf("route%d", i)), Function: fnName, URL: route}); err != nil {
 			return res, err
 		}
 	}
