@@ -89,7 +89,7 @@ func (c *coldStartConfigDeps) Run(ctx context.Context, sc *harness.Scope) (repor
 		}
 		// Let the pool refill so each iteration measures a cold pod.
 		_ = env.WaitForPoolReady(ctx, envName, 1, 2*time.Minute)
-		if d, ok := c.measureOne(ctx, env, envName, secrets, configMaps, i); ok {
+		if d, ok := c.measureOne(ctx, sc, envName, secrets, configMaps, i); ok {
 			samples = append(samples, d)
 		} else {
 			failures++
@@ -109,9 +109,11 @@ func (c *coldStartConfigDeps) Run(ctx context.Context, sc *harness.Scope) (repor
 
 // measureOne creates one function (referencing all the scenario's Secrets and
 // ConfigMaps) + route, measures the first successful request, and tears the pair
-// down (its own Scope) regardless of outcome.
-func (c *coldStartConfigDeps) measureOne(ctx context.Context, env *harness.Env, envName string, secrets, configMaps []string, i int) (time.Duration, bool) {
-	iter := env.NewScope(fmt.Sprintf("%s-i%d", c.Name(), i))
+// down (its own sub-scope, derived from the runner's scope so
+// repetition-unique labels reach the resource names) regardless of outcome.
+func (c *coldStartConfigDeps) measureOne(ctx context.Context, sc *harness.Scope, envName string, secrets, configMaps []string, i int) (time.Duration, bool) {
+	env := sc.Env()
+	iter := sc.SubScope(fmt.Sprintf("i%d", i))
 	defer iter.CleanupDetached(ctx, time.Minute)
 
 	fnName := iter.Name("fn")

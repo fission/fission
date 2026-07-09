@@ -94,12 +94,14 @@ func addForwardedHostHeader(req *http.Request) {
 		hostname = hostname[1 : len(hostname)-1]
 	}
 
-	// Per RFC 7239 an IPv6 node identifier must be quoted (it contains
-	// colons). The order of To4() and To16() matters: To16() also converts an
-	// IPv4 address, so check To4() first. FQDNs (ParseIP nil) and IPv4 stay
-	// unquoted.
+	// Per RFC 7239 a node identifier that isn't a plain token — anything
+	// carrying ':' or brackets, i.e. every IPv6 textual form including
+	// IPv4-mapped ("::ffff:1.2.3.4") — must be quoted. Keying on the
+	// characters rather than net.ParseIP classification covers the mapped
+	// forms (whose To4() is non-nil despite the colons) and skips a parse.
+	// FQDNs and IPv4 stay unquoted.
 	host := "host=" + req.Host + ";"
-	if ip := net.ParseIP(hostname); ip != nil && ip.To4() == nil && ip.To16() != nil {
+	if strings.ContainsRune(hostname, ':') || strings.HasPrefix(req.Host, "[") {
 		host = `host="` + req.Host + `";`
 	}
 

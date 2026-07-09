@@ -129,6 +129,26 @@ func TestAggregateReps(t *testing.T) {
 		assert.Equal(t, 25.0, out.Metrics[0].Value)
 	})
 
+	t.Run("metric missing from rep 0 still aggregates from later reps", func(t *testing.T) {
+		t.Parallel()
+		withCalls := mk(20, 100)
+		withCalls.Add("apiserver_calls", "count", report.Lower, 42)
+		out := aggregateReps([]report.ScenarioResult{mk(10, 100), withCalls, mk(30, 100)})
+		names := make([]string, 0, len(out.Metrics))
+		for _, m := range out.Metrics {
+			names = append(names, m.Name)
+		}
+		assert.Contains(t, names, "apiserver_calls")
+	})
+
+	t.Run("aggregation does not mutate rep 0's meta", func(t *testing.T) {
+		t.Parallel()
+		rep0 := mk(10, 100)
+		rep0.SetMeta("executor", "poolmgr")
+		_ = aggregateReps([]report.ScenarioResult{rep0, mk(20, 100)})
+		assert.Equal(t, map[string]string{"executor": "poolmgr"}, rep0.Meta)
+	})
+
 	t.Run("an errored rep short-circuits with its rep index", func(t *testing.T) {
 		t.Parallel()
 		bad := report.ScenarioResult{Name: "warm-path", Error: "boom"}

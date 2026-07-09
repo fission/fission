@@ -203,4 +203,13 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		assert.Equal(t, `host="[2001:db8::1]";`, req.Header.Get(FORWARDED))
 		assert.Equal(t, "[2001:db8::1]", req.Header.Get(X_FORWARDED_HOST))
 	})
+
+	t.Run("ipv4-mapped ipv6 host is quoted", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "http://router.example/x", nil)
+		req.Host = "[::ffff:10.0.0.1]:8888"
+		addForwardedHostHeader(req)
+		assert.Equal(t, `host="[::ffff:10.0.0.1]:8888";`, req.Header.Get(FORWARDED))
+		assert.Equal(t, "[::ffff:10.0.0.1]:8888", req.Header.Get(X_FORWARDED_HOST))
+	})
 }

@@ -81,6 +81,10 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 	// iteration count would silently shrink or stretch it).
 	deadline := time.Now().Add(time.Duration(specializationTimeout) * time.Second)
 	delay := waitPollInitialDelay
+	// One reusable timer across polls (Reset is safe on Go ≥1.23 timers)
+	// instead of a time.After allocation per iteration.
+	timer := time.NewTimer(time.Hour)
+	defer timer.Stop()
 
 	for {
 		latestDepl, err = kubeClient.AppsV1().Deployments(depl.ObjectMeta.Namespace).Get(ctx, depl.Name, metav1.GetOptions{})
@@ -99,10 +103,11 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 		// Wait before the next poll, but stay responsive to cancellation
 		// (executor shutdown / loss of leadership) instead of blocking for the
 		// full interval.
+		timer.Reset(min(delay, remaining))
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(min(delay, remaining)):
+		case <-timer.C:
 		}
 		delay = nextWaitPollDelay(delay)
 	}

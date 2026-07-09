@@ -292,8 +292,27 @@ func aggregateReps(reps []report.ScenarioResult) report.ScenarioResult {
 	}
 	agg := reps[0]
 	agg.Metrics = nil
+	// Fresh Meta map: the struct copy above aliases rep 0's map, and SetMeta
+	// below would otherwise mutate the rep's own result.
+	agg.Meta = nil
+	for k, v := range reps[0].Meta {
+		agg.SetMeta(k, v)
+	}
 	agg.SetMeta("repetitions", strconv.Itoa(len(reps)))
-	for _, m := range reps[0].Metrics {
+	// Metric set is the union across reps (first-seen order), not rep 0's set:
+	// conditionally-emitted metrics (apiserver_calls drops its sample on a
+	// counter reset or scrape miss) must survive one rep missing them.
+	var order []report.Metric
+	seen := map[string]bool{}
+	for _, r := range reps {
+		for _, m := range r.Metrics {
+			if !seen[m.Name] {
+				seen[m.Name] = true
+				order = append(order, m)
+			}
+		}
+	}
+	for _, m := range order {
 		vals := make([]float64, 0, len(reps))
 		for _, r := range reps {
 			for _, rm := range r.Metrics {

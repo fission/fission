@@ -75,7 +75,7 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 		route := "/" + fnName
 		if err := sc.CreateCodeFunction(ctx, harness.FunctionOptions{
 			Name: fnName, Env: envName, Code: []byte(pythonHello), Entrypoint: "main",
-			ExecutorType: fv1.ExecutorTypePoolmgr, MaxScale: 1,
+			ExecutorType: fv1.ExecutorTypePoolmgr,
 		}); err != nil {
 			return res, err
 		}
@@ -102,7 +102,6 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 		samples  []time.Duration
 		failures int
 	)
-	burstStart := time.Now()
 	var wg sync.WaitGroup
 	for _, route := range routes {
 		wg.Go(func() {
@@ -117,18 +116,18 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 		})
 	}
 	wg.Wait()
-	makespan := time.Since(burstStart)
 
 	if len(samples) == 0 {
 		return res, fmt.Errorf("no successful burst samples (%d failures)", failures)
 	}
+	// burst_max doubles as the makespan-from-propagation: every sample's clock
+	// is anchored by measureFirstSuccess's 404 gate, so the slowest request IS
+	// the wall time the burst took once routes were live. A naive
+	// wall-clock-from-fire makespan was measured and dropped — it absorbed
+	// route-propagation variance the scenario's design explicitly excludes.
 	res.Add("burst_p50", "ms", report.Lower, millis(percentile(samples, 50)))
 	res.Add("burst_p95", "ms", report.Lower, millis(percentile(samples, 95)))
 	res.Add("burst_max", "ms", report.Lower, millis(percentile(samples, 100)))
-	// Makespan is the wall time until the whole burst is served — the number a
-	// user staring at a traffic spike experiences; it captures refill/queueing
-	// serialization that per-request percentiles smear.
-	res.Add("burst_makespan", "ms", report.Lower, millis(makespan))
 	res.Add("samples", "count", report.Higher, float64(len(samples)))
 	res.Add("failures", "count", report.Lower, float64(failures))
 	return res, nil

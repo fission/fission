@@ -768,10 +768,19 @@ var pkgDialRetrySchedule = []time.Duration{
 	1500 * time.Millisecond, 2000 * time.Millisecond,
 }
 
+// pkgTransientRetrySchedule is the sleep sequence for every other Get error
+// (apiserver timeouts, connection resets, 429/5xx). The pre-reshape loop
+// retried any error up to 4 more times back-to-back; keep that resilience but
+// space the attempts out instead of hot-looping.
+var pkgTransientRetrySchedule = []time.Duration{
+	50 * time.Millisecond, 100 * time.Millisecond,
+	200 * time.Millisecond, 400 * time.Millisecond,
+}
+
 // getPkgInformation gets package information from k8s api server.
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
-	notFound, dial := 0, 0
+	notFound, dial, transient := 0, 0, 0
 	for attempt := 0; ; attempt++ {
 		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
 			"package_name":      req.Package.Name,
@@ -786,17 +795,25 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 			}
 			return pkg, nil
 		}
-		if k8serr.IsNotFound(err) && notFound < len(pkgNotFoundRetrySchedule) {
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		switch netErr := network.Adapter(err); {
+		case k8serr.IsNotFound(err) && notFound < len(pkgNotFoundRetrySchedule):
 			time.Sleep(pkgNotFoundRetrySchedule[notFound])
 			notFound++
-			continue
-		}
-		if netErr := network.Adapter(err); netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) && dial < len(pkgDialRetrySchedule) {
+		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) && dial < len(pkgDialRetrySchedule):
 			time.Sleep(pkgDialRetrySchedule[dial])
 			dial++
-			continue
+		case !k8serr.IsNotFound(err) && transient < len(pkgTransientRetrySchedule):
+			// Any other error class (timeout, reset, throttle) gets the
+			// transient schedule — a single apiserver hiccup must not fail the
+			// cold start.
+			time.Sleep(pkgTransientRetrySchedule[transient])
+			transient++
+		default:
+			return nil, err
 		}
-		return nil, err
 	}
 }
 
