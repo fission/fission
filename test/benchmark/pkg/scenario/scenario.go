@@ -75,8 +75,12 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 // back to DefaultParams via normalize. Field tags let it load directly from the
 // scenarios YAML.
 type Params struct {
-	Poolsize          int                `json:"poolsize"`
-	ColdIterations    int                `json:"coldIterations"`
+	Poolsize       int `json:"poolsize"`
+	ColdIterations int `json:"coldIterations"`
+	// Repetitions re-runs every selected scenario N times (each in a fresh
+	// Scope) and reports the per-metric median plus min..max spread, so a
+	// single noisy cluster sample can't masquerade as a regression or a win.
+	Repetitions       int                `json:"repetitions"`
 	WarmDuration      Duration           `json:"warmDuration"`
 	WarmWarmup        Duration           `json:"warmWarmup"`
 	WarmConcurrency   int                `json:"warmConcurrency"`
@@ -102,6 +106,7 @@ func DefaultParams() Params {
 	return Params{
 		Poolsize:             3,
 		ColdIterations:       20,
+		Repetitions:          1,
 		WarmDuration:         Duration(60 * time.Second),
 		WarmWarmup:           Duration(10 * time.Second),
 		WarmConcurrency:      50,
@@ -126,6 +131,9 @@ func (p Params) normalize() Params {
 	}
 	if p.ColdIterations == 0 {
 		p.ColdIterations = d.ColdIterations
+	}
+	if p.Repetitions == 0 {
+		p.Repetitions = d.Repetitions
 	}
 	if p.WarmDuration == 0 {
 		p.WarmDuration = d.WarmDuration
@@ -225,19 +233,77 @@ func Names(all []Scenario) []string {
 }
 
 // Run executes the scenarios against env, isolating each in its own Scope and
-// always cleaning up. A scenario error or skip is recorded in the result and the
-// run continues (failure budget).
-func Run(ctx context.Context, env *harness.Env, scenarios []Scenario) report.Run {
+// always cleaning up. repetitions > 1 re-runs each scenario in fresh scopes and
+// folds the results via aggregateReps. A scenario error or skip is recorded in
+// the result and the run continues (failure budget).
+func Run(ctx context.Context, env *harness.Env, scenarios []Scenario, repetitions int) report.Run {
+	if repetitions < 1 {
+		repetitions = 1
+	}
 	run := report.Run{RunID: env.RunID, StartedAt: time.Now()}
 	for _, s := range scenarios {
-		run.Scenarios = append(run.Scenarios, runOne(ctx, env, s))
+		reps := make([]report.ScenarioResult, 0, repetitions)
+		for rep := range repetitions {
+			label := s.Name()
+			if repetitions > 1 {
+				// The rep index keeps resource names distinct across reps: the
+				// previous rep's cleanup is detached and may still be deleting
+				// same-named resources when the next rep provisions.
+				label = fmt.Sprintf("%s-r%d", s.Name(), rep)
+			}
+			res := runOne(ctx, env, s, label)
+			reps = append(reps, res)
+			if res.Skipped || res.Error != "" {
+				break // a skip is deterministic; an error already fails the gate
+			}
+		}
+		run.Scenarios = append(run.Scenarios, aggregateReps(reps))
 	}
 	run.FinishedAt = time.Now()
 	return run
 }
 
-func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.ScenarioResult) {
-	sc := env.NewScope(s.Name())
+// aggregateReps folds repetition results into one ScenarioResult, keeping
+// metric names stable for thresholds and the trend: each metric's value is the
+// median across reps, with the observed min..max recorded in
+// Meta["<metric>_range"] so the run's noise floor is visible next to the
+// number. The first non-clean rep is returned as-is (annotated with its rep
+// index) since partial metrics aren't comparable.
+func aggregateReps(reps []report.ScenarioResult) report.ScenarioResult {
+	last := reps[len(reps)-1]
+	if len(reps) == 1 {
+		return last
+	}
+	if last.Error != "" || last.Skipped {
+		last.SetMeta("failed_repetition", strconv.Itoa(len(reps)-1))
+		return last
+	}
+	agg := reps[0]
+	agg.Metrics = nil
+	agg.SetMeta("repetitions", strconv.Itoa(len(reps)))
+	for _, m := range reps[0].Metrics {
+		vals := make([]float64, 0, len(reps))
+		for _, r := range reps {
+			for _, rm := range r.Metrics {
+				if rm.Name == m.Name {
+					vals = append(vals, rm.Value)
+					break
+				}
+			}
+		}
+		slices.Sort(vals)
+		med := vals[len(vals)/2]
+		if len(vals)%2 == 0 {
+			med = (vals[len(vals)/2-1] + vals[len(vals)/2]) / 2
+		}
+		agg.Metrics = append(agg.Metrics, report.Metric{Name: m.Name, Unit: m.Unit, Value: med, Better: m.Better})
+		agg.SetMeta(m.Name+"_range", fmt.Sprintf("%.3f..%.3f", vals[0], vals[len(vals)-1]))
+	}
+	return agg
+}
+
+func runOne(ctx context.Context, env *harness.Env, s Scenario, scopeLabel string) (res report.ScenarioResult) {
+	sc := env.NewScope(scopeLabel)
 	res.Name = s.Name()
 	res.Tags = s.Tags()
 	defer func() {
@@ -249,6 +315,7 @@ func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.Scena
 		_ = sc.CleanupDetached(ctx, 2*time.Minute)
 	}()
 
+	before, beforeOK := apiserverCalls(ctx, env)
 	out, err := s.Run(ctx, sc)
 	out.Name = s.Name()
 	out.Tags = s.Tags()
@@ -257,9 +324,32 @@ func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.Scena
 		out.Skip = err.Error()
 	} else if err != nil {
 		out.Error = err.Error()
+	} else if after, afterOK := apiserverCalls(ctx, env); beforeOK && afterOK && after >= before {
+		// after < before means a counter reset (component restart) — drop the
+		// sample rather than report a bogus delta.
+		out.Add("apiserver_calls", "count", report.Lower, after-before)
 	}
 	res = out
 	return res
+}
+
+// apiserverCalls sums the control-plane components' client-side apiserver
+// request counters. rest_client_requests_total is registered by
+// controller-runtime's metrics registry in every fission binary, so a
+// before/after delta attributes a scenario's apiserver traffic to Fission —
+// something apiserver_request_total (which has no user-agent label) cannot.
+// Prometheus scrapes on an interval, so the delta trails by up to one scrape;
+// treat it as an attribution signal for A/B comparisons, not an exact count.
+func apiserverCalls(ctx context.Context, env *harness.Env) (float64, bool) {
+	if !env.Capturer.PrometheusEnabled() {
+		return 0, false
+	}
+	q := fmt.Sprintf(`sum(rest_client_requests_total{namespace=%q})`, env.FissionNamespace())
+	v, found, err := env.Capturer.QueryInstant(ctx, q)
+	if err != nil || !found {
+		return 0, false
+	}
+	return v, true
 }
 
 func isSkip(err error) bool {

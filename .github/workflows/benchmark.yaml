@@ -24,6 +24,10 @@ on:
         description: "warm-path concurrency (default: scenario config)"
         default: ""
         type: string
+      repetitions:
+        description: "re-run each scenario N times, report medians (default: 1)"
+        default: ""
+        type: string
       publish_trend:
         description: "publish results to the gh-pages trend"
         default: true
@@ -208,6 +212,7 @@ jobs:
               echo "BM_SCENARIOS=${{ inputs.scenarios }}" >> "$GITHUB_ENV"
               echo "BM_DURATION=${{ inputs.duration }}" >> "$GITHUB_ENV"
               echo "BM_CONCURRENCY=${{ inputs.concurrency }}" >> "$GITHUB_ENV"
+              echo "BM_REPETITIONS=${{ inputs.repetitions }}" >> "$GITHUB_ENV"
               echo "BM_FAIL_ON_BREACH=true" >> "$GITHUB_ENV"
               echo "BM_PUBLISH_TREND=${{ inputs.publish_trend }}" >> "$GITHUB_ENV"
               ;;
@@ -333,7 +338,8 @@ jobs:
             ${BM_TAGS:+--tags "$BM_TAGS"} \
             ${BM_DURATION:+--duration "$BM_DURATION"} \
             ${BM_CONCURRENCY:+--concurrency "$BM_CONCURRENCY"} \
-            ${BM_COLD_ITERATIONS:+--cold-iterations "$BM_COLD_ITERATIONS"}
+            ${BM_COLD_ITERATIONS:+--cold-iterations "$BM_COLD_ITERATIONS"} \
+            ${BM_REPETITIONS:+--repetitions "$BM_REPETITIONS"}
 
       - name: Report and gate
         run: |
