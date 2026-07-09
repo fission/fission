@@ -80,7 +80,11 @@ type Params struct {
 	// Repetitions re-runs every selected scenario N times (each in a fresh
 	// Scope) and reports the per-metric median plus min..max spread, so a
 	// single noisy cluster sample can't masquerade as a regression or a win.
-	Repetitions       int                `json:"repetitions"`
+	Repetitions int `json:"repetitions"`
+	// BurstSize is the number of simultaneous first-requests the cold-burst
+	// scenarios fire; sized above Poolsize so the burst forces pool exhaustion
+	// and refill rather than being absorbed by warm pods.
+	BurstSize         int                `json:"burstSize"`
 	WarmDuration      Duration           `json:"warmDuration"`
 	WarmWarmup        Duration           `json:"warmWarmup"`
 	WarmConcurrency   int                `json:"warmConcurrency"`
@@ -107,6 +111,7 @@ func DefaultParams() Params {
 		Poolsize:             3,
 		ColdIterations:       20,
 		Repetitions:          1,
+		BurstSize:            10,
 		WarmDuration:         Duration(60 * time.Second),
 		WarmWarmup:           Duration(10 * time.Second),
 		WarmConcurrency:      50,
@@ -134,6 +139,9 @@ func (p Params) normalize() Params {
 	}
 	if p.Repetitions == 0 {
 		p.Repetitions = d.Repetitions
+	}
+	if p.BurstSize == 0 {
+		p.BurstSize = d.BurstSize
 	}
 	if p.WarmDuration == 0 {
 		p.WarmDuration = d.WarmDuration
@@ -188,6 +196,8 @@ func BuildAll(p Params) []Scenario {
 		out = append(out, &coldStart{executor: ex, iterations: p.ColdIterations, poolsize: p.Poolsize})
 	}
 	out = append(out, &coldStartConfigDeps{iterations: p.ColdIterations, poolsize: p.Poolsize, secrets: p.ConfigDepsSecrets, configMaps: p.ConfigDepsConfigMaps})
+	out = append(out, &coldBurst{distinct: false, burst: p.BurstSize, poolsize: p.Poolsize})
+	out = append(out, &coldBurst{distinct: true, burst: p.BurstSize, poolsize: p.Poolsize})
 	out = append(out, &warmPath{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &concurrencySweep{levels: p.ConcurrencyLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &rpsSweep{levels: p.RPSLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})

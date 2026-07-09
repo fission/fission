@@ -138,3 +138,14 @@ func TestAggregateReps(t *testing.T) {
 		assert.Empty(t, out.Metrics)
 	})
 }
+
+func TestColdBurstScenariosRegistered(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "cold-burst-same-fn")
+	assert.Contains(t, names, "cold-burst-distinct-fn")
+	// The default burst must exceed the default pool, or the scenario silently
+	// stops exercising exhaustion/refill.
+	p := DefaultParams()
+	assert.Greater(t, p.BurstSize, p.Poolsize)
+}

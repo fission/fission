@@ -7,6 +7,9 @@ coldIterations: 20
 # medians with a min..max range in the result meta. Raise for A/B dispatches
 # where a single sample can't clear the cluster noise floor.
 repetitions: 1
+# Simultaneous first-requests for the cold-burst scenarios; > poolsize so the
+# burst forces pool exhaustion + refill instead of being absorbed by warm pods.
+burstSize: 10
 warmDuration: 60s
 warmWarmup: 10s
 warmConcurrency: 50
