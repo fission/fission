@@ -150,7 +150,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	ctx := req.Context()
 
 	// set the timeout for transport context
-	addForwardedHostHeader(roundTripper.logger, req)
+	addForwardedHostHeader(req)
 	transport, otelTransport := roundTripper.params.sharedTransport()
 
 	executingTimeout := roundTripper.params.timeout

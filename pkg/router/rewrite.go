@@ -5,7 +5,6 @@
 package router
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -72,40 +71,36 @@ func rewriteFunctionURL(logger logr.Logger, req *http.Request, trigger *fv1.HTTP
 }
 
 // addForwardedHostHeader add "forwarded host" to request header
-func addForwardedHostHeader(logger logr.Logger, req *http.Request) {
-	// for more detailed information, please visit:
-	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
-
+// (see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded).
+// It runs on every proxied request, so the hostname is extracted with
+// net.SplitHostPort instead of a URL parse — the previous implementation
+// built "<req.Proto>://<req.Host>" ("HTTP/1.1" is not a scheme), which
+// url.Parse silently read as a host-less URL: every request paid the parse,
+// Hostname() was always empty, and the IPv6 quoting below never fired.
+func addForwardedHostHeader(req *http.Request) {
 	if len(req.Header.Get(FORWARDED)) > 0 || len(req.Header.Get(X_FORWARDED_HOST)) > 0 {
 		// forwarded headers were set by external proxy, leave them intact
 		return
 	}
 
-	// Format of req.Host is <host>:<port>
-	// We need to extract hostname from it, than
-	// check whether a host is ipv4 or ipv6 or FQDN
-	reqURL := fmt.Sprintf("%s://%s", req.Proto, req.Host)
-	u, err := url.Parse(reqURL)
-	if err != nil {
-		logger.Error(err, "error parsing request url while adding forwarded host headers", "url", reqURL)
-		return
+	// req.Host is <host>[:<port>]. SplitHostPort strips the port and IPv6
+	// brackets; a host without a port fails the split and is used as-is,
+	// except a bracketed port-less IPv6 literal ("[::1]"), whose brackets
+	// must come off for ParseIP below.
+	hostname := req.Host
+	if h, _, err := net.SplitHostPort(req.Host); err == nil {
+		hostname = h
+	} else if strings.HasPrefix(hostname, "[") && strings.HasSuffix(hostname, "]") {
+		hostname = hostname[1 : len(hostname)-1]
 	}
 
-	var host string
-
-	// ip will be nil if the Hostname is a FQDN string
-	ip := net.ParseIP(u.Hostname())
-
-	// ip == nil -> hostname is FQDN instead of ip address
-	// The order of To4() and To16() here matters, To16() will
-	// converts an IPv4 address to IPv6 format address and may
-	// cause router append wrong host value to header. To prevent
-	// this we need to check whether To4() is nil first.
-	if ip == nil || (ip != nil && ip.To4() != nil) {
-		host = fmt.Sprintf(`host=%s;`, req.Host)
-	} else if ip != nil && ip.To16() != nil {
-		// For the "Forwarded" header, if a host is an IPv6 address it should be quoted
-		host = fmt.Sprintf(`host="%s";`, req.Host)
+	// Per RFC 7239 an IPv6 node identifier must be quoted (it contains
+	// colons). The order of To4() and To16() matters: To16() also converts an
+	// IPv4 address, so check To4() first. FQDNs (ParseIP nil) and IPv4 stay
+	// unquoted.
+	host := "host=" + req.Host + ";"
+	if ip := net.ParseIP(hostname); ip != nil && ip.To4() == nil && ip.To16() != nil {
+		host = `host="` + req.Host + `";`
 	}
 
 	req.Header.Set(FORWARDED, host)

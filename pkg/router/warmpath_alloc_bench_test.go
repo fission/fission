@@ -7,8 +7,10 @@ package router
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 
@@ -124,5 +126,59 @@ func BenchmarkWarmPathTrackEventUnguardedOld(b *testing.B) {
 		otelUtils.SpanTrackEvent(ctx, "roundtrip", otelUtils.MapToAttributes(map[string]string{
 			"function-name": "hello", "function-namespace": "default",
 		})...)
+	}
+}
+
+func BenchmarkWarmPathForwardedHostHeaderNew(b *testing.B) {
+	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	req.Host = "example.com:8888"
+	b.ReportAllocs()
+	for b.Loop() {
+		req.Header.Del(FORWARDED)
+		req.Header.Del(X_FORWARDED_HOST)
+		addForwardedHostHeader(req)
+	}
+}
+
+func BenchmarkWarmPathForwardedHostHeaderOld(b *testing.B) {
+	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	req.Host = "example.com:8888"
+	b.ReportAllocs()
+	for b.Loop() {
+		req.Header.Del(FORWARDED)
+		req.Header.Del(X_FORWARDED_HOST)
+		// Previous implementation: built a "<proto>://<host>" pseudo-URL and
+		// url.Parse'd it per request just to extract the hostname (which the
+		// bogus scheme made empty anyway — see addForwardedHostHeader).
+		reqURL := fmt.Sprintf("%s://%s", req.Proto, req.Host)
+		u, err := url.Parse(reqURL)
+		if err != nil {
+			b.Fatal(err)
+		}
+		var host string
+		ip := net.ParseIP(u.Hostname())
+		if ip == nil || ip.To4() != nil {
+			host = fmt.Sprintf(`host=%s;`, req.Host)
+		} else if ip.To16() != nil {
+			host = fmt.Sprintf(`host="%s";`, req.Host)
+		}
+		req.Header.Set(FORWARDED, host)
+		req.Header.Set(X_FORWARDED_HOST, req.Host)
+	}
+}
+
+func BenchmarkWarmPathParamsHeaderNew(b *testing.B) {
+	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	b.ReportAllocs()
+	for b.Loop() {
+		req.Header.Set("X-Fission-Params-"+"name", "value")
+	}
+}
+
+func BenchmarkWarmPathParamsHeaderOld(b *testing.B) {
+	req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+	b.ReportAllocs()
+	for b.Loop() {
+		req.Header.Set(fmt.Sprintf("X-Fission-Params-%v", "name"), "value")
 	}
 }

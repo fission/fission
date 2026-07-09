@@ -132,7 +132,7 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Header.Set(FORWARDED, "host=upstream.example;")
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Equal(t, "host=upstream.example;", req.Header.Get(FORWARDED))
 		assert.Empty(t, req.Header.Get(X_FORWARDED_HOST))
 	})
@@ -141,7 +141,7 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Header.Set(X_FORWARDED_HOST, "upstream.example")
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Empty(t, req.Header.Get(FORWARDED))
 		assert.Equal(t, "upstream.example", req.Header.Get(X_FORWARDED_HOST))
 	})
@@ -150,7 +150,7 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Host = "example.com:8888"
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Equal(t, "host=example.com:8888;", req.Header.Get(FORWARDED))
 		assert.Equal(t, "example.com:8888", req.Header.Get(X_FORWARDED_HOST))
 	})
@@ -159,8 +159,48 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Host = "10.0.0.1:8888"
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Equal(t, "host=10.0.0.1:8888;", req.Header.Get(FORWARDED))
 		assert.Equal(t, "10.0.0.1:8888", req.Header.Get(X_FORWARDED_HOST))
+	})
+
+	t.Run("fqdn host without port", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "http://router.example/x", nil)
+		req.Host = "example.com"
+		addForwardedHostHeader(req)
+		assert.Equal(t, "host=example.com;", req.Header.Get(FORWARDED))
+		assert.Equal(t, "example.com", req.Header.Get(X_FORWARDED_HOST))
+	})
+
+	// RFC 7239: an IPv6 node identifier contains colons and must be quoted.
+	// (The pre-rewrite implementation never quoted: its hostname extraction
+	// went through url.Parse of a "HTTP/1.1://host" pseudo-URL, which always
+	// yielded an empty hostname, so IPv6 took the FQDN branch.)
+	t.Run("ipv6 host with port is quoted", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "http://router.example/x", nil)
+		req.Host = "[2001:db8::1]:8888"
+		addForwardedHostHeader(req)
+		assert.Equal(t, `host="[2001:db8::1]:8888";`, req.Header.Get(FORWARDED))
+		assert.Equal(t, "[2001:db8::1]:8888", req.Header.Get(X_FORWARDED_HOST))
+	})
+
+	t.Run("bare ipv6 host is quoted", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "http://router.example/x", nil)
+		req.Host = "2001:db8::1"
+		addForwardedHostHeader(req)
+		assert.Equal(t, `host="2001:db8::1";`, req.Header.Get(FORWARDED))
+		assert.Equal(t, "2001:db8::1", req.Header.Get(X_FORWARDED_HOST))
+	})
+
+	t.Run("bracketed port-less ipv6 host is quoted", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "http://router.example/x", nil)
+		req.Host = "[2001:db8::1]"
+		addForwardedHostHeader(req)
+		assert.Equal(t, `host="[2001:db8::1]";`, req.Header.Get(FORWARDED))
+		assert.Equal(t, "[2001:db8::1]", req.Header.Get(X_FORWARDED_HOST))
 	})
 }

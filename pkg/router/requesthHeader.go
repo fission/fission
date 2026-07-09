@@ -5,7 +5,6 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,9 +36,11 @@ func setFunctionMetadataToHeader(meta *metav1.ObjectMeta, request *http.Request)
 // setPathInfoToHeaders set URL path params and full URL path to request header
 func setPathInfoToHeader(request *http.Request) {
 	// retrieve url params and add them to request header
+	// (string concat, not Sprintf — this runs per path param per request;
+	// Header.Set canonicalizes the name either way)
 	vars := httpmux.Vars(request)
 	for k, v := range vars {
-		request.Header.Set(fmt.Sprintf("X-Fission-Params-%v", k), v)
+		request.Header.Set("X-Fission-Params-"+k, v)
 	}
 	request.Header.Set("X-Fission-Full-Url", request.URL.String())
 }
