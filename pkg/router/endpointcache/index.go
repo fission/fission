@@ -467,6 +467,10 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 // (idempotent: a dead-pod storm reports the same address from many in-flight
 // requests, and only the first copy-and-store matters).
 func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Duration) bool {
+	// A quarantine consumes any pending strikes for the address: without this
+	// a hard quarantine would leave stale strikes behind, and the first soft
+	// failure after the TTL expires could escalate off old state.
+	delete(e.strikes, address)
 	cur := e.quarantined.Load()
 	if cur != nil {
 		if expiry, already := (*cur)[address]; already && now.Before(expiry) {
@@ -513,9 +517,14 @@ func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 		rec.count = 0
 	}
 	rec.count++
-	rec.expiry = now.Add(ix.quarantineTTL)
+	if rec.count == 1 {
+		// The window is anchored at the FIRST strike (fixed, not sliding):
+		// refreshing the expiry per strike would let sporadic timeouts —
+		// one every ~TTL, never dialTimeoutStrikeLimit within any single
+		// window — accumulate forever and quarantine a healthy pod.
+		rec.expiry = now.Add(ix.quarantineTTL)
+	}
 	if rec.count >= dialTimeoutStrikeLimit {
-		delete(e.strikes, address)
 		stored := e.quarantineLocked(address, now, ix.quarantineTTL)
 		e.mu.Unlock()
 		if stored {

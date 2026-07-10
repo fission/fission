@@ -11,8 +11,10 @@ scenarios:
     metrics:
       c50_error_rate: { max: 0.05 }
       # A warm sweep should trigger ~zero specializations; the c500 saturation
-      # storm measured 88 (run 28775891057) — this bar catches its return.
-      specializations: { max: 10 }
+      # storm measured 86-88 (runs 28775891057 / 29085940648) — this bar
+      # catches its return. Optional: the metric is Prometheus-derived and
+      # absent when capture is off or the counter reset mid-run.
+      specializations: { max: 10, optional: true }
   cold-start-poolmgr:
     metrics:
       failures: { max: 5 } # at most 5 of N iterations may fail to specialize

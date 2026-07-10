@@ -181,6 +181,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// than the predefined threshold, reset retryCounter and remove service
 	// cache, then retry to get new svc record from executor again.
 	var retryCounter int
+	// softStruckHost dedups soft (dial-timeout) strikes within this request:
+	// each request contributes at most one strike per endpoint.
+	var softStruckHost string
 	var err error
 	var fnMeta = &roundTripper.fn.ObjectMeta
 
@@ -376,7 +379,17 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			if isNetTimeoutErr {
 				reason = InvalidateSoft
 			}
-			roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, reason)
+			// One soft strike per endpoint per request: the retry ladder
+			// re-dials the SAME admitted endpoint without re-resolving, so
+			// striking per attempt would let a single saturated request burn
+			// through the whole strike budget in a few hundred ms. Distinct
+			// requests each contribute at most one strike.
+			if reason != InvalidateSoft || roundTripper.serviceURL.Host != softStruckHost {
+				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, reason)
+				if reason == InvalidateSoft {
+					softStruckHost = roundTripper.serviceURL.Host
+				}
+			}
 		}
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").
@@ -391,8 +404,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			logger.V(1).Info(fmt.Sprintf(
 				"retry counter exceeded pre-defined threshold of %v",
 				roundTripper.params.svcAddrRetryCount))
-			if roundTripper.urlFromCache {
-				// Ladder exhausted: repeated failures, treat as hard.
+			// Ladder exhausted: hard-invalidate only executor-cached
+			// addresses (release == nil). Index-admitted endpoints also carry
+			// FromCache=true, but their eviction belongs to the strike
+			// machinery above — a hard invalidate here would let a saturated
+			// endpoint's repeated dial timeouts within ONE request bypass the
+			// strike budget entirely.
+			if roundTripper.urlFromCache && roundTripper.release == nil {
 				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, InvalidateHard)
 			}
 			retryCounter = 0

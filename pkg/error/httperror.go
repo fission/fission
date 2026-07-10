@@ -115,6 +115,17 @@ func IsNotFound(err error) bool {
 	return fe.Code == ErrorNotFound
 }
 
+// IsTooManyRequests reports whether err is a Fission capacity rejection
+// (surfaced to clients as HTTP 429).
+func IsTooManyRequests(err error) bool {
+	var fe Error
+	if !errors.As(err, &fe) {
+		return false
+	}
+
+	return fe.Code == ErrorTooManyRequests
+}
+
 const (
 	ErrorInternal = iota
 

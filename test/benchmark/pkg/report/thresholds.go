@@ -16,6 +16,11 @@ import (
 type Threshold struct {
 	Max *float64 `json:"max,omitempty"`
 	Min *float64 `json:"min,omitempty"`
+	// Optional marks a metric that is only emitted when its data source is
+	// reachable (e.g. Prometheus-derived counters): absence is tolerated
+	// instead of reported as a "missing" breach. The bounds still apply
+	// whenever the metric is present.
+	Optional bool `json:"optional,omitempty"`
 }
 
 // ScenarioThresholds maps metric name -> bound for one scenario.
@@ -71,7 +76,9 @@ func (t Thresholds) Evaluate(run Run) []Breach {
 		for metric, th := range st.Metrics {
 			m, found := res.Metric(metric)
 			if !found {
-				breaches = append(breaches, Breach{Scenario: scenario, Metric: metric, Kind: "missing"})
+				if !th.Optional {
+					breaches = append(breaches, Breach{Scenario: scenario, Metric: metric, Kind: "missing"})
+				}
 				continue
 			}
 			if th.Max != nil && m.Value > *th.Max {

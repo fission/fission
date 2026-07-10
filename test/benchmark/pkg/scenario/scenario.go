@@ -448,7 +448,7 @@ func functionColdStarts(ctx context.Context, env *harness.Env, fnName string) (f
 	if !env.Capturer.PrometheusEnabled() {
 		return 0, false
 	}
-	q := fmt.Sprintf(`sum(fission_function_cold_starts_total{function_name=%q})`, fnName)
+	q := fmt.Sprintf(`sum(fission_function_cold_starts_total{function_name=%q,function_namespace=%q})`, fnName, env.Namespace)
 	v, found, err := env.Capturer.QueryInstant(ctx, q)
 	if err != nil {
 		return 0, false

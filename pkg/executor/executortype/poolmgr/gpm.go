@@ -308,6 +308,12 @@ func (gpm *GenericPoolManager) GetFuncSvc(ctx context.Context, fn *fv1.Function)
 func (gpm *GenericPoolManager) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
 	fnSvc, err := gpm.fsCache.GetFuncSvc(ctx, &fn.ObjectMeta, fn.GetRequestPerPod(), fn.GetConcurrency())
+	if ferror.IsTooManyRequests(err) {
+		// The legacy data plane's concurrency-cap rejection: count it on the
+		// same series as the ensureCapacity-path rejections so saturation is
+		// visible regardless of which plane served the traffic.
+		metrics.RecordSpecializationRejected(ctx, fn.Name, fn.Namespace)
+	}
 	if err == nil {
 		// Self-healing for the function Service: the one-shot ensure on the
 		// cold start can be lost (executor rolled mid-ensure), and a missing

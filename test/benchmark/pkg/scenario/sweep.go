@@ -41,7 +41,9 @@ func (c *concurrencySweep) Run(ctx context.Context, sc *harness.Scope) (report.S
 	// Anchor after provisioning so the delta counts only sweep-triggered
 	// specializations — a warm sweep should stay near zero; a saturation
 	// storm (quarantine → executor fallback → new pod per request) shows up
-	// here directly instead of only as tail latency.
+	// here directly instead of only as tail latency. Prometheus scrapes on an
+	// interval, so the warm-up's own cold start can lag into the delta by ±1;
+	// the threshold bar (10) absorbs that.
 	before, beforeOK := functionColdStarts(ctx, env, fnName)
 	for _, level := range c.levels {
 		if err := ctx.Err(); err != nil {

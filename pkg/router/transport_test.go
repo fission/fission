@@ -510,3 +510,48 @@ type timeoutErr struct{}
 func (*timeoutErr) Error() string   { return "synthetic dial timeout" }
 func (*timeoutErr) Timeout() bool   { return true }
 func (*timeoutErr) Temporary() bool { return true }
+
+// reasonRecordingResolver returns the same admitted-style entry (Release set)
+// on every Resolve and tallies Invalidate calls by reason.
+type reasonRecordingResolver struct {
+	answer *url.URL
+	calls  atomic.Int64
+	soft   atomic.Int64
+	hard   atomic.Int64
+}
+
+func (s *reasonRecordingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
+	s.calls.Add(1)
+	var once sync.Once
+	return ResolvedEntry{SvcURL: s.answer, FromCache: true, Release: func() { once.Do(func() {}) }}, nil
+}
+
+func (s *reasonRecordingResolver) Invalidate(_ *fv1.Function, _ *url.URL, reason InvalidateReason) {
+	if reason == InvalidateSoft {
+		s.soft.Add(1)
+	} else {
+		s.hard.Add(1)
+	}
+}
+
+// TestSoftStrikeOncePerRequest guards the strike budget: a request's retry
+// ladder re-dials the same admitted endpoint, and must contribute at most ONE
+// soft strike per endpoint — striking per attempt would let a single
+// saturated request burn the whole dialTimeoutStrikeLimit budget and
+// quarantine the function's only endpoint by itself. The ladder-exhausted
+// hard invalidate must also never fire for index-admitted entries
+// (release != nil), even with a low svcAddrRetryCount.
+func TestSoftStrikeOncePerRequest(t *testing.T) {
+	t.Parallel()
+	// Blackholed address (TEST-NET-1, RFC 5737): dials time out (soft class).
+	blackhole := mustParseURL(t, "http://192.0.2.1:80")
+	resolver := &reasonRecordingResolver{answer: blackhole}
+	rrt := newTestRRT(resolver, &nopTapper{}, 4, 1) // retry threshold 1: ladder exhausts on every timeout
+	req := httptest.NewRequest("GET", "http://router.example/fission-function/fn", nil)
+
+	resp, err := rrt.RoundTrip(req) //nolint:bodyclose // resp is nil on error
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Equal(t, int64(1), resolver.soft.Load(), "one soft strike per endpoint per request")
+	assert.Zero(t, resolver.hard.Load(), "ladder exhaustion must not hard-invalidate index-admitted endpoints")
+}
