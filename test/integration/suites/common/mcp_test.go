@@ -42,8 +42,7 @@ func TestMCPToolsListAndCall(t *testing.T) {
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
 
-	base := f.MCPBaseURL()
-	requireMCPReachable(t, ctx, base)
+	requireMCPReachable(t, ctx, f)
 
 	ns := f.NewTestNamespace(t)
 	envName := "nodejs-mcp-" + ns.ID
@@ -63,7 +62,7 @@ func TestMCPToolsListAndCall(t *testing.T) {
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 
-	session := connectMCP(t, ctx, base)
+	session := connectMCP(t, ctx, f)
 	defer func() { _ = session.Close() }()
 
 	// tools/list eventually includes our tool (the reconciler registers it
@@ -109,14 +108,16 @@ func TestMCPToolsListAndCall(t *testing.T) {
 }
 
 // requireMCPReachable skips the test when the MCP endpoint isn't serving (MCP
-// disabled in this install, or no port-forward).
-func requireMCPReachable(t *testing.T, ctx context.Context, base string) {
+// disabled in this install). The 3s deadline bounds the registry's readiness
+// dial, so an MCP-less install still skips fast.
+func requireMCPReachable(t *testing.T, ctx context.Context, f *framework.Framework) {
 	t.Helper()
+	base := f.MCPBaseURL()
 	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(base, "/")+"/healthz", nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
 	require.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := f.HTTPClient().Do(req)
 	if err != nil {
 		t.Skipf("MCP endpoint %s not reachable (%v); skipping", base, err)
 	}
@@ -126,12 +127,17 @@ func requireMCPReachable(t *testing.T, ctx context.Context, base string) {
 	}
 }
 
-func connectMCP(t *testing.T, ctx context.Context, base string) *mcp.ClientSession {
+func connectMCP(t *testing.T, ctx context.Context, f *framework.Framework) *mcp.ClientSession {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "fission-it", Version: "test"}, nil)
-	transport := &mcp.StreamableClientTransport{Endpoint: strings.TrimRight(base, "/") + "/mcp"}
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: f.MCPBaseURL() + "/mcp",
+		// The endpoint host is a portless route name; resolve it through
+		// the framework registry.
+		HTTPClient: f.HTTPClient(),
+	}
 	session, err := client.Connect(ctx, transport, nil)
-	require.NoError(t, err, "connect MCP client to %s", base)
+	require.NoError(t, err, "connect MCP client to %s", f.MCPBaseURL())
 	return session
 }
 

@@ -78,21 +78,17 @@ Fix: retry the **entire** dial+SetReadDeadline+WriteMessage+ReadMessage cycle (n
 Re-sign the HMAC headers on every attempt (timestamp must stay inside the verifier's skew window).
 The framework's `RouterClient` does this for HTTP automatically; raw `gorilla/websocket` dials must build headers with `hmacauth.DeriveServiceKey(master, hmacauth.ServiceRouterInternal)` + `hmacauth.Sign(...)` (canonical = method, path, nil body, ts).
 
-## Internal listener requires its own port-forward
+## Router/MCP reachability: in-process port-forwards, not kubectl
 
-```bash
-kubectl port-forward svc/router          8888:80   -n fission &
-kubectl port-forward svc/router-internal 8889:8889 -n fission &
-```
-The 8889 forward is **not optional** — `/fission-function/...` lives only there since the listener split.
-A common mis-fix is `kubectl port-forward svc/router 8889:8889`, which silently fails (svc/router only exposes 80→8888).
-Symptom: HTTPTrigger calls pass but anything via `f.Router(t).Get("/fission-function/...")` gets `connection refused`.
+The framework registers `router.fission` / `router-internal.fission` / `mcp.fission` in a go-portless registry that port-forwards in-process from `FISSION_NAMESPACE` (default `fission`) — no `kubectl port-forward` is needed, and pod restarts self-heal (each dial re-resolves a ready pod).
+Base-URL hosts (`f.Router(t).BaseURL()`, `f.RouterInternalBaseURL()`, `f.MCPBaseURL()`) are portless route names: only clients built from the framework (`f.HTTPClient()`, `Router(t)`'s client) resolve them; a plain `http.Client` cannot.
+Env overrides `FISSION_ROUTER` / `FISSION_ROUTER_INTERNAL` / `FISSION_MCP_BASE_URL` (host:port or URL) point a route at a fixed address instead — for hand-managed forwards or non-default installs.
+`/fission-function/...` lives only on the internal listener since the listener split; `f.Router(t)` auto-routes those paths there.
 To have the framework sign requests, export the master HMAC secret; empty secret = unsigned, which works only in pass-through mode (`internalAuth.enabled=false`):
 ```bash
 export FISSION_INTERNAL_AUTH_SECRET=$(kubectl get secret fission-internal-auth -n fission -o jsonpath='{.data.master}' | base64 -d)
 ```
-For the MCP test (`TestMCPToolsListAndCall`) add `kubectl port-forward svc/mcp 8890:8890 -n fission &` and `export FISSION_MCP_BASE_URL=http://127.0.0.1:8890` (framework default; `t.Skip`s when unreachable).
-`svc/mcp` exists only when `mcp.enabled` (on in the kind/kind-ci profiles).
+The MCP test (`TestMCPToolsListAndCall`) `t.Skip`s when `svc/mcp` is unreachable; the service exists only when `mcp.enabled` (on in the kind/kind-ci profiles).
 The MCP server runs in `fission`, so its pod log is in the CI `kind-logs` artifact, not the `default`-scoped diagnostics dump.
 
 ## In-process e2e harness bypasses fission-bundle/main.go

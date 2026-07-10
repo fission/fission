@@ -12,10 +12,18 @@
 package framework
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
+	portless "github.com/sanketsudake/go-portless"
+	"github.com/sanketsudake/go-portless/backend"
+	portlessk8s "github.com/sanketsudake/go-portless/k8s"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -24,6 +32,22 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+)
+
+// Route names the framework registers in its portless registry. Dials to
+// these names (via HTTPClient / Router) port-forward in-process to the
+// corresponding Service — no kubectl port-forward needed — and block until
+// the backend accepts, so readiness lives in the dial.
+const (
+	// RouterName resolves to svc/router (public listener, Service port 80).
+	RouterName = "router.fission"
+	// RouterInternalName resolves to svc/router-internal — the ClusterIP-only
+	// Service hosting /fission-function/<ns>/<name> after the
+	// GHSA-3g33-6vg6-27m8 listener split.
+	RouterInternalName = "router-internal.fission"
+	// MCPName resolves to svc/mcp (RFC-0011). MCP tests skip when it is
+	// unreachable (MCP disabled in this install).
+	MCPName = "mcp.fission"
 )
 
 // Framework is a process-wide singleton built from KUBECONFIG once and reused
@@ -35,27 +59,19 @@ type Framework struct {
 	fissionClient versioned.Interface
 	kubeClient    kubernetes.Interface
 	images        RuntimeImages
-	router        string
-	// routerInternal is the URL the test framework uses for the
-	// router's internal listener (the one hosting /fission-function/...
-	// after the GHSA-3g33-6vg6-27m8 split). Sourced from
-	// FISSION_ROUTER_INTERNAL via routerInternalURLFromEnv, which
-	// always returns a non-empty value (defaulting to
-	// http://127.0.0.1:8889 to match the suite-bootstrap port-forward
-	// of svc/router-internal). The RouterClient unconditionally
-	// routes /fission-function/<ns>/<name> here.
-	routerInternal string
+	// reg resolves the route names above. Each route is either an
+	// in-process SPDY port-forward to the Service's ready pod (default) or
+	// a fixed TCP address when the matching env override (FISSION_ROUTER /
+	// FISSION_ROUTER_INTERNAL / FISSION_MCP_BASE_URL) is set. The registry
+	// lives for the whole test process; its connections die with it.
+	reg *portless.Registry
 	// internalAuthSecret is the master HMAC key used to sign
 	// /fission-function/... requests on the internal listener.
 	// Sourced from FISSION_INTERNAL_AUTH_SECRET; empty disables
 	// signing (matches the chart's pass-through mode when
 	// internalAuth.enabled=false).
 	internalAuthSecret []byte
-	// mcpBaseURL is the URL of the MCP server (svc/mcp). Sourced from
-	// FISSION_MCP_BASE_URL via mcpBaseURLFromEnv (default
-	// http://127.0.0.1:8890 to match the suite-bootstrap port-forward).
-	mcpBaseURL string
-	logger     logr.Logger
+	logger             logr.Logger
 }
 
 var (
@@ -89,18 +105,68 @@ func newFramework() (*Framework, error) {
 	if err != nil {
 		return nil, err
 	}
+	reg, err := newRegistry(restConfig)
+	if err != nil {
+		return nil, err
+	}
 	return &Framework{
 		restConfig:         restConfig,
 		clientGen:          clientGen,
 		fissionClient:      fissionClient,
 		kubeClient:         kubeClient,
 		images:             loadRuntimeImages(),
-		router:             routerURLFromEnv(),
-		routerInternal:     routerInternalURLFromEnv(),
+		reg:                reg,
 		internalAuthSecret: internalAuthSecretFromEnv(),
-		mcpBaseURL:         mcpBaseURLFromEnv(),
 		logger:             loggerfactory.GetLogger(),
 	}, nil
+}
+
+// newRegistry builds the portless registry backing all framework HTTP
+// clients. Each service defaults to an in-process port-forward
+// (self-healing: every dial re-resolves a ready pod, so a pod restart costs
+// one retried dial, not a severed tunnel); setting the env override points
+// the route at a fixed address instead, for runs against a non-default
+// install or a hand-managed forward.
+func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
+	namespace := os.Getenv("FISSION_NAMESPACE")
+	if namespace == "" {
+		namespace = "fission"
+	}
+	reg := portless.New()
+	for _, r := range []struct{ name, envVar, service string }{
+		{RouterName, "FISSION_ROUTER", "router"},
+		{RouterInternalName, "FISSION_ROUTER_INTERNAL", "router-internal"},
+		{MCPName, "FISSION_MCP_BASE_URL", "mcp"},
+	} {
+		var b portless.Backend
+		if v := os.Getenv(r.envVar); v != "" {
+			b = backend.TCP(hostport(v))
+		} else {
+			var err error
+			// No explicit target port: all three Services are single-port,
+			// so the resolver uses the Service's own target port.
+			b, err = portlessk8s.PortForward(restConfig, portlessk8s.Service(namespace, r.service))
+			if err != nil {
+				return nil, fmt.Errorf("build %s backend: %w", r.name, err)
+			}
+		}
+		if _, err := reg.Add(context.Background(), r.name, b); err != nil {
+			return nil, fmt.Errorf("register route %s: %w", r.name, err)
+		}
+	}
+	return reg, nil
+}
+
+// hostport normalizes an env override ("host:port", "http://host:port", or
+// bare "host") to the host:port form backend.TCP dials.
+func hostport(v string) string {
+	v = strings.TrimPrefix(v, "http://")
+	v = strings.TrimPrefix(v, "https://")
+	v = strings.TrimSuffix(v, "/")
+	if !strings.Contains(v, ":") {
+		v += ":80"
+	}
+	return v
 }
 
 // RestConfig returns the cached *rest.Config.
@@ -118,12 +184,20 @@ func (f *Framework) Images() RuntimeImages { return f.images }
 // Logger returns the framework logger.
 func (f *Framework) Logger() logr.Logger { return f.logger }
 
+// HTTPClient returns an http.Client that resolves the framework's route
+// names (RouterName etc.) through the portless registry. It sets no global
+// timeout — dials block until the backend is ready — so callers must bound
+// requests with contexts. Requests through it are NOT HMAC-signed; use
+// Router for signed /fission-function/... calls.
+func (f *Framework) HTTPClient() *http.Client { return f.reg.HTTPClient() }
+
 // RouterInternalBaseURL returns the framework's URL for the router's
 // internal listener — the one hosting /fission-function/<ns>/<name>
-// after the GHSA-3g33-6vg6-27m8 split. Tests that bypass the
-// `RouterClient` HTTP helpers (e.g. websocket dials done via
-// coder/websocket) should compose their URL from this base.
-func (f *Framework) RouterInternalBaseURL() string { return f.routerInternal }
+// after the GHSA-3g33-6vg6-27m8 split. The host is a portless route name,
+// resolvable only by clients built from this framework (HTTPClient, Router).
+func (f *Framework) RouterInternalBaseURL() string {
+	return portless.URL(RouterInternalName, 0, "")
+}
 
 // InternalAuthSecret returns the master HMAC key the framework uses
 // to sign /fission-function/... requests on the internal listener.
@@ -133,7 +207,7 @@ func (f *Framework) RouterInternalBaseURL() string { return f.routerInternal }
 func (f *Framework) InternalAuthSecret() []byte { return f.internalAuthSecret }
 
 // MCPBaseURL returns the URL of the MCP server (svc/mcp). MCP integration tests
-// dial "<base>/mcp"; they should skip when the endpoint is unreachable (the MCP
-// subsystem is enabled in the kind/kind-ci skaffold profiles but may be off in
-// other installs).
-func (f *Framework) MCPBaseURL() string { return f.mcpBaseURL }
+// dial "<base>/mcp" via HTTPClient; they should skip when the endpoint is
+// unreachable (the MCP subsystem is enabled in the kind/kind-ci skaffold
+// profiles but may be off in other installs).
+func (f *Framework) MCPBaseURL() string { return portless.URL(MCPName, 0, "") }

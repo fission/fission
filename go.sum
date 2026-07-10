@@ -439,6 +439,8 @@ github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDj
 github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
 github.com/sanketsudake/go-portless v0.1.0 h1:2D/oM6mwOf0O63vpTdHJHCvRi3dwWF2a1WlwQouFxo0=
 github.com/sanketsudake/go-portless v0.1.0/go.mod h1:AEveVEKcHEJ2W4DbCC4wuIUIXKLfy4ocZYU0pN9paYs=
+github.com/sanketsudake/go-portless/k8s v0.1.0 h1:PxZJj1aOtdyNVvVvSzh15KEyxf5KnrWZMmqn6ukpzQE=
+github.com/sanketsudake/go-portless/k8s v0.1.0/go.mod h1:Wv7ThaYmUQllWa3r5SHZwKwV2IrJPBnEQjAR03dfNRo=
 github.com/segmentio/asm v1.1.3 h1:WM03sfUOENvvKexOLp+pCqgb/WDjsi7EK8gIsICtzhc=
 github.com/segmentio/asm v1.1.3/go.mod h1:Ld3L4ZXGNcSLRg4JBsZ3//1+f/TjYl0Mzen/DQy1EJg=
 github.com/segmentio/encoding v0.5.4 h1:OW1VRern8Nw6ITAtwSZ7Idrl3MXCFwXHPgqESYfvNt0=

@@ -41,7 +41,8 @@ func TestCORS_RouterSecurity(t *testing.T) {
 	defer cancel()
 
 	f := framework.Connect(t)
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	// Unsigned registry-backed client; request deadlines come from ctx.
+	httpClient := f.HTTPClient()
 
 	t.Run("router-owned routes carry nosniff and Vary: Origin", func(t *testing.T) {
 		// /_version is the canonical router-owned route; SecurityHeaders
@@ -128,7 +129,7 @@ func TestCORS_HTTPTrigger(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	httpClient := f.HTTPClient()
 
 	ns := f.NewTestNamespace(t)
 	envName := "nodejs-cors-" + ns.ID
