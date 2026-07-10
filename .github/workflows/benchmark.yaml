@@ -1,0 +1,458 @@
+name: Fission Benchmark
+
+# End-to-end performance benchmarks (RFC-0020). Runs the test/benchmark engine
+# against a kind-deployed Fission, gates results against thresholds, and (on
+# weekly/dispatch) publishes a gh-pages time-series trend with regression alerts.
+# Multi-version baselining: the weekly run (or a dispatch with baseline=true)
+# additionally benchmarks released charts so HEAD can be compared to them.
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "comma-separated scenario names (default: all)"
+        default: ""
+        type: string
+      tags:
+        description: "comma-separated tags to select (e.g. smoke,latency)"
+        default: ""
+        type: string
+      duration:
+        description: "load duration, e.g. 60s (default: scenario config)"
+        default: ""
+        type: string
+      concurrency:
+        description: "warm-path concurrency (default: scenario config)"
+        default: ""
+        type: string
+      repetitions:
+        description: "re-run each scenario N times, report medians (default: 1)"
+        default: ""
+        type: string
+      publish_trend:
+        description: "publish results to the gh-pages trend"
+        default: true
+        type: boolean
+      baseline:
+        description: "also benchmark released chart versions for baselining"
+        default: false
+        type: boolean
+      baseline_versions:
+        description: "comma-separated released chart versions (default: v1.27.0,v1.26.0)"
+        default: ""
+        type: string
+  schedule:
+    # Mondays 06:00 UTC — full suite + released baselines + trend publish.
+    - cron: "0 6 * * 1"
+  # Run the warn-only smoke on every commit/PR that touches code, charts, or
+  # tests — same breadth as the integration suite — so a regression in the data
+  # path (or the benchmark harness) is caught against a real cluster before merge.
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "charts/**"
+      - "test/**"
+      - go.mod
+      - go.sum
+      - ".github/workflows/benchmark.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "charts/**"
+      - "test/**"
+      - go.mod
+      - go.sum
+      - ".github/workflows/benchmark.yaml"
+
+env:
+  HELM_VERSION: v4.2.2
+  KIND_VERSION: v0.32.0
+  KIND_CLUSTER_NAME: kind
+  SKAFFOLD_VERSION: v2.22.0
+  BENCH_K8S: v1.34.8
+
+permissions:
+  contents: read
+
+concurrency:
+  # Key on the event too: all three triggers resolve github.ref to
+  # refs/heads/main, so without this a routine push would cancel an in-flight
+  # weekly scheduled run.
+  group: fission-benchmark-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  # Compute the version matrix: HEAD always; released baselines on the weekly run
+  # or an opt-in dispatch.
+  setup:
+    runs-on: ubuntu-24.04
+    outputs:
+      versions: ${{ steps.versions.outputs.list }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+      - id: versions
+        run: |
+          set -euo pipefail
+          baseline=false
+          [ "${{ github.event_name }}" = "schedule" ] && baseline=true
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.baseline }}" = "true" ]; then
+            baseline=true
+          fi
+          versions='["HEAD"]'
+          if [ "$baseline" = "true" ]; then
+            extra="${{ inputs.baseline_versions }}"
+            extra="${extra:-v1.27.0,v1.26.0}"
+            json=$(echo "$extra" | tr ',' '\n' | sed 's/[[:space:]]//g; /^$/d; s/^/"/; s/$/"/' | paste -sd, -)
+            versions="[\"HEAD\",$json]"
+          fi
+          echo "list=$versions" >> "$GITHUB_OUTPUT"
+          echo "version matrix: $versions"
+
+  benchmark:
+    needs: setup
+    runs-on: ubuntu-24.04
+    permissions:
+      # contents:write lets github-action-benchmark push the trend to gh-pages.
+      contents: write
+    strategy:
+      fail-fast: false
+      # Serialize legs: each publishes to the same gh-pages branch with
+      # auto-push, so parallel legs would race non-fast-forward pushes.
+      max-parallel: 1
+      matrix:
+        fission_version: ${{ fromJSON(needs.setup.outputs.versions) }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout sources
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
+      - name: setup go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Helm installation
+        uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Kind Cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          node_image: kindest/node:${{ env.BENCH_K8S }}
+          version: ${{ env.KIND_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          config: kind.yaml
+
+      - name: Install Skaffold
+        if: ${{ matrix.fission_version == 'HEAD' }}
+        run: |
+          curl -Lo skaffold https://storage.googleapis.com/skaffold/releases/${{ env.SKAFFOLD_VERSION }}/skaffold-linux-amd64
+          sudo install skaffold /usr/local/bin/
+          skaffold version
+
+      - name: Install GoReleaser
+        if: ${{ matrix.fission_version == 'HEAD' }}
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          install-only: true
+          version: "~> v2"
+
+      - name: Setup Prometheus Stack
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+          kubectl create ns monitoring
+          helm install prometheus prometheus-community/kube-prometheus-stack -n monitoring \
+            --version 45.28.0 --set grafana.enabled=false --set alertmanager.enabled=false
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+          helm install metrics-server metrics-server/metrics-server \
+            --namespace kube-system --version 3.13.0 \
+            --set 'args={--kubelet-insecure-tls}' \
+            --wait --timeout 3m
+
+      - name: Configure run mode
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            schedule)
+              echo "BM_TAGS=" >> "$GITHUB_ENV"
+              echo "BM_SCENARIOS=" >> "$GITHUB_ENV"
+              echo "BM_DURATION=" >> "$GITHUB_ENV"
+              echo "BM_CONCURRENCY=" >> "$GITHUB_ENV"
+              echo "BM_FAIL_ON_BREACH=true" >> "$GITHUB_ENV"
+              echo "BM_PUBLISH_TREND=true" >> "$GITHUB_ENV"
+              ;;
+            push | pull_request)
+              echo "BM_TAGS=smoke" >> "$GITHUB_ENV"
+              echo "BM_SCENARIOS=" >> "$GITHUB_ENV"
+              echo "BM_DURATION=15s" >> "$GITHUB_ENV"
+              echo "BM_CONCURRENCY=20" >> "$GITHUB_ENV"
+              echo "BM_COLD_ITERATIONS=5" >> "$GITHUB_ENV"
+              echo "BM_FAIL_ON_BREACH=false" >> "$GITHUB_ENV"
+              echo "BM_PUBLISH_TREND=false" >> "$GITHUB_ENV"
+              ;;
+            workflow_dispatch)
+              echo "BM_TAGS=${{ inputs.tags }}" >> "$GITHUB_ENV"
+              echo "BM_SCENARIOS=${{ inputs.scenarios }}" >> "$GITHUB_ENV"
+              echo "BM_DURATION=${{ inputs.duration }}" >> "$GITHUB_ENV"
+              echo "BM_CONCURRENCY=${{ inputs.concurrency }}" >> "$GITHUB_ENV"
+              echo "BM_REPETITIONS=${{ inputs.repetitions }}" >> "$GITHUB_ENV"
+              echo "BM_FAIL_ON_BREACH=true" >> "$GITHUB_ENV"
+              echo "BM_PUBLISH_TREND=${{ inputs.publish_trend }}" >> "$GITHUB_ENV"
+              ;;
+          esac
+          # Released-version legs are baselines: never gate, and publish under
+          # their own trend series.
+          if [ "${{ matrix.fission_version }}" != "HEAD" ]; then
+            echo "BM_FAIL_ON_BREACH=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build and install Fission (HEAD via skaffold)
+        if: ${{ matrix.fission_version == 'HEAD' }}
+        timeout-minutes: 12
+        env:
+          # Instrument the control plane for coverage on the every-commit smoke
+          # only. The authoritative perf numbers come from the weekly/dispatch
+          # run, which is left uninstrumented (empty GOFLAGS) so the trend is
+          # never skewed by counter overhead. The fission-benchmark CLI is built
+          # in a later step without GOFLAGS, so it stays uninstrumented/excluded.
+          GOFLAGS: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && '-cover -coverpkg=github.com/fission/fission/...' || '' }}
+        run: |
+          set -euo pipefail
+          kubectl create ns fission
+          make create-crds
+          # kind-ci sets coverage.enabled=true, which mounts a type:Directory
+          # hostPath at /fission-coverage; the path must exist on the node or
+          # every fission pod fails to mount and the deploy times out at 0/1.
+          docker exec kind-control-plane sh -c \
+            'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
+          SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+
+      - name: Install released Fission (helm)
+        if: ${{ matrix.fission_version != 'HEAD' }}
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          # Released chart for version baselining. CRDs must match the release,
+          # not HEAD: an older webhook + HEAD's CRD shape can diverge (e.g. <=v1.24
+          # has no Package status subresource and defaults buildstatus, while
+          # HEAD's subresource strips it and the old webhook then rejects the
+          # empty value). Install the version's own crds/v1 via its git tag; the
+          # chart is deployed with --skip-crds so it does not fight them. The
+          # CI-equivalent value overlay uses keys broadly present across recent
+          # releases — extra keys an older chart ignores are harmless.
+          helm repo add fission-charts https://fission.github.io/fission-charts/
+          helm repo update
+          kubectl create ns fission
+          ver="${{ matrix.fission_version }}"
+          kubectl apply --server-side -k "github.com/fission/fission//crds/v1?ref=${ver}"
+          helm install fission fission-charts/fission-all \
+            --version "${ver#v}" -n fission --skip-crds --wait --timeout 8m \
+            --set routerServiceType=NodePort \
+            --set pprof.enabled=true \
+            --set prometheus.serviceEndpoint=http://prometheus-operated.monitoring.svc.cluster.local:9090 \
+            --set serviceMonitor.enabled=true \
+            --set podMonitor.enabled=true \
+            --set serviceMonitor.additionalServiceMonitorLabels.release=prometheus \
+            --set podMonitor.additionalPodMonitorLabels.release=prometheus
+
+      - name: Harden in-cluster DNS
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          for d in $(kubectl -n fission get deploy -o name); do
+            kubectl -n fission patch "$d" --type merge -p \
+              '{"spec":{"template":{"spec":{"dnsConfig":{"options":[{"name":"single-request-reopen"}]}}}}}'
+          done
+          for d in $(kubectl -n fission get deploy -o name); do
+            kubectl -n fission rollout status "$d" --timeout=5m
+          done
+
+      - name: Run benchmark
+        timeout-minutes: 60
+        env:
+          PYTHON_RUNTIME_IMAGE: ghcr.io/fission/python-env
+          PYTHON_BUILDER_IMAGE: ghcr.io/fission/python-builder
+          NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env-22
+          GO_RUNTIME_IMAGE: ghcr.io/fission/go-env-1.26
+          CONTAINER_RUNTIME_IMAGE: gcr.io/google-samples/hello-app:1.0
+        run: |
+          set -euo pipefail
+          pids=()
+          for img in "$PYTHON_RUNTIME_IMAGE" "$PYTHON_BUILDER_IMAGE" "$NODE_RUNTIME_IMAGE" "$GO_RUNTIME_IMAGE" "$CONTAINER_RUNTIME_IMAGE"; do
+            ( docker pull -q "$img" && kind load docker-image "$img" --name "${KIND_CLUSTER_NAME}" ) &
+            pids+=($!)
+          done
+          # Bare `wait` returns 0 regardless; wait per-pid so a pull/load failure
+          # fails the step at its real cause instead of surfacing downstream.
+          for pid in "${pids[@]}"; do
+            wait "$pid" || { echo "image preload failed (pid $pid)"; exit 1; }
+          done
+
+          forward() { while true; do kubectl port-forward "$@" || true; sleep 1; done; }
+          forward svc/router 8888:80 -n fission >/tmp/pf.log 2>&1 &
+          forward svc/router-internal 8889:8889 -n fission >/tmp/pf-int.log 2>&1 &
+          forward svc/prometheus-operated 9090:9090 -n monitoring >/tmp/pf-prom.log 2>&1 &
+          rpod=$(kubectl get pods -n fission -l svc=router -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          epod=$(kubectl get pods -n fission -l svc=executor -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          [ -n "$rpod" ] && forward pod/$rpod 6060:6060 -n fission >/tmp/pf-rpprof.log 2>&1 &
+          [ -n "$epod" ] && forward pod/$epod 6061:6060 -n fission >/tmp/pf-epprof.log 2>&1 &
+          trap "kill %1 %2 %3 %4 %5 2>/dev/null || true" EXIT
+
+          for i in $(seq 1 30); do
+            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null && break
+            [ "$i" -eq 30 ] && { echo "router port-forward not ready"; cat /tmp/pf.log; exit 1; }
+            sleep 1
+          done
+
+          cd test/benchmark
+          go build -o fission-benchmark ./cmd/fission-benchmark
+          ./fission-benchmark run \
+            --config config/scenarios.default.yaml \
+            --router-url http://127.0.0.1:8888 \
+            --router-internal-url http://127.0.0.1:8889 \
+            --prometheus-url http://127.0.0.1:9090 \
+            --pprof "router=http://127.0.0.1:6060,executor=http://127.0.0.1:6061" \
+            --artifact-dir "$GITHUB_WORKSPACE/bench-artifacts" \
+            --namespace default --fission-namespace fission \
+            --fission-version "${{ matrix.fission_version }}" \
+            --git-sha "${{ github.sha }}" \
+            --out "$GITHUB_WORKSPACE/results.json" \
+            ${BM_SCENARIOS:+--scenarios "$BM_SCENARIOS"} \
+            ${BM_TAGS:+--tags "$BM_TAGS"} \
+            ${BM_DURATION:+--duration "$BM_DURATION"} \
+            ${BM_CONCURRENCY:+--concurrency "$BM_CONCURRENCY"} \
+            ${BM_COLD_ITERATIONS:+--cold-iterations "$BM_COLD_ITERATIONS"} \
+            ${BM_REPETITIONS:+--repetitions "$BM_REPETITIONS"}
+
+      - name: Report and gate
+        run: |
+          set -euo pipefail
+          cd test/benchmark
+          ./fission-benchmark report \
+            --in "$GITHUB_WORKSPACE/results.json" \
+            --thresholds config/thresholds.yaml \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --trend-smaller "$GITHUB_WORKSPACE/trend-smaller.json" \
+            --trend-bigger "$GITHUB_WORKSPACE/trend-bigger.json" \
+            --fail-on-breach="${BM_FAIL_ON_BREACH}"
+
+      # Capture control-plane coverage from the smoke run's data-path exercise
+      # (router proxy, poolmgr specialization, fetcher) and add it to Codecov
+      # under its own flag. Only on the instrumented smoke legs; the weekly run
+      # is uninstrumented. Graceful delete flushes the coverage counters
+      # fission-bundle writes on SIGTERM.
+      - name: Collect benchmark coverage
+        if: ${{ matrix.fission_version == 'HEAD' && (github.event_name == 'pull_request' || github.event_name == 'push') }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          kubectl delete deploy --all -n fission --cascade=foreground --timeout=120s || true
+          mkdir -p covdata
+          docker cp kind-control-plane:/fission-coverage/. covdata/ || true
+          if ls covdata/covmeta.* >/dev/null 2>&1; then
+            go tool covdata percent -i=covdata || true
+            go tool covdata textfmt -i=covdata -o=benchmark-coverage.txt
+            echo "wrote benchmark-coverage.txt ($(wc -l < benchmark-coverage.txt) lines)"
+          else
+            echo "no coverage meta files collected"
+          fi
+
+      - name: Upload benchmark coverage to Codecov
+        if: ${{ matrix.fission_version == 'HEAD' && (github.event_name == 'pull_request' || github.event_name == 'push') && hashFiles('benchmark-coverage.txt') != '' }}
+        continue-on-error: true
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: benchmark
+          files: ./benchmark-coverage.txt
+          fail_ci_if_error: false
+
+      # github-action-benchmark stores each run on gh-pages and draws a chart;
+      # one direction per file, one series per fission version.
+      - name: Publish latency trend (lower is better)
+        if: ${{ env.BM_PUBLISH_TREND == 'true' }}
+        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
+        with:
+          name: "Fission latency (${{ matrix.fission_version }})"
+          tool: customSmallerIsBetter
+          output-file-path: trend-smaller.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench/latency/${{ matrix.fission_version }}
+          alert-threshold: "130%"
+          comment-on-alert: true
+          fail-on-alert: false
+
+      - name: Publish throughput trend (higher is better)
+        if: ${{ env.BM_PUBLISH_TREND == 'true' }}
+        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
+        with:
+          name: "Fission throughput (${{ matrix.fission_version }})"
+          tool: customBiggerIsBetter
+          output-file-path: trend-bigger.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench/throughput/${{ matrix.fission_version }}
+          alert-threshold: "130%"
+          comment-on-alert: true
+          fail-on-alert: false
+
+      - name: Archive benchmark results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-results-${{ github.run_id }}-${{ matrix.fission_version }}
+          path: |
+            results.json
+            trend-smaller.json
+            trend-bigger.json
+            bench-artifacts/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Backup prometheus data
+        if: ${{ always() }}
+        timeout-minutes: 10
+        run: TRACE=1 ./hack/backup-prometheus.sh
+
+      - name: Archive prometheus dump
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-prom-dump-${{ github.run_id }}-${{ matrix.fission_version }}
+          path: /tmp/prometheus/*
+          retention-days: 5
+          if-no-files-found: ignore
+
+      - name: Kind export logs
+        if: ${{ always() }}
+        timeout-minutes: 10
+        run: kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
+
+      - name: Archive kind logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-kind-logs-${{ github.run_id }}-${{ matrix.fission_version }}
+          path: kind-logs/*
+          retention-days: 5
+          if-no-files-found: ignore
