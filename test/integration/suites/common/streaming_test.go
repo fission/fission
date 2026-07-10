@@ -10,11 +10,11 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	portless "github.com/sanketsudake/go-portless"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -107,11 +107,10 @@ func TestStreamingProtocols(t *testing.T) {
 
 		// /fission-function/<fn> lives on the internal listener (post
 		// GHSA-3g33-6vg6-27m8); dial it and sign the upgrade with
-		// ServiceRouterInternal. http://127.0.0.1:8889 -> ws://127.0.0.1:8889.
-		base := f.RouterInternalBaseURL()
-		require.True(t, strings.HasPrefix(base, "http://"), "internal base must be http:// for ws rewrite, got %q", base)
+		// ServiceRouterInternal. The ws host is a portless route name,
+		// resolved by the framework's HTTP client during the handshake.
 		path := "/fission-function/" + fnName
-		wsURL := "ws://" + strings.TrimPrefix(base, "http://") + path
+		wsURL := portless.WSURL(framework.RouterInternalName, 0, path)
 		master := f.InternalAuthSecret()
 
 		signedHeader := func() http.Header {
@@ -137,7 +136,7 @@ func TestStreamingProtocols(t *testing.T) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			dctx, dcancel := context.WithTimeout(ctx, 15*time.Second)
 			defer dcancel()
-			conn, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPHeader: signedHeader()})
+			conn, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPClient: f.HTTPClient(), HTTPHeader: signedHeader()})
 			if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
 				return
 			}

@@ -10,11 +10,11 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	portless "github.com/sanketsudake/go-portless"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,9 +29,6 @@ import (
 // including the sender), then dials the router's well-known internal
 // route ws://<router>/fission-function/<fn>, sends a single text frame,
 // and asserts the same frame comes back.
-//
-// Skipped when the router is reachable only via http (no ws scheme); the
-// transport here just rewrites http→ws on f.Router().BaseURL().
 func TestWebsocket(t *testing.T) {
 	t.Parallel()
 
@@ -54,12 +51,10 @@ func TestWebsocket(t *testing.T) {
 	// /fission-function/<fn> moved off the public listener after
 	// GHSA-3g33-6vg6-27m8 — dial the internal listener instead, and
 	// sign the upgrade-handshake HTTP request with ServiceRouterInternal.
-	// http://127.0.0.1:8889 → ws://127.0.0.1:8889.
-	base := f.RouterInternalBaseURL()
-	require.True(t, strings.HasPrefix(base, "http://"),
-		"router internal base URL must be http:// for ws rewrite, got %q", base)
+	// The ws host is a portless route name, resolved by the framework's
+	// HTTP client during the upgrade handshake.
 	path := "/fission-function/" + fnName
-	wsURL := "ws://" + strings.TrimPrefix(base, "http://") + path
+	wsURL := portless.WSURL(framework.RouterInternalName, 0, path)
 
 	// Build the HMAC-signed upgrade headers. Empty secret leaves the
 	// dial unsigned, which is fine when internalAuth.enabled=false on
@@ -97,7 +92,7 @@ func TestWebsocket(t *testing.T) {
 		}
 		dctx, dcancel := context.WithTimeout(ctx, 10*time.Second)
 		defer dcancel()
-		c2, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPHeader: hdr})
+		c2, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPClient: f.HTTPClient(), HTTPHeader: hdr})
 		if !assert.NoErrorf(c, err, "websocket dial %q", wsURL) {
 			return
 		}
