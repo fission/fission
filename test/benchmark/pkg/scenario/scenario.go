@@ -290,45 +290,36 @@ func aggregateReps(reps []report.ScenarioResult) report.ScenarioResult {
 		last.SetMeta("failed_repetition", strconv.Itoa(len(reps)-1))
 		return last
 	}
-	agg := reps[0]
-	agg.Metrics = nil
-	// Fresh Meta map: the struct copy above aliases rep 0's map, and SetMeta
-	// below would otherwise mutate the rep's own result.
-	agg.Meta = nil
+	// Build the aggregate from scratch (no struct copy — that would alias
+	// rep 0's Meta map and mutate the rep's own result).
+	agg := report.ScenarioResult{Name: reps[0].Name, Tags: reps[0].Tags}
 	for k, v := range reps[0].Meta {
 		agg.SetMeta(k, v)
 	}
 	agg.SetMeta("repetitions", strconv.Itoa(len(reps)))
-	// Metric set is the union across reps (first-seen order), not rep 0's set:
-	// conditionally-emitted metrics (apiserver_calls drops its sample on a
-	// counter reset or scrape miss) must survive one rep missing them.
+	// Single sweep collecting values per metric name. The metric set is the
+	// union across reps (first-seen order), not rep 0's set: conditionally
+	// emitted metrics (apiserver_calls drops its sample on a counter reset or
+	// scrape miss) must survive one rep missing them.
 	var order []report.Metric
-	seen := map[string]bool{}
+	vals := map[string][]float64{}
 	for _, r := range reps {
 		for _, m := range r.Metrics {
-			if !seen[m.Name] {
-				seen[m.Name] = true
+			if _, ok := vals[m.Name]; !ok {
 				order = append(order, m)
 			}
+			vals[m.Name] = append(vals[m.Name], m.Value)
 		}
 	}
 	for _, m := range order {
-		vals := make([]float64, 0, len(reps))
-		for _, r := range reps {
-			for _, rm := range r.Metrics {
-				if rm.Name == m.Name {
-					vals = append(vals, rm.Value)
-					break
-				}
-			}
-		}
-		slices.Sort(vals)
-		med := vals[len(vals)/2]
-		if len(vals)%2 == 0 {
-			med = (vals[len(vals)/2-1] + vals[len(vals)/2]) / 2
+		v := vals[m.Name]
+		slices.Sort(v)
+		med := v[len(v)/2]
+		if len(v)%2 == 0 {
+			med = (v[len(v)/2-1] + v[len(v)/2]) / 2
 		}
 		agg.Metrics = append(agg.Metrics, report.Metric{Name: m.Name, Unit: m.Unit, Value: med, Better: m.Better})
-		agg.SetMeta(m.Name+"_range", fmt.Sprintf("%.3f..%.3f", vals[0], vals[len(vals)-1]))
+		agg.SetMeta(m.Name+"_range", fmt.Sprintf("%.3f..%.3f", v[0], v[len(v)-1]))
 	}
 	return agg
 }
@@ -355,10 +346,12 @@ func runOne(ctx context.Context, env *harness.Env, s Scenario, scopeLabel string
 		out.Skip = err.Error()
 	} else if err != nil {
 		out.Error = err.Error()
-	} else if after, afterOK := apiserverCalls(ctx, env); beforeOK && afterOK && after >= before {
+	} else if beforeOK {
 		// after < before means a counter reset (component restart) — drop the
 		// sample rather than report a bogus delta.
-		out.Add("apiserver_calls", "count", report.Lower, after-before)
+		if after, afterOK := apiserverCalls(ctx, env); afterOK && after >= before {
+			out.Add("apiserver_calls", "count", report.Lower, after-before)
+		}
 	}
 	res = out
 	return res

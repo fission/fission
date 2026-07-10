@@ -100,9 +100,11 @@ func addForwardedHostHeader(req *http.Request) {
 	// characters rather than net.ParseIP classification covers the mapped
 	// forms (whose To4() is non-nil despite the colons) and skips a parse.
 	// FQDNs and IPv4 stay unquoted.
-	host := "host=" + req.Host + ";"
+	var host string
 	if strings.ContainsRune(hostname, ':') || strings.HasPrefix(req.Host, "[") {
 		host = `host="` + req.Host + `";`
+	} else {
+		host = "host=" + req.Host + ";"
 	}
 
 	req.Header.Set(FORWARDED, host)

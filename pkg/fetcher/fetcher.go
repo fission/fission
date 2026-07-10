@@ -780,7 +780,9 @@ var pkgTransientRetrySchedule = []time.Duration{
 // getPkgInformation gets package information from k8s api server.
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
-	notFound, dial, transient := 0, 0, 0
+	// Each error class consumes its own schedule; when a class's slice is
+	// empty its budget is spent and the error is returned.
+	notFound, dial, transient := pkgNotFoundRetrySchedule, pkgDialRetrySchedule, pkgTransientRetrySchedule
 	for attempt := 0; ; attempt++ {
 		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
 			"package_name":      req.Package.Name,
@@ -799,18 +801,18 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 			return nil, err
 		}
 		switch netErr := network.Adapter(err); {
-		case k8serr.IsNotFound(err) && notFound < len(pkgNotFoundRetrySchedule):
-			time.Sleep(pkgNotFoundRetrySchedule[notFound])
-			notFound++
-		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) && dial < len(pkgDialRetrySchedule):
-			time.Sleep(pkgDialRetrySchedule[dial])
-			dial++
-		case !k8serr.IsNotFound(err) && transient < len(pkgTransientRetrySchedule):
+		case k8serr.IsNotFound(err) && len(notFound) > 0:
+			time.Sleep(notFound[0])
+			notFound = notFound[1:]
+		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) && len(dial) > 0:
+			time.Sleep(dial[0])
+			dial = dial[1:]
+		case !k8serr.IsNotFound(err) && len(transient) > 0:
 			// Any other error class (timeout, reset, throttle) gets the
 			// transient schedule — a single apiserver hiccup must not fail the
 			// cold start.
-			time.Sleep(pkgTransientRetrySchedule[transient])
-			transient++
+			time.Sleep(transient[0])
+			transient = transient[1:]
 		default:
 			return nil, err
 		}
@@ -918,13 +920,9 @@ const envSpecializeWaitBudget = 7 * time.Minute
 func envSpecializeRetryDelay(i int) time.Duration {
 	const base, maxDelay = 25 * time.Millisecond, 500 * time.Millisecond
 	if i >= 5 {
-		return maxDelay // 25ms<<5 already exceeds the cap
+		return maxDelay // 25ms<<5 already exceeds the cap (and huge i would overflow the shift)
 	}
-	d := base << i
-	if d > maxDelay {
-		return maxDelay
-	}
-	return d
+	return base << i // 25ms<<4 = 400ms, still under the cap
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes

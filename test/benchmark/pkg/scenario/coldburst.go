@@ -64,12 +64,14 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 	}
 
 	// Provision the target function(s) and route(s) before firing anything:
-	// creation must not overlap the measured burst.
-	routes := make([]string, 0, c.burst)
+	// creation must not overlap the measured burst. Provisioning is sequential
+	// (~4 apiserver round trips per function) but sits entirely outside the
+	// measured window, so it costs wall time only, never the numbers.
 	fnCount := 1
 	if c.distinct {
 		fnCount = c.burst
 	}
+	fnRoutes := make([]string, 0, fnCount)
 	for i := range fnCount {
 		fnName := sc.Name(fmt.Sprintf("fn%d", i))
 		route := "/" + fnName
@@ -85,13 +87,12 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 		if err := sc.CreateRoute(ctx, harness.RouteOptions{Name: sc.Name(fmt.Sprintf("route%d", i)), Function: fnName, URL: route}); err != nil {
 			return res, err
 		}
+		fnRoutes = append(fnRoutes, route)
 	}
+	// Burst target list: same-fn replicates the one route; distinct-fn is 1:1.
+	routes := make([]string, 0, c.burst)
 	for i := range c.burst {
-		fnIdx := 0
-		if c.distinct {
-			fnIdx = i
-		}
-		routes = append(routes, "/"+sc.Name(fmt.Sprintf("fn%d", fnIdx)))
+		routes = append(routes, fnRoutes[i%len(fnRoutes)])
 	}
 
 	// Fire the burst: one goroutine per request, each anchored by
