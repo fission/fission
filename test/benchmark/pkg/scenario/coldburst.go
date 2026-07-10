@@ -64,9 +64,7 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 	}
 
 	// Provision the target function(s) and route(s) before firing anything:
-	// creation must not overlap the measured burst. Provisioning is sequential
-	// (~4 apiserver round trips per function) but sits entirely outside the
-	// measured window, so it costs wall time only, never the numbers.
+	// creation must not overlap the measured burst.
 	fnCount := 1
 	if c.distinct {
 		fnCount = c.burst
@@ -123,9 +121,7 @@ func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 	}
 	// burst_max doubles as the makespan-from-propagation: every sample's clock
 	// is anchored by measureFirstSuccess's 404 gate, so the slowest request IS
-	// the wall time the burst took once routes were live. A naive
-	// wall-clock-from-fire makespan was measured and dropped — it absorbed
-	// route-propagation variance the scenario's design explicitly excludes.
+	// the wall time the burst took once routes were live.
 	res.Add("burst_p50", "ms", report.Lower, millis(percentile(samples, 50)))
 	res.Add("burst_p95", "ms", report.Lower, millis(percentile(samples, 95)))
 	res.Add("burst_max", "ms", report.Lower, millis(percentile(samples, 100)))

@@ -153,11 +153,7 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		{"fqdn host", "example.com:8888", "host=example.com:8888;"},
 		{"ipv4 host", "10.0.0.1:8888", "host=10.0.0.1:8888;"},
 		{"fqdn host without port", "example.com", "host=example.com;"},
-		// RFC 7239: an IPv6 node identifier contains colons and must be
-		// quoted. (The pre-rewrite implementation never quoted: its hostname
-		// extraction went through url.Parse of a "HTTP/1.1://host" pseudo-URL,
-		// which always yielded an empty hostname, so IPv6 took the FQDN
-		// branch.)
+		// RFC 7239: an IPv6 node identifier contains colons and must be quoted.
 		{"ipv6 host with port is quoted", "[2001:db8::1]:8888", `host="[2001:db8::1]:8888";`},
 		{"bare ipv6 host is quoted", "2001:db8::1", `host="2001:db8::1";`},
 		{"bracketed port-less ipv6 host is quoted", "[2001:db8::1]", `host="[2001:db8::1]";`},

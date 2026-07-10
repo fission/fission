@@ -808,9 +808,6 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 			time.Sleep(dial[0])
 			dial = dial[1:]
 		case !k8serr.IsNotFound(err) && len(transient) > 0:
-			// Any other error class (timeout, reset, throttle) gets the
-			// transient schedule — a single apiserver hiccup must not fail the
-			// cold start.
 			time.Sleep(transient[0])
 			transient = transient[1:]
 		default:
@@ -922,7 +919,7 @@ func envSpecializeRetryDelay(i int) time.Duration {
 	if i >= 5 {
 		return maxDelay // 25ms<<5 already exceeds the cap (and huge i would overflow the shift)
 	}
-	return base << i // 25ms<<4 = 400ms, still under the cap
+	return base << i
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes

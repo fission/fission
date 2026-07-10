@@ -133,11 +133,8 @@ func main() {
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
 
-	// GOMAXPROCS is deliberately left to the runtime: since Go 1.25 it is
-	// already derived from the cgroup CPU limit (rounded up, floor 2) and
-	// re-evaluated on in-place pod resize. Do not add automaxprocs here — its
-	// Set() floors fractional quotas to 1 and permanently disables the
-	// runtime's dynamic tracking, both strictly worse.
+	// GOMAXPROCS is left to the runtime: Go ≥1.25 derives it from the cgroup
+	// CPU quota (including on in-place resize); automaxprocs would regress that.
 
 	// ctrl.SetLogger targets controller-runtime's process-global logger. Set it
 	// once here, before any subsystem's Start builds its manager, so every

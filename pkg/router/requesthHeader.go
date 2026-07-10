@@ -36,8 +36,6 @@ func setFunctionMetadataToHeader(meta *metav1.ObjectMeta, request *http.Request)
 // setPathInfoToHeaders set URL path params and full URL path to request header
 func setPathInfoToHeader(request *http.Request) {
 	// retrieve url params and add them to request header
-	// (string concat, not Sprintf — this runs per path param per request;
-	// Header.Set canonicalizes the name either way)
 	vars := httpmux.Vars(request)
 	for k, v := range vars {
 		request.Header.Set("X-Fission-Params-"+k, v)

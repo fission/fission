@@ -37,9 +37,8 @@ type ScenarioResult struct {
 	Error   string            `json:"error,omitempty"`
 }
 
-// Add appends a metric. Non-finite values are dropped: json.Marshal rejects
-// NaN/±Inf, so a single poisoned sample would otherwise lose the entire run's
-// results file.
+// Add appends a metric, dropping non-finite values (json.Marshal rejects
+// NaN/±Inf).
 func (r *ScenarioResult) Add(name, unit, better string, value float64) {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return
