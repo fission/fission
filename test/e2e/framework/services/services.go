@@ -72,7 +72,9 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
 		})
 	})
-	f.AddServiceInfo("webhook", framework.ServiceInfo{Port: webhookPort})
+	if err := f.RegisterService("webhook", webhookPort); err != nil {
+		return err
+	}
 
 	executorPort, err := utils.FindFreePort()
 	if err != nil {
@@ -100,15 +102,12 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	runService("executor", func() error {
 		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
 	})
-	f.AddServiceInfo("executor", framework.ServiceInfo{Port: executorPort})
+	if err := f.RegisterService("executor", executorPort); err != nil {
+		return err
+	}
 
 	os.Setenv("PRUNE_ENABLED", "true")
 	os.Setenv("PRUNE_INTERVAL", "60")
-
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %w", err)
-	}
 
 	err = f.ToggleMetricAddr()
 	if err != nil {
@@ -127,7 +126,6 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	runService("builder manager", func() error {
 		return buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL)
 	})
-	f.AddServiceInfo("buildermgr", framework.ServiceInfo{})
 
 	os.Setenv("ROUTER_ROUND_TRIP_TIMEOUT", "50ms")
 	os.Setenv("ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT", "2")
@@ -165,8 +163,12 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	runService("router", func() error {
 		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
 	})
-	f.AddServiceInfo("router", framework.ServiceInfo{Port: routerPort})
-	f.AddServiceInfo("router-internal", framework.ServiceInfo{Port: internalRouterPort})
+	if err := f.RegisterService("router", routerPort); err != nil {
+		return err
+	}
+	if err := f.RegisterService("router-internal", internalRouterPort); err != nil {
+		return err
+	}
 	routerURL, err := f.GetServiceURL("router")
 	if err != nil {
 		return fmt.Errorf("error getting router URL: %w", err)
@@ -193,17 +195,14 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	runService("timer", func() error {
 		return timer.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
-	f.AddServiceInfo("timer", framework.ServiceInfo{})
 
 	runService("mqt scaler manager", func() error {
 		return mqtrigger.StartScalerManager(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
-	f.AddServiceInfo("mqtrigger-keda", framework.ServiceInfo{})
 
 	runService("kubewatcher", func() error {
 		return kubewatcher.Start(ctx, f.ClientGen(), f.Logger(), mgr, internalRouterURL)
 	})
-	f.AddServiceInfo("kubewatcher", framework.ServiceInfo{})
 
 	return nil
 }
@@ -223,7 +222,9 @@ func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.
 	if err != nil {
 		return storageSvcPort, fmt.Errorf("error starting storage service: %w", err)
 	}
-	f.AddServiceInfo("storagesvc", framework.ServiceInfo{Port: storageSvcPort})
+	if err := f.RegisterService("storagesvc", storageSvcPort); err != nil {
+		return storageSvcPort, err
+	}
 	storagesvcURL, err := f.GetServiceURL("storagesvc")
 	if err != nil {
 		return storageSvcPort, fmt.Errorf("error getting storage service URL: %w", err)

@@ -6,15 +6,14 @@ package framework
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"time"
 
+	portless "github.com/sanketsudake/go-portless"
+	"github.com/sanketsudake/go-portless/backend"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
@@ -25,15 +24,18 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-type ServiceInfo struct {
-	Port int
-}
-
 type Framework struct {
-	env         *envtest.Environment
-	config      *rest.Config
-	logger      logr.Logger
-	serviceInfo map[string]ServiceInfo
+	env    *envtest.Environment
+	config *rest.Config
+	logger logr.Logger
+	// reg maps service names to their local TCP addresses; dialing a
+	// registered name blocks until the backend accepts, so readiness
+	// waits happen inside the dial instead of in caller poll loops.
+	reg *portless.Registry
+	// ports remembers each service's local port so GetServiceURL can hand
+	// real dialable URLs to production consumers (in-process CLI,
+	// publishers) that read plain URLs from env vars.
+	ports map[string]int
 }
 
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
@@ -76,7 +78,8 @@ func NewFramework() *Framework {
 			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
-		serviceInfo: make(map[string]ServiceInfo),
+		reg:   portless.New(),
+		ports: make(map[string]int),
 	}
 }
 
@@ -116,6 +119,9 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 
 func (f *Framework) Stop() error {
 	f.logger.Info("Stopping test env")
+	if err := f.reg.Close(); err != nil {
+		f.logger.Error(err, "error closing portless registry")
+	}
 	err := f.env.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping test env: %w", err)
@@ -123,40 +129,37 @@ func (f *Framework) Stop() error {
 	return nil
 }
 
-func (f *Framework) AddServiceInfo(name string, info ServiceInfo) {
-	f.serviceInfo[name] = info
-	f.logger.Info("Added service", "name", name, "info", info)
+// RegisterService names a locally-bound service in the portless registry.
+// The service may still be starting: dials through the registry (WaitReady)
+// retry until the port accepts.
+func (f *Framework) RegisterService(name string, port int) error {
+	if _, err := f.reg.Add(context.Background(), name, backend.TCP(fmt.Sprintf("127.0.0.1:%d", port))); err != nil {
+		return fmt.Errorf("error registering service %s: %w", name, err)
+	}
+	f.ports[name] = port
+	f.logger.Info("Registered service", "name", name, "port", port)
+	return nil
 }
 
+// GetServiceURL returns the real local URL of a registered service. Production
+// consumers (the in-process CLI, publishers) dial these URLs with plain HTTP
+// clients, so they must stay resolvable outside the registry.
 func (f *Framework) GetServiceURL(name string) (string, error) {
-	info, ok := f.serviceInfo[name]
+	port, ok := f.ports[name]
 	if !ok {
 		return "", fmt.Errorf("service %s not found", name)
 	}
-	if info.Port == 0 {
-		return "", fmt.Errorf("service %s port not set", name)
-	}
-	return fmt.Sprintf("http://localhost:%d", info.Port), nil
+	return fmt.Sprintf("http://localhost:%d", port), nil
 }
 
-func (f *Framework) CheckService(name string) error {
-	_, err := f.GetServiceURL(name)
-	if err != nil {
-		return err
+// WaitReady blocks until the named service accepts TCP connections (or ctx
+// expires). This is an L4 probe — for the TLS webhook it checks accept, not
+// handshake, which suffices because controller-runtime loads certs before
+// listening. Replaces caller-side poll loops around the old CheckService.
+func (f *Framework) WaitReady(ctx context.Context, name string) error {
+	rt, ok := f.reg.Lookup(name)
+	if !ok {
+		return fmt.Errorf("service %s not found", name)
 	}
-	config := &tls.Config{
-		InsecureSkipVerify: true, //nolint:gosec // config is used to connect to our own webhook port.
-	}
-
-	d := &net.Dialer{Timeout: 10 * time.Second}
-	conn, err := tls.DialWithDialer(d, "tcp", net.JoinHostPort("localhost", strconv.Itoa(f.serviceInfo[name].Port)), config)
-	if err != nil {
-		return fmt.Errorf("webhook server is not reachable: %w", err)
-	}
-
-	if err := conn.Close(); err != nil {
-		return fmt.Errorf("webhook server is not reachable: closing connection: %w", err)
-	}
-
-	return nil
+	return rt.Ready(ctx)
 }

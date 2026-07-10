@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/e2e/framework"
@@ -39,12 +38,9 @@ func TestFissionCLI(t *testing.T) {
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
 
-	err = wait.PollUntilContextTimeout(ctx, time.Second*5, time.Second*50, true, func(_ context.Context) (bool, error) {
-		if err := f.CheckService("webhook"); err != nil {
-			return false, nil
-		}
-		return true, nil
-	})
+	readyCtx, readyCancel := context.WithTimeout(ctx, 50*time.Second)
+	defer readyCancel()
+	err = f.WaitReady(readyCtx, "webhook")
 	require.NoError(t, err)
 
 	fissionClient, err := f.ClientGen().GetFissionClient()
