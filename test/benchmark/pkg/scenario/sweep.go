@@ -34,10 +34,17 @@ func (c *concurrencySweep) Run(ctx context.Context, sc *harness.Scope) (report.S
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, c.poolsize, slices.Max(c.levels)+10, nil)
+	route, fnName, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, runtimeNode, c.poolsize, slices.Max(c.levels)+10, nil)
 	if err != nil {
 		return res, err
 	}
+	// Anchor after provisioning so the delta counts only sweep-triggered
+	// specializations — a warm sweep should stay near zero; a saturation
+	// storm (quarantine → executor fallback → new pod per request) shows up
+	// here directly instead of only as tail latency. Prometheus scrapes on an
+	// interval, so the warm-up's own cold start can lag into the delta by ±1;
+	// the threshold bar (10) absorbs that.
+	before, beforeOK := functionColdStarts(ctx, env, fnName)
 	for _, level := range c.levels {
 		if err := ctx.Err(); err != nil {
 			return res, err
@@ -49,6 +56,9 @@ func (c *concurrencySweep) Run(ctx context.Context, sc *harness.Scope) (report.S
 			Duration:    c.duration,
 		})
 		latencyMetrics(&res, fmt.Sprintf("c%d_", level), r)
+	}
+	if after, afterOK := functionColdStarts(ctx, env, fnName); beforeOK && afterOK && after >= before {
+		res.Add("specializations", "count", report.Lower, after-before)
 	}
 	return res, nil
 }
@@ -70,7 +80,7 @@ func (r *rpsSweep) Run(ctx context.Context, sc *harness.Scope) (report.ScenarioR
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, r.poolsize, slices.Max(r.levels)+10, nil)
+	route, _, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, runtimeNode, r.poolsize, slices.Max(r.levels)+10, nil)
 	if err != nil {
 		return res, err
 	}
@@ -106,7 +116,7 @@ func (p *payloadSweep) Run(ctx context.Context, sc *harness.Scope) (report.Scena
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, p.poolsize, p.concurrency+10, []string{http.MethodGet, http.MethodPost})
+	route, _, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, runtimeNode, p.poolsize, p.concurrency+10, []string{http.MethodGet, http.MethodPost})
 	if err != nil {
 		return res, err
 	}

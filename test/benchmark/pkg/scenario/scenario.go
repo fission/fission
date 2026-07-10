@@ -386,40 +386,77 @@ func addServerMetrics(ctx context.Context, env *harness.Env, res *report.Scenari
 	}
 }
 
+// warmRuntime selects the language runtime for a warm-path/sweep function.
+// Python's default server is single-threaded (bjoern), so it caps effective
+// pod concurrency at 1; Node's event loop serves many in-flight requests per
+// pod. warm-path stays python for trend continuity; the sweeps use node so
+// concurrency levels above 1 measure Fission, not the runtime.
+type warmRuntime int
+
+const (
+	runtimePython warmRuntime = iota
+	runtimeNode
+)
+
 // provisionWarmFunction creates an env + code function + route sized to serve
 // concurrent requests from a single warm pod (high requestsPerPod, so the
 // measurement isolates router/proxy overhead), and waits until it is routable —
 // which also warms it. For newdeploy/container the function pins minScale=1 so
 // a backing pod exists before load starts (poolmgr warms via its generic
-// pool). methods controls the route's allowed HTTP methods.
-func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, poolsize, requestsPerPod int, methods []string) (route string, err error) {
+// pool). methods controls the route's allowed HTTP methods. The returned
+// fnName feeds per-function PromQL (e.g. the cold-start counter delta).
+func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, runtime warmRuntime, poolsize, requestsPerPod int, methods []string) (route, fnName string, err error) {
 	env := sc.Env()
-	if env.Images.Python == "" {
-		return "", skip("PYTHON_RUNTIME_IMAGE unset")
+	image, code, entrypoint := env.Images.Python, pythonHello, "main"
+	if runtime == runtimeNode {
+		// Node v1 loads a single-file module with no entrypoint.
+		image, code, entrypoint = env.Images.Node, nodeHello, ""
+	}
+	if image == "" {
+		return "", "", skip("runtime image unset (PYTHON_RUNTIME_IMAGE / NODE_RUNTIME_IMAGE)")
 	}
 	envName := sc.Name("env")
-	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: env.Images.Python, Version: 1, Poolsize: poolsize}); err != nil {
-		return "", err
+	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: image, Version: 1, Poolsize: poolsize}); err != nil {
+		return "", "", err
 	}
 	minScale := 0
 	if executor != fv1.ExecutorTypePoolmgr {
 		minScale = 1
 	}
-	fnName := sc.Name("fn")
+	fnName = sc.Name("fn")
 	route = "/" + fnName
 	if err = sc.CreateCodeFunction(ctx, harness.FunctionOptions{
-		Name: fnName, Env: envName, Code: []byte(pythonHello), Entrypoint: "main",
+		Name: fnName, Env: envName, Code: []byte(code), Entrypoint: entrypoint,
 		ExecutorType: executor, MinScale: minScale, RequestsPerPod: requestsPerPod,
 	}); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err = sc.CreateRoute(ctx, harness.RouteOptions{Function: fnName, URL: route, Methods: methods}); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err = env.WaitForRoutable(ctx, route, 3*time.Minute); err != nil {
-		return "", fmt.Errorf("warm-up: %w", err)
+		return "", "", fmt.Errorf("warm-up: %w", err)
 	}
-	return route, nil
+	return route, fnName, nil
+}
+
+// functionColdStarts reads the executor's per-function specialization counter
+// (fission_function_cold_starts_total). An absent series reads as 0 with
+// ok=true when Prometheus is reachable — a warm function that never
+// specialized simply has no samples yet.
+func functionColdStarts(ctx context.Context, env *harness.Env, fnName string) (float64, bool) {
+	if !env.Capturer.PrometheusEnabled() {
+		return 0, false
+	}
+	q := fmt.Sprintf(`sum(fission_function_cold_starts_total{function_name=%q,function_namespace=%q})`, fnName, env.Namespace)
+	v, found, err := env.Capturer.QueryInstant(ctx, q)
+	if err != nil {
+		return 0, false
+	}
+	if !found {
+		return 0, true
+	}
+	return v, true
 }
 
 // snapshotPprof writes a labelled pprof snapshot for the scenario when an

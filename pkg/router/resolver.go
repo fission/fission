@@ -41,6 +41,22 @@ func (e ResolvedEntry) tapTarget() *url.URL {
 	return e.SvcURL
 }
 
+// InvalidateReason classifies the dial failure driving an Invalidate call, so
+// the index can tell a dead endpoint from a saturated one.
+type InvalidateReason int
+
+const (
+	// InvalidateHard marks the endpoint presumed dead: connection refused
+	// (port closed / pod gone), a non-timeout dial error, or the executor-
+	// cached path's retry ladder exhausting. Quarantines immediately.
+	InvalidateHard InvalidateReason = iota
+	// InvalidateSoft marks a dial timeout — how a saturated-but-alive pod
+	// presents (full SYN backlog). Quarantining a function's only endpoint on
+	// one of these turns saturation into an executor-fallback specialization
+	// storm, so soft failures only quarantine after repeated strikes.
+	InvalidateSoft
+)
+
 // AddressResolver resolves a function to a dialable service URL. It is the
 // single choke point of the data plane (RFC-0002): the executor-RPC resolver
 // is the legacy path (mode=off, and the fallback target), and the fallback
@@ -50,8 +66,9 @@ type AddressResolver interface {
 	// Resolve returns the service entry for fn.
 	Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error)
 	// Invalidate drops any cached state for fn's address. The transport calls
-	// it on the FIRST dial failure of an index-admitted endpoint (quarantine),
-	// and after the retry ladder for cached executor-resolved addresses. addr
-	// may be nil when no address had been resolved.
-	Invalidate(fn *fv1.Function, addr *url.URL)
+	// it on dial failure of an index-admitted endpoint (hard -> immediate
+	// quarantine, soft -> strike-counted) and after the retry ladder for
+	// cached executor-resolved addresses (hard). addr may be nil when no
+	// address had been resolved.
+	Invalidate(fn *fv1.Function, addr *url.URL, reason InvalidateReason)
 }

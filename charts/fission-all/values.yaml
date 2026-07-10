@@ -287,6 +287,14 @@ executor:
   ## nodes, and size it generously.
   ##
   specializationConcurrency: 0
+  ## maxPendingSpecializations bounds specializations IN FLIGHT per function on
+  ## the router's ensureCapacity path (EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION).
+  ## Unlike the function Concurrency cap (a total-pods budget, default 500), this
+  ## stops a saturated function from provisioning dozens of pods before any
+  ## becomes ready; excess requests get a fast 429. 0 disables. Unset uses the
+  ## executor default (20).
+  ##
+  # maxPendingSpecializations: 20
   ## podReadyTimeout represents the timeout in seconds for waiting for pod to become ready.
   ## This is applicable to Pool Manager executor type only.
   ##

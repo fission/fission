@@ -306,9 +306,9 @@ func TestReserveCapacity(t *testing.T) {
 	c := NewPoolCache(logr.Discard())
 
 	// concurrency=2: two reservations succeed, the third hits the cap.
-	require.NoError(t, c.ReserveCapacity(key, 2))
-	require.NoError(t, c.ReserveCapacity(key, 2))
-	err := c.ReserveCapacity(key, 2)
+	require.NoError(t, c.ReserveCapacity(key, 2, 0))
+	require.NoError(t, c.ReserveCapacity(key, 2, 0))
+	err := c.ReserveCapacity(key, 2, 0)
 	require.Error(t, err)
 	fe, ok := err.(ferror.Error)
 	require.True(t, ok)
@@ -316,13 +316,47 @@ func TestReserveCapacity(t *testing.T) {
 
 	// A failed specialization releases its reservation...
 	c.MarkSpecializationFailure(key)
-	require.NoError(t, c.ReserveCapacity(key, 2))
+	require.NoError(t, c.ReserveCapacity(key, 2, 0))
 
 	// ...and a successful one is consumed by setValue (the pod now counts via
 	// len(svcs) instead), keeping the cap exact.
 	c.SetSvcValue(t.Context(), key, "10.0.0.1:8888", &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}}, resource.MustParse("45m"), 10, 0)
-	err = c.ReserveCapacity(key, 2)
+	err = c.ReserveCapacity(key, 2, 0)
 	require.Error(t, err, "1 pod + 1 in-flight reservation == cap 2")
+}
+
+// TestReserveCapacityMaxPending locks the saturation-storm bound: in-flight
+// specializations are capped independently of (and far below) the concurrency
+// cap, released symmetrically, and 0 disables the bound (legacy behavior).
+func TestReserveCapacityMaxPending(t *testing.T) {
+	key := crd.CacheKeyURG{UID: "pending-fn", Generation: 1}
+	c := NewPoolCache(logr.Discard())
+
+	// concurrency far above the pending bound: the pending bound must fire
+	// first (the c500-collapse storm sat at 88 in-flight, well under the
+	// default concurrency of 500).
+	require.NoError(t, c.ReserveCapacity(key, 500, 2))
+	require.NoError(t, c.ReserveCapacity(key, 500, 2))
+	err := c.ReserveCapacity(key, 500, 2)
+	require.Error(t, err)
+	fe, ok := err.(ferror.Error)
+	require.True(t, ok)
+	require.EqualValues(t, ferror.ErrorTooManyRequests, fe.Code)
+
+	// A completed specialization frees a pending slot: the pod now counts
+	// toward concurrency (len(svcs)), not the in-flight bound.
+	c.SetSvcValue(t.Context(), key, "10.0.0.2:8888", &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}}, resource.MustParse("45m"), 10, 0)
+	require.NoError(t, c.ReserveCapacity(key, 500, 2))
+
+	// A failed one frees it too.
+	c.MarkSpecializationFailure(key)
+	require.NoError(t, c.ReserveCapacity(key, 500, 2))
+
+	// 0 disables the bound.
+	free := crd.CacheKeyURG{UID: "unbounded-fn", Generation: 1}
+	for range 50 {
+		require.NoError(t, c.ReserveCapacity(free, 0, 0))
+	}
 }
 
 // TestMarkSpecializationFailureUnknownKey guards the ensureCapacity error
@@ -332,7 +366,7 @@ func TestMarkSpecializationFailureUnknownKey(t *testing.T) {
 	c := NewPoolCache(logr.Discard())
 	c.MarkSpecializationFailure(crd.CacheKeyURG{UID: "never-seen", Generation: 1})
 	// The cache survives: a follow-up request still gets served.
-	require.NoError(t, c.ReserveCapacity(crd.CacheKeyURG{UID: "never-seen", Generation: 1}, 0))
+	require.NoError(t, c.ReserveCapacity(crd.CacheKeyURG{UID: "never-seen", Generation: 1}, 0, 0))
 }
 
 // TestPoolCacheTouchByAddress locks the RFC-0002 tap-liveness fix: the

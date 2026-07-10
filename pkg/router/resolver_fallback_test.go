@@ -261,7 +261,7 @@ func TestFallbackInvalidateQuarantinesEndpoint(t *testing.T) {
 
 	fn := poolFn("fn-q")
 	addr := mustParseURL(t, "http://10.0.0.1:8888")
-	f.Invalidate(fn, addr)
+	f.Invalidate(fn, addr, InvalidateHard)
 
 	// The quarantined endpoint is unadmissible. With one ready-but-quarantined
 	// endpoint this takes the saturated-fallback branch (ready > 0, nil

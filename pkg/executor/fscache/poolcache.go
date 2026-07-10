@@ -170,7 +170,12 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 // cap. The svcWaiting reservation is symmetric with GetSvcValue's: a
 // successful specialization decrements it in SetSvcValue, a failed one in
 // MarkSpecializationFailure.
-func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency int) error {
+// maxPending additionally bounds specializations in flight at once,
+// independently of the concurrency cap (a total-pods budget); 0 disables.
+// Exceeding either bound returns ErrorTooManyRequests, which the router
+// relays to the client as a fast 429. Sizing rationale lives on
+// poolmgr.defaultMaxPendingSpecializations.
+func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency, maxPending int) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -179,9 +184,13 @@ func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency int) e
 		grp = NewFuncSvcGroup()
 		c.cache[function] = grp
 	}
-	concurrencyUsed := len(grp.svcs) + (grp.svcWaiting - grp.queue.Len())
+	pending := grp.svcWaiting - grp.queue.Len()
+	concurrencyUsed := len(grp.svcs) + pending
 	if concurrency > 0 && concurrencyUsed >= concurrency {
 		return ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' concurrency '%d' limit reached.", function, concurrency))
+	}
+	if maxPending > 0 && pending >= maxPending {
+		return ferror.MakeError(ferror.ErrorTooManyRequests, fmt.Sprintf("function '%s' already has %d specializations in flight (cap %d).", function, pending, maxPending))
 	}
 	grp.svcWaiting++
 	return nil

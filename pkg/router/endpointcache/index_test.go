@@ -328,3 +328,72 @@ func TestAdmit(t *testing.T) {
 		assert.Equal(t, int64(goroutines), admitted.Load()+refused.Load())
 	})
 }
+
+// TestReportDialTimeout pins the strike escalation: a dial timeout is how a
+// saturated-but-alive pod presents, so soft failures must not quarantine a
+// function's only endpoint until the strike limit is reached within one TTL
+// window.
+func TestReportDialTimeout(t *testing.T) {
+	t.Parallel()
+
+	t.Run("quarantines only at the strike limit", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		for i := 1; i < dialTimeoutStrikeLimit; i++ {
+			assert.Falsef(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "strike %d must not quarantine", i)
+			_, release, result := ix.Admit("default", "fn-a", 1)
+			require.Equalf(t, Admitted, result, "endpoint must stay admissible after strike %d", i)
+			release()
+		}
+		assert.True(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "the limit-th strike escalates")
+		_, _, result := ix.Admit("default", "fn-a", 1)
+		assert.Equal(t, AllQuarantined, result)
+	})
+
+	t.Run("strikes lapse with the window", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.quarantineTTL = 30 * time.Millisecond
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		time.Sleep(60 * time.Millisecond)
+		// The window lapsed: the count restarts, so this is strike 1 again.
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"),
+			"stale strikes must not accumulate across windows")
+	})
+
+	t.Run("slice events clear pending strikes", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"),
+			"a slice event resets the strike count")
+	})
+
+	t.Run("unknown function is a no-op", func(t *testing.T) {
+		t.Parallel()
+		ix := NewIndex()
+		assert.False(t, ix.ReportDialTimeout("default", "nope", "10.0.0.1:8888"))
+	})
+}
+
+func TestReportDialTimeoutIgnoredWhileQuarantined(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+	ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+
+	// In-flight requests keep timing out after the quarantine stores; those
+	// reports must not bank strikes that outlive the quarantine window.
+	for range dialTimeoutStrikeLimit + 2 {
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+	}
+}

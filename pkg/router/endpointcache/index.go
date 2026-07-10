@@ -34,6 +34,22 @@ const shardCount = 64
 // a genuinely dead pod just gets re-quarantined by the next dial failure.
 const DefaultQuarantineTTL = 30 * time.Second
 
+// dialTimeoutStrikeLimit is how many dial timeouts an address absorbs within
+// one TTL window before it is quarantined. A dial timeout is how a
+// saturated-but-alive pod presents (SYN backlog full), so a single strike must
+// not remove a function's only endpoint — that turns saturation into an
+// executor-fallback specialization storm. A truly dead-but-Ready pod still
+// quarantines after this many failed dials; connection refusals (port closed,
+// pod gone) skip strikes and quarantine immediately.
+const dialTimeoutStrikeLimit = 3
+
+// dialStrike is one address's soft-failure record; count resets when the
+// window lapses.
+type dialStrike struct {
+	count  int
+	expiry time.Time
+}
+
 type (
 	// FnKey identifies a function by its CR coordinates (the labels mirrored
 	// from the function's Service onto its slices).
@@ -94,6 +110,11 @@ type (
 		// DefaultQuarantineTTL). Copy-on-write (like eps) so Admit reads it
 		// lock-free; writes happen under mu.
 		quarantined atomic.Pointer[map[string]time.Time]
+		// strikes counts soft dial failures (timeouts) per address, escalated
+		// to a quarantine at dialTimeoutStrikeLimit. Only touched on failure
+		// reports (never by Admit), so a plain mu-guarded map suffices;
+		// cleared alongside quarantined on slice events.
+		strikes map[string]dialStrike
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
 		// readers load it without taking mu.
 		eps atomic.Pointer[[]Endpoint]
@@ -237,10 +258,11 @@ func (ix *Index) ApplySlice(es *discoveryv1.EndpointSlice) {
 
 	e.mu.Lock()
 	e.slices[sliceKey] = endpointsFromSlice(es)
-	// Any slice event for this function lifts quarantines: dead endpoints have
-	// been (or are being) removed by the slice controller, so survivors are
-	// trustworthy again.
+	// Any slice event for this function lifts quarantines (and pending
+	// strikes): dead endpoints have been (or are being) removed by the slice
+	// controller, so survivors are trustworthy again.
 	e.quarantined.Store(nil)
+	e.strikes = nil
 	e.rebuildLocked()
 	e.mu.Unlock()
 }
@@ -265,6 +287,7 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 	e.mu.Lock()
 	delete(e.slices, sliceKey)
 	e.quarantined.Store(nil)
+	e.strikes = nil
 	empty := len(e.slices) == 0
 	e.rebuildLocked()
 	e.mu.Unlock()
@@ -430,15 +453,28 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 	if !ok {
 		return
 	}
-	now := time.Now()
 	e.mu.Lock()
+	stored := e.quarantineLocked(address, time.Now(), ix.quarantineTTL)
+	e.mu.Unlock()
+	if stored {
+		RecordQuarantine()
+	}
+}
+
+// quarantineLocked writes address into the copy-on-write quarantine map;
+// callers hold e.mu. It reports whether a new (or expired-and-renewed)
+// quarantine was stored — false means the address was already quarantined
+// (idempotent: a dead-pod storm reports the same address from many in-flight
+// requests, and only the first copy-and-store matters).
+func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Duration) bool {
+	// A quarantine consumes any pending strikes for the address: without this
+	// a hard quarantine would leave stale strikes behind, and the first soft
+	// failure after the TTL expires could escalate off old state.
+	delete(e.strikes, address)
 	cur := e.quarantined.Load()
 	if cur != nil {
 		if expiry, already := (*cur)[address]; already && now.Before(expiry) {
-			// Idempotent: a dead-pod storm quarantines the same address from
-			// many in-flight requests — only the first copy-and-store matters.
-			e.mu.Unlock()
-			return
+			return false
 		}
 	}
 	next := make(map[string]time.Time)
@@ -451,8 +487,64 @@ func (ix *Index) Quarantine(namespace, name, address string) {
 			}
 		}
 	}
-	next[address] = now.Add(ix.quarantineTTL)
+	next[address] = now.Add(ttl)
 	e.quarantined.Store(&next)
+	return true
+}
+
+// ReportDialTimeout records a soft dial failure for an address, quarantining
+// only after dialTimeoutStrikeLimit strikes land within one TTL window (see
+// that constant for the saturation rationale). Strikes are cleared by slice
+// events (like quarantines) and lapse with the window. The return value
+// reports whether THIS call stored a new quarantine — false both below the
+// limit and when a concurrent report already quarantined the address, so
+// callers can log escalations without storm-duplicated noise.
+func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
+	key := FnKey{Namespace: namespace, Name: name}
+	s := ix.shard(key)
+	s.mu.RLock()
+	e, ok := s.m[key]
+	s.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	now := time.Now()
+	e.mu.Lock()
+	// Timeouts reported while the address is already quarantined don't count:
+	// in-flight requests keep failing after the first quarantine stores, and
+	// their strikes would outlive the quarantine window and re-quarantine the
+	// endpoint faster than dialTimeoutStrikeLimit once it's admissible again.
+	if cur := e.quarantined.Load(); cur != nil {
+		if expiry, already := (*cur)[address]; already && now.Before(expiry) {
+			e.mu.Unlock()
+			return false
+		}
+	}
+	if e.strikes == nil {
+		e.strikes = make(map[string]dialStrike)
+	}
+	rec := e.strikes[address]
+	if now.After(rec.expiry) {
+		rec.count = 0
+	}
+	rec.count++
+	if rec.count == 1 {
+		// The window is anchored at the FIRST strike (fixed, not sliding):
+		// refreshing the expiry per strike would let sporadic timeouts —
+		// one every ~TTL, never dialTimeoutStrikeLimit within any single
+		// window — accumulate forever and quarantine a healthy pod.
+		rec.expiry = now.Add(ix.quarantineTTL)
+	}
+	if rec.count >= dialTimeoutStrikeLimit {
+		stored := e.quarantineLocked(address, now, ix.quarantineTTL)
+		e.mu.Unlock()
+		if stored {
+			RecordQuarantine()
+		}
+		return stored
+	}
+	e.strikes[address] = rec
 	e.mu.Unlock()
-	RecordQuarantine()
+	RecordDialTimeoutStrike()
+	return false
 }

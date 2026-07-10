@@ -132,8 +132,8 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 // ReserveCapacity atomically checks the function's concurrency cap and
 // reserves one in-flight specialization in the pool cache (RFC-0002
 // ensureCapacity); returns a TooManyRequests ferror at the cap.
-func (fsc *FunctionServiceCache) ReserveCapacity(key crd.CacheKeyURG, concurrency int) error {
-	return fsc.connFunctionCache.ReserveCapacity(key, concurrency)
+func (fsc *FunctionServiceCache) ReserveCapacity(key crd.CacheKeyURG, concurrency, maxPending int) error {
+	return fsc.connFunctionCache.ReserveCapacity(key, concurrency, maxPending)
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
