@@ -492,12 +492,11 @@ func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Durat
 	return true
 }
 
-// ReportDialTimeout records a soft dial failure (dial timeout) for an address.
-// A timeout is how a saturated-but-alive pod presents, so unlike a connection
-// refusal it does not quarantine on the first report — only after
-// dialTimeoutStrikeLimit strikes land within one TTL window. Strikes are
-// cleared by slice events (like quarantines) and lapse with the window. The
-// return value reports whether this strike escalated to a quarantine.
+// ReportDialTimeout records a soft dial failure for an address, quarantining
+// only after dialTimeoutStrikeLimit strikes land within one TTL window (see
+// that constant for the saturation rationale). Strikes are cleared by slice
+// events (like quarantines) and lapse with the window. The return value
+// reports whether this strike escalated to a quarantine.
 func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)

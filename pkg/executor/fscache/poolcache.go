@@ -170,12 +170,11 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 // cap. The svcWaiting reservation is symmetric with GetSvcValue's: a
 // successful specialization decrements it in SetSvcValue, a failed one in
 // MarkSpecializationFailure.
-// maxPending additionally bounds the number of specializations in flight at
-// once (0 disables): the concurrency cap (default 500) is a total-pods
-// budget, far too loose to stop a saturation storm from specializing dozens
-// of pods for one function before any of them becomes ready. Exceeding either
-// bound returns ErrorTooManyRequests, which the router relays to the client
-// as a fast 429 instead of piling more provisioning on.
+// maxPending additionally bounds specializations in flight at once,
+// independently of the concurrency cap (a total-pods budget); 0 disables.
+// Exceeding either bound returns ErrorTooManyRequests, which the router
+// relays to the client as a fast 429. Sizing rationale lives on
+// poolmgr.defaultMaxPendingSpecializations.
 func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency, maxPending int) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()

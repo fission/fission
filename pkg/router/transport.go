@@ -368,12 +368,9 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 		// An index-admitted endpoint (release != nil) that fails a dial is
 		// reported: re-resolving the index would happily re-admit the same
 		// endpoint (connection refused never increments retryCounter) until
-		// maxRetries burn out, so the index must be told. Classification
-		// matters — a refused/unreachable dial means the pod is gone
-		// (quarantine now), while a dial TIMEOUT is how a saturated-but-alive
-		// pod presents and only strikes toward quarantine, so saturation
-		// degrades instead of evicting the function's only endpoint. The
-		// quarantine lifts on the next slice event for the function.
+		// maxRetries burn out, so the index must be told. Refused/unreachable
+		// dials quarantine now; dial timeouts are strike-counted (see
+		// endpointcache.dialTimeoutStrikeLimit for the saturation rationale).
 		if roundTripper.release != nil {
 			reason := InvalidateHard
 			if isNetTimeoutErr {

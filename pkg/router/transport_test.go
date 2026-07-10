@@ -515,15 +515,12 @@ func (*timeoutErr) Temporary() bool { return true }
 // on every Resolve and tallies Invalidate calls by reason.
 type reasonRecordingResolver struct {
 	answer *url.URL
-	calls  atomic.Int64
 	soft   atomic.Int64
 	hard   atomic.Int64
 }
 
 func (s *reasonRecordingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
-	s.calls.Add(1)
-	var once sync.Once
-	return ResolvedEntry{SvcURL: s.answer, FromCache: true, Release: func() { once.Do(func() {}) }}, nil
+	return ResolvedEntry{SvcURL: s.answer, FromCache: true, Release: func() {}}, nil
 }
 
 func (s *reasonRecordingResolver) Invalidate(_ *fv1.Function, _ *url.URL, reason InvalidateReason) {

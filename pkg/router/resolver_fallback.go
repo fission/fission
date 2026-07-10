@@ -177,19 +177,15 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 	return ResolvedEntry{SvcURL: svcURL}, nil
 }
 
-// Invalidate handles a reported dial failure: hard failures (refused, dead
-// endpoint) quarantine immediately; soft failures (dial timeout — how a
-// saturated pod presents) count strikes and quarantine only when the limit is
-// reached, so saturation does not evict a function's only endpoint and cascade
-// into an executor-fallback specialization storm. Both drop the executor
-// resolver's cached address. Quarantines log at Info: they are rare, and a
-// partial quarantine (one bad pod among many) is otherwise invisible — the
-// aggregate fallback metric only fires when every endpoint of a function is
-// out.
+// Invalidate handles a reported dial failure: hard failures quarantine the
+// endpoint immediately, soft ones are strike-counted (see
+// endpointcache.ReportDialTimeout). Both drop the executor resolver's cached
+// address. Quarantines log at Info: they are rare, and a partial quarantine
+// (one bad pod among many) is otherwise invisible — the aggregate fallback
+// metric only fires when every endpoint of a function is out.
 func (f *fallbackResolver) Invalidate(fn *fv1.Function, addr *url.URL, reason InvalidateReason) {
 	if addr != nil {
-		switch reason {
-		case InvalidateSoft:
+		if reason == InvalidateSoft {
 			if f.index.ReportDialTimeout(fn.Namespace, fn.Name, addr.Host) {
 				f.logger.Info("quarantining endpoint after repeated dial timeouts",
 					"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
@@ -197,7 +193,7 @@ func (f *fallbackResolver) Invalidate(fn *fv1.Function, addr *url.URL, reason In
 				f.logger.V(1).Info("dial timeout strike recorded",
 					"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
 			}
-		default:
+		} else {
 			f.logger.Info("quarantining endpoint after dial failure",
 				"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
 			f.index.Quarantine(fn.Namespace, fn.Name, addr.Host)
