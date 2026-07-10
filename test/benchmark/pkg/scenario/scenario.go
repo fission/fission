@@ -75,8 +75,16 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 // back to DefaultParams via normalize. Field tags let it load directly from the
 // scenarios YAML.
 type Params struct {
-	Poolsize          int                `json:"poolsize"`
-	ColdIterations    int                `json:"coldIterations"`
+	Poolsize       int `json:"poolsize"`
+	ColdIterations int `json:"coldIterations"`
+	// Repetitions re-runs every selected scenario N times (each in a fresh
+	// Scope) and reports the per-metric median plus min..max spread, so a
+	// single noisy cluster sample can't masquerade as a regression or a win.
+	Repetitions int `json:"repetitions"`
+	// BurstSize is the number of simultaneous first-requests the cold-burst
+	// scenarios fire; sized above Poolsize so the burst forces pool exhaustion
+	// and refill rather than being absorbed by warm pods.
+	BurstSize         int                `json:"burstSize"`
 	WarmDuration      Duration           `json:"warmDuration"`
 	WarmWarmup        Duration           `json:"warmWarmup"`
 	WarmConcurrency   int                `json:"warmConcurrency"`
@@ -102,6 +110,8 @@ func DefaultParams() Params {
 	return Params{
 		Poolsize:             3,
 		ColdIterations:       20,
+		Repetitions:          1,
+		BurstSize:            10,
 		WarmDuration:         Duration(60 * time.Second),
 		WarmWarmup:           Duration(10 * time.Second),
 		WarmConcurrency:      50,
@@ -126,6 +136,12 @@ func (p Params) normalize() Params {
 	}
 	if p.ColdIterations == 0 {
 		p.ColdIterations = d.ColdIterations
+	}
+	if p.Repetitions == 0 {
+		p.Repetitions = d.Repetitions
+	}
+	if p.BurstSize == 0 {
+		p.BurstSize = d.BurstSize
 	}
 	if p.WarmDuration == 0 {
 		p.WarmDuration = d.WarmDuration
@@ -180,7 +196,11 @@ func BuildAll(p Params) []Scenario {
 		out = append(out, &coldStart{executor: ex, iterations: p.ColdIterations, poolsize: p.Poolsize})
 	}
 	out = append(out, &coldStartConfigDeps{iterations: p.ColdIterations, poolsize: p.Poolsize, secrets: p.ConfigDepsSecrets, configMaps: p.ConfigDepsConfigMaps})
-	out = append(out, &warmPath{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
+	out = append(out, &coldBurst{distinct: false, burst: p.BurstSize, poolsize: p.Poolsize})
+	out = append(out, &coldBurst{distinct: true, burst: p.BurstSize, poolsize: p.Poolsize})
+	for _, ex := range p.Executors {
+		out = append(out, &warmPath{executor: ex, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
+	}
 	out = append(out, &concurrencySweep{levels: p.ConcurrencyLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &rpsSweep{levels: p.RPSLevels, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), poolsize: p.Poolsize})
 	out = append(out, &payloadSweep{sizes: p.PayloadSizes, duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
@@ -225,19 +245,38 @@ func Names(all []Scenario) []string {
 }
 
 // Run executes the scenarios against env, isolating each in its own Scope and
-// always cleaning up. A scenario error or skip is recorded in the result and the
-// run continues (failure budget).
-func Run(ctx context.Context, env *harness.Env, scenarios []Scenario) report.Run {
+// always cleaning up. repetitions > 1 re-runs each scenario in fresh scopes and
+// folds the results via report.Aggregate. A scenario error or skip is recorded
+// in the result and the run continues (failure budget).
+func Run(ctx context.Context, env *harness.Env, scenarios []Scenario, repetitions int) report.Run {
+	if repetitions < 1 {
+		repetitions = 1
+	}
 	run := report.Run{RunID: env.RunID, StartedAt: time.Now()}
 	for _, s := range scenarios {
-		run.Scenarios = append(run.Scenarios, runOne(ctx, env, s))
+		reps := make([]report.ScenarioResult, 0, repetitions)
+		for rep := range repetitions {
+			label := s.Name()
+			if repetitions > 1 {
+				// The rep index keeps resource names distinct across reps: the
+				// previous rep's cleanup is detached and may still be deleting
+				// same-named resources when the next rep provisions.
+				label = fmt.Sprintf("%s-r%d", s.Name(), rep)
+			}
+			res := runOne(ctx, env, s, label)
+			reps = append(reps, res)
+			if res.Skipped || res.Error != "" {
+				break // a skip is deterministic; an error already fails the gate
+			}
+		}
+		run.Scenarios = append(run.Scenarios, report.Aggregate(reps))
 	}
 	run.FinishedAt = time.Now()
 	return run
 }
 
-func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.ScenarioResult) {
-	sc := env.NewScope(s.Name())
+func runOne(ctx context.Context, env *harness.Env, s Scenario, scopeLabel string) (res report.ScenarioResult) {
+	sc := env.NewScope(scopeLabel)
 	res.Name = s.Name()
 	res.Tags = s.Tags()
 	defer func() {
@@ -249,6 +288,7 @@ func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.Scena
 		_ = sc.CleanupDetached(ctx, 2*time.Minute)
 	}()
 
+	before, beforeOK := apiserverCalls(ctx, env)
 	out, err := s.Run(ctx, sc)
 	out.Name = s.Name()
 	out.Tags = s.Tags()
@@ -257,9 +297,34 @@ func runOne(ctx context.Context, env *harness.Env, s Scenario) (res report.Scena
 		out.Skip = err.Error()
 	} else if err != nil {
 		out.Error = err.Error()
+	} else if beforeOK {
+		// after < before means a counter reset (component restart) — drop the
+		// sample rather than report a bogus delta.
+		if after, afterOK := apiserverCalls(ctx, env); afterOK && after >= before {
+			out.Add("apiserver_calls", "count", report.Lower, after-before)
+		}
 	}
 	res = out
 	return res
+}
+
+// apiserverCalls sums the control-plane components' client-side apiserver
+// request counters. rest_client_requests_total is registered by
+// controller-runtime's metrics registry in every fission binary, so a
+// before/after delta attributes a scenario's apiserver traffic to Fission —
+// something apiserver_request_total (which has no user-agent label) cannot.
+// Prometheus scrapes on an interval, so the delta trails by up to one scrape;
+// treat it as an attribution signal for A/B comparisons, not an exact count.
+func apiserverCalls(ctx context.Context, env *harness.Env) (float64, bool) {
+	if !env.Capturer.PrometheusEnabled() {
+		return 0, false
+	}
+	q := fmt.Sprintf(`sum(rest_client_requests_total{namespace=%q})`, env.FissionNamespace())
+	v, found, err := env.Capturer.QueryInstant(ctx, q)
+	if err != nil || !found {
+		return 0, false
+	}
+	return v, true
 }
 
 func isSkip(err error) bool {
@@ -321,11 +386,13 @@ func addServerMetrics(ctx context.Context, env *harness.Env, res *report.Scenari
 	}
 }
 
-// provisionWarmFunction creates a poolmgr env + code function + route sized to
-// serve concurrent requests from a single warm pod (high requestsPerPod, so the
+// provisionWarmFunction creates an env + code function + route sized to serve
+// concurrent requests from a single warm pod (high requestsPerPod, so the
 // measurement isolates router/proxy overhead), and waits until it is routable —
-// which also warms it. methods controls the route's allowed HTTP methods.
-func provisionWarmFunction(ctx context.Context, sc *harness.Scope, poolsize, requestsPerPod int, methods []string) (route string, err error) {
+// which also warms it. For newdeploy/container the function pins minScale=1 so
+// a backing pod exists before load starts (poolmgr warms via its generic
+// pool). methods controls the route's allowed HTTP methods.
+func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, poolsize, requestsPerPod int, methods []string) (route string, err error) {
 	env := sc.Env()
 	if env.Images.Python == "" {
 		return "", skip("PYTHON_RUNTIME_IMAGE unset")
@@ -334,11 +401,15 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, poolsize, req
 	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: env.Images.Python, Version: 1, Poolsize: poolsize}); err != nil {
 		return "", err
 	}
+	minScale := 0
+	if executor != fv1.ExecutorTypePoolmgr {
+		minScale = 1
+	}
 	fnName := sc.Name("fn")
 	route = "/" + fnName
 	if err = sc.CreateCodeFunction(ctx, harness.FunctionOptions{
 		Name: fnName, Env: envName, Code: []byte(pythonHello), Entrypoint: "main",
-		ExecutorType: fv1.ExecutorTypePoolmgr, RequestsPerPod: requestsPerPod,
+		ExecutorType: executor, MinScale: minScale, RequestsPerPod: requestsPerPod,
 	}); err != nil {
 		return "", err
 	}

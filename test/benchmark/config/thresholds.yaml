@@ -13,3 +13,9 @@ scenarios:
   cold-start-poolmgr:
     metrics:
       failures: { max: 5 } # at most 5 of N iterations may fail to specialize
+  cold-burst-same-fn:
+    metrics:
+      failures: { max: 3 } # of burstSize concurrent first-requests
+  cold-burst-distinct-fn:
+    metrics:
+      failures: { max: 3 }

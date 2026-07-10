@@ -752,12 +752,14 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 // getPkgInformation gets package information from k8s api server.
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
-	maxRetries := 5
-	for i := range maxRetries {
+	// Each error class consumes its own schedule; when a class's schedule is
+	// empty its budget is spent and the error is returned.
+	notFound, dial, transient := pkgNotFoundRetrySchedule, pkgDialRetrySchedule, pkgTransientRetrySchedule
+	for attempt := 0; ; attempt++ {
 		otelUtils.SpanTrackEvent(ctx, "fetchPkgInfo", otelUtils.MapToAttributes(map[string]string{
 			"package_name":      req.Package.Name,
 			"package_namespace": req.Package.Namespace,
-			"retry_count":       strconv.Itoa(i),
+			"retry_count":       strconv.Itoa(attempt),
 		})...)
 		// TODO: pass resource version in the GetOptions, added warning for now
 		pkg, err = fetcher.fissionClient.CoreV1().Packages(req.Package.Namespace).Get(ctx, req.Package.Name, metav1.GetOptions{})
@@ -767,27 +769,22 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 			}
 			return pkg, nil
 		}
-		if i < maxRetries-1 {
-			// In some cases, creating a package and querying the package info
-			// immediately, the Kubernetes API server will return "not found"
-			// error. So retry the query again after some time.
-
-			if k8serr.IsNotFound(err) {
-				time.Sleep(50 * time.Duration(i+1) * time.Millisecond)
-				continue
-			}
-
-			// All outbound requests are blocked if istio is enabled at the first seconds.
-			// So if an error is a "connection refused" or "dial" error, wait for a while
-			// before retrying so that envoy proxy will start to serve requests.
-			// For details, see https://github.com/istio/istio/issues/12187
-			netErr := network.Adapter(err)
-			if netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) {
-				time.Sleep(500 * time.Duration(i+1) * time.Millisecond)
-			}
+		// Classify, then consume from that class's schedule only.
+		sched := &transient
+		switch netErr := network.Adapter(err); {
+		case k8serr.IsNotFound(err):
+			sched = &notFound
+		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()):
+			sched = &dial
 		}
+		if len(*sched) == 0 {
+			return nil, err
+		}
+		if !sleepCtx(ctx, (*sched)[0]) {
+			return nil, err
+		}
+		*sched = (*sched)[1:]
 	}
-	return nil, err
 }
 
 func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetchRequest, loadReq FunctionLoadRequest) (int, error) {
@@ -815,7 +812,6 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	// Specialize the pod
 
-	maxRetries := 30
 	var contentType string
 	var specializeURL string
 	var reader *bytes.Reader
@@ -840,7 +836,8 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		logger.Info("calling environment v1 specialization endpoint")
 	}
 
-	for i := range maxRetries {
+	deadline := time.Now().Add(envSpecializeWaitBudget)
+	for attempt := 0; ; attempt++ {
 		otelUtils.SpanTrackEvent(ctx, "specializeCall", otelUtils.MapToAttributes(map[string]string{
 			"url": specializeURL,
 		})...)
@@ -854,9 +851,15 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		netErr := network.Adapter(err)
 		// Only retry for the specific case of a connection error.
 		if netErr != nil && (netErr.IsConnRefusedError() || netErr.IsDialError()) {
-			if i < maxRetries-1 {
-				time.Sleep(500 * time.Duration(2*i) * time.Millisecond)
-				logger.Error(netErr, "error connecting to function environment pod for specialization request, retrying")
+			if ctx.Err() == nil && time.Now().Before(deadline) {
+				// Retries are frequent now, so log the wait once per ~10s of
+				// capped delay instead of once per attempt.
+				if attempt%20 == 0 {
+					logger.Error(netErr, "error connecting to function environment pod for specialization request, retrying")
+				}
+				if !sleepCtx(ctx, envSpecializeRetryDelay(attempt)) {
+					return http.StatusInternalServerError, fmt.Errorf("error specializing function pod: %w", ctx.Err())
+				}
 				continue
 			}
 		}
@@ -872,8 +875,6 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		}
 		return statusCode, fmt.Errorf("error specializing function pod: %w", err)
 	}
-
-	return http.StatusInternalServerError, fmt.Errorf("error specializing function pod after %v times: %w", maxRetries, err)
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes

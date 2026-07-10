@@ -51,7 +51,10 @@ func (s *Scope) CreateEnv(ctx context.Context, o EnvOptions) error {
 		},
 	}
 	if o.Builder != "" {
-		env.Spec.Builder = fv1.Builder{Image: o.Builder}
+		// Command must mirror the CLI default ("build", resolved on the builder
+		// image's PATH): with an empty command the builder falls back to /build,
+		// which the env builder images don't ship.
+		env.Spec.Builder = fv1.Builder{Image: o.Builder, Command: "build"}
 	}
 	if _, err := s.env.Clients.Fission.CoreV1().Environments(ns).Create(ctx, env, metav1.CreateOptions{}); err != nil {
 		return fmt.Errorf("create environment %q: %w", o.Name, err)

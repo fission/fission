@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,7 +78,16 @@ func (c *Capturer) QueryInstant(ctx context.Context, promQL string) (value float
 		return 0, false, fmt.Errorf("unexpected prometheus value type %T", resp.Data.Result[0].Value[1])
 	}
 	v, err := strconv.ParseFloat(s, 64)
-	return v, err == nil, err
+	if err != nil {
+		return 0, false, err
+	}
+	// PromQL yields NaN for 0/0 rate ratios (and ±Inf for x/0); treat those as
+	// "no sample" — a non-finite value poisons the results JSON (json.Marshal
+	// rejects NaN), losing the entire run's output.
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false, nil
+	}
+	return v, true, nil
 }
 
 // QueryRangeRaw runs a range query and returns the raw JSON response so it can

@@ -133,6 +133,9 @@ func main() {
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
 
+	// GOMAXPROCS is left to the runtime: Go ≥1.25 derives it from the cgroup
+	// CPU quota (including on in-place resize); automaxprocs would regress that.
+
 	// ctrl.SetLogger targets controller-runtime's process-global logger. Set it
 	// once here, before any subsystem's Start builds its manager, so every
 	// subsystem routes controller-runtime's own logs (cache-sync, reconcile,

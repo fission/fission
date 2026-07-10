@@ -132,7 +132,7 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Header.Set(FORWARDED, "host=upstream.example;")
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Equal(t, "host=upstream.example;", req.Header.Get(FORWARDED))
 		assert.Empty(t, req.Header.Get(X_FORWARDED_HOST))
 	})
@@ -141,26 +141,32 @@ func TestAddForwardedHostHeader(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "http://router.example/x", nil)
 		req.Header.Set(X_FORWARDED_HOST, "upstream.example")
-		addForwardedHostHeader(logr.Discard(), req)
+		addForwardedHostHeader(req)
 		assert.Empty(t, req.Header.Get(FORWARDED))
 		assert.Equal(t, "upstream.example", req.Header.Get(X_FORWARDED_HOST))
 	})
 
-	t.Run("fqdn host", func(t *testing.T) {
-		t.Parallel()
-		req := httptest.NewRequest("GET", "http://router.example/x", nil)
-		req.Host = "example.com:8888"
-		addForwardedHostHeader(logr.Discard(), req)
-		assert.Equal(t, "host=example.com:8888;", req.Header.Get(FORWARDED))
-		assert.Equal(t, "example.com:8888", req.Header.Get(X_FORWARDED_HOST))
-	})
-
-	t.Run("ipv4 host", func(t *testing.T) {
-		t.Parallel()
-		req := httptest.NewRequest("GET", "http://router.example/x", nil)
-		req.Host = "10.0.0.1:8888"
-		addForwardedHostHeader(logr.Discard(), req)
-		assert.Equal(t, "host=10.0.0.1:8888;", req.Header.Get(FORWARDED))
-		assert.Equal(t, "10.0.0.1:8888", req.Header.Get(X_FORWARDED_HOST))
-	})
+	// Host-form cases: same body, varying host and expected quoting.
+	cases := []struct {
+		name, host, wantForwarded string
+	}{
+		{"fqdn host", "example.com:8888", "host=example.com:8888;"},
+		{"ipv4 host", "10.0.0.1:8888", "host=10.0.0.1:8888;"},
+		{"fqdn host without port", "example.com", "host=example.com;"},
+		// RFC 7239: an IPv6 node identifier contains colons and must be quoted.
+		{"ipv6 host with port is quoted", "[2001:db8::1]:8888", `host="[2001:db8::1]:8888";`},
+		{"bare ipv6 host is quoted", "2001:db8::1", `host="2001:db8::1";`},
+		{"bracketed port-less ipv6 host is quoted", "[2001:db8::1]", `host="[2001:db8::1]";`},
+		{"ipv4-mapped ipv6 host is quoted", "[::ffff:10.0.0.1]:8888", `host="[::ffff:10.0.0.1]:8888";`},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest("GET", "http://router.example/x", nil)
+			req.Host = tt.host
+			addForwardedHostHeader(req)
+			assert.Equal(t, tt.wantForwarded, req.Header.Get(FORWARDED))
+			assert.Equal(t, tt.host, req.Header.Get(X_FORWARDED_HOST))
+		})
+	}
 }

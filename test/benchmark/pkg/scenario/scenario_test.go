@@ -90,3 +90,27 @@ func TestConfigDepsScenarioRegistered(t *testing.T) {
 	assert.Equal(t, 2, cd.secrets)
 	assert.Equal(t, 3, cd.configMaps)
 }
+
+func TestColdBurstScenariosRegistered(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "cold-burst-same-fn")
+	assert.Contains(t, names, "cold-burst-distinct-fn")
+	// The default burst must exceed the default pool, or the scenario silently
+	// stops exercising exhaustion/refill.
+	p := DefaultParams()
+	assert.Greater(t, p.BurstSize, p.Poolsize)
+}
+
+func TestWarmPathPerExecutor(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "warm-path")
+	assert.Contains(t, names, "warm-path-newdeploy")
+	// Only the poolmgr variant runs in the per-PR smoke.
+	for _, s := range BuildAll(DefaultParams()) {
+		if s.Name() == "warm-path-newdeploy" {
+			assert.NotContains(t, s.Tags(), "smoke")
+		}
+	}
+}

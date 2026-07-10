@@ -6,7 +6,10 @@
 // outputs computed from it. It is decoupled from how results are produced.
 package report
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Improvement direction for a metric, used by threshold gating and the trend
 // dashboard to know which way is "better".
@@ -34,8 +37,12 @@ type ScenarioResult struct {
 	Error   string            `json:"error,omitempty"`
 }
 
-// Add appends a metric.
+// Add appends a metric, dropping non-finite values (json.Marshal rejects
+// NaN/±Inf).
 func (r *ScenarioResult) Add(name, unit, better string, value float64) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return
+	}
 	r.Metrics = append(r.Metrics, Metric{Name: name, Unit: unit, Value: value, Better: better})
 }
 

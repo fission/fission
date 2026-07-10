@@ -25,6 +25,7 @@ func runCmd() *cobra.Command {
 		runID, fissionVersion, k8sVersion, gitSHA   string
 		duration, warmup                            time.Duration
 		concurrency, coldIterations, poolsize       int
+		repetitions                                 int
 	)
 
 	cmd := &cobra.Command{
@@ -54,6 +55,9 @@ func runCmd() *cobra.Command {
 			if poolsize > 0 {
 				params.Poolsize = poolsize
 			}
+			if repetitions > 0 {
+				params.Repetitions = repetitions
+			}
 
 			selected := scenario.Select(scenario.BuildAll(params), splitCSV(scenariosCSV), splitCSV(tagsCSV))
 			if len(selected) == 0 {
@@ -82,7 +86,7 @@ func runCmd() *cobra.Command {
 			}
 
 			fmt.Fprintf(os.Stderr, "running %d scenario(s): %v\n", len(selected), scenario.Names(selected))
-			run := scenario.Run(ctx, env, selected)
+			run := scenario.Run(ctx, env, selected, params.Repetitions)
 			run.FissionVersion = fissionVersion
 			run.K8sVersion = k8sVersion
 			run.GitSHA = gitSHA
@@ -119,6 +123,7 @@ func runCmd() *cobra.Command {
 	f.DurationVar(&warmup, "warmup", 0, "warm-up window discarded before measuring (overrides config)")
 	f.IntVar(&concurrency, "concurrency", 0, "warm-path concurrency (overrides config)")
 	f.IntVar(&coldIterations, "cold-iterations", 0, "cold-start iterations (overrides config)")
+	f.IntVar(&repetitions, "repetitions", 0, "re-run each scenario N times and report per-metric medians (overrides config)")
 	f.IntVar(&poolsize, "poolsize", 0, "environment pool size (overrides config)")
 	return cmd
 }

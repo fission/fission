@@ -7,6 +7,7 @@ package util
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,4 +178,21 @@ func TestWaitForDeployment(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, got)
 	})
+}
+
+func TestNextWaitPollDelay(t *testing.T) {
+	t.Parallel()
+	// ×1.5 growth from the initial delay, capped at the old fixed interval.
+	assert.Equal(t, 75*time.Millisecond, nextWaitPollDelay(waitPollInitialDelay))
+	assert.Equal(t, waitPollMaxDelay, nextWaitPollDelay(900*time.Millisecond))
+	assert.Equal(t, waitPollMaxDelay, nextWaitPollDelay(waitPollMaxDelay))
+	// The schedule reaches its cap quickly, bounding the extra apiserver GETs
+	// an adaptive poll adds over the old 1/s: ~9 in the first ~5s of a wait.
+	d, polls := waitPollInitialDelay, 0
+	for elapsed := time.Duration(0); d < waitPollMaxDelay; polls++ {
+		elapsed += d
+		d = nextWaitPollDelay(d)
+		require.Less(t, elapsed, 6*time.Second)
+	}
+	assert.LessOrEqual(t, polls, 10)
 }

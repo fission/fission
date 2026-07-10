@@ -843,13 +843,23 @@ func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1
 	gpm.poolPodC.processRS(ctx, rs)
 }
 
+// readyPodEnqueueDelay debounces a warm pod's entry into its readyPodQueue.
+// The 2021-era value was 100ms (#1890, an informer-settle guard with no stated
+// derivation); today choosePod re-reads the pod from the cache and claims it
+// with a verified relabel patch, and a pod dequeued too early lands on the
+// not-ready requeue path (expoDelay backoff) and self-corrects — so the delay
+// only needs to cover the common cache-settle case, not guarantee it. Every
+// 10ms here is 10ms of pool-refill latency added to each queued cold start
+// once the pool is exhausted (visible in the cold-burst benchmark scenarios).
+const readyPodEnqueueDelay = 10 * time.Millisecond
+
 // enqueueReadyPod adds a warm pod's key to its pool's readyPodQueue (looked up
 // by pool key — env UID, plus image hash for per-image pools). Driven by the
 // readyPod reconciler. A pool that no longer exists (race with destroy) is
 // simply skipped — its queue is gone and choosePod won't run.
 func (gpm *GenericPoolManager) enqueueReadyPod(queueKey, podKey string) {
 	if q, ok := gpm.readyPodQueues.Load(queueKey); ok {
-		q.(workqueue.TypedDelayingInterface[string]).AddAfter(podKey, 100*time.Millisecond)
+		q.(workqueue.TypedDelayingInterface[string]).AddAfter(podKey, readyPodEnqueueDelay)
 	}
 }
 
@@ -899,7 +909,7 @@ func (gpm *GenericPoolManager) seedReadyPodQueue(ctx context.Context, env *fv1.E
 		if err != nil {
 			continue
 		}
-		queue.AddAfter(key, 100*time.Millisecond)
+		queue.AddAfter(key, readyPodEnqueueDelay)
 	}
 }
 

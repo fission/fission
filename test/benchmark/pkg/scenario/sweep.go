@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/benchmark/pkg/harness"
 	"github.com/fission/fission/test/benchmark/pkg/loadgen"
 	"github.com/fission/fission/test/benchmark/pkg/report"
@@ -33,7 +34,7 @@ func (c *concurrencySweep) Run(ctx context.Context, sc *harness.Scope) (report.S
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, c.poolsize, slices.Max(c.levels)+10, nil)
+	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, c.poolsize, slices.Max(c.levels)+10, nil)
 	if err != nil {
 		return res, err
 	}
@@ -69,7 +70,7 @@ func (r *rpsSweep) Run(ctx context.Context, sc *harness.Scope) (report.ScenarioR
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, r.poolsize, slices.Max(r.levels)+10, nil)
+	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, r.poolsize, slices.Max(r.levels)+10, nil)
 	if err != nil {
 		return res, err
 	}
@@ -105,7 +106,7 @@ func (p *payloadSweep) Run(ctx context.Context, sc *harness.Scope) (report.Scena
 	var res report.ScenarioResult
 	env := sc.Env()
 
-	route, err := provisionWarmFunction(ctx, sc, p.poolsize, p.concurrency+10, []string{http.MethodGet, http.MethodPost})
+	route, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, p.poolsize, p.concurrency+10, []string{http.MethodGet, http.MethodPost})
 	if err != nil {
 		return res, err
 	}
