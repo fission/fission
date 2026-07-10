@@ -181,9 +181,11 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// than the predefined threshold, reset retryCounter and remove service
 	// cache, then retry to get new svc record from executor again.
 	var retryCounter int
-	// softStruckHost dedups soft (dial-timeout) strikes within this request:
-	// each request contributes at most one strike per endpoint.
-	var softStruckHost string
+	// softStruck dedups soft (dial-timeout) strikes within this request: each
+	// request contributes at most one strike per endpoint, even when
+	// re-resolution cycles between endpoints (A->B->A). Allocated lazily —
+	// most requests never strike.
+	var softStruck map[string]bool
 	var err error
 	var fnMeta = &roundTripper.fn.ObjectMeta
 
@@ -381,10 +383,13 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			// striking per attempt would let a single saturated request burn
 			// through the whole strike budget in a few hundred ms. Distinct
 			// requests each contribute at most one strike.
-			if reason != InvalidateSoft || roundTripper.serviceURL.Host != softStruckHost {
+			if reason != InvalidateSoft || !softStruck[roundTripper.serviceURL.Host] {
 				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, reason)
 				if reason == InvalidateSoft {
-					softStruckHost = roundTripper.serviceURL.Host
+					if softStruck == nil {
+						softStruck = make(map[string]bool, 1)
+					}
+					softStruck[roundTripper.serviceURL.Host] = true
 				}
 			}
 		}

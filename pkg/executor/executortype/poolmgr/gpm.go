@@ -345,7 +345,10 @@ func maxPendingSpecializationsFromEnv(logger logr.Logger) int {
 		return defaultMaxPendingSpecializations
 	}
 	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
+	if err == nil && n < 0 {
+		err = fmt.Errorf("value must be >= 0, got %d", n)
+	}
+	if err != nil {
 		logger.Error(err, "invalid EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION - using default",
 			"value", v, "default", defaultMaxPendingSpecializations)
 		return defaultMaxPendingSpecializations
