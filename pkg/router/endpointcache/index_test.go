@@ -384,3 +384,16 @@ func TestReportDialTimeout(t *testing.T) {
 		assert.False(t, ix.ReportDialTimeout("default", "nope", "10.0.0.1:8888"))
 	})
 }
+
+func TestReportDialTimeoutIgnoredWhileQuarantined(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+	ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+
+	// In-flight requests keep timing out after the quarantine stores; those
+	// reports must not bank strikes that outlive the quarantine window.
+	for range dialTimeoutStrikeLimit + 2 {
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+	}
+}

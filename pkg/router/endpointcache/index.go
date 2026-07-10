@@ -510,6 +510,16 @@ func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 	}
 	now := time.Now()
 	e.mu.Lock()
+	// Timeouts reported while the address is already quarantined don't count:
+	// in-flight requests keep failing after the first quarantine stores, and
+	// their strikes would outlive the quarantine window and re-quarantine the
+	// endpoint faster than dialTimeoutStrikeLimit once it's admissible again.
+	if cur := e.quarantined.Load(); cur != nil {
+		if expiry, already := (*cur)[address]; already && now.Before(expiry) {
+			e.mu.Unlock()
+			return false
+		}
+	}
 	if e.strikes == nil {
 		e.strikes = make(map[string]dialStrike)
 	}

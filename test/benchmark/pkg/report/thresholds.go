@@ -61,7 +61,9 @@ func (b Breach) String() string {
 
 // Evaluate checks run against the thresholds and returns every breach. A metric
 // named in the thresholds but absent from the result is reported as a breach so
-// a silently-missing measurement cannot pass the gate.
+// a silently-missing measurement cannot pass the gate — unless the threshold is
+// marked Optional, which tolerates absence (the bounds still apply whenever the
+// metric is present).
 func (t Thresholds) Evaluate(run Run) []Breach {
 	var breaches []Breach
 	byName := make(map[string]ScenarioResult, len(run.Scenarios))
