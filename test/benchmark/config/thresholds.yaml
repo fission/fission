@@ -10,6 +10,23 @@ scenarios:
   concurrency-sweep:
     metrics:
       c50_error_rate: { max: 0.05 }
+      # Graceful-degradation gate: pre-fix, c500 collapsed to 29 RPS with 60%
+      # errors (run 29085940648); post-fix it holds ~274 RPS at ~10%. The bar
+      # catches a return of the collapse, with headroom for run-to-run noise.
+      c500_error_rate: { max: 0.25 }
+      # Total specializations over the whole sweep. Under closed-loop 5x
+      # overload the executor keeps replacing saturated pods by design — the
+      # in-flight bound caps amplitude (<=20 pending), not total churn (~86 in
+      # both A/B legs). This is a runaway guard, not a zero bar. Optional: the
+      # metric is Prometheus-derived and absent when capture is off or the
+      # counter reset mid-run.
+      specializations: { max: 150, optional: true }
   cold-start-poolmgr:
     metrics:
       failures: { max: 5 } # at most 5 of N iterations may fail to specialize
+  cold-burst-same-fn:
+    metrics:
+      failures: { max: 3 } # of burstSize concurrent first-requests
+  cold-burst-distinct-fn:
+    metrics:
+      failures: { max: 3 }

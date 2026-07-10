@@ -3,6 +3,13 @@
 # For a quick smoke run, keep this file but pass: --tags smoke --duration 15s --warmup 5s
 poolsize: 3
 coldIterations: 20
+# Re-run every scenario N times (fresh resources each rep) and report per-metric
+# medians with a min..max range in the result meta. Raise for A/B dispatches
+# where a single sample can't clear the cluster noise floor.
+repetitions: 1
+# Simultaneous first-requests for the cold-burst scenarios; > poolsize so the
+# burst forces pool exhaustion + refill instead of being absorbed by warm pods.
+burstSize: 10
 warmDuration: 60s
 warmWarmup: 10s
 warmConcurrency: 50
@@ -10,3 +17,7 @@ concurrencyLevels: [10, 50, 100, 250, 500]
 rpsLevels: [100, 250, 500, 1000]
 payloadSizes: [1024, 10240, 102400, 1048576]
 executors: [poolmgr, newdeploy]
+# Secret/ConfigMap references for the cold-start-poolmgr-configdeps scenario,
+# which measures the per-reference specialization-time existence checks.
+configDepsSecrets: 5
+configDepsConfigmaps: 5

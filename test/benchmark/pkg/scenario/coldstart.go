@@ -68,7 +68,7 @@ func (c *coldStart) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 			// Let the pool refill between iterations so each measures a cold pod.
 			_ = env.WaitForPoolReady(ctx, envName, 1, 2*time.Minute)
 		}
-		if d, ok := c.measureOne(ctx, env, envName, i); ok {
+		if d, ok := c.measureOne(ctx, sc, envName, i); ok {
 			samples = append(samples, d)
 		} else {
 			failures++
@@ -87,9 +87,11 @@ func (c *coldStart) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 }
 
 // measureOne creates one function+route, measures the first successful request,
-// and tears the pair down (its own Scope) regardless of outcome.
-func (c *coldStart) measureOne(ctx context.Context, env *harness.Env, envName string, i int) (time.Duration, bool) {
-	iter := env.NewScope(fmt.Sprintf("%s-i%d", c.Name(), i))
+// and tears the pair down (its own sub-scope, derived from the runner's scope
+// so repetition-unique labels reach the resource names) regardless of outcome.
+func (c *coldStart) measureOne(ctx context.Context, sc *harness.Scope, envName string, i int) (time.Duration, bool) {
+	env := sc.Env()
+	iter := sc.SubScope(fmt.Sprintf("i%d", i))
 	defer iter.CleanupDetached(ctx, time.Minute)
 
 	fnName := iter.Name("fn")

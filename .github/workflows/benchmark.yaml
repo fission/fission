@@ -24,6 +24,10 @@ on:
         description: "warm-path concurrency (default: scenario config)"
         default: ""
         type: string
+      repetitions:
+        description: "re-run each scenario N times, report medians (default: 1)"
+        default: ""
+        type: string
       publish_trend:
         description: "publish results to the gh-pages trend"
         default: true
@@ -208,6 +212,7 @@ jobs:
               echo "BM_SCENARIOS=${{ inputs.scenarios }}" >> "$GITHUB_ENV"
               echo "BM_DURATION=${{ inputs.duration }}" >> "$GITHUB_ENV"
               echo "BM_CONCURRENCY=${{ inputs.concurrency }}" >> "$GITHUB_ENV"
+              echo "BM_REPETITIONS=${{ inputs.repetitions }}" >> "$GITHUB_ENV"
               echo "BM_FAIL_ON_BREACH=true" >> "$GITHUB_ENV"
               echo "BM_PUBLISH_TREND=${{ inputs.publish_trend }}" >> "$GITHUB_ENV"
               ;;
@@ -333,7 +338,8 @@ jobs:
             ${BM_TAGS:+--tags "$BM_TAGS"} \
             ${BM_DURATION:+--duration "$BM_DURATION"} \
             ${BM_CONCURRENCY:+--concurrency "$BM_CONCURRENCY"} \
-            ${BM_COLD_ITERATIONS:+--cold-iterations "$BM_COLD_ITERATIONS"}
+            ${BM_COLD_ITERATIONS:+--cold-iterations "$BM_COLD_ITERATIONS"} \
+            ${BM_REPETITIONS:+--repetitions "$BM_REPETITIONS"}
 
       - name: Report and gate
         run: |
@@ -379,11 +385,10 @@ jobs:
           fail_ci_if_error: false
 
       # github-action-benchmark stores each run on gh-pages and draws a chart;
-      # one direction per file, one series per fission version. Pinned to a
-      # version tag — run bump-ci-tool-versions to SHA-pin before merge.
+      # one direction per file, one series per fission version.
       - name: Publish latency trend (lower is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@v1 # TODO: SHA-pin (bump-ci-tool-versions)
+        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
         with:
           name: "Fission latency (${{ matrix.fission_version }})"
           tool: customSmallerIsBetter
@@ -398,7 +403,7 @@ jobs:
 
       - name: Publish throughput trend (higher is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@v1 # TODO: SHA-pin (bump-ci-tool-versions)
+        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
         with:
           name: "Fission throughput (${{ matrix.fission_version }})"
           tool: customBiggerIsBetter

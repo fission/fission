@@ -31,6 +31,16 @@ type namedCleanup struct {
 // Env returns the shared run context (clients, capturer, router targets).
 func (s *Scope) Env() *Env { return s.env }
 
+// SubScope returns a child scope whose label extends this scope's label with
+// suffix. Scenarios that create per-iteration scopes must derive them from the
+// scope the runner handed them — the runner's label carries the repetition
+// index, so re-deriving names from the scenario name alone would collide
+// across repetitions (the previous rep's detached cleanup may still be
+// deleting same-named resources).
+func (s *Scope) SubScope(suffix string) *Scope {
+	return &Scope{env: s.env, label: s.label + "-" + suffix}
+}
+
 // Name returns a scenario- and run-unique resource name with the given prefix,
 // kept within DNS-1123 limits by the short prefixes/IDs callers use.
 func (s *Scope) Name(prefix string) string {

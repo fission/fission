@@ -67,4 +67,50 @@ func TestParamsNormalizeFillsDefaults(t *testing.T) {
 	assert.Equal(t, 5, p.ColdIterations, "explicit value preserved")
 	assert.Equal(t, DefaultParams().Poolsize, p.Poolsize, "zero value defaulted")
 	assert.Equal(t, DefaultParams().WarmDuration, p.WarmDuration, "zero duration defaulted")
+	assert.Equal(t, DefaultParams().ConfigDepsSecrets, p.ConfigDepsSecrets, "config-deps secret count defaulted")
+	assert.Equal(t, DefaultParams().ConfigDepsConfigMaps, p.ConfigDepsConfigMaps, "config-deps configmap count defaulted")
+}
+
+// TestConfigDepsScenarioRegistered pins that the secret/configmap cold-start
+// scenario is built and is deliberately excluded from the smoke subset (its
+// few-ms per-reference delta needs the repeated full run to clear the noise
+// floor), and that it carries its configured reference counts.
+func TestConfigDepsScenarioRegistered(t *testing.T) {
+	t.Parallel()
+	all := BuildAll(DefaultParams())
+	assert.Contains(t, Names(all), "cold-start-poolmgr-configdeps")
+	assert.NotContains(t, Names(Select(all, nil, []string{"smoke"})), "cold-start-poolmgr-configdeps",
+		"config-deps scenario must stay out of the noise-sensitive smoke subset")
+
+	built := Select(BuildAll(Params{ConfigDepsSecrets: 2, ConfigDepsConfigMaps: 3}),
+		[]string{"cold-start-poolmgr-configdeps"}, nil)
+	require.Len(t, built, 1)
+	cd, ok := built[0].(*coldStartConfigDeps)
+	require.True(t, ok)
+	assert.Equal(t, 2, cd.secrets)
+	assert.Equal(t, 3, cd.configMaps)
+}
+
+func TestColdBurstScenariosRegistered(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "cold-burst-same-fn")
+	assert.Contains(t, names, "cold-burst-distinct-fn")
+	// The default burst must exceed the default pool, or the scenario silently
+	// stops exercising exhaustion/refill.
+	p := DefaultParams()
+	assert.Greater(t, p.BurstSize, p.Poolsize)
+}
+
+func TestWarmPathPerExecutor(t *testing.T) {
+	t.Parallel()
+	names := Names(BuildAll(DefaultParams()))
+	assert.Contains(t, names, "warm-path")
+	assert.Contains(t, names, "warm-path-newdeploy")
+	// Only the poolmgr variant runs in the per-PR smoke.
+	for _, s := range BuildAll(DefaultParams()) {
+		if s.Name() == "warm-path-newdeploy" {
+			assert.NotContains(t, s.Tags(), "smoke")
+		}
+	}
 }

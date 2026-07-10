@@ -84,6 +84,10 @@ func New(ctx context.Context, cfg Config) (*Env, error) {
 	}, nil
 }
 
+// FissionNamespace returns the control-plane namespace, for PromQL that targets
+// the Fission components themselves (e.g. client-side apiserver call counters).
+func (e *Env) FissionNamespace() string { return e.fissionNamespace }
+
 // NewScope returns a per-scenario resource scope; label disambiguates resource
 // names and cleanup logs across scenarios sharing the Env.
 func (e *Env) NewScope(label string) *Scope {
