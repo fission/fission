@@ -5,11 +5,15 @@
 package mcp
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testServer(t *testing.T) *Server {
@@ -41,4 +45,31 @@ func TestServerFilterTools(t *testing.T) {
 
 	wild := s.filterTools([]*mcp.Tool{{Name: "tool-a"}, {Name: "tool-b"}}, AuthScope{Wildcard: true})
 	assert.Len(t, wild, 2)
+}
+
+// TestServerHTTPHandlerAllowsHostnameOverLoopback pins the DNS-rebinding
+// posture: this is a cluster service (not a local dev MCP server), and
+// port-forwarded traffic always reaches the pod via loopback — a client using
+// a hostname (e.g. the integration framework's mcp.fission route) must not be
+// rejected by the SDK's localhost heuristic with 403.
+func TestServerHTTPHandlerAllowsHostnameOverLoopback(t *testing.T) {
+	t.Parallel()
+	// Pass-through authorizer (nil key): authz is not what's under test.
+	s := NewServer(NewRegistry(), NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
+	srv := httptest.NewServer(s.HTTPHandler())
+	t.Cleanup(srv.Close)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Host = "mcp.fission" // non-loopback Host over a loopback connection
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.NotEqual(t, http.StatusForbidden, resp.StatusCode,
+		"initialize with a hostname Host header must not trip localhost DNS-rebinding protection")
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

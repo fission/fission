@@ -98,7 +98,18 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 func (s *Server) HTTPHandler() http.Handler {
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return s.mcp },
-		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout},
+		&mcp.StreamableHTTPOptions{
+			SessionTimeout: sessionTimeout,
+			// The SDK's localhost heuristic targets local dev MCP servers: it
+			// 403s requests whose connection arrives on a loopback local
+			// address with a non-loopback Host header. This server is a
+			// cluster service with its own bearer-token authz — and
+			// port-forwarded traffic (kubectl or SPDY, the standard ops/test
+			// path to the ClusterIP-only svc/mcp) always lands on the pod's
+			// loopback, so the heuristic would 403 any such client that uses
+			// a hostname instead of 127.0.0.1.
+			DisableLocalhostProtection: true,
+		},
 	)
 	return s.authz.HTTPMiddleware(limitRequestBody(streamable))
 }
