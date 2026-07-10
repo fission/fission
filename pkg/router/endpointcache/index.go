@@ -496,7 +496,9 @@ func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Durat
 // only after dialTimeoutStrikeLimit strikes land within one TTL window (see
 // that constant for the saturation rationale). Strikes are cleared by slice
 // events (like quarantines) and lapse with the window. The return value
-// reports whether this strike escalated to a quarantine.
+// reports whether THIS call stored a new quarantine — false both below the
+// limit and when a concurrent report already quarantined the address, so
+// callers can log escalations without storm-duplicated noise.
 func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)
@@ -529,7 +531,7 @@ func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 		if stored {
 			RecordQuarantine()
 		}
-		return true
+		return stored
 	}
 	e.strikes[address] = rec
 	e.mu.Unlock()
