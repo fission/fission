@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/utils/correlation"
 )
 
@@ -42,22 +41,18 @@ type RouterClient struct {
 	http     *http.Client
 }
 
-// Router returns an HTTP client targeting the router's public listener.
+// Router returns an HTTP client targeting the router's public listener. The
+// shared underlying client resolves route names through the framework
+// registry and signs requests to /fission-function/... with the
+// ServiceRouterInternal key (when configured); other paths (HTTPTriggers,
+// /router-healthz) pass through unsigned to match end-user behaviour against
+// the public listener.
 func (f *Framework) Router(t *testing.T) *RouterClient {
 	t.Helper()
-	// The transport resolves route names through the framework registry and
-	// signs requests to /fission-function/... with the ServiceRouterInternal
-	// key (when configured); other paths (HTTPTriggers, /router-healthz)
-	// pass through unsigned to match end-user behaviour against the public
-	// listener. Signing shared with the benchmark harness via pkg/auth/hmac.
-	var rt http.RoundTripper = f.reg.Transport()
-	if len(f.internalAuthSecret) > 0 {
-		rt = hmacauth.NewServiceSigningTransport(f.internalAuthSecret, hmacauth.ServiceRouterInternal, rt, "/fission-function/")
-	}
 	return &RouterClient{
 		baseURL:  portless.URL(RouterName, 0, ""),
 		internal: portless.URL(RouterInternalName, 0, ""),
-		http:     &http.Client{Timeout: 30 * time.Second, Transport: rt},
+		http:     f.routerHTTP,
 	}
 }
 

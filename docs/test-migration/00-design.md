@@ -137,7 +137,7 @@ CI uploads this directory as an artifact, mirroring the existing fission-dump/ki
 ```
 
 Then `./test/kind_CI.sh` runs unchanged — its embedded test list is what shrinks each PR.
-Both Go and bash tests share the same deployed Fission, the same `KUBECONFIG`, the same port-forwarded router (`127.0.0.1:8888`), and the same runtime image env vars.
+Both Go and bash tests share the same deployed Fission, the same `KUBECONFIG`, the same router (reached via the framework's in-process port-forward), and the same runtime image env vars.
 
 The build tag `//go:build integration` keeps the suite out of `make test-run` (the unit-test gate), so `make check` and the existing test workflow are unaffected.
 

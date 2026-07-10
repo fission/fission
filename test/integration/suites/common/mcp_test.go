@@ -28,11 +28,13 @@ import (
 // and (2) callable via tools/call, returning the same body as a direct
 // invocation on the router internal listener.
 //
-// The MCP subsystem is enabled in the kind/kind-ci skaffold profiles and
-// port-forwarded to FISSION_MCP_BASE_URL by the suite bootstrap; the test skips
-// when the endpoint is unreachable (MCP off in this install). In CI the server
-// runs in pass-through auth mode (authentication disabled), so no bearer token
-// is needed; per-namespace JWT scoping is covered by the pkg/mcp unit tests.
+// The MCP subsystem is enabled in the kind/kind-ci skaffold profiles; the
+// framework reaches it through the mcp.fission route (in-process port-forward,
+// or the FISSION_MCP_BASE_URL override). The test skips when the endpoint is
+// unreachable (MCP off in this install) — CI guards against that skip going
+// silent by gating on deploy/mcp before the suite runs. In CI the server runs
+// in pass-through auth mode (authentication disabled), so no bearer token is
+// needed; per-namespace JWT scoping is covered by the pkg/mcp unit tests.
 func TestMCPToolsListAndCall(t *testing.T) {
 	t.Parallel()
 
@@ -108,12 +110,14 @@ func TestMCPToolsListAndCall(t *testing.T) {
 }
 
 // requireMCPReachable skips the test when the MCP endpoint isn't serving (MCP
-// disabled in this install). The 3s deadline bounds the registry's readiness
-// dial, so an MCP-less install still skips fast.
+// disabled in this install). The deadline bounds the registry's readiness
+// dial; it must cover a cold in-process port-forward (Service lookup + pod
+// resolution + SPDY tunnel through a possibly-loaded apiserver), so it is
+// deliberately generous — an MCP-less install pays it once, on this one test.
 func requireMCPReachable(t *testing.T, ctx context.Context, f *framework.Framework) {
 	t.Helper()
 	base := f.MCPBaseURL()
-	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
 	require.NoError(t, err)

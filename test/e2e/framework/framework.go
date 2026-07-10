@@ -6,6 +6,7 @@ package framework
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -131,14 +132,32 @@ func (f *Framework) Stop() error {
 
 // RegisterService names a locally-bound service in the portless registry.
 // The service may still be starting: dials through the registry (WaitReady)
-// retry until the port accepts.
-func (f *Framework) RegisterService(name string, port int) error {
-	if _, err := f.reg.Add(context.Background(), name, backend.TCP(fmt.Sprintf("127.0.0.1:%d", port))); err != nil {
+// retry until the port accepts (and any route health check passes).
+func (f *Framework) RegisterService(name string, port int, opts ...portless.RouteOption) error {
+	if _, err := f.reg.Add(context.Background(), name, backend.TCP(fmt.Sprintf("127.0.0.1:%d", port)), opts...); err != nil {
 		return fmt.Errorf("error registering service %s: %w", name, err)
 	}
 	f.ports[name] = port
 	f.logger.Info("Registered service", "name", name, "port", port)
 	return nil
+}
+
+// WithTLSReadyCheck gates a route's readiness on a completed TLS handshake,
+// not just a TCP accept — use it for TLS servers (the webhook) where
+// "listening" and "able to serve TLS" can differ (e.g. bad cert material).
+func WithTLSReadyCheck() portless.RouteOption {
+	return portless.RouteWithHealthCheck(func(ctx context.Context, dial portless.DialFunc) error {
+		conn, err := dial(ctx, "tcp", "health:0")
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		tlsConn := tls.Client(conn, &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // readiness probe against our own webhook port.
+		})
+		defer tlsConn.Close()
+		return tlsConn.HandshakeContext(ctx)
+	})
 }
 
 // GetServiceURL returns the real local URL of a registered service. Production
@@ -152,10 +171,9 @@ func (f *Framework) GetServiceURL(name string) (string, error) {
 	return fmt.Sprintf("http://localhost:%d", port), nil
 }
 
-// WaitReady blocks until the named service accepts TCP connections (or ctx
-// expires). This is an L4 probe — for the TLS webhook it checks accept, not
-// handshake, which suffices because controller-runtime loads certs before
-// listening. Replaces caller-side poll loops around the old CheckService.
+// WaitReady blocks until the named service accepts TCP connections and its
+// route health check (if any — see WithTLSReadyCheck) passes, or ctx expires.
+// Replaces caller-side poll loops around the old CheckService.
 func (f *Framework) WaitReady(ctx context.Context, name string) error {
 	rt, ok := f.reg.Lookup(name)
 	if !ok {

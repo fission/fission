@@ -72,7 +72,9 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 			CertDir: env.WebhookInstallOptions.LocalServingCertDir,
 		})
 	})
-	if err := f.RegisterService("webhook", webhookPort); err != nil {
+	// Webhook readiness must prove a completed TLS handshake, not just a TCP
+	// accept — envtest's CRD installs go through this server immediately after.
+	if err := f.RegisterService("webhook", webhookPort, framework.WithTLSReadyCheck()); err != nil {
 		return err
 	}
 

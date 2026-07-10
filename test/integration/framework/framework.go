@@ -14,11 +14,14 @@ package framework
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	portless "github.com/sanketsudake/go-portless"
@@ -29,6 +32,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -71,7 +75,14 @@ type Framework struct {
 	// signing (matches the chart's pass-through mode when
 	// internalAuth.enabled=false).
 	internalAuthSecret []byte
-	logger             logr.Logger
+	// httpClient and routerHTTP are built once so every caller shares one
+	// registry transport (and its connection pool) instead of constructing
+	// a transport per call. httpClient is unsigned with no global timeout;
+	// routerHTTP signs /fission-function/... (when the secret is set) and
+	// keeps a 30s per-request timeout.
+	httpClient *http.Client
+	routerHTTP *http.Client
+	logger     logr.Logger
 }
 
 var (
@@ -109,6 +120,19 @@ func newFramework() (*Framework, error) {
 	if err != nil {
 		return nil, err
 	}
+	secret := internalAuthSecretFromEnv()
+	// One shared transport (one connection pool) for all framework clients;
+	// the signing wrapper adds headers per request and delegates here.
+	transport := reg.Transport()
+	var signing http.RoundTripper = transport
+	if len(secret) > 0 {
+		// Sign requests to /fission-function/... with the
+		// ServiceRouterInternal key; other paths (HTTPTriggers,
+		// /router-healthz) pass through unsigned to match end-user
+		// behaviour against the public listener. Shared with the benchmark
+		// harness via pkg/auth/hmac.
+		signing = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceRouterInternal, transport, "/fission-function/")
+	}
 	return &Framework{
 		restConfig:         restConfig,
 		clientGen:          clientGen,
@@ -116,7 +140,9 @@ func newFramework() (*Framework, error) {
 		kubeClient:         kubeClient,
 		images:             loadRuntimeImages(),
 		reg:                reg,
-		internalAuthSecret: internalAuthSecretFromEnv(),
+		internalAuthSecret: secret,
+		httpClient:         &http.Client{Transport: transport},
+		routerHTTP:         &http.Client{Timeout: 30 * time.Second, Transport: signing},
 		logger:             loggerfactory.GetLogger(),
 	}, nil
 }
@@ -139,16 +165,16 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 		{MCPName, "FISSION_MCP_BASE_URL", "mcp"},
 	} {
 		var b portless.Backend
+		var err error
 		if v := os.Getenv(r.envVar); v != "" {
-			b = backend.TCP(hostport(v))
+			b, err = overrideBackend(r.envVar, v)
 		} else {
-			var err error
 			// No explicit target port: all three Services are single-port,
 			// so the resolver uses the Service's own target port.
 			b, err = portlessk8s.PortForward(restConfig, portlessk8s.Service(namespace, r.service))
-			if err != nil {
-				return nil, fmt.Errorf("build %s backend: %w", r.name, err)
-			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("build %s backend: %w", r.name, err)
 		}
 		if _, err := reg.Add(context.Background(), r.name, b); err != nil {
 			return nil, fmt.Errorf("register route %s: %w", r.name, err)
@@ -157,16 +183,32 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 	return reg, nil
 }
 
-// hostport normalizes an env override ("host:port", "http://host:port", or
-// bare "host") to the host:port form backend.TCP dials.
-func hostport(v string) string {
-	v = strings.TrimPrefix(v, "http://")
-	v = strings.TrimPrefix(v, "https://")
-	v = strings.TrimSuffix(v, "/")
-	if !strings.Contains(v, ":") {
-		v += ":80"
+// overrideBackend parses an env override into a fixed-address backend.
+// Accepted forms: "host:port", "host" (port 80), "http://host[:port]".
+// Anything else fails loudly at framework init: the framework's clients
+// speak plain HTTP over the route, so an https:// endpoint cannot be served
+// by a TCP backend (it would silently downgrade to plaintext), and a URL
+// path has nowhere to go (route names replace base URLs).
+func overrideBackend(envVar, v string) (portless.Backend, error) {
+	raw := v
+	if !strings.Contains(v, "://") {
+		v = "http://" + v
 	}
-	return v
+	u, err := url.Parse(v)
+	if err != nil {
+		return nil, fmt.Errorf("%s=%q: %w", envVar, raw, err)
+	}
+	if u.Scheme != "http" {
+		return nil, fmt.Errorf("%s=%q: scheme %q not supported (routes are dialed as plain TCP + HTTP; use http:// or host:port)", envVar, raw, u.Scheme)
+	}
+	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Host == "" {
+		return nil, fmt.Errorf("%s=%q: must be host[:port], optionally with an http:// scheme and no path", envVar, raw)
+	}
+	host := u.Host
+	if u.Port() == "" {
+		host = net.JoinHostPort(u.Hostname(), "80")
+	}
+	return backend.TCP(host), nil
 }
 
 // RestConfig returns the cached *rest.Config.
@@ -184,12 +226,12 @@ func (f *Framework) Images() RuntimeImages { return f.images }
 // Logger returns the framework logger.
 func (f *Framework) Logger() logr.Logger { return f.logger }
 
-// HTTPClient returns an http.Client that resolves the framework's route
-// names (RouterName etc.) through the portless registry. It sets no global
-// timeout — dials block until the backend is ready — so callers must bound
-// requests with contexts. Requests through it are NOT HMAC-signed; use
+// HTTPClient returns the shared http.Client that resolves the framework's
+// route names (RouterName etc.) through the portless registry. It sets no
+// global timeout — dials block until the backend is ready — so callers must
+// bound requests with contexts. Requests through it are NOT HMAC-signed; use
 // Router for signed /fission-function/... calls.
-func (f *Framework) HTTPClient() *http.Client { return f.reg.HTTPClient() }
+func (f *Framework) HTTPClient() *http.Client { return f.httpClient }
 
 // RouterInternalBaseURL returns the framework's URL for the router's
 // internal listener — the one hosting /fission-function/<ns>/<name>

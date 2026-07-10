@@ -186,6 +186,12 @@ jobs:
           for d in $(kubectl -n fission get deploy -o name); do
             kubectl -n fission rollout status "$d" --timeout=5m
           done
+          # deploy/mcp must exist and be ready (kind-ci enables mcp.enabled):
+          # the MCP integration test skips itself when the endpoint is
+          # unreachable, so without this explicit gate a profile regression
+          # would silently turn all MCP coverage into a green skip — the
+          # loop above only waits for deployments that exist.
+          kubectl -n fission rollout status deploy/mcp --timeout=3m
 
       # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
       # kind-ci deploys with the EndpointSlice path on everywhere, so without
