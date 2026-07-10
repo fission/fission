@@ -26,6 +26,10 @@ var (
 		"fission_function_cold_starts_total",
 		"How many cold starts are made by function_name, function_namespace.",
 	)
+	specializationsRejected = metrics.Int64Counter(
+		"fission_executor_specializations_rejected_total",
+		"Specialization requests rejected at a capacity bound (concurrency cap or in-flight limit), by function_name, function_namespace.",
+	)
 	// Histogram instead of Summary: avoids the per-series quantile stream
 	// memory; quantiles are derived with histogram_quantile(). This is a
 	// function lifetime (seconds to hours), so the buckets stay exponential
@@ -61,6 +65,13 @@ var (
 		"Idle-pool reap attempts whose deployment delete failed (deployment orphaned until adoption or restart cleanup).",
 	)
 )
+
+// RecordSpecializationRejected counts one capacity-gated specialization
+// rejection (concurrency cap or in-flight-specialization bound); the router
+// relays these to clients as 429s.
+func RecordSpecializationRejected(ctx context.Context, fnName, fnNamespace string) {
+	specializationsRejected.Add(ctx, 1, functionLabels(fnName, fnNamespace))
+}
 
 // RecordColdStart counts one cold start for the function.
 func RecordColdStart(ctx context.Context, fnName, fnNamespace string) {

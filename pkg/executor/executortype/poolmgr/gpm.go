@@ -116,6 +116,11 @@ type (
 		// once from POD_READY_TIMEOUT and handed to every pool.
 		podReadyTimeout time.Duration
 
+		// maxPendingSpecializations bounds specializations in flight per
+		// function on the ensureCapacity path (0 disables); parsed once from
+		// EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION. See ReserveCapacity.
+		maxPendingSpecializations int
+
 		// functionServicesEnabled is the RFC-0002 gate (ENABLE_FUNCTION_SERVICES):
 		// when on, every invoked poolmgr function gets a headless selector
 		// Service so the EndpointSlice controller publishes its specialized
@@ -195,6 +200,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		podSpecPatch:               podSpecPatch,
 		objectReaperIntervalSecond: time.Duration(executorUtils.GetObjectReaperInterval(logger, fv1.ExecutorTypePoolmgr, 5)) * time.Second,
 		podReadyTimeout:            podReadyTimeoutFromEnv(gpmLogger),
+		maxPendingSpecializations:  maxPendingSpecializationsFromEnv(gpmLogger),
 		functionServicesEnabled:    functionServicesEnabled() && !enableIstio,
 	}
 
@@ -318,13 +324,41 @@ func (gpm *GenericPoolManager) DeleteFuncSvcFromCache(ctx context.Context, fsvc 
 	gpm.fsCache.DeleteFunctionSvc(ctx, fsvc)
 }
 
+// defaultMaxPendingSpecializations bounds specializations in flight per
+// function when EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION is unset.
+// Sized well above a legitimate cold burst (the benchmark fires 10) and well
+// below the 88-pod saturation storm this bound exists to stop; 0 disables.
+const defaultMaxPendingSpecializations = 20
+
+// maxPendingSpecializationsFromEnv parses
+// EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION, defaulting on a missing
+// or unparsable value. Called once by MakeGenericPoolManager.
+func maxPendingSpecializationsFromEnv(logger logr.Logger) int {
+	v := os.Getenv("EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION")
+	if v == "" {
+		return defaultMaxPendingSpecializations
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		logger.Error(err, "invalid EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION - using default",
+			"value", v, "default", defaultMaxPendingSpecializations)
+		return defaultMaxPendingSpecializations
+	}
+	return n
+}
+
 // ReserveCapacity implements the executor's capacityReserver facet (RFC-0002
 // ensureCapacity): an atomic check-and-reserve against the function's
-// concurrency cap inside the PoolCache — still the capacity authority. The
-// reservation is released by the specialization's setValue on success or
-// MarkSpecializationFailure on failure.
+// concurrency cap AND the per-function in-flight specialization bound inside
+// the PoolCache — still the capacity authority. The reservation is released
+// by the specialization's setValue on success or MarkSpecializationFailure on
+// failure. Rejections surface to the router (and client) as 429s.
 func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error {
-	return gpm.fsCache.ReserveCapacity(crd.CacheKeyURGFromMeta(fnMeta), concurrency)
+	err := gpm.fsCache.ReserveCapacity(crd.CacheKeyURGFromMeta(fnMeta), concurrency, gpm.maxPendingSpecializations)
+	if err != nil {
+		metrics.RecordSpecializationRejected(ctx, fnMeta.Name, fnMeta.Namespace)
+	}
+	return err
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {

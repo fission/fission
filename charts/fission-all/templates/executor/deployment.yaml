@@ -88,6 +88,10 @@ spec:
         - name: EXECUTOR_SPECIALIZATION_CONCURRENCY
           value: {{ .Values.executor.specializationConcurrency | quote }}
         {{- end }}
+        {{- if hasKey .Values.executor "maxPendingSpecializations" }}
+        - name: EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION
+          value: {{ .Values.executor.maxPendingSpecializations | quote }}
+        {{- end }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
