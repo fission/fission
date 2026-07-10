@@ -32,9 +32,9 @@ import (
 // (the internal-listener request must NOT carry an HMAC signature here —
 // rejecting unsigned traffic is the point).
 
-// get issues a single unsigned GET bounded to 10s so a hung listener
+// unsignedGet issues a single unsigned GET bounded to 10s so a hung listener
 // fails the test fast rather than waiting on the suite-level timeout.
-func get(t *testing.T, f *framework.Framework, url string) *http.Response {
+func unsignedGet(t *testing.T, f *framework.Framework, url string) *http.Response {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -50,7 +50,7 @@ func get(t *testing.T, f *framework.Framework, url string) *http.Response {
 // regardless of whether the function exists.
 func TestPublicRouterReturns404ForInternalRoute(t *testing.T) {
 	f := framework.Connect(t)
-	resp := get(t, f, f.Router(t).BaseURL()+"/fission-function/default/nonexistent")
+	resp := unsignedGet(t, f, f.Router(t).BaseURL()+"/fission-function/default/nonexistent")
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -67,7 +67,7 @@ func TestPublicRouterReturns404ForInternalRoute(t *testing.T) {
 // short-circuits and the request reaches the function handler.
 func TestInternalRouterRejectsUnsigned(t *testing.T) {
 	f := framework.Connect(t)
-	resp := get(t, f, f.RouterInternalBaseURL()+"/fission-function/default/nonexistent")
+	resp := unsignedGet(t, f, f.RouterInternalBaseURL()+"/fission-function/default/nonexistent")
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)

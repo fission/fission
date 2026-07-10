@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	portless "github.com/sanketsudake/go-portless"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -110,7 +109,7 @@ func TestStreamingProtocols(t *testing.T) {
 		// ServiceRouterInternal. The ws host is a portless route name,
 		// resolved by the framework's HTTP client during the handshake.
 		path := "/fission-function/" + fnName
-		wsURL := portless.WSURL(framework.RouterInternalName, 0, path)
+		wsURL := f.RouterInternalWSURL(path)
 		master := f.InternalAuthSecret()
 
 		signedHeader := func() http.Header {

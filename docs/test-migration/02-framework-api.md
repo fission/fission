@@ -21,7 +21,7 @@ All framework code lives behind the `//go:build integration` build tag, so it is
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `KUBECONFIG` | Path to kubeconfig pointing at the test cluster. | `$HOME/.kube/config` (controller-runtime default) |
-| `FISSION_ROUTER`, `FISSION_ROUTER_INTERNAL`, `FISSION_MCP_BASE_URL` | Optional fixed `host:port` (or full URL) override for a route. When unset the framework port-forwards in-process (go-portless SPDY) to the corresponding Service. | unset (in-process port-forward) |
+| `FISSION_ROUTER`, `FISSION_ROUTER_INTERNAL`, `FISSION_MCP_BASE_URL` | Optional fixed-address override for a route: `host[:port]` or an `http://` URL without a path (`https://` and paths are rejected at init). When unset the framework port-forwards in-process (go-portless SPDY) to the corresponding Service. | unset (in-process port-forward) |
 | `FISSION_NAMESPACE` | Namespace where the Fission control plane is deployed; the in-process port-forwards resolve Services here. | `fission` |
 | `NODE_RUNTIME_IMAGE`, `NODE_BUILDER_IMAGE`, `PYTHON_RUNTIME_IMAGE`, `PYTHON_BUILDER_IMAGE`, `GO_RUNTIME_IMAGE`, `GO_BUILDER_IMAGE`, `JVM_RUNTIME_IMAGE`, `JVM_BUILDER_IMAGE`, `JVM_JERSEY_RUNTIME_IMAGE`, `JVM_JERSEY_BUILDER_IMAGE`, `TS_RUNTIME_IMAGE` | Runtime/builder images for env tests. | Tests `t.Skip` when a required image is unset. |
 | `LOG_DIR` | Directory for diagnostic dumps on test failure. | `test/integration/logs/` |

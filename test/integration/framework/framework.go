@@ -63,12 +63,6 @@ type Framework struct {
 	fissionClient versioned.Interface
 	kubeClient    kubernetes.Interface
 	images        RuntimeImages
-	// reg resolves the route names above. Each route is either an
-	// in-process SPDY port-forward to the Service's ready pod (default) or
-	// a fixed TCP address when the matching env override (FISSION_ROUTER /
-	// FISSION_ROUTER_INTERNAL / FISSION_MCP_BASE_URL) is set. The registry
-	// lives for the whole test process; its connections die with it.
-	reg *portless.Registry
 	// internalAuthSecret is the master HMAC key used to sign
 	// /fission-function/... requests on the internal listener.
 	// Sourced from FISSION_INTERNAL_AUTH_SECRET; empty disables
@@ -122,7 +116,10 @@ func newFramework() (*Framework, error) {
 	}
 	secret := internalAuthSecretFromEnv()
 	// One shared transport (one connection pool) for all framework clients;
-	// the signing wrapper adds headers per request and delegates here.
+	// the signing wrapper adds headers per request and delegates here. The
+	// transport's DialContext keeps the registry alive for the process — the
+	// registry (and its port-forward connections) is never closed, dying
+	// with the test process.
 	transport := reg.Transport()
 	var signing http.RoundTripper = transport
 	if len(secret) > 0 {
@@ -139,7 +136,6 @@ func newFramework() (*Framework, error) {
 		fissionClient:      fissionClient,
 		kubeClient:         kubeClient,
 		images:             loadRuntimeImages(),
-		reg:                reg,
 		internalAuthSecret: secret,
 		httpClient:         &http.Client{Transport: transport},
 		routerHTTP:         &http.Client{Timeout: 30 * time.Second, Transport: signing},
@@ -158,7 +154,11 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 	if namespace == "" {
 		namespace = "fission"
 	}
-	reg := portless.New()
+	// Strict: the route set is closed, and the names deliberately mirror
+	// in-cluster DNS shortnames (router.fission = <svc>.<ns>) — without
+	// strict mode a typo'd name would silently fall back to a real DNS
+	// dial that could even succeed from inside a pod.
+	reg := portless.New(portless.WithStrict())
 	for _, r := range []struct{ name, envVar, service string }{
 		{RouterName, "FISSION_ROUTER", "router"},
 		{RouterInternalName, "FISSION_ROUTER_INTERNAL", "router-internal"},
@@ -239,6 +239,13 @@ func (f *Framework) HTTPClient() *http.Client { return f.httpClient }
 // resolvable only by clients built from this framework (HTTPClient, Router).
 func (f *Framework) RouterInternalBaseURL() string {
 	return portless.URL(RouterInternalName, 0, "")
+}
+
+// RouterInternalWSURL returns a ws:// URL for `path` on the router's internal
+// listener, for websocket dials that carry HTTPClient through the upgrade
+// handshake (coder/websocket DialOptions.HTTPClient).
+func (f *Framework) RouterInternalWSURL(path string) string {
+	return portless.WSURL(RouterInternalName, 0, path)
 }
 
 // InternalAuthSecret returns the master HMAC key the framework uses

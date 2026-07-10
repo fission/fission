@@ -79,7 +79,9 @@ func NewFramework() *Framework {
 			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
-		reg:   portless.New(),
+		// Strict: only registered service names may be dialed through the
+		// registry — a typo'd name errors instead of hitting real DNS.
+		reg:   portless.New(portless.WithStrict()),
 		ports: make(map[string]int),
 	}
 }
@@ -173,7 +175,9 @@ func (f *Framework) GetServiceURL(name string) (string, error) {
 
 // WaitReady blocks until the named service accepts TCP connections and its
 // route health check (if any — see WithTLSReadyCheck) passes, or ctx expires.
-// Replaces caller-side poll loops around the old CheckService.
+// A ctx without a deadline is capped by the route's ready timeout (60s
+// default), so callers don't need their own timeout boilerplate. Replaces
+// caller-side poll loops around the old CheckService.
 func (f *Framework) WaitReady(ctx context.Context, name string) error {
 	rt, ok := f.reg.Lookup(name)
 	if !ok {

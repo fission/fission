@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -38,9 +37,8 @@ func TestFissionCLI(t *testing.T) {
 	err = services.StartServices(ctx, f, mgr)
 	require.NoError(t, err)
 
-	readyCtx, readyCancel := context.WithTimeout(ctx, 50*time.Second)
-	defer readyCancel()
-	err = f.WaitReady(readyCtx, "webhook")
+	// Capped by the route's ready timeout (WaitReady doc).
+	err = f.WaitReady(ctx, "webhook")
 	require.NoError(t, err)
 
 	fissionClient, err := f.ClientGen().GetFissionClient()

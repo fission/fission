@@ -131,9 +131,8 @@ func (f *FetcherTestSuite) SetupSuite() {
 	err = services.StartServices(ctx, f.framework, f.mgr)
 	require.NoError(f.T(), err)
 
-	readyCtx, readyCancel := context.WithTimeout(ctx, 50*time.Second)
-	defer readyCancel()
-	err = f.framework.WaitReady(readyCtx, "webhook")
+	// Capped by the route's ready timeout (WaitReady doc).
+	err = f.framework.WaitReady(ctx, "webhook")
 	require.NoError(f.T(), err)
 
 	defer func() {

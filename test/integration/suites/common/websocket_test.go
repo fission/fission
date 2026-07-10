@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	portless "github.com/sanketsudake/go-portless"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,7 +53,7 @@ func TestWebsocket(t *testing.T) {
 	// The ws host is a portless route name, resolved by the framework's
 	// HTTP client during the upgrade handshake.
 	path := "/fission-function/" + fnName
-	wsURL := portless.WSURL(framework.RouterInternalName, 0, path)
+	wsURL := f.RouterInternalWSURL(path)
 
 	// Build the HMAC-signed upgrade headers. Empty secret leaves the
 	// dial unsigned, which is fine when internalAuth.enabled=false on
