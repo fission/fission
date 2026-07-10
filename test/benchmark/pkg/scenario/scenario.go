@@ -246,8 +246,8 @@ func Names(all []Scenario) []string {
 
 // Run executes the scenarios against env, isolating each in its own Scope and
 // always cleaning up. repetitions > 1 re-runs each scenario in fresh scopes and
-// folds the results via aggregateReps. A scenario error or skip is recorded in
-// the result and the run continues (failure budget).
+// folds the results via report.Aggregate. A scenario error or skip is recorded
+// in the result and the run continues (failure budget).
 func Run(ctx context.Context, env *harness.Env, scenarios []Scenario, repetitions int) report.Run {
 	if repetitions < 1 {
 		repetitions = 1
@@ -269,59 +269,10 @@ func Run(ctx context.Context, env *harness.Env, scenarios []Scenario, repetition
 				break // a skip is deterministic; an error already fails the gate
 			}
 		}
-		run.Scenarios = append(run.Scenarios, aggregateReps(reps))
+		run.Scenarios = append(run.Scenarios, report.Aggregate(reps))
 	}
 	run.FinishedAt = time.Now()
 	return run
-}
-
-// aggregateReps folds repetition results into one ScenarioResult, keeping
-// metric names stable for thresholds and the trend: each metric's value is the
-// median across reps, with the observed min..max recorded in
-// Meta["<metric>_range"] so the run's noise floor is visible next to the
-// number. The first non-clean rep is returned as-is (annotated with its rep
-// index) since partial metrics aren't comparable.
-func aggregateReps(reps []report.ScenarioResult) report.ScenarioResult {
-	last := reps[len(reps)-1]
-	if len(reps) == 1 {
-		return last
-	}
-	if last.Error != "" || last.Skipped {
-		last.SetMeta("failed_repetition", strconv.Itoa(len(reps)-1))
-		return last
-	}
-	// Build the aggregate from scratch (no struct copy — that would alias
-	// rep 0's Meta map and mutate the rep's own result).
-	agg := report.ScenarioResult{Name: reps[0].Name, Tags: reps[0].Tags}
-	for k, v := range reps[0].Meta {
-		agg.SetMeta(k, v)
-	}
-	agg.SetMeta("repetitions", strconv.Itoa(len(reps)))
-	// Single sweep collecting values per metric name. The metric set is the
-	// union across reps (first-seen order), not rep 0's set: conditionally
-	// emitted metrics (apiserver_calls drops its sample on a counter reset or
-	// scrape miss) must survive one rep missing them.
-	var order []report.Metric
-	vals := map[string][]float64{}
-	for _, r := range reps {
-		for _, m := range r.Metrics {
-			if _, ok := vals[m.Name]; !ok {
-				order = append(order, m)
-			}
-			vals[m.Name] = append(vals[m.Name], m.Value)
-		}
-	}
-	for _, m := range order {
-		v := vals[m.Name]
-		slices.Sort(v)
-		med := v[len(v)/2]
-		if len(v)%2 == 0 {
-			med = (v[len(v)/2-1] + v[len(v)/2]) / 2
-		}
-		agg.Metrics = append(agg.Metrics, report.Metric{Name: m.Name, Unit: m.Unit, Value: med, Better: m.Better})
-		agg.SetMeta(m.Name+"_range", fmt.Sprintf("%.3f..%.3f", v[0], v[len(v)-1]))
-	}
-	return agg
 }
 
 func runOne(ctx context.Context, env *harness.Env, s Scenario, scopeLabel string) (res report.ScenarioResult) {

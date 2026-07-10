@@ -749,38 +749,10 @@ func (fetcher *Fetcher) rename(src string, dst string) error {
 	return nil
 }
 
-// pkgNotFoundRetrySchedule is the sleep sequence for the apiserver
-// create-then-get race (a Package created moments ago can still 404). The
-// first hits are cheap (the race usually resolves within tens of ms) while
-// the summed window (≥550ms) covers at least the previous schedule's 500ms.
-var pkgNotFoundRetrySchedule = []time.Duration{
-	10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond,
-	80 * time.Millisecond, 100 * time.Millisecond, 100 * time.Millisecond,
-	100 * time.Millisecond, 100 * time.Millisecond,
-}
-
-// pkgDialRetrySchedule is the sleep sequence for connection errors on the
-// package Get. It exists for istio: envoy blocks all outbound requests during
-// the pod's first seconds, so these waits stay deliberately coarse.
-// For details, see https://github.com/istio/istio/issues/12187
-var pkgDialRetrySchedule = []time.Duration{
-	500 * time.Millisecond, 1000 * time.Millisecond,
-	1500 * time.Millisecond, 2000 * time.Millisecond,
-}
-
-// pkgTransientRetrySchedule is the sleep sequence for every other Get error
-// (apiserver timeouts, connection resets, 429/5xx). The pre-reshape loop
-// retried any error up to 4 more times back-to-back; keep that resilience but
-// space the attempts out instead of hot-looping.
-var pkgTransientRetrySchedule = []time.Duration{
-	50 * time.Millisecond, 100 * time.Millisecond,
-	200 * time.Millisecond, 400 * time.Millisecond,
-}
-
 // getPkgInformation gets package information from k8s api server.
 func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetchRequest) (pkg *fv1.Package, err error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
-	// Each error class consumes its own schedule; when a class's slice is
+	// Each error class consumes its own schedule; when a class's schedule is
 	// empty its budget is spent and the error is returned.
 	notFound, dial, transient := pkgNotFoundRetrySchedule, pkgDialRetrySchedule, pkgTransientRetrySchedule
 	for attempt := 0; ; attempt++ {
@@ -797,22 +769,21 @@ func (fetcher *Fetcher) getPkgInformation(ctx context.Context, req FunctionFetch
 			}
 			return pkg, nil
 		}
-		if ctx.Err() != nil {
-			return nil, err
-		}
+		// Classify, then consume from that class's schedule only.
+		sched := &transient
 		switch netErr := network.Adapter(err); {
-		case k8serr.IsNotFound(err) && len(notFound) > 0:
-			time.Sleep(notFound[0])
-			notFound = notFound[1:]
-		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()) && len(dial) > 0:
-			time.Sleep(dial[0])
-			dial = dial[1:]
-		case !k8serr.IsNotFound(err) && len(transient) > 0:
-			time.Sleep(transient[0])
-			transient = transient[1:]
-		default:
+		case k8serr.IsNotFound(err):
+			sched = &notFound
+		case netErr != nil && (netErr.IsDialError() || netErr.IsConnRefusedError()):
+			sched = &dial
+		}
+		if len(*sched) == 0 {
 			return nil, err
 		}
+		if !sleepCtx(ctx, (*sched)[0]) {
+			return nil, err
+		}
+		*sched = (*sched)[1:]
 	}
 }
 
@@ -886,7 +857,9 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 				if attempt%20 == 0 {
 					logger.Error(netErr, "error connecting to function environment pod for specialization request, retrying")
 				}
-				time.Sleep(envSpecializeRetryDelay(attempt))
+				if !sleepCtx(ctx, envSpecializeRetryDelay(attempt)) {
+					return http.StatusInternalServerError, fmt.Errorf("error specializing function pod: %w", ctx.Err())
+				}
 				continue
 			}
 		}
@@ -902,24 +875,6 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		}
 		return statusCode, fmt.Errorf("error specializing function pod: %w", err)
 	}
-}
-
-// envSpecializeWaitBudget bounds the total wall-clock time SpecializePod waits
-// for the environment container's server to start accepting connections. It
-// covers (with margin) the previous schedule's ~406s worst case, so slow-image
-// environments that survived before still do.
-const envSpecializeWaitBudget = 7 * time.Minute
-
-// envSpecializeRetryDelay returns the sleep before conn-refused retry attempt
-// i (0-based) of the env-specialize wait: 25ms doubling to a 500ms cap. Env
-// servers typically bind tens of milliseconds after the fetcher's first POST;
-// the previous 500*2i ms ramp made that common case cost a full second.
-func envSpecializeRetryDelay(i int) time.Duration {
-	const base, maxDelay = 25 * time.Millisecond, 500 * time.Millisecond
-	if i >= 5 {
-		return maxDelay // 25ms<<5 already exceeds the cap (and huge i would overflow the shift)
-	}
-	return base << i
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes

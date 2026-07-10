@@ -84,14 +84,12 @@ func addForwardedHostHeader(req *http.Request) {
 	}
 
 	// req.Host is <host>[:<port>]. SplitHostPort strips the port and IPv6
-	// brackets; a host without a port fails the split and is used as-is,
-	// except a bracketed port-less IPv6 literal ("[::1]"), whose brackets
-	// must come off for ParseIP below.
+	// brackets; a host without a port fails the split and is used as-is
+	// (a bracketed port-less IPv6 literal like "[::1]" still matches the
+	// quoting test below through its brackets/colons).
 	hostname := req.Host
 	if h, _, err := net.SplitHostPort(req.Host); err == nil {
 		hostname = h
-	} else if strings.HasPrefix(hostname, "[") && strings.HasSuffix(hostname, "]") {
-		hostname = hostname[1 : len(hostname)-1]
 	}
 
 	// Per RFC 7239 a node identifier that isn't a plain token — anything

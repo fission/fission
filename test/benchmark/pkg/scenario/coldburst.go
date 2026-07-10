@@ -7,6 +7,7 @@ package scenario
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -44,8 +45,8 @@ func (c *coldBurst) Tags() []string { return []string{"latency", "coldstart", "b
 
 func (c *coldBurst) Run(ctx context.Context, sc *harness.Scope) (report.ScenarioResult, error) {
 	var res report.ScenarioResult
-	res.SetMeta("burst", fmt.Sprintf("%d", c.burst))
-	res.SetMeta("poolsize", fmt.Sprintf("%d", c.poolsize))
+	res.SetMeta("burst", strconv.Itoa(c.burst))
+	res.SetMeta("poolsize", strconv.Itoa(c.poolsize))
 	env := sc.Env()
 
 	image := env.Images.Python
