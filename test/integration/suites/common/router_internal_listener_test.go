@@ -36,7 +36,7 @@ import (
 // fails the test fast rather than waiting on the suite-level timeout.
 func unsignedGet(t *testing.T, f *framework.Framework, url string) *http.Response {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
