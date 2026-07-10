@@ -45,7 +45,9 @@ func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function) (Resolved
 	return ResolvedEntry{SvcURL: s.answers[n], FromCache: s.fromCache}, nil
 }
 
-func (s *scriptedResolver) Invalidate(*fv1.Function, *url.URL) { s.invalidated.Add(1) }
+func (s *scriptedResolver) Invalidate(*fv1.Function, *url.URL, InvalidateReason) {
+	s.invalidated.Add(1)
+}
 
 // nopTapper records taps/untaps and their target URLs.
 type nopTapper struct {
@@ -215,7 +217,9 @@ func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (R
 	}, nil
 }
 
-func (s *releaseTrackingResolver) Invalidate(*fv1.Function, *url.URL) { s.invalidated.Add(1) }
+func (s *releaseTrackingResolver) Invalidate(*fv1.Function, *url.URL, InvalidateReason) {
+	s.invalidated.Add(1)
+}
 
 // TestStreamingRetryReleasesAbandonedSlots guards the RFC-0002 admission-slot
 // leak: a streaming request whose first admitted endpoint fails to dial must

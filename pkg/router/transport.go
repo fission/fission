@@ -362,15 +362,21 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			resp.Body.Close()
 		}
 
-		// An index-admitted endpoint (release != nil) that fails ANY dial is
-		// quarantined immediately: unlike the executor-RPC path — where only
-		// the timeout ladder below invalidates, because a fresh RPC re-picks a
-		// pod anyway — re-resolving the index would happily re-admit the same
-		// dead endpoint (connection refused never increments retryCounter)
-		// until maxRetries burn out. The quarantine lifts on the next slice
-		// event for the function.
+		// An index-admitted endpoint (release != nil) that fails a dial is
+		// reported: re-resolving the index would happily re-admit the same
+		// endpoint (connection refused never increments retryCounter) until
+		// maxRetries burn out, so the index must be told. Classification
+		// matters — a refused/unreachable dial means the pod is gone
+		// (quarantine now), while a dial TIMEOUT is how a saturated-but-alive
+		// pod presents and only strikes toward quarantine, so saturation
+		// degrades instead of evicting the function's only endpoint. The
+		// quarantine lifts on the next slice event for the function.
 		if roundTripper.release != nil {
-			roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL)
+			reason := InvalidateHard
+			if isNetTimeoutErr {
+				reason = InvalidateSoft
+			}
+			roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, reason)
 		}
 
 		// Check whether an error is an timeout error ("dial tcp i/o timeout").
@@ -386,7 +392,8 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 				"retry counter exceeded pre-defined threshold of %v",
 				roundTripper.params.svcAddrRetryCount))
 			if roundTripper.urlFromCache {
-				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL)
+				// Ladder exhausted: repeated failures, treat as hard.
+				roundTripper.resolver.Invalidate(roundTripper.fn, roundTripper.serviceURL, InvalidateHard)
 			}
 			retryCounter = 0
 		}

@@ -96,7 +96,7 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 }
 
 // Invalidate removes the function's service url entry from the cache.
-func (r *executorResolver) Invalidate(fn *fv1.Function, _ *url.URL) {
+func (r *executorResolver) Invalidate(fn *fv1.Function, _ *url.URL, _ InvalidateReason) {
 	r.fmap.remove(&fn.ObjectMeta)
 }
 

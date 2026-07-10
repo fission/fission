@@ -51,6 +51,14 @@ var (
 		"fission_router_endpointcache_quarantines_total",
 		"Endpoints quarantined from the index after a dial failure (lifted by the next slice event or the quarantine TTL).",
 	)
+	// dialTimeoutStrikes counts soft dial failures (timeouts) recorded against
+	// endpoints without quarantining them; a burst here with few quarantines
+	// means saturation, sustained strikes escalating to quarantines mean dead
+	// pods.
+	dialTimeoutStrikes = metrics.Int64Counter(
+		"fission_router_endpointcache_dial_timeout_strikes_total",
+		"Soft dial failures (timeouts) recorded against endpoints; quarantine requires several within one TTL window.",
+	)
 	// fallbacks counts warm-path requests routed to the executor for a
 	// specific reason (strict-mode annotation, no endpoints, all endpoints
 	// saturated, or the executor not supporting ensureCapacity).
@@ -82,6 +90,9 @@ func RecordEndpointLBPick() { lbPicks.Add(context.Background(), 1) }
 
 // RecordQuarantine counts one endpoint quarantine.
 func RecordQuarantine() { quarantines.Add(context.Background(), 1) }
+
+// RecordDialTimeoutStrike counts one soft (timeout) dial-failure strike.
+func RecordDialTimeoutStrike() { dialTimeoutStrikes.Add(context.Background(), 1) }
 
 // RegisterModeInfo publishes the constant info gauge exposing the requested and
 // effective endpointslice cache modes. Recorded for EVERY mode (including off)
