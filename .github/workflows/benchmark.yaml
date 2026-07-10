@@ -272,6 +272,18 @@ jobs:
             --set serviceMonitor.additionalServiceMonitorLabels.release=prometheus \
             --set podMonitor.additionalPodMonitorLabels.release=prometheus
 
+      # BISECT BRANCH ONLY: pin the legacy executor-RPC data plane (RFC-0002
+      # gates off) to isolate whether the c250 saturation gap vs v1.27 comes
+      # from the slice plane's quarantine/fallback behavior or from other code.
+      - name: Pin legacy data plane
+        if: ${{ matrix.fission_version == 'HEAD' }}
+        timeout-minutes: 5
+        run: |
+          kubectl -n fission set env deploy/router ROUTER_ENDPOINTSLICE_CACHE_MODE=off
+          kubectl -n fission set env deploy/executor ENABLE_FUNCTION_SERVICES=false
+          kubectl -n fission rollout status deploy/router --timeout=3m
+          kubectl -n fission rollout status deploy/executor --timeout=3m
+
       - name: Harden in-cluster DNS
         timeout-minutes: 6
         run: |
