@@ -1,6 +1,6 @@
 module github.com/fission/fission/test/benchmark
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2
