@@ -49,7 +49,7 @@ func (w *warmPath) Run(ctx context.Context, sc *harness.Scope) (report.ScenarioR
 
 	// requestsPerPod high so all concurrent requests serialize through one warm
 	// pod, isolating router/proxy overhead from pod fan-out.
-	route, err := provisionWarmFunction(ctx, sc, w.executor, w.poolsize, w.concurrency+10, nil)
+	route, _, err := provisionWarmFunction(ctx, sc, w.executor, runtimePython, w.poolsize, w.concurrency+10, nil)
 	if err != nil {
 		return res, err
 	}
