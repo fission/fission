@@ -6,15 +6,14 @@ package framework
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"time"
 
+	portless "github.com/sanketsudake/go-portless"
+	"github.com/sanketsudake/go-portless/backend"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
@@ -25,31 +24,43 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-type ServiceInfo struct {
-	Port int
+// Ports holds every fixed port the harness assigns, reserved together in one
+// FindFreePorts call at framework construction — the single place port
+// discovery happens — and passed down explicitly from there. (The subsystem
+// Start functions take port ints, so ports must be pre-picked; reserving them
+// atomically is what keeps them distinct.)
+type Ports struct {
+	Executor       int
+	StorageSvc     int
+	Router         int
+	RouterInternal int
 }
 
 type Framework struct {
-	env         *envtest.Environment
-	config      *rest.Config
-	logger      logr.Logger
-	serviceInfo map[string]ServiceInfo
+	env    *envtest.Environment
+	config *rest.Config
+	logger logr.Logger
+	ports  Ports
+	// reg maps service names to their local TCP addresses; dialing a
+	// registered name blocks until the backend accepts, so readiness
+	// waits happen inside the dial instead of in caller poll loops, and
+	// Route.Addr hands real dialable URLs to production consumers
+	// (in-process CLI, publishers) that read plain URLs from env vars.
+	reg *portless.Registry
 }
 
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
-	webhookPort, err := utils.FindFreePort()
-	if err != nil {
-		return nil, fmt.Errorf("error finding unused port: %w", err)
-	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
 
+	// LocalServingPort deliberately unset: PrepWithoutInstalling assigns it
+	// via controller-runtime's addr.Suggest, whose lock-file reservation is
+	// collision-safe even across test processes (unlike a FindFreePort).
 	options := &envtest.WebhookInstallOptions{
 		LocalServingHost: "localhost",
-		LocalServingPort: webhookPort,
 		Paths:            []string{filepath.Join(root, "webhook-manifest.yaml")},
 	}
-	err = options.PrepWithoutInstalling()
+	err := options.PrepWithoutInstalling()
 	if err != nil {
 		return nil, fmt.Errorf("error preparing webhook install options: %w", err)
 	}
@@ -61,11 +72,21 @@ func NewFramework() *Framework {
 	if err != nil {
 		panic(err)
 	}
+	servicePorts, err := utils.FindFreePorts(4)
+	if err != nil {
+		panic(fmt.Errorf("error reserving service ports: %w", err))
+	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
 	crdPath := filepath.Join(root, "..", "..", "..", "crds", "v1")
 
 	return &Framework{
+		ports: Ports{
+			Executor:       servicePorts[0],
+			StorageSvc:     servicePorts[1],
+			Router:         servicePorts[2],
+			RouterInternal: servicePorts[3],
+		},
 		logger: loggerfactory.GetLogger(),
 		env: &envtest.Environment{
 			CRDDirectoryPaths:     []string{crdPath},
@@ -76,7 +97,10 @@ func NewFramework() *Framework {
 			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
-		serviceInfo: make(map[string]ServiceInfo),
+		// Strict (the v0.2 default): only registered service names may be
+		// dialed through the registry — a typo'd name errors instead of
+		// hitting real DNS.
+		reg: portless.New(),
 	}
 }
 
@@ -93,13 +117,9 @@ func (f *Framework) Start(ctx context.Context) error {
 	return nil
 }
 
-func (f *Framework) ToggleMetricAddr() error {
-	port, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port: %w", err)
-	}
-	os.Setenv("METRICS_ADDR", fmt.Sprint(port))
-	return nil
+// Ports returns the harness's pre-reserved service ports.
+func (f *Framework) Ports() Ports {
+	return f.ports
 }
 
 func (f *Framework) RestConfig() *rest.Config {
@@ -116,6 +136,9 @@ func (f *Framework) ClientGen() *crd.ClientGenerator {
 
 func (f *Framework) Stop() error {
 	f.logger.Info("Stopping test env")
+	if err := f.reg.Close(); err != nil {
+		f.logger.Error(err, "error closing portless registry")
+	}
 	err := f.env.Stop()
 	if err != nil {
 		return fmt.Errorf("error stopping test env: %w", err)
@@ -123,40 +146,44 @@ func (f *Framework) Stop() error {
 	return nil
 }
 
-func (f *Framework) AddServiceInfo(name string, info ServiceInfo) {
-	f.serviceInfo[name] = info
-	f.logger.Info("Added service", "name", name, "info", info)
+// RegisterService names a locally-bound service in the portless registry.
+// The service may still be starting: dials through the registry (WaitReady)
+// retry until the port accepts (and any route health check passes).
+func (f *Framework) RegisterService(name string, port int, opts ...portless.RouteOption) error {
+	if _, err := f.reg.Add(context.Background(), name, backend.TCP(fmt.Sprintf("127.0.0.1:%d", port)), opts...); err != nil {
+		return fmt.Errorf("error registering service %s: %w", name, err)
+	}
+	f.logger.Info("Registered service", "name", name, "port", port)
+	return nil
 }
 
+// WithTLSReadyCheck gates a route's readiness on a completed TLS handshake,
+// not just a TCP accept — use it for TLS servers (the webhook) where
+// "listening" and "able to serve TLS" can differ (e.g. bad cert material).
+func WithTLSReadyCheck() portless.RouteOption {
+	return portless.RouteWithTLSHealth(0, nil)
+}
+
+// GetServiceURL returns the real local URL of a registered service. Production
+// consumers (the in-process CLI, publishers) dial these URLs with plain HTTP
+// clients, so they must stay resolvable outside the registry.
 func (f *Framework) GetServiceURL(name string) (string, error) {
-	info, ok := f.serviceInfo[name]
+	rt, ok := f.reg.Lookup(name)
 	if !ok {
 		return "", fmt.Errorf("service %s not found", name)
 	}
-	if info.Port == 0 {
-		return "", fmt.Errorf("service %s port not set", name)
+	addr, ok := rt.Addr()
+	if !ok {
+		return "", fmt.Errorf("service %s has no address", name)
 	}
-	return fmt.Sprintf("http://localhost:%d", info.Port), nil
+	return "http://" + addr.String(), nil
 }
 
-func (f *Framework) CheckService(name string) error {
-	_, err := f.GetServiceURL(name)
-	if err != nil {
-		return err
-	}
-	config := &tls.Config{
-		InsecureSkipVerify: true, //nolint:gosec // config is used to connect to our own webhook port.
-	}
-
-	d := &net.Dialer{Timeout: 10 * time.Second}
-	conn, err := tls.DialWithDialer(d, "tcp", net.JoinHostPort("localhost", strconv.Itoa(f.serviceInfo[name].Port)), config)
-	if err != nil {
-		return fmt.Errorf("webhook server is not reachable: %w", err)
-	}
-
-	if err := conn.Close(); err != nil {
-		return fmt.Errorf("webhook server is not reachable: closing connection: %w", err)
-	}
-
-	return nil
+// WaitReady blocks until the named service accepts TCP connections and its
+// route health check (if any — see WithTLSReadyCheck) passes, or ctx expires.
+// A ctx without a deadline is capped by the route's ready timeout (60s
+// default), so callers don't need their own timeout boilerplate. Replaces
+// caller-side poll loops around the old CheckService.
+func (f *Framework) WaitReady(ctx context.Context, name string) error {
+	return f.reg.Ready(ctx, name)
 }

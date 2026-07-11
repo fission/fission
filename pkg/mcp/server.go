@@ -96,6 +96,11 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 // wrapped with bearer-token authz (pass-through when no signing key is set) and
 // a per-request body cap. SessionTimeout bounds idle-session accumulation.
 func (s *Server) HTTPHandler() http.Handler {
+	// The SDK's localhost DNS-rebinding protection stays ON: port-forwarded
+	// traffic lands on the pod's loopback, so clients reaching svc/mcp
+	// through a forward must present a loopback Host header (127.0.0.1, the
+	// documented form; the integration framework rewrites its route's Host
+	// accordingly). Non-loopback Hosts over a forward are rejected 403.
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return s.mcp },
 		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout},

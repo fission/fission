@@ -7,6 +7,7 @@
 package common_test
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -15,46 +16,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/fission/fission/test/integration/framework"
 )
 
 // TestRouterInternalListener exercises the listener split introduced
 // for GHSA-3g33-6vg6-27m8: /fission-function/<ns>/<name> must NOT be
-// reachable on the public listener (port 8888 → forwarded to
-// localhost:8888) and the internal listener (port 8889) must reject
-// unsigned requests when the HMAC secret is provisioned, while
-// remaining reachable for healthcheck-style probing.
+// reachable on the public listener (Service `router`) and the internal
+// listener (the separate ClusterIP-only Service `router-internal`, so
+// routerServiceType=NodePort/LoadBalancer doesn't expose it outside the
+// cluster) must reject unsigned requests when the HMAC secret is
+// provisioned, while remaining reachable for healthcheck-style probing.
 //
-// Prerequisites (matching the integration-test bootstrap in the suite
-// workflow / README — the public listener is on Service `router`, the
-// internal listener is on the separate ClusterIP-only Service
-// `router-internal` so routerServiceType=NodePort/LoadBalancer doesn't
-// expose port 8889 outside the cluster):
-//
-//	kubectl port-forward svc/router          8888:80   -n fission &
-//	kubectl port-forward svc/router-internal 8889:8889 -n fission &
-//
-// The integration suite already requires the public 8888 forward;
-// the 8889 forward is new for this advisory.
+// Both listeners are reached through the framework's unsigned HTTPClient
+// (the internal-listener request must NOT carry an HMAC signature here —
+// rejecting unsigned traffic is the point).
 
-const (
-	publicRouterURL   = "http://localhost:8888"
-	internalRouterURL = "http://localhost:8889"
-)
-
-// httpClientWithTimeout returns a short-timeout client so a hung
-// listener fails the test fast rather than waiting on the suite-level
-// 30m timeout.
-func httpClientWithTimeout() *http.Client {
-	return &http.Client{Timeout: 10 * time.Second}
+// unsignedGet issues a single unsigned GET bounded to 10s so a hung listener
+// fails the test fast rather than waiting on the suite-level timeout.
+func unsignedGet(t *testing.T, f *framework.Framework, url string) *http.Response {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	t.Cleanup(cancel)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err := f.HTTPClient().Do(req)
+	require.NoError(t, err, "router listener %s must be reachable", url)
+	return resp
 }
 
 // TestPublicRouterReturns404ForInternalRoute pins the GHSA-3g33-6vg6-27m8
 // regression: the public listener must NOT serve /fission-function/...,
 // regardless of whether the function exists.
 func TestPublicRouterReturns404ForInternalRoute(t *testing.T) {
-	client := httpClientWithTimeout()
-	resp, err := client.Get(publicRouterURL + "/fission-function/default/nonexistent")
-	require.NoError(t, err, "public router on 8888 must be reachable")
+	f := framework.Connect(t)
+	resp := unsignedGet(t, f, f.Router(t).BaseURL()+"/fission-function/default/nonexistent")
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
@@ -70,9 +66,8 @@ func TestPublicRouterReturns404ForInternalRoute(t *testing.T) {
 // unset on the router pod), because in that mode the verifier
 // short-circuits and the request reaches the function handler.
 func TestInternalRouterRejectsUnsigned(t *testing.T) {
-	client := httpClientWithTimeout()
-	resp, err := client.Get(internalRouterURL + "/fission-function/default/nonexistent")
-	require.NoError(t, err, "internal router on 8889 must be reachable")
+	f := framework.Connect(t)
+	resp := unsignedGet(t, f, f.RouterInternalBaseURL()+"/fission-function/default/nonexistent")
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)

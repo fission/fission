@@ -186,6 +186,12 @@ jobs:
           for d in $(kubectl -n fission get deploy -o name); do
             kubectl -n fission rollout status "$d" --timeout=5m
           done
+          # deploy/mcp must exist and be ready (kind-ci enables mcp.enabled):
+          # the MCP integration test skips itself when the endpoint is
+          # unreachable, so without this explicit gate a profile regression
+          # would silently turn all MCP coverage into a green skip — the
+          # loop above only waits for deployments that exist.
+          kubectl -n fission rollout status deploy/mcp --timeout=3m
 
       # Pin the v1.34 leg back to the legacy data plane (RFC-0002 gates off):
       # kind-ci deploys with the EndpointSlice path on everywhere, so without
@@ -331,14 +337,15 @@ jobs:
           kubectl rollout status deploy/loki -n fission-logging --timeout=3m
           kubectl rollout status daemonset/otel-collector -n fission-logging --timeout=3m
 
-      # Port-forward is started inside the Go test step rather than as a
-      # standalone step, because background processes started with `&` may
-      # not survive across GitHub Actions steps on every runner image.
-      # Wait-for-readiness covers cluster startup races.
+      # The conditional forward loops (test-registry, loki) are started inside
+      # the Go test step rather than as a standalone step, because background
+      # processes started with `&` may not survive across GitHub Actions steps
+      # on every runner image. Router/mcp traffic needs no forwards — the test
+      # framework port-forwards in-process and its dials wait for readiness.
 
       - name: Go integration tests (common + serial phases)
         # Margin over the hard go-test timeouts this step contains (common 35m +
-        # serial 25m) plus image preload / port-forward setup, so a slow-but-valid
+        # serial 25m) plus image preload / jar build setup, so a slow-but-valid
         # run isn't killed by the step timeout before a go-test timeout can fire.
         # common bumped to 35m for the rust/jvm/jersey builder tests (cargo crate
         # fetch + Maven dependency download on first build); serial bumped to 25m
@@ -379,7 +386,6 @@ jobs:
           # the eg-gateway Gateway are installed (above). Empty elsewhere, so
           # the test skips. Value is the parentRef the test attaches to.
           TEST_GATEWAY_PARENTREF: ${{ matrix.kindversion == 'v1.32.11' && 'fission/eg-gateway' || '' }}
-          FISSION_ROUTER: 127.0.0.1:8888
           FISSION_NAMESPACE: fission
           LOG_DIR: ${{ github.workspace }}/test/integration/logs
         run: |
@@ -430,29 +436,12 @@ jobs:
           export JVM_JERSEY_JAR_PATH="$JAR_DIR/jersey-hello-world.jar"
           echo "built jars: $(ls -l "$JAR_DIR")"
 
-          # Port-forwards are self-healing: kubectl port-forward exits when its
-          # target pod restarts (e.g. a router liveness restart under node
-          # churn), and a one-shot forward then severs the rest of the suite —
-          # one 5s blip becomes 40 connection-refused failures. The loop
-          # re-establishes the tunnel; in-flight test polls (GetEventually)
-          # absorb the gap.
-          forward() { while true; do kubectl port-forward "$1" "$2" -n "$FISSION_NAMESPACE" || true; sleep 1; done; }
-          forward svc/router 8888:80 >/tmp/pf.log 2>&1 &
-          PF_PID=$!
-          # The router internal listener (GHSA-3g33-6vg6-27m8 fix) hosts
-          # /fission-function/<ns>/<name>; the framework routes those
-          # requests to localhost:8889 with HMAC signing. The internal
-          # port lives on a separate ClusterIP-only Service (router-internal)
-          # so routerServiceType=NodePort/LoadBalancer doesn't expose
-          # the listener externally — port-forward that Service.
-          forward svc/router-internal 8889:8889 >/tmp/pf-internal.log 2>&1 &
-          PF_PID_INT=$!
-          # The MCP tool server (RFC-0011) is enabled in the kind-ci skaffold
-          # profile as a ClusterIP-only Service; port-forward it so the MCP
-          # integration test can reach it at FISSION_MCP_BASE_URL.
-          forward svc/mcp 8890:8890 >/tmp/pf-mcp.log 2>&1 &
-          PF_PID_MCP=$!
-          export FISSION_MCP_BASE_URL="http://127.0.0.1:8890"
+          # No router/mcp port-forwards: the integration framework
+          # port-forwards in-process (go-portless registry — router.fission /
+          # router-internal.fission / mcp.fission resolved from
+          # FISSION_NAMESPACE), self-healing across pod restarts and blocking
+          # dials until the service is ready. Only services dialed by plain
+          # HTTP clients outside the framework still need a forward loop:
           # OCI test registry (RFC-0001), deployed on the 1.32 + 1.36 legs.
           # Tests push through the forward; the fetcher pulls the Service
           # address. Env vars unset on other legs => tests skip. The 1.36 leg
@@ -482,7 +471,7 @@ jobs:
             export LOKI_URL=http://127.0.0.1:3100
             export FISSION_TEST_LOKI=1
           fi
-          trap "kill $PF_PID $PF_PID_INT $PF_PID_MCP $PF_PID_REG $PF_PID_LOKI 2>/dev/null || true" EXIT
+          trap "kill $PF_PID_REG $PF_PID_LOKI 2>/dev/null || true" EXIT
 
           # Export the master HMAC secret so the framework's RouterClient
           # signs /fission-function/... requests against the internal
@@ -496,27 +485,8 @@ jobs:
             echo "fission-internal-auth Secret not present — running tests in unsigned mode"
           fi
 
-          # Wait for port-forward to accept TCP connections. Without -f, curl
-          # exits 0 for any HTTP response (including 4xx/5xx) and exit 7 for
-          # connection refused — exactly what we want here.
-          for i in $(seq 1 30); do
-            ok_pub=0; ok_int=0; ok_mcp=0
-            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8888/" 2>/dev/null && ok_pub=1
-            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8889/" 2>/dev/null && ok_int=1
-            curl -sS --connect-timeout 1 --max-time 2 -o /dev/null "http://127.0.0.1:8890/healthz" 2>/dev/null && ok_mcp=1
-            if [ "$ok_pub" -eq 1 ] && [ "$ok_int" -eq 1 ] && [ "$ok_mcp" -eq 1 ]; then
-              echo "router + mcp port-forwards ready after ${i}s (8888=$ok_pub, 8889=$ok_int, 8890=$ok_mcp)"
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              echo "port-forward did not become ready in 30s; pf logs:"
-              cat /tmp/pf.log || true
-              cat /tmp/pf-internal.log || true
-              cat /tmp/pf-mcp.log || true
-              exit 1
-            fi
-            sleep 1
-          done
+          # No readiness poll: the framework's registry blocks each dial until
+          # the target service accepts, so the first test request self-waits.
 
           # On the coverage leg, also instrument the test binary itself so the
           # CLI + client-library code the suite drives in-process (via
@@ -536,8 +506,8 @@ jobs:
           # Serial phase: tests that mutate cluster-wide control-plane state
           # (e.g. restarting the executor to exercise AdoptExistingResources)
           # and so cannot run alongside the parallel common suite. Runs after
-          # it, single-package (-p 1), reusing the same port-forwards and HMAC
-          # secret established above. On the coverage leg the same -cover flags
+          # it, single-package (-p 1), reusing the HMAC secret established
+          # above. On the coverage leg the same -cover flags
           # apply, so the in-process CLI coverage merges into covdata-cli and
           # the executor pod's adopt-path coverage flushes to the node hostPath.
           # -timeout is kept above the test's own 15m context deadline so the
@@ -630,12 +600,13 @@ jobs:
         timeout-minutes: 2
         if: ${{ failure() || cancelled() }}
         run: |
-          # The self-healing forward loops convert a permanently-dead service
-          # (router crashloop, deleted Service) into test-timeout-shaped
-          # failures; the repeating "unable to forward" lines naming the real
-          # cause live only in these runner-local files, which no artifact
-          # captures.
-          for f in /tmp/pf.log /tmp/pf-internal.log /tmp/pf-mcp.log /tmp/pf-registry.log; do
+          # The self-healing forward loops (test-registry, loki) convert a
+          # permanently-dead service into test-timeout-shaped failures; the
+          # repeating "unable to forward" lines naming the real cause live
+          # only in these runner-local files, which no artifact captures.
+          # (Router/mcp traffic goes through the in-process registry, whose
+          # dial errors surface directly in test output.)
+          for f in /tmp/pf-registry.log /tmp/pf-loki.log; do
             echo "===== $f ====="
             tail -n 100 "$f" 2>/dev/null || echo "(absent)"
           done

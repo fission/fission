@@ -17,8 +17,8 @@ Companion docs: [`fission-build-pipeline.md`](fission-build-pipeline.md), [`fiss
 |---|---|---|
 | `dial tcp <ip>:<port>: i/o timeout` (Fission pod → storagesvc) | NetworkPolicy dropping the request, or pod labels don't match policy selectors | "NetworkPolicy" below |
 | `dial tcp <router-internal-clusterIP>:8889: i/o timeout` in a *caller's* pod log | A fission-bundle head that calls the router internal listener is missing from the allowlist | "Router internal-listener allowlist" below |
-| `dial tcp ...: connection refused` to `127.0.0.1:8888` | `kubectl port-forward svc/router` race in the test runner (CI has a 30s wait loop). Usually a flake | — |
-| `connection refused` on `127.0.0.1:8889` / `404` from `/fission-function/...` | Missing `kubectl port-forward svc/router-internal 8889:8889` (listener split moved these routes off public 8888) | [`fission-integration-test-quirks.md`](fission-integration-test-quirks.md) |
+| `portless: waiting for route "router.fission": ... not ready within 60s` (or another `*.fission` route) | The in-process port-forward found no ready pod behind the Service — the deploy is unhealthy or `FISSION_NAMESPACE` is wrong. Check the Service's pods, not a kubectl forward (there is none) | [`fission-integration-test-quirks.md`](fission-integration-test-quirks.md) |
+| `404` from `/fission-function/...` on the public route | Request went to the public listener; the listener split moved those routes to `router-internal.fission` (use `f.Router(t)` / `f.RouterInternalBaseURL()`) | [`fission-integration-test-quirks.md`](fission-integration-test-quirks.md) |
 | `404 Not Found` from `raw.githubusercontent.com/...` | Test-data URL broken upstream. Not a regression | — |
 
 ### Filesystem / permissions

@@ -28,11 +28,13 @@ import (
 // and (2) callable via tools/call, returning the same body as a direct
 // invocation on the router internal listener.
 //
-// The MCP subsystem is enabled in the kind/kind-ci skaffold profiles and
-// port-forwarded to FISSION_MCP_BASE_URL by the suite bootstrap; the test skips
-// when the endpoint is unreachable (MCP off in this install). In CI the server
-// runs in pass-through auth mode (authentication disabled), so no bearer token
-// is needed; per-namespace JWT scoping is covered by the pkg/mcp unit tests.
+// The MCP subsystem is enabled in the kind/kind-ci skaffold profiles; the
+// framework reaches it through the mcp.fission route (in-process port-forward,
+// or the FISSION_MCP_BASE_URL override). The test skips when the endpoint is
+// unreachable (MCP off in this install) — CI guards against that skip going
+// silent by gating on deploy/mcp before the suite runs. In CI the server runs
+// in pass-through auth mode (authentication disabled), so no bearer token is
+// needed; per-namespace JWT scoping is covered by the pkg/mcp unit tests.
 func TestMCPToolsListAndCall(t *testing.T) {
 	t.Parallel()
 
@@ -42,8 +44,7 @@ func TestMCPToolsListAndCall(t *testing.T) {
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
 
-	base := f.MCPBaseURL()
-	requireMCPReachable(t, ctx, base)
+	requireMCPReachable(t, ctx, f)
 
 	ns := f.NewTestNamespace(t)
 	envName := "nodejs-mcp-" + ns.ID
@@ -63,7 +64,7 @@ func TestMCPToolsListAndCall(t *testing.T) {
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 
-	session := connectMCP(t, ctx, base)
+	session := connectMCP(t, ctx, f)
 	defer func() { _ = session.Close() }()
 
 	// tools/list eventually includes our tool (the reconciler registers it
@@ -109,29 +110,51 @@ func TestMCPToolsListAndCall(t *testing.T) {
 }
 
 // requireMCPReachable skips the test when the MCP endpoint isn't serving (MCP
-// disabled in this install, or no port-forward).
-func requireMCPReachable(t *testing.T, ctx context.Context, base string) {
+// disabled in this install). A short first probe distinguishes "not installed"
+// (typed target-not-found — skip fast) from "warming"; only the latter earns
+// the generous deadline a cold in-process port-forward needs (Service lookup +
+// pod resolution + SPDY tunnel through a possibly-loaded apiserver).
+func requireMCPReachable(t *testing.T, ctx context.Context, f *framework.Framework) {
 	t.Helper()
-	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(base, "/")+"/healthz", nil)
-	require.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
+	base := f.MCPBaseURL()
+	probe := func(timeout time.Duration) (int, error) {
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
+		require.NoError(t, err)
+		resp, err := f.HTTPClient().Do(req)
+		if err != nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	status, err := probe(5 * time.Second)
+	if framework.IsTargetMissing(err) {
+		t.Skipf("MCP not installed (svc/mcp absent); skipping: %v", err)
+	}
+	if err != nil {
+		status, err = probe(30 * time.Second)
+	}
 	if err != nil {
 		t.Skipf("MCP endpoint %s not reachable (%v); skipping", base, err)
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Skipf("MCP endpoint %s returned %d; skipping", base, resp.StatusCode)
+	if status != http.StatusOK {
+		t.Skipf("MCP endpoint %s returned %d; skipping", base, status)
 	}
 }
 
-func connectMCP(t *testing.T, ctx context.Context, base string) *mcp.ClientSession {
+func connectMCP(t *testing.T, ctx context.Context, f *framework.Framework) *mcp.ClientSession {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "fission-it", Version: "test"}, nil)
-	transport := &mcp.StreamableClientTransport{Endpoint: strings.TrimRight(base, "/") + "/mcp"}
+	transport := &mcp.StreamableClientTransport{
+		Endpoint: f.MCPBaseURL() + "/mcp",
+		// The endpoint host is a portless route name; resolve it through
+		// the framework registry.
+		HTTPClient: f.HTTPClient(),
+	}
 	session, err := client.Connect(ctx, transport, nil)
-	require.NoError(t, err, "connect MCP client to %s", base)
+	require.NoError(t, err, "connect MCP client to %s", f.MCPBaseURL())
 	return session
 }
 

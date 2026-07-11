@@ -291,19 +291,35 @@ func GetIntValueFromEnv(envVar string) (int, error) {
 }
 
 func FindFreePort() (int, error) {
-	listener, err := net.Listen("tcp", ":0")
+	ports, err := FindFreePorts(1)
 	if err != nil {
 		return 0, err
 	}
+	return ports[0], nil
+}
 
-	port := listener.Addr().(*net.TCPAddr).Port
-
-	err = listener.Close()
-	if err != nil {
-		return 0, err
+// FindFreePorts picks n distinct free ports by holding all n listeners open
+// simultaneously before closing any of them. Two sequential FindFreePort
+// calls can return the SAME port (listen :0, close, re-listen — the kernel
+// may hand the just-freed port right back), which breaks callers needing
+// distinct ports, e.g. the router's public and internal listeners.
+func FindFreePorts(n int) ([]int, error) {
+	listeners := make([]net.Listener, 0, n)
+	defer func() {
+		for _, l := range listeners {
+			_ = l.Close()
+		}
+	}()
+	ports := make([]int, 0, n)
+	for range n {
+		listener, err := net.Listen("tcp", ":0")
+		if err != nil {
+			return nil, err
+		}
+		listeners = append(listeners, listener)
+		ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
 	}
-
-	return port, nil
+	return ports, nil
 }
 
 // DeleteOldPackages deletes src and built deployment packages from builder's storage.

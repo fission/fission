@@ -16,23 +16,24 @@ import (
 	"testing"
 	"time"
 
+	portless "github.com/sanketsudake/go-portless"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/utils/correlation"
 )
 
-// RouterClient wraps an HTTP client pointed at the Fission router (typically
-// the port-forwarded svc/router on 127.0.0.1:8888 in CI).
+// RouterClient wraps an HTTP client pointed at the Fission router. The base
+// URLs are portless route names (RouterName / RouterInternalName), resolved
+// by the client's transport through the framework registry — an in-process
+// port-forward by default, or a fixed address when the env overrides are set.
 //
 // Requests to /fission-function/... are unconditionally routed to the
-// framework's `routerInternal` URL (typically 127.0.0.1:8889) and
-// signed with HMAC-SHA256 because of the GHSA-3g33-6vg6-27m8 listener
-// split — the public listener no longer hosts those routes. The
-// framework reads FISSION_INTERNAL_AUTH_SECRET at startup; an empty
-// secret leaves requests unsigned, which works against clusters where
-// internalAuth.enabled=false (the verifier short-circuits to
+// router-internal route and signed with HMAC-SHA256 because of the
+// GHSA-3g33-6vg6-27m8 listener split — the public listener no longer hosts
+// those routes. The framework reads FISSION_INTERNAL_AUTH_SECRET at startup;
+// an empty secret leaves requests unsigned, which works against clusters
+// where internalAuth.enabled=false (the verifier short-circuits to
 // pass-through).
 type RouterClient struct {
 	baseURL  string
@@ -40,29 +41,24 @@ type RouterClient struct {
 	http     *http.Client
 }
 
-// Router returns an HTTP client targeting FISSION_ROUTER (or 127.0.0.1:8888).
+// Router returns an HTTP client targeting the router's public listener. The
+// shared underlying client resolves route names through the framework
+// registry and signs requests to /fission-function/... with the
+// ServiceRouterInternal key (when configured); other paths (HTTPTriggers,
+// /router-healthz) pass through unsigned to match end-user behaviour against
+// the public listener.
 func (f *Framework) Router(t *testing.T) *RouterClient {
 	t.Helper()
-	// The persistent http.Client uses a transport that signs requests
-	// to /fission-function/... with the master HMAC key (when
-	// configured). Other paths (HTTPTriggers, /router-healthz) go
-	// through unsigned to match end-user behaviour against the public
-	// listener.
-	// Sign requests to /fission-function/... with the ServiceRouterInternal key
-	// (when configured); other paths (HTTPTriggers, /router-healthz) pass through
-	// unsigned. Shared with the benchmark harness via pkg/auth/hmac.
-	rt := http.DefaultTransport
-	if len(f.internalAuthSecret) > 0 {
-		rt = hmacauth.NewServiceSigningTransport(f.internalAuthSecret, hmacauth.ServiceRouterInternal, rt, "/fission-function/")
-	}
 	return &RouterClient{
-		baseURL:  f.router,
-		internal: f.routerInternal,
-		http:     &http.Client{Timeout: 30 * time.Second, Transport: rt},
+		baseURL:  portless.URL(RouterName, 0, ""),
+		internal: portless.URL(RouterInternalName, 0, ""),
+		http:     f.routerHTTP,
 	}
 }
 
-// BaseURL returns the configured router base URL (e.g. "http://127.0.0.1:8888").
+// BaseURL returns the router's public base URL. The host is a portless route
+// name, resolvable only by clients built from the framework (HTTPClient,
+// Router).
 func (r *RouterClient) BaseURL() string { return r.baseURL }
 
 // Get performs a single GET against `path` (joined to BaseURL) and returns the
@@ -90,9 +86,6 @@ func (r *RouterClient) Post(ctx context.Context, path, contentType string, body 
 func (r *RouterClient) do(ctx context.Context, method, path, contentType string, body []byte, header http.Header) (int, string, error) {
 	// /fission-function/... lives only on the internal listener after
 	// GHSA-3g33-6vg6-27m8; route to the internal base URL.
-	// `r.internal` is always non-empty after framework setup
-	// (defaults to http://127.0.0.1:8889 from
-	// routerInternalURLFromEnv).
 	base := r.baseURL
 	p := ensureLeadingSlash(path)
 	if strings.HasPrefix(p, "/fission-function/") {

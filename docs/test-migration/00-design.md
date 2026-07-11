@@ -42,7 +42,7 @@ test/integration/
     canary.go                   # CreateCanaryConfig, WaitForCanaryWeights
     timer.go, kubewatcher.go,
     mqtrigger.go                # other trigger helpers (added as tests need them)
-    router.go                   # Router(t) HTTP client with retries; honors FISSION_ROUTER env
+    router.go                   # Router(t) HTTP client with retries; portless-resolved, honors FISSION_ROUTER override
     poll.go                     # Eventually(t, fn, opts) over wait.PollUntilContextTimeout
     diag.go                     # OnFailure dump (events, pod logs, CRD YAML) → t.TempDir
     images.go                   # RuntimeImages from env vars; single source of truth
@@ -137,7 +137,7 @@ CI uploads this directory as an artifact, mirroring the existing fission-dump/ki
 ```
 
 Then `./test/kind_CI.sh` runs unchanged — its embedded test list is what shrinks each PR.
-Both Go and bash tests share the same deployed Fission, the same `KUBECONFIG`, the same port-forwarded router (`127.0.0.1:8888`), and the same runtime image env vars.
+Both Go and bash tests share the same deployed Fission, the same `KUBECONFIG`, the same router (reached via the framework's in-process port-forward), and the same runtime image env vars.
 
 The build tag `//go:build integration` keeps the suite out of `make test-run` (the unit-test gate), so `make check` and the existing test workflow are unaffected.
 
@@ -248,12 +248,9 @@ The `#test:disabled` directive is honored by `test/run_test.sh:41` today, so no 
 kind create cluster --config kind.yaml
 kubectl create ns fission && make create-crds
 SKAFFOLD_PROFILE=kind make skaffold-deploy
-kubectl port-forward svc/router 8888:80 -nfission &
 
 export NODE_RUNTIME_IMAGE=ghcr.io/fission/node-env-22
 # ... other runtime image env vars matching kind_CI.sh lines 23-35 ...
-export FISSION_ROUTER=127.0.0.1:8888
-
 go test -tags=integration -timeout=30m -v ./test/integration/suites/common/...
 ```
 

@@ -115,18 +115,24 @@ func (f *FetcherTestSuite) SetupSuite() {
 		return nil
 	})
 
+	err = f.createFetcherTestDirs()
+	require.NoError(f.T(), err, "error creating fetcher test dirs")
+
+	// Mutate os.Args (the fetcher's flag input) BEFORE starting any service
+	// goroutines: controller-runtime managers read os.Args[0] via
+	// rest.DefaultKubernetesUserAgent, and an append here would race with
+	// them once StartServices has run.
+	os.Args = append(os.Args, "-secret-dir", f.secretsDir, "-cfgmap-dir", f.cfgMapsDir)
+	os.Args = append(os.Args, f.sharedVolDir)
+
 	err = f.framework.Start(ctx)
 	require.NoError(f.T(), err)
 
 	err = services.StartServices(ctx, f.framework, f.mgr)
 	require.NoError(f.T(), err)
 
-	err = wait.PollUntilContextTimeout(ctx, time.Second*5, time.Second*50, true, func(_ context.Context) (bool, error) {
-		if err := f.framework.CheckService("webhook"); err != nil {
-			return false, nil
-		}
-		return true, nil
-	})
+	// Capped by the route's ready timeout (WaitReady doc).
+	err = f.framework.WaitReady(ctx, "webhook")
 	require.NoError(f.T(), err)
 
 	defer func() {
@@ -134,12 +140,6 @@ func (f *FetcherTestSuite) SetupSuite() {
 			f.TearDownSuite()
 		}
 	}()
-
-	err = f.createFetcherTestDirs()
-	require.NoError(f.T(), err, "error creating fetcher test dirs")
-
-	os.Args = append(os.Args, "-secret-dir", f.secretsDir, "-cfgmap-dir", f.cfgMapsDir)
-	os.Args = append(os.Args, f.sharedVolDir)
 
 	err = f.setupPodInfoMountDir()
 	require.NoError(f.T(), err)

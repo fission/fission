@@ -134,44 +134,6 @@ type skipper interface {
 	Skipf(format string, args ...any)
 }
 
-func routerURLFromEnv() string {
-	if v := os.Getenv("FISSION_ROUTER"); v != "" {
-		if hasScheme(v) {
-			return v
-		}
-		return "http://" + v
-	}
-	return "http://127.0.0.1:8888"
-}
-
-// routerInternalURLFromEnv returns the URL the framework should use
-// for the router's internal listener (post-GHSA-3g33-6vg6-27m8 split).
-// Defaults to http://127.0.0.1:8889 to match the suite-bootstrap
-// port-forward; override via FISSION_ROUTER_INTERNAL when running
-// against a non-default install.
-func routerInternalURLFromEnv() string {
-	if v := os.Getenv("FISSION_ROUTER_INTERNAL"); v != "" {
-		if hasScheme(v) {
-			return v
-		}
-		return "http://" + v
-	}
-	return "http://127.0.0.1:8889"
-}
-
-// mcpBaseURLFromEnv returns the URL the framework should use for the MCP server
-// (svc/mcp). Defaults to http://127.0.0.1:8890 to match the suite-bootstrap
-// port-forward; override via FISSION_MCP_BASE_URL. Empty disables the MCP tests.
-func mcpBaseURLFromEnv() string {
-	if v := os.Getenv("FISSION_MCP_BASE_URL"); v != "" {
-		if hasScheme(v) {
-			return v
-		}
-		return "http://" + v
-	}
-	return "http://127.0.0.1:8890"
-}
-
 // internalAuthSecretFromEnv returns the master HMAC key used to sign
 // requests against the router internal listener. Empty when
 // internalAuth is disabled in the cluster — the framework still issues
@@ -180,8 +142,4 @@ func mcpBaseURLFromEnv() string {
 // env-var contract stays in one place.
 func internalAuthSecretFromEnv() []byte {
 	return storageclient.HMACSecretFromEnv()
-}
-
-func hasScheme(s string) bool {
-	return len(s) > 7 && (s[:7] == "http://" || s[:8] == "https://")
 }
