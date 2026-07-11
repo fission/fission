@@ -230,169 +230,194 @@ func setupCommandLineArgs() *CommandLineArgs {
 	return args
 }
 
-// getServiceNameFromArgs determines which service is being started based on command line args
-func getServiceNameFromArgs(args *CommandLineArgs) string {
-	serviceName := "Fission-Unknown"
-
-	if args.routerPort != 0 {
-		serviceName = "Fission-Router"
-	} else if args.executorPort != 0 {
-		serviceName = "Fission-Executor"
-	} else if args.kubewatcher {
-		serviceName = "Fission-KubeWatcher"
-	} else if args.timer {
-		serviceName = "Fission-Timer"
-	} else if args.mqt {
-		serviceName = "Fission-MessageQueueTrigger"
-	} else if args.builderMgr {
-		serviceName = "Fission-BuilderMgr"
-	} else if args.storageServicePort != 0 {
-		serviceName = "Fission-StorageSvc"
-	} else if args.mqt_keda {
-		serviceName = "Fission-Keda-MQTrigger"
-	} else if args.mcpPort != 0 {
-		serviceName = "Fission-MCP"
-	} else if args.tenantController {
-		serviceName = "Fission-TenantController"
-	}
-
-	return serviceName
+// bundleService describes one dispatchable fission-bundle subsystem: its
+// OTEL service name, its selection predicate over the parsed flags, and its
+// runner. Both the dispatch and the OTEL service name derive from this one
+// table, in order (first match wins) — adding a subsystem is one flag plus
+// one entry here.
+type bundleService struct {
+	name     string
+	selected func(*CommandLineArgs) bool
+	run      func(ctx context.Context, deps bundleDeps) error
 }
 
-// startRequestedService starts the service specified by command line arguments
-func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
-	var err error
+// bundleDeps carries everything a subsystem runner needs.
+type bundleDeps struct {
+	args      *CommandLineArgs
+	clientGen crd.ClientGeneratorInterface
+	logger    logr.Logger
+	mgr       *errgroup.Group
+	resolver  svcinfo.AddressResolver
+}
 
+// bundleServices returns the dispatch table in precedence order.
+func bundleServices() []bundleService {
+	return []bundleService{
+		{
+			// One-shot migration hook: seed FissionTenant CRs from the env
+			// namespace config and exit. Run as a Helm
+			// post-install/post-upgrade Job; idempotent.
+			name:     "Fission-SeedTenants",
+			selected: func(a *CommandLineArgs) bool { return a.seedTenants },
+			run: func(ctx context.Context, d bundleDeps) error {
+				// One-shot semantics: this runs as a Helm Job, so the process
+				// must exit (0/1) rather than fall through to the long-running
+				// service wait in main.
+				fissionClient, err := d.clientGen.GetFissionClient()
+				if err != nil {
+					d.logger.Error(err, "tenant seeding: get fission client")
+					os.Exit(1)
+				}
+				if err := tenant.SeedTenants(ctx, fissionClient, utils.DefaultNSResolver(), d.logger); err != nil {
+					d.logger.Error(err, "tenant seeding failed")
+					os.Exit(1)
+				}
+				d.logger.Info("tenant seeding complete")
+				os.Exit(0)
+				return nil
+			},
+		},
+		{
+			name:     "Fission-Webhook",
+			selected: func(a *CommandLineArgs) bool { return a.webhookPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return webhook.Start(ctx, d.clientGen, d.logger, cnwebhook.Options{Port: d.args.webhookPort})
+			},
+		},
+		{
+			name:     "Fission-CanaryConfig",
+			selected: func(a *CommandLineArgs) bool { return a.canaryConfig },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return canaryconfigmgr.StartCanaryServer(ctx, d.clientGen, d.logger, d.mgr, false)
+			},
+		},
+		{
+			name:     "Fission-Router",
+			selected: func(a *CommandLineArgs) bool { return a.routerPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				executorClient := eclient.MakeClient(d.logger, d.resolver.ExecutorURL(), storagesvcClient.HMACSecretFromEnv())
+				return router.Start(ctx, d.clientGen, d.logger, d.mgr, d.args.routerPort, d.args.routerInternalPort, executorClient)
+			},
+		},
+		{
+			name:     "Fission-Executor",
+			selected: func(a *CommandLineArgs) bool { return a.executorPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return executor.StartExecutor(ctx, d.clientGen, d.logger, d.mgr, d.args.executorPort)
+			},
+		},
+		// The publishers below target the router's internal listener; the
+		// resolver applies the ROUTER_INTERNAL_URL-beats---routerUrl
+		// precedence (see svcinfo.AddressResolver).
+		{
+			name:     "Fission-KubeWatcher",
+			selected: func(a *CommandLineArgs) bool { return a.kubewatcher },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return kubewatcher.Start(ctx, d.clientGen, d.logger, d.mgr, d.resolver.RouterInternalURL())
+			},
+		},
+		{
+			name:     "Fission-Timer",
+			selected: func(a *CommandLineArgs) bool { return a.timer },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return timer.Start(ctx, d.clientGen, d.logger, d.mgr, d.resolver.RouterInternalURL())
+			},
+		},
+		{
+			name:     "Fission-MessageQueueTrigger",
+			selected: func(a *CommandLineArgs) bool { return a.mqt },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return mqtrigger.Start(ctx, d.clientGen, d.logger, d.mgr, d.resolver.RouterInternalURL())
+			},
+		},
+		{
+			name:     "Fission-Keda-MQTrigger",
+			selected: func(a *CommandLineArgs) bool { return a.mqt_keda },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return mqt.StartScalerManager(ctx, d.clientGen, d.logger, d.mgr, d.resolver.RouterInternalURL())
+			},
+		},
+		{
+			// The MCP server proxies tools/call to /fission-function/... on
+			// the router internal listener, so it takes the same resolved
+			// URL as the other publishers.
+			name:     "Fission-MCP",
+			selected: func(a *CommandLineArgs) bool { return a.mcpPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, d.args.mcpPort, d.resolver.RouterInternalURL())
+			},
+		},
+		{
+			name:     "Fission-TenantController",
+			selected: func(a *CommandLineArgs) bool { return a.tenantController },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return tenant.Start(ctx, d.clientGen, d.logger, d.mgr)
+			},
+		},
+		{
+			name:     "Fission-BuilderMgr",
+			selected: func(a *CommandLineArgs) bool { return a.builderMgr },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return buildermgr.Start(ctx, d.clientGen, d.logger, d.mgr, d.resolver.StorageSvcURL())
+			},
+		},
+		{
+			name:     "Fission-StorageSvc",
+			selected: func(a *CommandLineArgs) bool { return a.storageServicePort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return startStorageService(ctx, d.args, d.clientGen, d.logger, d.mgr)
+			},
+		},
+	}
+}
+
+// selectBundleService returns the first table entry whose predicate matches,
+// or nil when no subsystem flag was given.
+func selectBundleService(args *CommandLineArgs) *bundleService {
+	for _, svc := range bundleServices() {
+		if svc.selected(args) {
+			return &svc
+		}
+	}
+	return nil
+}
+
+// getServiceNameFromArgs determines the OTEL service name from the dispatch
+// table, so the name and the dispatch can never drift apart.
+func getServiceNameFromArgs(args *CommandLineArgs) string {
+	if svc := selectBundleService(args); svc != nil {
+		return svc.name
+	}
+	return "Fission-Unknown"
+}
+
+// startRequestedService starts the service selected by the command line
+// arguments via the dispatch table.
+func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
+	svc := selectBundleService(args)
+	if svc == nil {
+		return
+	}
 	// One resolution seam for every sibling-service URL: explicit flag >
 	// env override (ROUTER_INTERNAL_URL) > POD_NAMESPACE-derived default.
-	resolver := svcinfo.NewEnvResolver(svcinfo.FlagValues{
-		ExecutorURL: args.executorUrl, ExecutorSet: args.executorUrlSet,
-		RouterURL: args.routerUrl, RouterSet: args.routerUrlSet,
-		StorageSvcURL: args.storageSvcUrl, StorageSvcSet: args.storageSvcUrlSet,
-	})
-
-	// One-shot migration hook: seed FissionTenant CRs from the env namespace
-	// config and exit. Run as a Helm post-install/post-upgrade Job; idempotent.
-	if args.seedTenants {
-		fissionClient, ferr := clientGen.GetFissionClient()
-		if ferr != nil {
-			logger.Error(ferr, "tenant seeding: get fission client")
-			os.Exit(1)
-		}
-		if serr := tenant.SeedTenants(ctx, fissionClient, utils.DefaultNSResolver(), logger); serr != nil {
-			logger.Error(serr, "tenant seeding failed")
-			os.Exit(1)
-		}
-		logger.Info("tenant seeding complete")
-		os.Exit(0)
+	deps := bundleDeps{
+		args:      args,
+		clientGen: clientGen,
+		logger:    logger,
+		mgr:       mgr,
+		resolver: svcinfo.NewEnvResolver(svcinfo.FlagValues{
+			ExecutorURL: args.executorUrl, ExecutorSet: args.executorUrlSet,
+			RouterURL: args.routerUrl, RouterSet: args.routerUrlSet,
+			StorageSvcURL: args.storageSvcUrl, StorageSvcSet: args.storageSvcUrlSet,
+		}),
 	}
-
-	// Start the requested service based on command line arguments
-	if args.webhookPort != 0 {
-		err = webhook.Start(ctx, clientGen, logger, cnwebhook.Options{
-			Port: args.webhookPort,
-		})
-		logger.Error(err, "webhook server exited:")
-		return
-	}
-
-	if args.canaryConfig {
-		err = canaryconfigmgr.StartCanaryServer(ctx, clientGen, logger, mgr, false)
-		if err != nil {
-			logger.Error(err, "canary config server exited with error: ")
-		}
-		return
-	}
-
-	if args.routerPort != 0 {
-		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, resolver.ExecutorURL(), storagesvcClient.HMACSecretFromEnv()))
-		if err != nil {
-			logger.Error(err, "router exited")
-		}
-		return
-	}
-
-	if args.executorPort != 0 {
-		err = executor.StartExecutor(ctx, clientGen, logger, mgr, args.executorPort)
-		if err != nil {
-			logger.Error(err, "executor exited")
-		}
-		return
-	}
-
-	// The publishers (kubewatcher / timer / mqtrigger / mqt_keda / mcp)
-	// target the router's internal listener; the resolver applies the
-	// ROUTER_INTERNAL_URL-beats---routerUrl precedence (see
-	// svcinfo.AddressResolver).
-	publishURL := resolver.RouterInternalURL()
-
-	if args.kubewatcher {
-		err = kubewatcher.Start(ctx, clientGen, logger, mgr, publishURL)
-		if err != nil {
-			logger.Error(err, "kubewatcher exited")
-		}
-		return
-	}
-
-	if args.timer {
-		err = timer.Start(ctx, clientGen, logger, mgr, publishURL)
-		if err != nil {
-			logger.Error(err, "timer exited")
-		}
-		return
-	}
-
-	if args.mqt {
-		err = mqtrigger.Start(ctx, clientGen, logger, mgr, publishURL)
-		if err != nil {
-			logger.Error(err, "message queue manager exited")
-		}
-		return
-	}
-
-	if args.mqt_keda {
-		err = mqt.StartScalerManager(ctx, clientGen, logger, mgr, publishURL)
-		if err != nil {
-			logger.Error(err, "mqt scaler manager exited")
-		}
-		return
-	}
-
-	if args.mcpPort != 0 {
-		// The MCP server proxies tools/call to /fission-function/... on the
-		// router internal listener, so it takes the same resolved publishURL
-		// (ROUTER_INTERNAL_URL) as kubewatcher/timer/mqt.
-		err = mcp.Start(ctx, clientGen, logger, mgr, args.mcpPort, publishURL)
-		if err != nil {
-			logger.Error(err, "mcp server exited")
-		}
-		return
-	}
-
-	if args.tenantController {
-		err = tenant.Start(ctx, clientGen, logger, mgr)
-		if err != nil {
-			logger.Error(err, "tenant controller exited")
-		}
-		return
-	}
-
-	if args.builderMgr {
-		err = buildermgr.Start(ctx, clientGen, logger, mgr, resolver.StorageSvcURL())
-		if err != nil {
-			logger.Error(err, "builder manager exited")
-		}
-		return
-	}
-
-	if args.storageServicePort != 0 {
-		startStorageService(ctx, args, clientGen, logger, mgr)
-		return
+	if err := svc.run(ctx, deps); err != nil {
+		logger.Error(err, "service exited", "service", svc.name)
 	}
 }
 
 // startStorageService initializes and starts the storage service
-func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
+func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) error {
 	var storage storagesvc.Storage
 
 	if args.storageType == string(storagesvc.StorageTypeS3) {
@@ -401,8 +426,5 @@ func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen c
 		storage = storagesvc.NewLocalStorage("/fission")
 	}
 
-	err := storagesvc.Start(ctx, clientGen, logger, storage, mgr, args.storageServicePort)
-	if err != nil {
-		logger.Error(err, "storage service exited")
-	}
+	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, args.storageServicePort)
 }
