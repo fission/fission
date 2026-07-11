@@ -60,10 +60,14 @@ type CommandLineArgs struct {
 	storageServicePort int
 	mcpPort            int
 
-	// URL values
-	executorUrl   string
-	routerUrl     string
-	storageSvcUrl string
+	// URL values (and whether each flag was explicitly set — an unset flag
+	// falls through to the resolver's POD_NAMESPACE-derived default)
+	executorUrl      string
+	routerUrl        string
+	storageSvcUrl    string
+	executorUrlSet   bool
+	routerUrlSet     bool
+	storageSvcUrlSet bool
 
 	// Other configurations
 	storageType string
@@ -212,6 +216,16 @@ func setupCommandLineArgs() *CommandLineArgs {
 
 	// Parse flags
 	flag.Parse()
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "executorUrl":
+			args.executorUrlSet = true
+		case "routerUrl":
+			args.routerUrlSet = true
+		case "storageSvcUrl":
+			args.storageSvcUrlSet = true
+		}
+	})
 
 	return args
 }
@@ -249,6 +263,14 @@ func getServiceNameFromArgs(args *CommandLineArgs) string {
 func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group) {
 	var err error
 
+	// One resolution seam for every sibling-service URL: explicit flag >
+	// env override (ROUTER_INTERNAL_URL) > POD_NAMESPACE-derived default.
+	resolver := svcinfo.NewEnvResolver(svcinfo.FlagValues{
+		ExecutorURL: args.executorUrl, ExecutorSet: args.executorUrlSet,
+		RouterURL: args.routerUrl, RouterSet: args.routerUrlSet,
+		StorageSvcURL: args.storageSvcUrl, StorageSvcSet: args.storageSvcUrlSet,
+	})
+
 	// One-shot migration hook: seed FissionTenant CRs from the env namespace
 	// config and exit. Run as a Helm post-install/post-upgrade Job; idempotent.
 	if args.seedTenants {
@@ -283,7 +305,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.routerPort != 0 {
-		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, args.executorUrl, storagesvcClient.HMACSecretFromEnv()))
+		err = router.Start(ctx, clientGen, logger, mgr, args.routerPort, args.routerInternalPort, eclient.MakeClient(logger, resolver.ExecutorURL(), storagesvcClient.HMACSecretFromEnv()))
 		if err != nil {
 			logger.Error(err, "router exited")
 		}
@@ -298,15 +320,11 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 		return
 	}
 
-	// ROUTER_INTERNAL_URL (set by the chart on internal-publisher pods)
-	// overrides the legacy --routerUrl flag for kubewatcher / timer /
-	// mqtrigger / mqt_keda — they all publish to /fission-function/...,
-	// which after GHSA-3g33-6vg6-27m8 lives only on the router's
-	// internal listener (port 8889 on svc/router-internal).
-	publishURL := args.routerUrl
-	if internal := os.Getenv("ROUTER_INTERNAL_URL"); internal != "" {
-		publishURL = internal
-	}
+	// The publishers (kubewatcher / timer / mqtrigger / mqt_keda / mcp)
+	// target the router's internal listener; the resolver applies the
+	// ROUTER_INTERNAL_URL-beats---routerUrl precedence (see
+	// svcinfo.AddressResolver).
+	publishURL := resolver.RouterInternalURL()
 
 	if args.kubewatcher {
 		err = kubewatcher.Start(ctx, clientGen, logger, mgr, publishURL)
@@ -360,7 +378,7 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	}
 
 	if args.builderMgr {
-		err = buildermgr.Start(ctx, clientGen, logger, mgr, args.storageSvcUrl)
+		err = buildermgr.Start(ctx, clientGen, logger, mgr, resolver.StorageSvcURL())
 		if err != nil {
 			logger.Error(err, "builder manager exited")
 		}
