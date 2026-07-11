@@ -28,6 +28,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mcpPort", "{{ .Values.mcp.port | default 8890 }}"]
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
@@ -36,7 +37,7 @@ spec:
         # which after GHSA-3g33-6vg6-27m8 lives only on the router's internal
         # listener; internalAuth.envs supplies the HMAC secret used by the signer.
         - name: ROUTER_INTERNAL_URL
-          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+          value: {{ include "fission.routerInternalURL" . | quote }}
         {{- if .Values.authentication.enabled }}
         # Agents authenticate to /mcp with a bearer JWT signed by this key (shared
         # with the router's signing key). Tokens must carry sub + exp claims and an

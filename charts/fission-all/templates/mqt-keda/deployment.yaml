@@ -26,6 +26,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--mqt_keda", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.mqt_keda | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
@@ -39,7 +40,7 @@ spec:
         # build signing-aware connector images. See the comment on
         # StartScalerManager in pkg/mqtrigger/scalermanager.go.
         - name: ROUTER_INTERNAL_URL
-          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+          value: {{ include "fission.routerInternalURL" . | quote }}
         - name: CONNECTOR_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: KAFKA_IMAGE

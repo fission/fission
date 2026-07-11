@@ -361,6 +361,9 @@ router:
   ## (executor / kubewatcher / timer / mqtrigger / mqtrigger-keda /
   ## canaryconfig / buildermgr) only.
   ##
+  ## port is the router's public listener port (fronted by the Service's
+  ## port 80). Mirrored by pkg/svcinfo.PortRouter.
+  port: 8888
   internalPort: 8889
   ## strategy is the Deployment rollout strategy for the router (ignored when
   ## deployAsDaemonSet is true). Leave unset for the Kubernetes default. The

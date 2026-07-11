@@ -42,9 +42,9 @@ spec:
         command: ["/fission-bundle"]
         args:
           - "--routerPort"
-          - "8888"
+          - {{ .Values.router.port | default 8888 | quote }}
           - "--routerInternalPort"
-          - {{ .Values.router.internalPort | default 8889 | quote }}
+          - {{ include "fission.routerInternalPort" . | quote }}
           - "--executorUrl"
           - "http://executor.{{ .Release.Namespace }}"
         env:
@@ -146,7 +146,7 @@ spec:
           name: metrics
         - containerPort: 8888
           name: http
-        - containerPort: {{ .Values.router.internalPort | default 8889 }}
+        - containerPort: {{ include "fission.routerInternalPort" . }}
           name: internal
         {{- if .Values.pprof.enabled }}
         - containerPort: 6060

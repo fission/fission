@@ -95,7 +95,7 @@ spec:
             matchLabels:
               svc: mcp
       ports:
-        - port: {{ .Values.router.internalPort | default 8889 }}
+        - port: {{ include "fission.routerInternalPort" . }}
           protocol: TCP
     # Metrics endpoint open to any scraper.
     - ports:
