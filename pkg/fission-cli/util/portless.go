@@ -7,8 +7,8 @@ package util
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -64,26 +64,28 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 	if pfReg == nil {
 		pfReg = portless.New()
 	}
-	route, err := pfReg.Add(ctx, key, backend)
-	if err != nil {
-		return "", fmt.Errorf("error registering port-forward route for %v: %w", labelSelector, err)
-	}
 	// Preserve the old contract: SetupPortForward returning means a working
-	// tunnel. Ready blocks until a pod accepts (bounded by ctx / the route's
-	// ready timeout), so callers — including humans handed a printed URL —
-	// get a diagnosable error here instead of a silent first-request stall.
-	if err := route.Ready(ctx); err != nil {
-		_ = pfReg.Remove(ctx, key)
-		return "", fmt.Errorf("error waiting for %v port-forward to become ready: %w", labelSelector, err)
+	// tunnel. AddReady blocks until a pod accepts (bounded by ctx / the
+	// route's ready timeout) and frees the name again on failure, so callers
+	// — including humans handed a printed URL — get a diagnosable error here
+	// instead of a silent first-request stall, and a later retry can re-Add.
+	if _, err := pfReg.AddReady(ctx, key, backend); err != nil {
+		return "", fmt.Errorf("error setting up %v port-forward: %w", labelSelector, err)
 	}
 
-	port, err := bridgeToRoute(pfReg, key)
+	// The local bridge lets plain-URL consumers (bare HTTP clients, SDK
+	// transports, URLs printed for humans) ride portless's per-dial readiness
+	// and pod re-resolution. The listener lives for the process — the CLI is
+	// per-invocation.
+	l, err := pfReg.ListenLocal(key)
 	if err != nil {
 		// Deregister so a later retry of the same service can re-Add
 		// instead of failing ErrRouteExists forever.
 		_ = pfReg.Remove(ctx, key)
-		return "", err
+		return "", fmt.Errorf("error bridging %v port-forward locally: %w", labelSelector, err)
 	}
+	// ListenLocal binds "tcp" on loopback, so the Addr is always a *net.TCPAddr.
+	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	pfBridges[key] = port
 	console.Verbose(2, "Port forward to %s ready on local port %v", labelSelector, port)
 	return port, nil
@@ -136,63 +138,4 @@ func resolveFissionService(ctx context.Context, kube kubernetes.Interface, names
 		targetPort = servicePort.TargetPort
 	}
 	return ns, targetPort, nil
-}
-
-// bridgeToRoute binds a kernel-assigned 127.0.0.1:0 listener whose accept
-// loop pipes each connection through the registry route — the bridge that
-// lets plain-URL consumers ride portless's per-dial readiness and pod
-// re-resolution. The listener lives for the process (per-invocation CLI).
-func bridgeToRoute(reg *portless.Registry, name string) (string, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", fmt.Errorf("error binding local port-forward listener: %w", err)
-	}
-	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				return
-			}
-			go func() {
-				defer conn.Close()
-				// The dialed port is ignored by the k8s backend (it forwards
-				// to the resolved target port); the dial blocks until a ready
-				// pod accepts, bounded by the route's ready timeout.
-				upstream, err := reg.DialContext(context.Background(), "tcp", name+":0")
-				if err != nil {
-					console.Warn(fmt.Sprintf("port-forward dial for %v failed: %v", name, err))
-					return
-				}
-				defer upstream.Close()
-				done := make(chan struct{})
-				go func() {
-					_, _ = io.Copy(upstream, conn)
-					// Half-close toward the pod when supported so the
-					// server sees EOF; otherwise tear the stream down.
-					if cw, ok := upstream.(interface{ CloseWrite() error }); ok {
-						_ = cw.CloseWrite()
-					} else {
-						_ = upstream.Close()
-					}
-					close(done)
-				}()
-				_, _ = io.Copy(conn, upstream)
-				// Tell the client the response stream ended (the old
-				// forwarder tore the local conn down when the remote
-				// closed); without this a connection-close-delimited
-				// response hangs the client forever.
-				if tc, ok := conn.(*net.TCPConn); ok {
-					_ = tc.CloseWrite()
-				} else {
-					_ = conn.Close()
-				}
-				<-done
-			}()
-		}
-	}()
-	_, port, err := net.SplitHostPort(l.Addr().String())
-	if err != nil {
-		return "", err
-	}
-	return port, nil
 }

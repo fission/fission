@@ -8,9 +8,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,8 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	"errors"
-
+	"github.com/sanketsudake/go-portless/backend"
 	"golang.org/x/net/context/ctxhttp"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -290,36 +289,15 @@ func GetIntValueFromEnv(envVar string) (int, error) {
 	return value, nil
 }
 
+// FindFreePort picks a free TCP port. Callers needing several distinct
+// ports at once should use go-portless's backend.ReservePorts directly —
+// two sequential FindFreePort calls can return the same port.
 func FindFreePort() (int, error) {
-	ports, err := FindFreePorts(1)
+	ports, err := backend.ReservePorts(1)
 	if err != nil {
 		return 0, err
 	}
 	return ports[0], nil
-}
-
-// FindFreePorts picks n distinct free ports by holding all n listeners open
-// simultaneously before closing any of them. Two sequential FindFreePort
-// calls can return the SAME port (listen :0, close, re-listen — the kernel
-// may hand the just-freed port right back), which breaks callers needing
-// distinct ports, e.g. the router's public and internal listeners.
-func FindFreePorts(n int) ([]int, error) {
-	listeners := make([]net.Listener, 0, n)
-	defer func() {
-		for _, l := range listeners {
-			_ = l.Close()
-		}
-	}()
-	ports := make([]int, 0, n)
-	for range n {
-		listener, err := net.Listen("tcp", ":0")
-		if err != nil {
-			return nil, err
-		}
-		listeners = append(listeners, listener)
-		ports = append(ports, listener.Addr().(*net.TCPAddr).Port)
-	}
-	return ports, nil
 }
 
 // DeleteOldPackages deletes src and built deployment packages from builder's storage.
