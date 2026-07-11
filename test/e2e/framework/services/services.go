@@ -60,21 +60,17 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// ports. Set once and never mutated, so their goroutines read it
 	// deterministically.
 	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
+	// Every metrics server binds an ephemeral port: the manager-based
+	// services force :0 under FISSION_TEST_EPHEMERAL_SERVERS, and the
+	// fail-soft ServeMetrics consumers read METRICS_ADDR verbatim — "0"
+	// makes the kernel assign per-listener, so no pre-picked metrics ports
+	// and no collisions, ever.
+	os.Setenv("METRICS_ADDR", "0")
 	env := f.GetEnv()
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
-	// Reserve every fixed port the harness assigns in ONE call — sequential
-	// FindFreePort calls can return duplicates (the kernel may hand a
-	// just-freed port right back), and the router hard-fails when its
-	// public and internal listeners collide.
-	ports, err := utils.FindFreePorts(4)
-	if err != nil {
-		return fmt.Errorf("error finding unused ports: %w", err)
-	}
-	executorPort, storageSvcPort, routerPort, internalRouterPort := ports[0], ports[1], ports[2], ports[3]
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %w", err)
-	}
+	// Service ports were reserved together at framework construction
+	// (framework.Ports) — the only port-discovery call in the harness.
+	ports := f.Ports()
 	runService("webhook", func() error {
 		return webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
 			Port:    webhookPort,
@@ -85,11 +81,6 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// accept — envtest's CRD installs go through this server immediately after.
 	if err := f.RegisterService("webhook", webhookPort, framework.WithTLSReadyCheck()); err != nil {
 		return err
-	}
-
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
 	// namespace settings for components
@@ -107,28 +98,23 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// blocks (like webhook.Start). Run it in a goroutine so the remaining
 	// services still come up.
 	runService("executor", func() error {
-		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executorPort)
+		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, ports.Executor)
 	})
-	if err := f.RegisterService("executor", executorPort); err != nil {
+	if err := f.RegisterService("executor", ports.Executor); err != nil {
 		return err
 	}
 
 	os.Setenv("PRUNE_ENABLED", "true")
 	os.Setenv("PRUNE_INTERVAL", "60")
 
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %w", err)
-	}
-
-	if err := StartStorageSvc(ctx, f, mgr, storageSvcPort); err != nil {
+	if err := StartStorageSvc(ctx, f, mgr, ports.StorageSvc); err != nil {
 		return err
 	}
 
 	// buildermgr's Start blocks (controller-runtime Manager), so run it in a
 	// goroutine; FISSION_TEST_EPHEMERAL_SERVERS (set at the top) makes its
 	// Manager servers bind ephemeral ports.
-	storageSvcURL := fmt.Sprintf("http://localhost:%d", storageSvcPort)
+	storageSvcURL := fmt.Sprintf("http://localhost:%d", ports.StorageSvc)
 	runService("builder manager", func() error {
 		return buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL)
 	})
@@ -144,27 +130,22 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	os.Setenv("USE_ENCODED_PATH", "false")
 	os.Setenv("DISPLAY_ACCESS_LOG", "true")
 	// os.Setenv("DEBUG_ENV", "false")
-	err = f.ToggleMetricAddr()
-	if err != nil {
-		return fmt.Errorf("error toggling metric address: %w", err)
-	}
-
 	// E2E framework runs the executor in the same process as its caller,
 	// so any FISSION_INTERNAL_AUTH_SECRET set on the test environment
 	// flows into both ends of this client/verifier pair via
 	// HMACSecretFromEnv (returns nil when unset, leaving the channel
 	// unsigned).
-	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort), storagesvcClient.HMACSecretFromEnv())
+	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", ports.Executor), storagesvcClient.HMACSecretFromEnv())
 	// router now runs under a controller-runtime Manager, so Start blocks. Run
 	// it in a goroutine so the harness can continue; FISSION_TEST_EPHEMERAL_SERVERS
 	// (set at the top) makes its Manager metrics server bind an ephemeral port.
 	runService("router", func() error {
-		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, routerPort, internalRouterPort, executor)
+		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, ports.Router, ports.RouterInternal, executor)
 	})
-	if err := f.RegisterService("router", routerPort); err != nil {
+	if err := f.RegisterService("router", ports.Router); err != nil {
 		return err
 	}
-	if err := f.RegisterService("router-internal", internalRouterPort); err != nil {
+	if err := f.RegisterService("router-internal", ports.RouterInternal); err != nil {
 		return err
 	}
 	routerURL, err := f.GetServiceURL("router")

@@ -24,10 +24,23 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
+// Ports holds every fixed port the harness assigns, reserved together in one
+// FindFreePorts call at framework construction — the single place port
+// discovery happens — and passed down explicitly from there. (The subsystem
+// Start functions take port ints, so ports must be pre-picked; reserving them
+// atomically is what keeps them distinct.)
+type Ports struct {
+	Executor       int
+	StorageSvc     int
+	Router         int
+	RouterInternal int
+}
+
 type Framework struct {
 	env    *envtest.Environment
 	config *rest.Config
 	logger logr.Logger
+	ports  Ports
 	// reg maps service names to their local TCP addresses; dialing a
 	// registered name blocks until the backend accepts, so readiness
 	// waits happen inside the dial instead of in caller poll loops, and
@@ -37,19 +50,17 @@ type Framework struct {
 }
 
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
-	webhookPort, err := utils.FindFreePort()
-	if err != nil {
-		return nil, fmt.Errorf("error finding unused port: %w", err)
-	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
 
+	// LocalServingPort deliberately unset: PrepWithoutInstalling assigns it
+	// via controller-runtime's addr.Suggest, whose lock-file reservation is
+	// collision-safe even across test processes (unlike a FindFreePort).
 	options := &envtest.WebhookInstallOptions{
 		LocalServingHost: "localhost",
-		LocalServingPort: webhookPort,
 		Paths:            []string{filepath.Join(root, "webhook-manifest.yaml")},
 	}
-	err = options.PrepWithoutInstalling()
+	err := options.PrepWithoutInstalling()
 	if err != nil {
 		return nil, fmt.Errorf("error preparing webhook install options: %w", err)
 	}
@@ -61,11 +72,21 @@ func NewFramework() *Framework {
 	if err != nil {
 		panic(err)
 	}
+	servicePorts, err := utils.FindFreePorts(4)
+	if err != nil {
+		panic(fmt.Errorf("error reserving service ports: %w", err))
+	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
 	crdPath := filepath.Join(root, "..", "..", "..", "crds", "v1")
 
 	return &Framework{
+		ports: Ports{
+			Executor:       servicePorts[0],
+			StorageSvc:     servicePorts[1],
+			Router:         servicePorts[2],
+			RouterInternal: servicePorts[3],
+		},
 		logger: loggerfactory.GetLogger(),
 		env: &envtest.Environment{
 			CRDDirectoryPaths:     []string{crdPath},
@@ -96,13 +117,9 @@ func (f *Framework) Start(ctx context.Context) error {
 	return nil
 }
 
-func (f *Framework) ToggleMetricAddr() error {
-	port, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port: %w", err)
-	}
-	os.Setenv("METRICS_ADDR", fmt.Sprint(port))
-	return nil
+// Ports returns the harness's pre-reserved service ports.
+func (f *Framework) Ports() Ports {
+	return f.ports
 }
 
 func (f *Framework) RestConfig() *rest.Config {
