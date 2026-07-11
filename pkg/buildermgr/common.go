@@ -27,6 +27,7 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -84,8 +85,8 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 	// which matches the corresponding verifier's empty-secret short-
 	// circuit on the server side.
 	masterSecret := storagesvcClient.HMACSecretFromEnv()
-	fetcherURL := fmt.Sprintf("http://%s:8000", svcName)
-	builderURL := fmt.Sprintf("http://%s:8001", svcName)
+	fetcherURL := fmt.Sprintf("http://%s:%d", svcName, svcinfo.PortFetcher)
+	builderURL := fmt.Sprintf("http://%s:%d", svcName, svcinfo.PortBuilder)
 	var fetcherC fetcherClient.ClientInterface
 	var builderC builderClient.ClientInterface
 	if signNamespace != "" {

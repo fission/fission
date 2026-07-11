@@ -31,7 +31,7 @@ spec:
     # (cluster-internal pods, LoadBalancer, NodePort) — router is
     # designed to be reachable from outside the cluster.
     - ports:
-        - port: 8888
+        - port: {{ include "fission.routerPort" . }}
           protocol: TCP
     # Internal Fission components that publish events to the router.
     # Listed explicitly for documentation even though the open rule
@@ -58,7 +58,7 @@ spec:
             matchLabels:
               svc: canaryconfig
       ports:
-        - port: 8888
+        - port: {{ include "fission.routerPort" . }}
           protocol: TCP
     # Internal listener (port {{ .Values.router.internalPort | default 8889 }}) — serves
     # /fission-function/<ns>/<name>. After GHSA-3g33-6vg6-27m8 these
@@ -95,7 +95,7 @@ spec:
             matchLabels:
               svc: mcp
       ports:
-        - port: {{ .Values.router.internalPort | default 8889 }}
+        - port: {{ include "fission.routerInternalPort" . }}
           protocol: TCP
     # Metrics endpoint open to any scraper.
     - ports:

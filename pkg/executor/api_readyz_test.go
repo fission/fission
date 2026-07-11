@@ -45,14 +45,3 @@ func TestRunnableLeaderElection(t *testing.T) {
 	assert.False(t, (&executorAPIServer{}).NeedLeaderElection(),
 		"the API server must run on every replica so /readyz answers everywhere")
 }
-
-func TestBindAddr(t *testing.T) {
-	t.Setenv("METRICS_ADDR", "")
-	assert.Equal(t, ":8080", bindAddr("METRICS_ADDR", "8080"))
-
-	t.Setenv("METRICS_ADDR", "9090")
-	assert.Equal(t, ":9090", bindAddr("METRICS_ADDR", "8080"))
-
-	t.Setenv("METRICS_ADDR", "0.0.0.0:9090")
-	assert.Equal(t, "0.0.0.0:9090", bindAddr("METRICS_ADDR", "8080"))
-}

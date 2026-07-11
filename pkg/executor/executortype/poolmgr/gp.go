@@ -33,6 +33,7 @@ import (
 	executorUtil "github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -270,12 +271,12 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 
 		// the fission router isn't in the same namespace, so return a
 		// namespace-qualified hostname
-		svcHost = fmt.Sprintf("%v.%v:8888", svcName, gp.fnNamespace)
+		svcHost = fmt.Sprintf("%v.%v:%d", svcName, gp.fnNamespace, svcinfo.PortEnvRuntime)
 	} else if gp.useIstio {
 		svc := utils.GetFunctionIstioServiceName(fn.Name, fn.Namespace)
-		svcHost = fmt.Sprintf("%v.%v:8888", svc, gp.fnNamespace)
+		svcHost = fmt.Sprintf("%v.%v:%d", svc, gp.fnNamespace, svcinfo.PortEnvRuntime)
 	} else {
-		svcHost = fmt.Sprintf("%v:8888", pod.Status.PodIP)
+		svcHost = fmt.Sprintf("%v:%d", pod.Status.PodIP, svcinfo.PortEnvRuntime)
 	}
 
 	otelUtils.SpanTrackEvent(ctx, "addFunctionLabel", otelUtils.GetAttributesForPod(pod)...)

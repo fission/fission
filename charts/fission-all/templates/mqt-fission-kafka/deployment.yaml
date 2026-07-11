@@ -33,6 +33,7 @@ spec:
           - containerPort: 8080
             name: metrics
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.kafka | default dict))) | indent 8 }}
         - name: MESSAGE_QUEUE_TYPE
           value: kafka
@@ -49,7 +50,7 @@ spec:
         # signs each invocation when FISSION_INTERNAL_AUTH_SECRET is
         # set (mounted by internalAuth.envs).
         - name: ROUTER_INTERNAL_URL
-          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+          value: {{ include "fission.routerInternalURL" . | quote }}
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- include "internalAuth.envs" . | indent 8 }}

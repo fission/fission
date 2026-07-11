@@ -22,7 +22,7 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-func TestStartServer(t *testing.T) {
+func TestServe(t *testing.T) {
 	mgr := &errgroup.Group{}
 	t.Cleanup(func() { _ = mgr.Wait() })
 
@@ -41,7 +41,7 @@ func TestStartServer(t *testing.T) {
 	}))
 
 	mgr.Go(func() error {
-		StartServer(ctx, logger, mgr, "test", addr, m.Handler())
+		Serve(ctx, logger, mgr, ServerOptions{Name: "test", Addr: addr, Handler: m.Handler()})
 		return nil
 	})
 
@@ -97,10 +97,10 @@ func freePort(t *testing.T) string {
 	return fmt.Sprintf("127.0.0.1:%d", port)
 }
 
-// TestStartServerDrainsInFlightRequest verifies that an in-flight request is
+// TestServeDrainsInFlightRequest verifies that an in-flight request is
 // allowed to complete when the server is asked to shut down, rather than being
 // cut the moment the signal context is cancelled.
-func TestStartServerDrainsInFlightRequest(t *testing.T) {
+func TestServeDrainsInFlightRequest(t *testing.T) {
 	addr := freePort(t)
 
 	handlerEntered := make(chan struct{})
@@ -115,7 +115,7 @@ func TestStartServerDrainsInFlightRequest(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr := &errgroup.Group{}
-	go StartServer(ctx, logr.Discard(), mgr, "test", addr, m)
+	go Serve(ctx, logr.Discard(), mgr, ServerOptions{Name: "test", Addr: addr, Handler: m})
 
 	require.Eventually(t, func() bool {
 		c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
@@ -172,4 +172,53 @@ func TestDrainTimeout(t *testing.T) {
 
 	t.Setenv("GRACEFUL_SHUTDOWN_TIMEOUT", "garbage")
 	assert.Equal(t, defaultDrainTimeout, drainTimeout())
+}
+
+// TestBindAddrFromEnv pins the shared bind-address resolution every component
+// uses for its metrics/health servers (formerly per-package bindAddr copies).
+func TestBindAddrFromEnv(t *testing.T) {
+	t.Setenv("METRICS_ADDR", "")
+	assert.Equal(t, ":8080", BindAddrFromEnv("METRICS_ADDR", 8080))
+
+	t.Setenv("METRICS_ADDR", "9090")
+	assert.Equal(t, ":9090", BindAddrFromEnv("METRICS_ADDR", 8080))
+
+	t.Setenv("METRICS_ADDR", "0.0.0.0:9090")
+	assert.Equal(t, "0.0.0.0:9090", BindAddrFromEnv("METRICS_ADDR", 8080))
+
+	t.Setenv("METRICS_ADDR", "0")
+	assert.Equal(t, ":0", BindAddrFromEnv("METRICS_ADDR", 8080))
+}
+
+// TestServeInjectedListener pins the listener-injection path: a caller-bound
+// 127.0.0.1:0 listener is served directly (no second bind), so harnesses can
+// let the kernel assign ports instead of pre-picking them.
+func TestServeInjectedListener(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	mgr := &errgroup.Group{}
+	m := httpmux.New()
+	m.Handle("/ping", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "pong")
+	}))
+	go Serve(ctx, logr.Discard(), mgr, ServerOptions{Name: "test", Listener: l, Handler: m.Handler()})
+
+	var body string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := http.Get(fmt.Sprintf("http://%s/ping", l.Addr()))
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		if !assert.NoError(c, err) {
+			return
+		}
+		body = string(b)
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Equal(t, "pong", body)
+	cancel()
+	_ = mgr.Wait()
 }

@@ -42,6 +42,7 @@ spec:
         args: ["--storageServicePort", "8000", "--storageType", "local"]
         {{- end }}
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: PRUNE_ENABLED
           value: "{{.Values.storagesvc.archivePruner.enabled}}"
         {{- if .Values.storagesvc.archivePruner.enabled }}

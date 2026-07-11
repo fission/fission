@@ -25,6 +25,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--kubewatcher", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.kubewatcher | default dict))) | indent 8 }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
@@ -35,7 +36,7 @@ spec:
         # requires the HMAC headers; the env mounted by
         # internalAuth.envs supplies the secret used by the signer.
         - name: ROUTER_INTERNAL_URL
-          value: "http://router-internal.{{ .Release.Namespace }}:{{ .Values.router.internalPort | default 8889 }}"
+          value: {{ include "fission.routerInternalURL" . | quote }}
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}

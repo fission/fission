@@ -37,7 +37,7 @@ func ProfileIfEnabled(ctx context.Context, logger logr.Logger, mgr *errgroup.Gro
 	http.DefaultServeMux = http.NewServeMux()
 
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "pprof", pprofPort, pprofMux)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: "pprof", Addr: pprofPort, Handler: pprofMux})
 		return nil
 	})
 }

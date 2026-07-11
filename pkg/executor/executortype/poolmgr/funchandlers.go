@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -50,14 +51,14 @@ func (gpm *GenericPoolManager) createIstioServiceForFunction(ctx context.Context
 				{
 					Name:       "http-fetcher",
 					Protocol:   apiv1.ProtocolTCP,
-					Port:       8000,
-					TargetPort: intstr.FromInt(8000),
+					Port:       svcinfo.PortFetcher,
+					TargetPort: intstr.FromInt(svcinfo.PortFetcher),
 				},
 				{
 					Name:       "http-env",
 					Protocol:   apiv1.ProtocolTCP,
-					Port:       8888,
-					TargetPort: intstr.FromInt(8888),
+					Port:       svcinfo.PortEnvRuntime,
+					TargetPort: intstr.FromInt(svcinfo.PortEnvRuntime),
 				},
 			},
 			Selector: sel,

@@ -11,8 +11,10 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -393,7 +395,7 @@ func (executor *Executor) GetHandler() http.Handler {
 // charts/fission-all/templates/executor/networkpolicy.yaml); the CORS
 // deny is defense-in-depth if a future regression exposes this port via
 // Ingress.
-func (executor *Executor) Serve(ctx context.Context, mgr *errgroup.Group, port int) {
+func (executor *Executor) Serve(ctx context.Context, mgr *errgroup.Group, port int, listener net.Listener) {
 	// correlation.Middleware (inside OTEL, outside the HMAC verifier which lives
 	// in GetHandler) extracts the inbound X-Fission-Request-ID into the request
 	// context so a cold-start specialization and its fetcher call carry the same
@@ -404,5 +406,7 @@ func (executor *Executor) Serve(ctx context.Context, mgr *errgroup.Group, port i
 			otelUtils.GetHandlerWithOTEL(correlation.Middleware(executor.GetHandler()), "fission-executor", otelUtils.UrlsToIgnore("/healthz")),
 		),
 	)
-	httpserver.StartServer(ctx, executor.logger, mgr, "executor", fmt.Sprintf("%d", port), handler)
+	httpserver.Serve(ctx, executor.logger, mgr, httpserver.ServerOptions{
+		Name: "executor", Addr: strconv.Itoa(port), Listener: listener, Handler: handler,
+	})
 }

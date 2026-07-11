@@ -18,7 +18,7 @@ spec:
   ports:
   - name: http
     port: 80
-    targetPort: 8888
+    targetPort: {{ include "fission.routerPort" . }}
 {{- if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
 {{- end }}
@@ -43,7 +43,7 @@ spec:
   type: ClusterIP
   ports:
   - name: internal
-    port: {{ .Values.router.internalPort | default 8889 }}
-    targetPort: {{ .Values.router.internalPort | default 8889 }}
+    port: {{ include "fission.routerInternalPort" . }}
+    targetPort: {{ include "fission.routerInternalPort" . }}
   selector:
     svc: router

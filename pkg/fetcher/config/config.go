@@ -18,6 +18,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/otel"
 )
@@ -339,7 +340,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 					Path: "/readiness-healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: 8000,
+						IntVal: svcinfo.PortFetcher,
 					},
 				},
 			},
@@ -352,7 +353,7 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 					Path: "/healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: 8000,
+						IntVal: svcinfo.PortFetcher,
 					},
 				},
 			},

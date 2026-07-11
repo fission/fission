@@ -29,6 +29,7 @@ spec:
         command: ["/fission-bundle"]
         args: ["--builderMgr", "--storageSvcUrl", "http://storagesvc.{{ .Release.Namespace }}"]
         env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.buildermgr | default dict))) | indent 8 }}
         - name: FETCHER_IMAGE
           value: {{ include "fetcherImage" . | quote }}

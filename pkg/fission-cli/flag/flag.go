@@ -12,6 +12,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 type (
@@ -91,7 +92,7 @@ var (
 	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
 	FnPkgName               = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
 	FnImageName             = Flag{Type: String, Name: flagkey.FnImageName, Usage: "Name of the Docker image to be deployed as a function. Valid only when executorType is set to 'container'"}
-	FnPort                  = Flag{Type: Int, Name: flagkey.FnPort, Usage: "Port where the application is running", DefaultValue: 8888}
+	FnPort                  = Flag{Type: Int, Name: flagkey.FnPort, Usage: "Port where the application is running", DefaultValue: svcinfo.PortEnvRuntime}
 	FnCommand               = Flag{Type: String, Name: flagkey.FnCommand, Usage: "Command to be passed to the container. If not specified , the ones defined in the image are used"}
 	FnArgs                  = Flag{Type: String, Name: flagkey.FnArgs, Usage: "Args to be passed to the command on the container. If not specified , the ones defined in the image are used"}
 	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}

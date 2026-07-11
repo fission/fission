@@ -226,3 +226,50 @@ production. See values.yaml `coverage`.
     type: Directory
 {{- end }}
 {{- end }}
+
+{{/*
+fission.routerInternalPort is the router's internal listener port — the
+/fission-function/... listener behind the GHSA-3g33-6vg6-27m8 split. Mirrored
+by pkg/svcinfo.PortRouterInternal; a Go-side drift test compares the rendered
+chart against those constants.
+*/}}
+{{- define "fission.routerInternalPort" -}}
+{{ .Values.router.internalPort | default 8889 }}
+{{- end -}}
+
+{{/*
+fission.routerInternalURL is the in-cluster URL internal publishers
+(kubewatcher / timer / mqtrigger / mqt-keda / mcp) use to reach the router's
+internal listener.
+*/}}
+{{- define "fission.routerInternalURL" -}}
+http://router-internal.{{ .Release.Namespace }}:{{ include "fission.routerInternalPort" . }}
+{{- end -}}
+
+{{/*
+fission.podNamespaceEnv injects POD_NAMESPACE via the downward API — the
+namespace fission-bundle's AddressResolver derives sibling-service URL
+defaults from when a URL flag/env is not explicitly set.
+*/}}
+{{- define "fission.podNamespaceEnv" -}}
+- name: POD_NAMESPACE
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.namespace
+{{- end }}
+
+{{/*
+fission.routerPort is the router's public listener port (fronted by the
+Service's port 80). Mirrored by pkg/svcinfo.PortRouter.
+*/}}
+{{- define "fission.routerPort" -}}
+{{ .Values.router.port | default 8888 }}
+{{- end -}}
+
+{{/*
+fission.mcpPort is the MCP tool server's port. Mirrored by
+pkg/svcinfo.PortMCP.
+*/}}
+{{- define "fission.mcpPort" -}}
+{{ .Values.mcp.port | default 8890 }}
+{{- end -}}

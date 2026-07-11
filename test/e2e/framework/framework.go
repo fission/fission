@@ -7,6 +7,7 @@ package framework
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,27 +21,13 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/crd"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
-
-// Ports holds every fixed port the harness assigns, reserved together in one
-// FindFreePorts call at framework construction — the single place port
-// discovery happens — and passed down explicitly from there. (The subsystem
-// Start functions take port ints, so ports must be pre-picked; reserving them
-// atomically is what keeps them distinct.)
-type Ports struct {
-	Executor       int
-	StorageSvc     int
-	Router         int
-	RouterInternal int
-}
 
 type Framework struct {
 	env    *envtest.Environment
 	config *rest.Config
 	logger logr.Logger
-	ports  Ports
 	// reg maps service names to their local TCP addresses; dialing a
 	// registered name blocks until the backend accepts, so readiness
 	// waits happen inside the dial instead of in caller poll loops, and
@@ -72,21 +59,11 @@ func NewFramework() *Framework {
 	if err != nil {
 		panic(err)
 	}
-	servicePorts, err := utils.FindFreePorts(4)
-	if err != nil {
-		panic(fmt.Errorf("error reserving service ports: %w", err))
-	}
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	root := filepath.Dir(filename)
 	crdPath := filepath.Join(root, "..", "..", "..", "crds", "v1")
 
 	return &Framework{
-		ports: Ports{
-			Executor:       servicePorts[0],
-			StorageSvc:     servicePorts[1],
-			Router:         servicePorts[2],
-			RouterInternal: servicePorts[3],
-		},
 		logger: loggerfactory.GetLogger(),
 		env: &envtest.Environment{
 			CRDDirectoryPaths:     []string{crdPath},
@@ -117,11 +94,6 @@ func (f *Framework) Start(ctx context.Context) error {
 	return nil
 }
 
-// Ports returns the harness's pre-reserved service ports.
-func (f *Framework) Ports() Ports {
-	return f.ports
-}
-
 func (f *Framework) RestConfig() *rest.Config {
 	return f.config
 }
@@ -146,7 +118,8 @@ func (f *Framework) Stop() error {
 	return nil
 }
 
-// RegisterService names a locally-bound service in the portless registry.
+// RegisterService names a locally-bound service in the portless registry by
+// port (used for the envtest webhook, whose port controller-runtime assigns).
 // The service may still be starting: dials through the registry (WaitReady)
 // retry until the port accepts (and any route health check passes).
 func (f *Framework) RegisterService(name string, port int, opts ...portless.RouteOption) error {
@@ -155,6 +128,23 @@ func (f *Framework) RegisterService(name string, port int, opts ...portless.Rout
 	}
 	f.logger.Info("Registered service", "name", name, "port", port)
 	return nil
+}
+
+// ListenAndRegister binds a fresh 127.0.0.1:0 listener, registers it under
+// name, and returns it for injection into the service's Start options.
+// The service owns the listener; the kernel picked its port, so there is no
+// pre-pick race and nothing to reserve.
+func (f *Framework) ListenAndRegister(name string) (net.Listener, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("error binding listener for %s: %w", name, err)
+	}
+	if _, err := f.reg.Add(context.Background(), name, backend.Listener(l)); err != nil {
+		_ = l.Close()
+		return nil, fmt.Errorf("error registering service %s: %w", name, err)
+	}
+	f.logger.Info("Registered service", "name", name, "addr", l.Addr().String())
+	return l, nil
 }
 
 // WithTLSReadyCheck gates a route's readiness on a completed TLS handshake,

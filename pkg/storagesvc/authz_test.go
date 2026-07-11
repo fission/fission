@@ -114,7 +114,7 @@ func TestArchiveAuthzHandlers(t *testing.T) {
 	storage := NewLocalStorage(t.TempDir())
 	sc, err := MakeStorageClient(logr.Discard(), storage)
 	require.NoError(t, err)
-	ss := MakeStorageService(logr.Discard(), sc, 0, master, nil, 0)
+	ss := MakeStorageService(logr.Discard(), sc, master, nil, 0)
 
 	m := httpmux.New(httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(master, nil, hmacauth.ServiceStoragesvc,
 		hmacauth.VerifierOpts{SkewSec: 60, Now: func() time.Time { return now }})))

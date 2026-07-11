@@ -152,7 +152,7 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 			otelUtils.GetHandlerWithOTEL(verifier(mux), "fission-fetcher", otelUtils.UrlsToIgnore("/healthz", "/readiness-healthz")),
 		),
 	)
-	httpserver.StartServer(ctx, logger, mgr, "fetcher", port, handler)
+	httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: "fetcher", Addr: port, Handler: handler})
 	return nil
 }
 

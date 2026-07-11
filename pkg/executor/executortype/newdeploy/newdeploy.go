@@ -20,6 +20,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -186,7 +187,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 			{
 				Name: "http-env",
 				// Now that we have added Port field in spec, should we make this configurable too?
-				ContainerPort: int32(8888),
+				ContainerPort: int32(svcinfo.PortEnvRuntime),
 			},
 		},
 		Resources: resources,
@@ -415,7 +416,7 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 					Name: "http-env",
 					Port: int32(80),
 					// Since Function spec now supports Port , should we make this configurable too?
-					TargetPort: intstr.FromInt(8888),
+					TargetPort: intstr.FromInt(svcinfo.PortEnvRuntime),
 				},
 			},
 			Selector: deployLabels,

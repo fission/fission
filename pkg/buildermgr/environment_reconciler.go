@@ -24,6 +24,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -319,19 +320,19 @@ func (r *EnvironmentReconciler) createBuilderService(ctx context.Context, env *f
 				{
 					Name:     "fetcher-port",
 					Protocol: apiv1.ProtocolTCP,
-					Port:     8000,
+					Port:     svcinfo.PortFetcher,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: 8000,
+						IntVal: svcinfo.PortFetcher,
 					},
 				},
 				{
 					Name:     "builder-port",
 					Protocol: apiv1.ProtocolTCP,
-					Port:     8001,
+					Port:     svcinfo.PortBuilder,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: 8001,
+						IntVal: svcinfo.PortBuilder,
 					},
 				},
 			},
@@ -419,7 +420,7 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 					Path: "/healthz",
 					Port: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: 8001,
+						IntVal: svcinfo.PortBuilder,
 					},
 				},
 			},

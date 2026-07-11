@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -27,7 +28,7 @@ import (
 const (
 	builderSharedPath = "/packages"
 	builderBinary     = "/builder" // builder server entrypoint (buildermgr runs "/builder /packages")
-	builderPort       = 8001
+	builderPort       = svcinfo.PortBuilder
 	builderSrcDirName = "src"
 	// builderBuildTimeout bounds the synchronous build POST. A real build can take
 	// minutes (Maven downloading its dependency tree on first run, a large Go/Rust

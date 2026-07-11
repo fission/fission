@@ -19,6 +19,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 type CategoryID string
@@ -151,25 +152,25 @@ func (hc *HealthChecker) allCategories() []*Category {
 				{
 					successMsg: "executor is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor", "executor")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "executor", svcinfo.SvcExecutor)
 					},
 				},
 				{
 					successMsg: "router is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router", "router")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "router", svcinfo.SvcRouter)
 					},
 				},
 				{
 					successMsg: "storagesvc is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc", "storagesvc")
+						return hc.CheckServiceStatus(ctx, hc.fissionNamespace, "storagesvc", svcinfo.SvcStorage)
 					},
 				},
 				{
 					successMsg: "webhook is running fine",
 					check: func(ctx context.Context, input cli.Input, client cmd.Client) error {
-						err := hc.CheckServiceStatus(ctx, hc.fissionNamespace, "webhook", "webhook-service")
+						err := hc.CheckServiceStatus(ctx, hc.fissionNamespace, "webhook", svcinfo.SvcWebhook)
 						if err != nil {
 							console.Errorf("Error found: %s", err.Error())
 						}

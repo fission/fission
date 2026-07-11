@@ -129,7 +129,7 @@ func TestS3StorageService(t *testing.T) {
 
 	storage := storagesvc.NewS3Storage()
 	ctx := t.Context()
-	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
+	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, storagesvc.Options{Port: port})
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", 8081), nil)
@@ -206,7 +206,7 @@ func TestLocalStorageService(t *testing.T) {
 	storage := storagesvc.NewLocalStorage(localPath)
 	ctx := t.Context()
 	os.Setenv("METRICS_ADDR", "8083")
-	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, port)
+	_ = storagesvc.Start(ctx, crd.NewClientGenerator(), logger, storage, mgr, storagesvc.Options{Port: port})
 
 	time.Sleep(time.Second)
 	client := MakeClient(fmt.Sprintf("http://localhost:%v/", port), nil)
