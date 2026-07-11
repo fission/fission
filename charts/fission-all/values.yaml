@@ -789,21 +789,37 @@ storagesvc:
 
   ## maxArchiveSizeMib caps the size (in MiB) of a single package archive
   ## uploaded to /v1/archive. With internalAuth enabled, the HMAC verifier
-  ## buffers the upload body in memory to check its signature and rejects
-  ## anything larger with 413 Request Entity Too Large. (With internalAuth
-  ## disabled there is no verifier, so this cap has no effect.)
+  ## checks the upload's signature and rejects anything larger with 413
+  ## Request Entity Too Large. (With internalAuth disabled there is no
+  ## verifier, so this cap has no effect.)
   ## Use a plain integer number of MiB — no unit suffix (512, not 512Mi).
   ## 0 or unset means the 256 MiB default; there is no "unlimited" setting.
-  ## Raise it for large packages instead of disabling internalAuth, and size
-  ## the storagesvc memory request/limit to match, since the body is held in
-  ## memory during verification. The cap applies to the multipart-wrapped
-  ## request body, which is marginally larger than the raw archive.
+  ## Raise it for large packages instead of disabling internalAuth. Uploads
+  ## above ~32 MiB are stream-verified through a temporary file, so verification
+  ## holds only a bounded amount in memory regardless of archive size (it does
+  ## use ephemeral disk); the cap then bounds disk rather than RAM. The cap
+  ## applies to the multipart-wrapped request body, marginally larger than the
+  ## raw archive.
   ##
   ## For very large packages, prefer publishing them as OCI images
   ## (packageRegistry.enabled + repositoryPrefix) over raising this cap: the
   ## code is then pulled and mounted from a registry instead of buffered
   ## through storagesvc, which scales and manages better.
   maxArchiveSizeMib: 256
+
+  ## uploadSpill controls stream-verification of large /v1/archive uploads.
+  ## Above thresholdMib the HMAC verifier streams the upload body through a temp
+  ## file in a dedicated emptyDir (mounted at dir) instead of buffering it in
+  ## RAM, so verification memory stays bounded regardless of archive size and
+  ## it keeps working if the root filesystem is later made read-only. sizeLimit
+  ## caps that volume (the
+  ## pod is evicted if exceeded) — bounding the disk a burst of concurrent
+  ## uploads can consume; raise it if you raise maxArchiveSizeMib. Set sizeLimit
+  ## to "" to leave the volume unbounded.
+  uploadSpill:
+    thresholdMib: 32
+    dir: /tmp/fission-spill
+    sizeLimit: 2Gi
 
   ## Security Context
   ## It holds pod-level and container level security configuration.

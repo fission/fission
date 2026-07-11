@@ -98,6 +98,19 @@ func TestUploadBodySizeCapConfigurable(t *testing.T) {
 		requireArchiveStored(t, rr)
 	})
 
+	t.Run("an upload larger than the spill threshold is streamed, admitted and stored", func(t *testing.T) {
+		t.Parallel()
+		storage := NewLocalStorage(t.TempDir())
+		sc, err := MakeStorageClient(logr.Discard(), storage)
+		require.NoError(t, err)
+		ss := MakeStorageService(logr.Discard(), sc, 0, master, nil, underCap)
+		ss.uploadSpillThreshold = 16 * 1024 // < 64 KiB payload, so the verifier spills to disk
+		rr := httptest.NewRecorder()
+		ss.makeHandler().ServeHTTP(rr, signedArchiveUpload(t, keyMaster, payload))
+		require.Equal(t, http.StatusOK, rr.Code)
+		requireArchiveStored(t, rr)
+	})
+
 	t.Run("a zero cap falls back to the default and admits the upload", func(t *testing.T) {
 		t.Parallel()
 		rr := httptest.NewRecorder()

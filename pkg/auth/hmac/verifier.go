@@ -7,6 +7,8 @@ package hmac
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -74,6 +76,20 @@ type VerifierOpts struct {
 	// The cap is only applied when enforcement is on (Secret non-empty); the
 	// pass-through short-circuit deliberately leaves the body untouched.
 	MaxBodyBytes int64
+	// SpillThreshold, when > 0, switches verification to the streaming path: the
+	// body is read through a SHA-256 hasher, staged in memory up to this many
+	// bytes and spilled to a temp file beyond it (removed when the re-injected
+	// body is closed), so verification memory stays bounded regardless of body
+	// size. Zero (the default) keeps the in-memory io.ReadAll path, byte-for-byte
+	// unchanged. MaxBodyBytes still applies as the hard ceiling — on the spill
+	// path it bounds disk, not RAM. Intended for the one bulk-data endpoint
+	// (storagesvc /v1/archive); other registrations leave it 0.
+	SpillThreshold int64
+	// SpillDir is the directory for spill temp files (empty → os.TempDir()).
+	// Point this at a writable, size-limited volume so spilling works under a
+	// read-only root filesystem and the spill bytes land on provisioned storage
+	// rather than the container root FS. Only consulted on the spill path.
+	SpillDir string
 	// Logger receives V(1) messages on each rejection. The zero value is
 	// substituted with logr.Discard() at construction so callers that don't
 	// care about audit logs don't crash. Rejection log lines deliberately
@@ -176,40 +192,82 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				return
 			}
 
-			var body []byte
-			if r.Body != nil {
-				if opts.MaxBodyBytes > 0 {
-					r.Body = http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes)
-				}
-				body, err = io.ReadAll(r.Body)
-				if err != nil {
-					var maxErr *http.MaxBytesError
-					if errors.As(err, &maxErr) {
-						opts.Logger.V(1).Info("HMAC verification failed",
-							"reason", "body exceeds MaxBodyBytes",
-							"method", r.Method, "path", r.URL.Path,
-							"remoteAddr", r.RemoteAddr,
-							"limit", maxErr.Limit)
-						w.WriteHeader(http.StatusRequestEntityTooLarge)
-						return
-					}
+			// Sign over RequestURI (path + raw query) so query parameters
+			// like ?id= are bound to the signature.
+			ru := r.URL.RequestURI()
+
+			// writeBodyErr maps a body-read failure to its response: a
+			// MaxBytesReader overflow → 413, anything else → 401.
+			writeBodyErr := func(e error) {
+				var maxErr *http.MaxBytesError
+				if errors.As(e, &maxErr) {
 					opts.Logger.V(1).Info("HMAC verification failed",
-						"reason", "body read error",
+						"reason", "body exceeds MaxBodyBytes",
 						"method", r.Method, "path", r.URL.Path,
-						"remoteAddr", r.RemoteAddr)
-					w.WriteHeader(http.StatusUnauthorized)
+						"remoteAddr", r.RemoteAddr, "limit", maxErr.Limit)
+					w.WriteHeader(http.StatusRequestEntityTooLarge)
 					return
 				}
-				r.Body = io.NopCloser(bytes.NewReader(body))
+				opts.Logger.V(1).Info("HMAC verification failed",
+					"reason", "body read error",
+					"method", r.Method, "path", r.URL.Path, "remoteAddr", r.RemoteAddr)
+				w.WriteHeader(http.StatusUnauthorized)
 			}
 
-			// Sign over RequestURI (path + raw query) so query parameters
-			// like ?id= are bound to the signature. Try each candidate key in
-			// order (active, then rotation, or the per-request namespace keys);
-			// constant-time compare happens inside Verify per candidate.
-			ru := r.URL.RequestURI()
+			// Apply the body cap once, before the staging-path split, so the
+			// MaxBodyBytes invariant is provably enforced on both paths.
+			if r.Body != nil && opts.MaxBodyBytes > 0 {
+				r.Body = http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes)
+			}
+
+			// verifyBody checks a candidate key against the staged body. The two
+			// staging paths differ only in memory cost: the spill path streams
+			// the body through a hasher into memory-or-tempfile (bounded RAM),
+			// the default path buffers it with io.ReadAll (unchanged behaviour).
+			// Spill only when there is actually a body to stream — a bodyless
+			// request (GET/list/HEAD, ContentLength 0) takes the cheap path and
+			// never allocates a hasher or temp file.
+			var verifyBody func(key []byte) bool
+
+			if opts.SpillThreshold > 0 && r.Body != nil && r.ContentLength != 0 {
+				sr, serr := newSpillReader(r.Body, opts.SpillThreshold, opts.SpillDir)
+				if serr != nil {
+					writeBodyErr(serr)
+					return
+				}
+				// The net/http server closes the ORIGINAL captured request body,
+				// not the spillReader we re-inject, so the verifier owns the
+				// temp file's lifetime: defer Close so it is removed on every
+				// exit — after the handler returns (success) or after a 401.
+				defer func() { _ = sr.Close() }()
+				bodyHashHex := sr.BodyHashHex()
+				r.Body = sr
+				verifyBody = func(key []byte) bool {
+					return VerifyWithBodyHash(key, r.Method, ru, bodyHashHex, tsNum, sig)
+				}
+			} else {
+				var body []byte
+				if r.Body != nil {
+					body, err = io.ReadAll(r.Body)
+					if err != nil {
+						writeBodyErr(err)
+						return
+					}
+					r.Body = io.NopCloser(bytes.NewReader(body))
+				}
+				// Hash once (not per candidate key) and verify via the same
+				// primitive as the spill path, so both staging paths converge.
+				h := sha256.Sum256(body)
+				bodyHashHex := hex.EncodeToString(h[:])
+				verifyBody = func(key []byte) bool {
+					return VerifyWithBodyHash(key, r.Method, ru, bodyHashHex, tsNum, sig)
+				}
+			}
+
+			// Try each candidate key in order (active, then rotation, or the
+			// per-request namespace keys); constant-time compare per candidate.
 			for _, c := range opts.labeledCandidates(r) {
-				if len(c.Key) > 0 && Verify(c.Key, r.Method, ru, body, tsNum, sig) {
+				if len(c.Key) > 0 && verifyBody(c.Key) {
 					// Record the principal whose key matched so downstream
 					// handlers authorize on the authenticated namespace rather
 					// than a caller-controlled header.

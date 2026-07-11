@@ -6,6 +6,8 @@ package hmac
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strconv"
@@ -68,6 +70,30 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 	if len(s.secret) == 0 {
 		return s.rt.RoundTrip(r)
 	}
+	ts := s.now().Unix()
+
+	// Sign over the request-URI (path + raw query) so query parameters like
+	// ?id= are bound to the signature. Signing the path alone would let an
+	// attacker replay a captured /v1/archive?id=A signature against ?id=B
+	// within the skew window.
+	uri := r.URL.RequestURI()
+
+	// When GetBody is available, hash a fresh copy from it and forward the
+	// original r.Body untouched, so a streamed body stays streaming (bounded
+	// memory — used by the storagesvc archive-upload client). GetBody is
+	// contractually a faithful reproduction of the body, so the signature is
+	// identical to hashing r.Body itself.
+	if r.Body != nil && r.GetBody != nil {
+		bodyHashHex, err := hashFromGetBody(r.GetBody)
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set(HeaderTimestamp, strconv.FormatInt(ts, 10))
+		r.Header.Set(HeaderSignature, SignWithBodyHash(s.secret, r.Method, uri, bodyHashHex, ts))
+		return s.rt.RoundTrip(r)
+	}
+
+	// No GetBody: buffer the body to hash it, then re-inject for the transport.
 	var body []byte
 	if r.Body != nil {
 		original := r.Body
@@ -85,13 +111,22 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 	}
-	ts := s.now().Unix()
-	// Sign over the request-URI (path + raw query) so query parameters
-	// like ?id= are bound to the signature. Signing the path alone would
-	// let an attacker replay a captured /v1/archive?id=A signature
-	// against a different ?id=B within the skew window.
-	sig := Sign(s.secret, r.Method, r.URL.RequestURI(), body, ts)
 	r.Header.Set(HeaderTimestamp, strconv.FormatInt(ts, 10))
-	r.Header.Set(HeaderSignature, sig)
+	r.Header.Set(HeaderSignature, Sign(s.secret, r.Method, uri, body, ts))
 	return s.rt.RoundTrip(r)
+}
+
+// hashFromGetBody returns hex(SHA-256) of the body produced by getBody,
+// streaming it through the hasher without buffering it in memory.
+func hashFromGetBody(getBody func() (io.ReadCloser, error)) (string, error) {
+	rc, err := getBody()
+	if err != nil {
+		return "", err
+	}
+	defer rc.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, rc); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
