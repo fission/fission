@@ -437,10 +437,10 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
 github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0+uJM6H+SuU8sEs5K5IQeKccPqeSjfgcKGgPk=
 github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDjyw0ULyrTYWeN0UNCCkmCWfjPnIA2W6oviI=
 github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
-github.com/sanketsudake/go-portless v0.2.0 h1:YAsZTZdya8afq9x0Gmc5rmkS9qR5s3zEhcQqQctN3mk=
-github.com/sanketsudake/go-portless v0.2.0/go.mod h1:jRGHM6BOYLizSy8fvFfQOX9pmBayEuAWpOz8GYhrPbI=
-github.com/sanketsudake/go-portless/k8s v0.2.0 h1:Bpu41iaD++LCn/tDEkkQZJS02cUVpIgrIB1YCuulhoI=
-github.com/sanketsudake/go-portless/k8s v0.2.0/go.mod h1:fYBVINr1oMf8K1Wh2VH8Wqp9/EsmtM+O7tFB6iD2HKo=
+github.com/sanketsudake/go-portless v0.3.0 h1:1jNQaNTME1ZIMzbk+owv8soaAMUBFn63oQhwcedD4Og=
+github.com/sanketsudake/go-portless v0.3.0/go.mod h1:jRGHM6BOYLizSy8fvFfQOX9pmBayEuAWpOz8GYhrPbI=
+github.com/sanketsudake/go-portless/k8s v0.3.0 h1:upMXPHIcFPeeQXIUTxUlfgvxVbMZx3oqXWyBOrYj3VU=
+github.com/sanketsudake/go-portless/k8s v0.3.0/go.mod h1:4Z5fafvLm6poetZT4SlFsD4JuhUaJJemBlf3oZmiupc=
 github.com/segmentio/asm v1.1.3 h1:WM03sfUOENvvKexOLp+pCqgb/WDjsi7EK8gIsICtzhc=
 github.com/segmentio/asm v1.1.3/go.mod h1:Ld3L4ZXGNcSLRg4JBsZ3//1+f/TjYl0Mzen/DQy1EJg=
 github.com/segmentio/encoding v0.5.4 h1:OW1VRern8Nw6ITAtwSZ7Idrl3MXCFwXHPgqESYfvNt0=

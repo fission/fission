@@ -130,17 +130,14 @@ func (f *Framework) RegisterService(name string, port int, opts ...portless.Rout
 	return nil
 }
 
-// ListenAndRegister binds a fresh 127.0.0.1:0 listener, registers it under
-// name, and returns it for injection into the service's Start options.
-// The service owns the listener; the kernel picked its port, so there is no
-// pre-pick race and nothing to reserve.
+// ListenAndRegister binds a fresh 127.0.0.1:0 listener (via
+// backend.ListenAndAdd), registers it under name, and returns it for
+// injection into the service's Start options. The service owns the listener;
+// the kernel picked its port, so there is no pre-pick race and nothing to
+// reserve.
 func (f *Framework) ListenAndRegister(name string) (net.Listener, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := backend.ListenAndAdd(context.Background(), f.reg, name)
 	if err != nil {
-		return nil, fmt.Errorf("error binding listener for %s: %w", name, err)
-	}
-	if _, err := f.reg.Add(context.Background(), name, backend.Listener(l)); err != nil {
-		_ = l.Close()
 		return nil, fmt.Errorf("error registering service %s: %w", name, err)
 	}
 	f.logger.Info("Registered service", "name", name, "addr", l.Addr().String())

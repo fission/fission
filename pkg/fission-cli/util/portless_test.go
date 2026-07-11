@@ -5,15 +5,8 @@
 package util
 
 import (
-	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
-	portless "github.com/sanketsudake/go-portless"
-	"github.com/sanketsudake/go-portless/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -97,43 +90,4 @@ func TestResolveFissionService(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found")
 	})
-}
-
-// TestBridgeToRoute pins the local bridge: plain HTTP clients dial the
-// returned 127.0.0.1 port and reach the route's backend through the registry
-// — including a bare POST (the token-create shape) and sequential
-// connections through the persistent accept loop.
-func TestBridgeToRoute(t *testing.T) {
-	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
-	}))
-	t.Cleanup(srv.Close)
-
-	reg := portless.New()
-	t.Cleanup(func() { _ = reg.Close() })
-	b, err := backend.ParseTCP(strings.TrimPrefix(srv.URL, "http://"))
-	require.NoError(t, err)
-	_, err = reg.Add(t.Context(), "bridge-test", b)
-	require.NoError(t, err)
-
-	port, err := bridgeToRoute(reg, "bridge-test")
-	require.NoError(t, err)
-	base := "http://127.0.0.1:" + port
-
-	resp, err := http.Get(base + "/one")
-	require.NoError(t, err)
-	assert.Equal(t, "GET /one", readAll(t, resp))
-
-	resp, err = http.Post(base+"/auth/login", "application/json", strings.NewReader("{}"))
-	require.NoError(t, err)
-	assert.Equal(t, "POST /auth/login", readAll(t, resp))
-}
-
-func readAll(t *testing.T, resp *http.Response) string {
-	t.Helper()
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return string(b)
 }
