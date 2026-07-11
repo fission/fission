@@ -122,10 +122,20 @@ func argAfter(args []string, flag string) string {
 func TestChartPortsMatchSvcinfo(t *testing.T) {
 	docs := render(t, "--set", "mcp.enabled=true", "--set", "mcp.allowInsecure=true")
 
-	t.Run("router deployment args", func(t *testing.T) {
-		args := containerArgs(t, find(docs, "Deployment", svcinfo.SvcRouter))
+	t.Run("router deployment args and container ports", func(t *testing.T) {
+		router := find(docs, "Deployment", svcinfo.SvcRouter)
+		args := containerArgs(t, router)
 		assert.Equal(t, fmt.Sprint(svcinfo.PortRouter), argAfter(args, "--routerPort"))
 		assert.Equal(t, fmt.Sprint(svcinfo.PortRouterInternal), argAfter(args, "--routerInternalPort"))
+
+		containers := router["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)
+		ports, _ := containers[0].(map[string]any)["ports"].([]any)
+		got := make([]any, 0, len(ports))
+		for _, p := range ports {
+			got = append(got, p.(map[string]any)["containerPort"])
+		}
+		assert.Contains(t, got, float64(svcinfo.PortRouter))
+		assert.Contains(t, got, float64(svcinfo.PortRouterInternal))
 	})
 
 	t.Run("router services", func(t *testing.T) {
@@ -149,6 +159,11 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 		assert.EqualValues(t, svcinfo.PortStorageSvc, storage[0]["targetPort"])
 	})
 
+	t.Run("mcp deployment arg", func(t *testing.T) {
+		args := containerArgs(t, find(docs, "Deployment", "mcp"))
+		assert.Equal(t, fmt.Sprint(svcinfo.PortMCP), argAfter(args, "--mcpPort"))
+	})
+
 	t.Run("mcp service", func(t *testing.T) {
 		mcp := servicePorts(t, find(docs, "Service", svcinfo.SvcMCP))
 		require.Len(t, mcp, 1)
@@ -160,13 +175,18 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 		want := svcinfo.RouterInternalURL("fission")
 		for _, name := range []string{"kubewatcher", "timer", "mqtrigger-keda", "mcp"} {
 			doc := find(docs, "Deployment", name)
-			if doc == nil {
-				t.Logf("deployment %s not rendered with default values; skipping", name)
-				continue
-			}
+			require.NotNilf(t, doc, "deployment %s must render under the test flags", name)
 			assert.Equalf(t, want, containerEnv(t, doc)["ROUTER_INTERNAL_URL"],
 				"deployment %s ROUTER_INTERNAL_URL", name)
 		}
+	})
+
+	t.Run("sibling-service URL args", func(t *testing.T) {
+		router := containerArgs(t, find(docs, "Deployment", svcinfo.SvcRouter))
+		assert.Equal(t, svcinfo.ExecutorURL("fission"), argAfter(router, "--executorUrl"))
+
+		buildermgr := containerArgs(t, find(docs, "Deployment", "buildermgr"))
+		assert.Equal(t, svcinfo.StorageSvcURL("fission"), argAfter(buildermgr, "--storageSvcUrl"))
 	})
 
 	t.Run("webhook deployment port", func(t *testing.T) {

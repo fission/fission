@@ -295,7 +295,7 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, opts Op
 	return nil
 }
 
-// Options configures StartWithOptions. Each listener is either pre-bound by
+// Options configures Start. Each listener is either pre-bound by
 // the caller (Listener/InternalListener — e.g. a test harness binding
 // 127.0.0.1:0) or bound here from the corresponding port.
 type Options struct {
@@ -315,14 +315,9 @@ type Options struct {
 	Executor eclient.ClientInterface
 }
 
-// Start starts a router on the given ports. See StartWithOptions.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int, executor eclient.ClientInterface) error {
-	return StartWithOptions(ctx, clientGen, logger, mgr, Options{Port: port, InternalPort: internalPort, Executor: executor})
-}
-
-// StartWithOptions starts a router. The internal listener is mandatory —
-// the public listener no longer registers /fission-function/... routes.
-func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
+// Start starts a router. The internal listener is mandatory — the public
+// listener no longer registers /fission-function/... routes.
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
 	executor := opts.Executor
 	if opts.InternalListener == nil && opts.InternalPort <= 0 {
 		opts.InternalPort = svcinfo.PortRouterInternal

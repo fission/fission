@@ -42,7 +42,7 @@ spec:
         command: ["/fission-bundle"]
         args:
           - "--routerPort"
-          - {{ .Values.router.port | default 8888 | quote }}
+          - {{ include "fission.routerPort" . | quote }}
           - "--routerInternalPort"
           - {{ include "fission.routerInternalPort" . | quote }}
           - "--executorUrl"
@@ -126,14 +126,14 @@ spec:
         readinessProbe:
           httpGet:
             path: "/readyz"
-            port: 8888
+            port: {{ include "fission.routerPort" . }}
           initialDelaySeconds: 1
           periodSeconds: 1
           failureThreshold: 30
         livenessProbe:
           httpGet:
             path: "/router-healthz"
-            port: 8888
+            port: {{ include "fission.routerPort" . }}
           initialDelaySeconds: 35
           periodSeconds: 5
         volumeMounts:
@@ -144,7 +144,7 @@ spec:
         ports:
         - containerPort: 8080
           name: metrics
-        - containerPort: 8888
+        - containerPort: {{ include "fission.routerPort" . }}
           name: http
         - containerPort: {{ include "fission.routerInternalPort" . }}
           name: internal

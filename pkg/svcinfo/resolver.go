@@ -35,23 +35,27 @@ func (s StaticResolver) RouterURL() string         { return s.Router }
 func (s StaticResolver) RouterInternalURL() string { return s.RouterInternal }
 func (s StaticResolver) StorageSvcURL() string     { return s.StorageSvc }
 
-// FlagValues carries fission-bundle's URL flag values plus whether each flag
-// was explicitly set on the command line (flag.Visit) — an unset flag falls
-// through to the namespace-derived default rather than pinning the flag's
-// compile-time default namespace.
+// FlagValues carries fission-bundle's URL flag values; empty means "not
+// set", falling through to the namespace-derived default rather than
+// pinning a compile-time namespace.
 type FlagValues struct {
 	ExecutorURL, RouterURL, StorageSvcURL string
-	ExecutorSet, RouterSet, StorageSvcSet bool
 }
 
 // envResolver resolves each URL with the precedence:
 //
-//  1. the explicitly-set command-line flag (the chart always passes these),
+//  1. the non-empty command-line flag (the chart always passes these),
 //  2. the service-specific env override (only ROUTER_INTERNAL_URL exists:
 //     it beats --routerUrl for the publishers' target, preserving the
 //     established contract),
 //  3. the in-cluster default built from POD_NAMESPACE (downward API),
 //     falling back to the historic "fission" namespace when unset.
+//
+// The POD_NAMESPACE derivation is a deliberate behavior change for installs
+// that set neither flags nor env: the old compile-time defaults pinned the
+// "fission" namespace no matter where the bundle ran. A split-namespace
+// install (bundle outside the control-plane namespace) that relied on that
+// pin must now pass the URL flags — which the Helm chart always does.
 type envResolver struct {
 	flags     FlagValues
 	namespace string
@@ -68,14 +72,14 @@ func NewEnvResolver(flags FlagValues) AddressResolver {
 }
 
 func (r envResolver) ExecutorURL() string {
-	if r.flags.ExecutorSet {
+	if r.flags.ExecutorURL != "" {
 		return r.flags.ExecutorURL
 	}
 	return ExecutorURL(r.namespace)
 }
 
 func (r envResolver) RouterURL() string {
-	if r.flags.RouterSet {
+	if r.flags.RouterURL != "" {
 		return r.flags.RouterURL
 	}
 	return RouterURL(r.namespace)
@@ -94,7 +98,7 @@ func (r envResolver) RouterInternalURL() string {
 }
 
 func (r envResolver) StorageSvcURL() string {
-	if r.flags.StorageSvcSet {
+	if r.flags.StorageSvcURL != "" {
 		return r.flags.StorageSvcURL
 	}
 	return StorageSvcURL(r.namespace)

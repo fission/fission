@@ -79,7 +79,7 @@ func TestUploadBodySizeCapConfigurable(t *testing.T) {
 		storage := NewLocalStorage(t.TempDir())
 		sc, err := MakeStorageClient(logr.Discard(), storage)
 		require.NoError(t, err)
-		ss := MakeStorageService(logr.Discard(), sc, 0, master, nil, maxUploadBytes)
+		ss := MakeStorageService(logr.Discard(), sc, master, nil, maxUploadBytes)
 		return ss.makeHandler()
 	}
 

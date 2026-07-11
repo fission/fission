@@ -45,27 +45,23 @@ const envAllowInsecure = "MCP_ALLOW_INSECURE"
 // tool list, so reconcile must run on each), registers the tool reconciler, and
 // serves the MCP endpoint on port until ctx is cancelled.
 //
-// routerInternalURL is the resolved ROUTER_INTERNAL_URL passed down from
-// fission-bundle (the same value kubewatcher/timer/mqt receive), so library
-// constructors stay deterministic for unit tests.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger,
-	mgr *errgroup.Group, port int, routerInternalURL string) error {
-	return StartWithOptions(ctx, clientGen, logger, mgr, Options{Port: port}, routerInternalURL)
-}
-
-// Options configures StartWithOptions. The listener is either pre-bound by
-// the caller (Listener — e.g. a test harness binding 127.0.0.1:0) or bound
-// here from Port.
+// Options configures Start. The listener is either pre-bound by the caller
+// (Listener — e.g. a test harness binding 127.0.0.1:0) or bound here from
+// Port.
 type Options struct {
 	// Port is the MCP server port. Ignored when Listener is set.
 	Port int
 	// Listener optionally pre-binds the listener.
 	Listener net.Listener
+	// RouterInternalURL is the resolved ROUTER_INTERNAL_URL passed down from
+	// fission-bundle (the same value kubewatcher/timer/mqt receive), so
+	// library constructors stay deterministic for unit tests.
+	RouterInternalURL string
 }
 
-// StartWithOptions is Start with an injectable listener.
-func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger,
-	mgr *errgroup.Group, opts Options, routerInternalURL string) error {
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger,
+	mgr *errgroup.Group, opts Options) error {
+	routerInternalURL := opts.RouterInternalURL
 	logger = logger.WithName("mcp")
 
 	fissionClient, err := clientGen.GetFissionClient()

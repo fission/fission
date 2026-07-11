@@ -64,12 +64,24 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 	if pfReg == nil {
 		pfReg = portless.New()
 	}
-	if _, err := pfReg.Add(ctx, key, backend); err != nil {
+	route, err := pfReg.Add(ctx, key, backend)
+	if err != nil {
 		return "", fmt.Errorf("error registering port-forward route for %v: %w", labelSelector, err)
+	}
+	// Preserve the old contract: SetupPortForward returning means a working
+	// tunnel. Ready blocks until a pod accepts (bounded by ctx / the route's
+	// ready timeout), so callers — including humans handed a printed URL —
+	// get a diagnosable error here instead of a silent first-request stall.
+	if err := route.Ready(ctx); err != nil {
+		_ = pfReg.Remove(ctx, key)
+		return "", fmt.Errorf("error waiting for %v port-forward to become ready: %w", labelSelector, err)
 	}
 
 	port, err := bridgeToRoute(pfReg, key)
 	if err != nil {
+		// Deregister so a later retry of the same service can re-Add
+		// instead of failing ErrRouteExists forever.
+		_ = pfReg.Remove(ctx, key)
 		return "", err
 	}
 	pfBridges[key] = port
@@ -148,7 +160,7 @@ func bridgeToRoute(reg *portless.Registry, name string) (string, error) {
 				// pod accepts, bounded by the route's ready timeout.
 				upstream, err := reg.DialContext(context.Background(), "tcp", name+":0")
 				if err != nil {
-					console.Verbose(2, "port-forward dial for %v failed: %v", name, err)
+					console.Warn(fmt.Sprintf("port-forward dial for %v failed: %v", name, err))
 					return
 				}
 				defer upstream.Close()
@@ -165,6 +177,15 @@ func bridgeToRoute(reg *portless.Registry, name string) (string, error) {
 					close(done)
 				}()
 				_, _ = io.Copy(conn, upstream)
+				// Tell the client the response stream ended (the old
+				// forwarder tore the local conn down when the remote
+				// closed); without this a connection-close-delimited
+				// response hangs the client forever.
+				if tc, ok := conn.(*net.TCPConn); ok {
+					_ = tc.CloseWrite()
+				} else {
+					_ = conn.Close()
+				}
 				<-done
 			}()
 		}

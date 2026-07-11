@@ -262,13 +262,9 @@ func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]exe
 
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
-func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int) error {
-	return StartExecutorWithOptions(ctx, clientGen, logger, mgr, Options{Port: port})
-}
-
-// Options configures StartExecutorWithOptions. The API listener is either
-// pre-bound by the caller (Listener — e.g. a test harness binding
-// 127.0.0.1:0) or bound here from Port.
+// Options configures StartExecutor. The API listener is either pre-bound by
+// the caller (Listener — e.g. a test harness binding 127.0.0.1:0) or bound
+// here from Port.
 type Options struct {
 	// Port is the executor API port. Ignored when Listener is set.
 	Port int
@@ -276,8 +272,7 @@ type Options struct {
 	Listener net.Listener
 }
 
-// StartExecutorWithOptions is StartExecutor with an injectable listener.
-func StartExecutorWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
+func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {

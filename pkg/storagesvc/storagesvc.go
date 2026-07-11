@@ -47,7 +47,6 @@ type (
 	StorageService struct {
 		logger        logr.Logger
 		storageClient *StorageClient
-		port          int
 		// authSecret, if non-empty, enables HMAC enforcement on /v1/archive.
 		authSecret []byte
 		// authSecretOld is accepted alongside authSecret during rotation.
@@ -308,11 +307,10 @@ func (ss *StorageService) healthHandler(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func MakeStorageService(logger logr.Logger, storageClient *StorageClient, port int, authSecret, authSecretOld []byte, maxUploadBytes int64) *StorageService {
+func MakeStorageService(logger logr.Logger, storageClient *StorageClient, authSecret, authSecretOld []byte, maxUploadBytes int64) *StorageService {
 	return &StorageService{
 		logger:         logger.WithName("storage_service"),
 		storageClient:  storageClient,
-		port:           port,
 		authSecret:     authSecret,
 		authSecretOld:  authSecretOld,
 		maxUploadBytes: maxUploadBytes,
@@ -416,14 +414,9 @@ func maxUploadBytesFromEnv(logger logr.Logger) int64 {
 	return mib << 20
 }
 
-// Start runs storage service on the given port. See StartWithOptions.
-func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr *errgroup.Group, port int) error {
-	return StartWithOptions(ctx, clientGen, logger, storage, mgr, Options{Port: port})
-}
-
-// Options configures StartWithOptions. The API listener is either pre-bound
-// by the caller (Listener — e.g. a test harness binding 127.0.0.1:0) or
-// bound here from Port.
+// Options configures Start. The API listener is either pre-bound by the
+// caller (Listener — e.g. a test harness binding 127.0.0.1:0) or bound here
+// from Port.
 type Options struct {
 	// Port is the storage service API port. Ignored when Listener is set.
 	Port int
@@ -431,8 +424,8 @@ type Options struct {
 	Listener net.Listener
 }
 
-// StartWithOptions runs the storage service with an injectable listener.
-func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr *errgroup.Group, opts Options) error {
+// Start runs the storage service.
+func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, storage Storage, mgr *errgroup.Group, opts Options) error {
 	enablePruner, err := strconv.ParseBool(os.Getenv("PRUNE_ENABLED"))
 	if err != nil {
 		logger.Error(err, "PRUNE_ENABLED value not set. Enabling archive pruner by default.")
@@ -450,7 +443,7 @@ func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterfac
 	authSecretOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 
 	// create http handlers
-	storageService := MakeStorageService(logger, storageClient, opts.Port, authSecret, authSecretOld, maxUploadBytesFromEnv(logger))
+	storageService := MakeStorageService(logger, storageClient, authSecret, authSecretOld, maxUploadBytesFromEnv(logger))
 	mgr.Go(func() error {
 		metrics.ServeMetrics(ctx, "storagesvc", logger, mgr)
 		return nil

@@ -92,7 +92,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 		return err
 	}
 	runService("executor", func() error {
-		return executor.StartExecutorWithOptions(ctx, f.ClientGen(), f.Logger(), mgr, executor.Options{Listener: executorListener})
+		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, executor.Options{Listener: executorListener})
 	})
 
 	os.Setenv("PRUNE_ENABLED", "true")
@@ -145,7 +145,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// router now runs under a controller-runtime Manager, so its Start
 	// blocks. Run it in a goroutine so the harness can continue.
 	runService("router", func() error {
-		return router.StartWithOptions(ctx, f.ClientGen(), f.Logger(), mgr, router.Options{
+		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, router.Options{
 			Listener:         routerListener,
 			InternalListener: internalListener,
 			Executor:         executorClient,
@@ -199,7 +199,7 @@ func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.
 	if err != nil {
 		return err
 	}
-	err = storagesvc.StartWithOptions(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storagesvc.Options{Listener: listener})
+	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storagesvc.Options{Listener: listener})
 	if err != nil {
 		return fmt.Errorf("error starting storage service: %w", err)
 	}

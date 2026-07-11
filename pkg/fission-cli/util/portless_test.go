@@ -101,8 +101,8 @@ func TestResolveFissionService(t *testing.T) {
 
 // TestBridgeToRoute pins the local bridge: plain HTTP clients dial the
 // returned 127.0.0.1 port and reach the route's backend through the registry
-// — including a bare POST (the token-create shape), sequential connections,
-// and recovery after the backend restarts (the pod-restart analogue).
+// — including a bare POST (the token-create shape) and sequential
+// connections through the persistent accept loop.
 func TestBridgeToRoute(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

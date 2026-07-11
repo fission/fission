@@ -48,9 +48,10 @@ func BindAddrFromEnv(env string, defPort int) string {
 	return addr
 }
 
-// ServerOptions configures Serve. Exactly one of Addr or Listener supplies
-// the bind: a non-nil Listener takes precedence (the caller pre-bound it —
-// e.g. a test harness on 127.0.0.1:0), otherwise Addr is bound here.
+// ServerOptions configures Serve. A non-nil Listener wins (the caller
+// pre-bound it — e.g. a test harness on 127.0.0.1:0); otherwise Addr is
+// bound here. Callers may pass both: Addr is simply ignored alongside a
+// Listener (the delegating port-based Start paths do this).
 type ServerOptions struct {
 	// Name identifies the service in logs.
 	Name string
@@ -69,7 +70,7 @@ type ServerOptions struct {
 // returning.
 func Serve(ctx context.Context, log logr.Logger, mgr *errgroup.Group, opts ServerOptions) {
 	addr := opts.Addr
-	if !strings.Contains(addr, ":") {
+	if opts.Listener == nil && !strings.Contains(addr, ":") {
 		addr = fmt.Sprintf(":%s", addr)
 	}
 	server := http.Server{

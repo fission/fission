@@ -26,7 +26,7 @@ spec:
         image: {{ include "fission-bundleImage" . | quote }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
-        args: ["--mcpPort", "{{ .Values.mcp.port | default 8890 }}"]
+        args: ["--mcpPort", "{{ include "fission.mcpPort" . }}"]
         env:
         {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: DEBUG_ENV
@@ -69,12 +69,12 @@ spec:
         readinessProbe:
           httpGet:
             path: /readyz
-            port: {{ .Values.mcp.port | default 8890 }}
+            port: {{ include "fission.mcpPort" . }}
           periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /healthz
-            port: {{ .Values.mcp.port | default 8890 }}
+            port: {{ include "fission.mcpPort" . }}
           periodSeconds: 30
         resources:
           {{- toYaml .Values.mcp.resources | nindent 10 }}

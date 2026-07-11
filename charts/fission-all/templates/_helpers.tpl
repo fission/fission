@@ -257,3 +257,19 @@ defaults from when a URL flag/env is not explicitly set.
     fieldRef:
       fieldPath: metadata.namespace
 {{- end }}
+
+{{/*
+fission.routerPort is the router's public listener port (fronted by the
+Service's port 80). Mirrored by pkg/svcinfo.PortRouter.
+*/}}
+{{- define "fission.routerPort" -}}
+{{ .Values.router.port | default 8888 }}
+{{- end -}}
+
+{{/*
+fission.mcpPort is the MCP tool server's port. Mirrored by
+pkg/svcinfo.PortMCP.
+*/}}
+{{- define "fission.mcpPort" -}}
+{{ .Values.mcp.port | default 8890 }}
+{{- end -}}

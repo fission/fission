@@ -14,8 +14,8 @@ spec:
   type: ClusterIP
   ports:
   - name: mcp
-    port: {{ .Values.mcp.port | default 8890 }}
-    targetPort: {{ .Values.mcp.port | default 8890 }}
+    port: {{ include "fission.mcpPort" . }}
+    targetPort: {{ include "fission.mcpPort" . }}
   selector:
     svc: mcp
 {{- end }}

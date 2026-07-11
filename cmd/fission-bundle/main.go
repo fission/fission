@@ -60,14 +60,11 @@ type CommandLineArgs struct {
 	storageServicePort int
 	mcpPort            int
 
-	// URL values (and whether each flag was explicitly set — an unset flag
-	// falls through to the resolver's POD_NAMESPACE-derived default)
-	executorUrl      string
-	routerUrl        string
-	storageSvcUrl    string
-	executorUrlSet   bool
-	routerUrlSet     bool
-	storageSvcUrlSet bool
+	// URL values — empty means "not set": the resolver derives the
+	// in-cluster default from POD_NAMESPACE (see svcinfo.AddressResolver)
+	executorUrl   string
+	routerUrl     string
+	storageSvcUrl string
 
 	// Other configurations
 	storageType string
@@ -207,25 +204,15 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
 
 	// URL flags
-	flag.StringVar(&args.executorUrl, "executorUrl", svcinfo.ExecutorURL("fission"), "Executor URL")
-	flag.StringVar(&args.routerUrl, "routerUrl", svcinfo.RouterURL("fission"), "Router URL")
-	flag.StringVar(&args.storageSvcUrl, "storageSvcUrl", svcinfo.StorageSvcURL("fission"), "StorageService URL")
+	flag.StringVar(&args.executorUrl, "executorUrl", "", "Executor URL (default http://executor.<POD_NAMESPACE>)")
+	flag.StringVar(&args.routerUrl, "routerUrl", "", "Router URL (default http://router.<POD_NAMESPACE>)")
+	flag.StringVar(&args.storageSvcUrl, "storageSvcUrl", "", "StorageService URL (default http://storagesvc.<POD_NAMESPACE>)")
 
 	// Other configuration flags
 	flag.StringVar(&args.storageType, "storageType", "", "Type of storage to use")
 
 	// Parse flags
 	flag.Parse()
-	flag.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "executorUrl":
-			args.executorUrlSet = true
-		case "routerUrl":
-			args.routerUrlSet = true
-		case "storageSvcUrl":
-			args.storageSvcUrlSet = true
-		}
-	})
 
 	return args
 }
@@ -239,6 +226,9 @@ type bundleService struct {
 	name     string
 	selected func(*CommandLineArgs) bool
 	run      func(ctx context.Context, deps bundleDeps) error
+	// oneShot marks a job-style entry (Helm Job): the dispatcher exits the
+	// process with run's status instead of waiting for ctx like a service.
+	oneShot bool
 }
 
 // bundleDeps carries everything a subsystem runner needs.
@@ -259,21 +249,16 @@ func bundleServices() []bundleService {
 			// post-install/post-upgrade Job; idempotent.
 			name:     "Fission-SeedTenants",
 			selected: func(a *CommandLineArgs) bool { return a.seedTenants },
+			oneShot:  true,
 			run: func(ctx context.Context, d bundleDeps) error {
-				// One-shot semantics: this runs as a Helm Job, so the process
-				// must exit (0/1) rather than fall through to the long-running
-				// service wait in main.
 				fissionClient, err := d.clientGen.GetFissionClient()
 				if err != nil {
-					d.logger.Error(err, "tenant seeding: get fission client")
-					os.Exit(1)
+					return fmt.Errorf("tenant seeding: get fission client: %w", err)
 				}
 				if err := tenant.SeedTenants(ctx, fissionClient, utils.DefaultNSResolver(), d.logger); err != nil {
-					d.logger.Error(err, "tenant seeding failed")
-					os.Exit(1)
+					return fmt.Errorf("tenant seeding failed: %w", err)
 				}
 				d.logger.Info("tenant seeding complete")
-				os.Exit(0)
 				return nil
 			},
 		},
@@ -296,14 +281,16 @@ func bundleServices() []bundleService {
 			selected: func(a *CommandLineArgs) bool { return a.routerPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
 				executorClient := eclient.MakeClient(d.logger, d.resolver.ExecutorURL(), storagesvcClient.HMACSecretFromEnv())
-				return router.Start(ctx, d.clientGen, d.logger, d.mgr, d.args.routerPort, d.args.routerInternalPort, executorClient)
+				return router.Start(ctx, d.clientGen, d.logger, d.mgr, router.Options{
+					Port: d.args.routerPort, InternalPort: d.args.routerInternalPort, Executor: executorClient,
+				})
 			},
 		},
 		{
 			name:     "Fission-Executor",
 			selected: func(a *CommandLineArgs) bool { return a.executorPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
-				return executor.StartExecutor(ctx, d.clientGen, d.logger, d.mgr, d.args.executorPort)
+				return executor.StartExecutor(ctx, d.clientGen, d.logger, d.mgr, executor.Options{Port: d.args.executorPort})
 			},
 		},
 		// The publishers below target the router's internal listener; the
@@ -344,7 +331,7 @@ func bundleServices() []bundleService {
 			name:     "Fission-MCP",
 			selected: func(a *CommandLineArgs) bool { return a.mcpPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
-				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, d.args.mcpPort, d.resolver.RouterInternalURL())
+				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, mcp.Options{Port: d.args.mcpPort, RouterInternalURL: d.resolver.RouterInternalURL()})
 			},
 		},
 		{
@@ -398,20 +385,30 @@ func startRequestedService(ctx context.Context, args *CommandLineArgs, clientGen
 	if svc == nil {
 		return
 	}
-	// One resolution seam for every sibling-service URL: explicit flag >
-	// env override (ROUTER_INTERNAL_URL) > POD_NAMESPACE-derived default.
+	// One resolution seam for every sibling-service URL — see
+	// svcinfo.AddressResolver for the documented precedence.
 	deps := bundleDeps{
 		args:      args,
 		clientGen: clientGen,
 		logger:    logger,
 		mgr:       mgr,
 		resolver: svcinfo.NewEnvResolver(svcinfo.FlagValues{
-			ExecutorURL: args.executorUrl, ExecutorSet: args.executorUrlSet,
-			RouterURL: args.routerUrl, RouterSet: args.routerUrlSet,
-			StorageSvcURL: args.storageSvcUrl, StorageSvcSet: args.storageSvcUrlSet,
+			ExecutorURL:   args.executorUrl,
+			RouterURL:     args.routerUrl,
+			StorageSvcURL: args.storageSvcUrl,
 		}),
 	}
-	if err := svc.run(ctx, deps); err != nil {
+	err := svc.run(ctx, deps)
+	if svc.oneShot {
+		// Job-style entries (Helm Jobs) must exit with a status instead of
+		// falling through to main's long-running service wait.
+		if err != nil {
+			logger.Error(err, "job failed", "service", svc.name)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if err != nil {
 		logger.Error(err, "service exited", "service", svc.name)
 	}
 }
@@ -426,5 +423,5 @@ func startStorageService(ctx context.Context, args *CommandLineArgs, clientGen c
 		storage = storagesvc.NewLocalStorage("/fission")
 	}
 
-	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, args.storageServicePort)
+	return storagesvc.Start(ctx, clientGen, logger, storage, mgr, storagesvc.Options{Port: args.storageServicePort})
 }

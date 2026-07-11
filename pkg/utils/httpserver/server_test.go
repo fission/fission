@@ -22,7 +22,7 @@ import (
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
-func TestStartServer(t *testing.T) {
+func TestServe(t *testing.T) {
 	mgr := &errgroup.Group{}
 	t.Cleanup(func() { _ = mgr.Wait() })
 
@@ -97,10 +97,10 @@ func freePort(t *testing.T) string {
 	return fmt.Sprintf("127.0.0.1:%d", port)
 }
 
-// TestStartServerDrainsInFlightRequest verifies that an in-flight request is
+// TestServeDrainsInFlightRequest verifies that an in-flight request is
 // allowed to complete when the server is asked to shut down, rather than being
 // cut the moment the signal context is cancelled.
-func TestStartServerDrainsInFlightRequest(t *testing.T) {
+func TestServeDrainsInFlightRequest(t *testing.T) {
 	addr := freePort(t)
 
 	handlerEntered := make(chan struct{})

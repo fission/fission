@@ -18,7 +18,7 @@ spec:
   ports:
   - name: http
     port: 80
-    targetPort: {{ .Values.router.port | default 8888 }}
+    targetPort: {{ include "fission.routerPort" . }}
 {{- if eq .Values.routerServiceType "NodePort" }}
     nodePort: {{ .Values.routerPort }}
 {{- end }}
