@@ -36,6 +36,8 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // Command line arguments
@@ -196,7 +198,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	// Port flags
 	flag.IntVar(&args.webhookPort, "webhookPort", 0, "Port that the webhook should listen on")
 	flag.IntVar(&args.routerPort, "routerPort", 0, "Port that the router should listen on")
-	flag.IntVar(&args.routerInternalPort, "routerInternalPort", router.DefaultInternalListenerPort, "Port for the router internal listener that serves /fission-function/<ns>/<name>")
+	flag.IntVar(&args.routerInternalPort, "routerInternalPort", svcinfo.PortRouterInternal, "Port for the router internal listener that serves /fission-function/<ns>/<name>")
 	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")

@@ -20,6 +20,8 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/utils"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // getPoolName returns a unique name for a pool's deployment: per environment,
@@ -116,11 +118,11 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		Ports: []apiv1.ContainerPort{
 			{
 				Name:          "http-fetcher",
-				ContainerPort: int32(8000),
+				ContainerPort: int32(svcinfo.PortFetcher),
 			},
 			{
 				Name:          "http-env",
-				ContainerPort: int32(8888),
+				ContainerPort: int32(svcinfo.PortEnvRuntime),
 			},
 		},
 	}, env.Spec.Runtime.Container)

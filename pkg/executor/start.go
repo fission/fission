@@ -46,7 +46,10 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // executorScheme is the controller-runtime Manager's scheme. Unlike the
@@ -256,19 +259,6 @@ func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]exe
 	}
 }
 
-// bindAddr resolves a server bind address from env, defaulting to def and
-// prefixing ":" when only a port is given.
-func bindAddr(env, def string) string {
-	addr := os.Getenv(env)
-	if addr == "" {
-		addr = def
-	}
-	if !strings.Contains(addr, ":") {
-		addr = ":" + addr
-	}
-	return addr
-}
-
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int) error {
@@ -368,7 +358,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		logger.Error(err, "failed to register fission metrics collectors")
 	}
 
-	metricsBind := bindAddr("METRICS_ADDR", "8080")
+	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
 	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
 		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
 		metricsBind = ":0"

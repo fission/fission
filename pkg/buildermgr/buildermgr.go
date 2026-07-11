@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"github.com/go-logr/logr"
@@ -32,6 +31,10 @@ import (
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
+
+	"github.com/fission/fission/pkg/svcinfo"
+
+	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
 const (
@@ -95,8 +98,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		bmLogger.Error(err, "failed to register fission metrics collectors")
 	}
 
-	metricsBind := bindAddr("METRICS_ADDR", "8080")
-	healthBind := bindAddr("HEALTH_PROBE_ADDR", "8081")
+	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
+	healthBind := httpserver.BindAddrFromEnv("HEALTH_PROBE_ADDR", svcinfo.PortHealthProbe)
 	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
 		// The e2e framework runs every Fission service in one process sharing
 		// METRICS_ADDR, which is fine for the fail-soft ServeMetrics servers but
@@ -179,19 +182,6 @@ func packageBuildConcurrency() int {
 		return v
 	}
 	return defaultPackageBuildConcurrency
-}
-
-// bindAddr resolves a server bind address from env, defaulting to def and
-// prefixing ":" when only a port is given (matching ServeMetrics' convention).
-func bindAddr(env, def string) string {
-	addr := os.Getenv(env)
-	if addr == "" {
-		addr = def
-	}
-	if !strings.Contains(addr, ":") {
-		addr = ":" + addr
-	}
-	return addr
 }
 
 // readinessRunnable backs /readyz: it reports ready once this replica is the

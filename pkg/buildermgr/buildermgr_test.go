@@ -36,14 +36,3 @@ func TestPackageBuildConcurrency(t *testing.T) {
 	t.Setenv("BUILDERMGR_PACKAGE_CONCURRENCY", "notanumber")
 	assert.Equal(t, defaultPackageBuildConcurrency, packageBuildConcurrency(), "invalid falls back to default")
 }
-
-func TestBindAddr(t *testing.T) {
-	t.Setenv("METRICS_ADDR", "")
-	assert.Equal(t, ":8080", bindAddr("METRICS_ADDR", "8080"))
-
-	t.Setenv("METRICS_ADDR", "9090")
-	assert.Equal(t, ":9090", bindAddr("METRICS_ADDR", "8080"))
-
-	t.Setenv("METRICS_ADDR", "0.0.0.0:9090")
-	assert.Equal(t, "0.0.0.0:9090", bindAddr("METRICS_ADDR", "8080"))
-}

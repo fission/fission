@@ -14,6 +14,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // loadOnlySpecialize specializes a Path B (image-volume) pod: the code is
@@ -32,9 +34,9 @@ func (gp *GenericPool) loadOnlySpecialize(ctx context.Context, podIP string, fn 
 		return fmt.Errorf("error encoding load request: %w", err)
 	}
 
-	specializeURL := fmt.Sprintf("http://%s:8888/v2/specialize", podIP)
+	specializeURL := fmt.Sprintf("http://%s:%d/v2/specialize", podIP, svcinfo.PortEnvRuntime)
 	if IsIPv6(podIP) {
-		specializeURL = fmt.Sprintf("http://[%s]:8888/v2/specialize", podIP)
+		specializeURL = fmt.Sprintf("http://[%s]:%d/v2/specialize", podIP, svcinfo.PortEnvRuntime)
 	}
 	logger.Info("load-only specializing image-volume pod", "function", fn.Name, "url", specializeURL)
 

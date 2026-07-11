@@ -42,6 +42,8 @@ import (
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 type (
@@ -826,12 +828,12 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 
 	if loadReq.EnvVersion >= 2 {
 		contentType = "application/json"
-		specializeURL = "http://127.0.0.1:8888/v2/specialize"
+		specializeURL = fmt.Sprintf("http://127.0.0.1:%d/v2/specialize", svcinfo.PortEnvRuntime)
 		reader = bytes.NewReader(loadPayload)
 		logger.Info("calling environment v2 specialization endpoint")
 	} else {
 		contentType = "text/plain"
-		specializeURL = "http://127.0.0.1:8888/specialize"
+		specializeURL = fmt.Sprintf("http://127.0.0.1:%d/specialize", svcinfo.PortEnvRuntime)
 		reader = bytes.NewReader([]byte{})
 		logger.Info("calling environment v1 specialization endpoint")
 	}

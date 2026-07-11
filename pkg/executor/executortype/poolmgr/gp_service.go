@@ -25,6 +25,8 @@ import (
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // createSvc creates the legacy per-function ClusterIP Service used by the
@@ -43,8 +45,8 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 			Ports: []apiv1.ServicePort{
 				{
 					Protocol:   apiv1.ProtocolTCP,
-					Port:       8888,
-					TargetPort: intstr.FromInt(8888),
+					Port:       svcinfo.PortEnvRuntime,
+					TargetPort: intstr.FromInt(svcinfo.PortEnvRuntime),
 				},
 			},
 			Selector: labels,
@@ -142,8 +144,8 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 			Ports: []apiv1.ServicePort{
 				{
 					Protocol:   apiv1.ProtocolTCP,
-					Port:       8888,
-					TargetPort: intstr.FromInt(8888),
+					Port:       svcinfo.PortEnvRuntime,
+					TargetPort: intstr.FromInt(svcinfo.PortEnvRuntime),
 				},
 			},
 			Selector: selector,

@@ -27,6 +27,8 @@ import (
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // IsIPv6 validates if the podIP follows to IPv6 protocol
@@ -49,9 +51,9 @@ func (gp *GenericPool) getFetcherURL(podIP string) string {
 	var baseURL string
 
 	if isv6 { // We use bracket if the IP is in IPv6.
-		baseURL = fmt.Sprintf("http://[%s]:8000/", podIP)
+		baseURL = fmt.Sprintf("http://[%s]:%d/", podIP, svcinfo.PortFetcher)
 	} else {
-		baseURL = fmt.Sprintf("http://%s:8000/", podIP)
+		baseURL = fmt.Sprintf("http://%s:%d/", podIP, svcinfo.PortFetcher)
 	}
 	return baseURL
 }

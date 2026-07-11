@@ -6,7 +6,6 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 
@@ -22,7 +21,12 @@ import (
 
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+
 	//+kubebuilder:scaffold:imports
+
+	"github.com/fission/fission/pkg/svcinfo"
+
+	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
 type WebhookInjector interface {
@@ -32,13 +36,7 @@ type WebhookInjector interface {
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, options webhook.Options) (err error) {
 	wLogger := logger.WithName("webhook")
 
-	metricsAddr := os.Getenv("METRICS_ADDR")
-	if metricsAddr == "" {
-		metricsAddr = ":8080"
-	}
-	if metricsAddr[0] != ':' {
-		metricsAddr = fmt.Sprintf(":%s", metricsAddr)
-	}
+	metricsAddr := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
 	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
 		// In-process e2e harness: bind an ephemeral metrics port so the manager
 		// can't lose a TOCTOU race for a fixed port against the other in-process

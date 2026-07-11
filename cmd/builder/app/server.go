@@ -16,6 +16,10 @@ import (
 	builder "github.com/fission/fission/pkg/builder"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
+
+	"strconv"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // Usage: builder <shared volume path>
@@ -58,5 +62,5 @@ func Run(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, shareVolu
 	// Builder is a pod-local sidecar with no Service; no legitimate
 	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth.
 	handler := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(mux)))
-	httpserver.StartServer(ctx, logger, mgr, "builder", "8001", handler)
+	httpserver.StartServer(ctx, logger, mgr, "builder", strconv.Itoa(svcinfo.PortBuilder), handler)
 }

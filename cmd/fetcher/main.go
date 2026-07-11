@@ -15,9 +15,13 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 	"github.com/fission/fission/pkg/utils/profile"
+
+	"github.com/fission/fission/pkg/svcinfo"
+
+	"strconv"
 )
 
-const fetcherPort = "8000"
+var fetcherPort = strconv.Itoa(svcinfo.PortFetcher)
 
 // Usage: fetcher <shared volume path>
 func main() {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,21 @@ func drainTimeout() time.Duration {
 		}
 	}
 	return defaultDrainTimeout
+}
+
+// BindAddrFromEnv resolves a listen address from an env var, defaulting to
+// defPort, and prefixes ":" when only a port is given. Shared by every
+// component that binds a metrics/health server (previously each carried a
+// private bindAddr copy).
+func BindAddrFromEnv(env string, defPort int) string {
+	addr := os.Getenv(env)
+	if addr == "" {
+		addr = strconv.Itoa(defPort)
+	}
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+	return addr
 }
 
 func StartServer(ctx context.Context, log logr.Logger, mgr *errgroup.Group, svc string, port string, handler http.Handler) {

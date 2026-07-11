@@ -33,7 +33,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -71,6 +70,8 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+
+	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // routerScheme is the router Manager's scheme: the Fission CRD types plus the
@@ -187,23 +188,12 @@ type runnableFunc func(context.Context) error
 
 func (f runnableFunc) Start(ctx context.Context) error { return f(ctx) }
 
-// bindAddr resolves a server bind address from env, defaulting to def and
-// prefixing ":" when only a port is given.
-func bindAddr(env, def string) string {
-	addr := os.Getenv(env)
-	if addr == "" {
-		addr = def
-	}
-	if !strings.Contains(addr, ":") {
-		addr = ":" + addr
-	}
-	return addr
-}
-
 // DefaultInternalListenerPort is the default port for the internal
-// listener that serves /fission-function/<ns>/<name>. It must match the
-// targetPort used by the chart's router Service "internal" port.
-const DefaultInternalListenerPort = 8889
+// listener that serves /fission-function/<ns>/<name>.
+//
+// Deprecated: use svcinfo.PortRouterInternal — pkg/svcinfo is the single
+// source of truth for component ports.
+const DefaultInternalListenerPort = svcinfo.PortRouterInternal
 
 // internalListenerMaxBodyBytes caps the request body size the HMAC
 // verifier on the internal listener will buffer. 64 MiB is large enough
@@ -389,7 +379,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		logger.Error(err, "failed to register fission metrics collectors")
 	}
 
-	metricsBind := bindAddr("METRICS_ADDR", "8080")
+	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
 	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
 		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
 		metricsBind = ":0"
