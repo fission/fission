@@ -44,12 +44,11 @@ import (
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
-
-	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // executorScheme is the controller-runtime Manager's scheme. Unlike the

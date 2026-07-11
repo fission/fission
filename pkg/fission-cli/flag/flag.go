@@ -12,7 +12,6 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
-
 	"github.com/fission/fission/pkg/svcinfo"
 )
 

@@ -5,12 +5,13 @@
 // Package svcinfo is the single source of truth for the ports and service
 // names of Fission's control-plane components. Every Go-side reference to a
 // component port or in-cluster service name must come from here; the Helm
-// chart mirrors these values in values.yaml (a drift check keeps the two in
-// lockstep — see test/helm).
+// chart mirrors these values in values.yaml. (A helm-template drift check
+// asserting the rendered chart matches these constants is planned; until it
+// lands, TestPortValues pins the numbers so changing one is loud.)
 //
 // Changing a port here is NOT enough to change it in a cluster: Services,
 // NetworkPolicies, and probes render from the chart. These constants exist so
-// Go code agrees with itself and so the drift check can compare one anchor
+// Go code agrees with itself and so a drift check can compare one anchor
 // against the rendered chart.
 package svcinfo
 

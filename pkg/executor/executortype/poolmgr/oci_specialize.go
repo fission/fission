@@ -12,10 +12,9 @@ import (
 	"time"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-
-	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // loadOnlySpecialize specializes a Path B (image-volume) pod: the code is

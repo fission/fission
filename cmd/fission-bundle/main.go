@@ -29,6 +29,7 @@ import (
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/timer"
 	"github.com/fission/fission/pkg/utils"
@@ -36,8 +37,6 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
-
-	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // Command line arguments
@@ -204,9 +203,9 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
 
 	// URL flags
-	flag.StringVar(&args.executorUrl, "executorUrl", "http://executor.fission", "Executor URL")
-	flag.StringVar(&args.routerUrl, "routerUrl", "http://router.fission", "Router URL")
-	flag.StringVar(&args.storageSvcUrl, "storageSvcUrl", "http://storagesvc.fission", "StorageService URL")
+	flag.StringVar(&args.executorUrl, "executorUrl", svcinfo.ExecutorURL("fission"), "Executor URL")
+	flag.StringVar(&args.routerUrl, "routerUrl", svcinfo.RouterURL("fission"), "Router URL")
+	flag.StringVar(&args.storageSvcUrl, "storageSvcUrl", svcinfo.StorageSvcURL("fission"), "StorageService URL")
 
 	// Other configuration flags
 	flag.StringVar(&args.storageType, "storageType", "", "Type of storage to use")

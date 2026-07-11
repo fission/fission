@@ -17,9 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fission/fission/pkg/utils"
-
 	"github.com/fission/fission/pkg/svcinfo"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // The builder contract (pkg/builder, cmd/builder): the env builder image runs a

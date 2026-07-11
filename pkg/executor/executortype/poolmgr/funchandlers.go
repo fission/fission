@@ -13,9 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils"
-
 	"github.com/fission/fission/pkg/svcinfo"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func getIstioServiceLabels(fnName string) map[string]string {

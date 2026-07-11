@@ -8,18 +8,16 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	builder "github.com/fission/fission/pkg/builder"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
-
-	"strconv"
-
-	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // Usage: builder <shared volume path>

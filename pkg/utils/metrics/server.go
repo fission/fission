@@ -13,9 +13,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/fission/fission/pkg/utils/httpserver"
-
 	"github.com/fission/fission/pkg/svcinfo"
+	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
 func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr *errgroup.Group) {

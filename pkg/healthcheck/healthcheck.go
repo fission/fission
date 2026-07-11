@@ -19,7 +19,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	"github.com/fission/fission/pkg/fission-cli/util"
-
 	"github.com/fission/fission/pkg/svcinfo"
 )
 

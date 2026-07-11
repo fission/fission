@@ -24,9 +24,8 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
-	"github.com/fission/fission/pkg/utils"
-
 	"github.com/fission/fission/pkg/svcinfo"
+	"github.com/fission/fission/pkg/utils"
 )
 
 const (

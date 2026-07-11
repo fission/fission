@@ -27,9 +27,8 @@ import (
 	fetcherClient "github.com/fission/fission/pkg/fetcher/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
-	"github.com/fission/fission/pkg/utils"
-
 	"github.com/fission/fission/pkg/svcinfo"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // builderSigningNamespace decides whether buildermgr signs a builder pod's

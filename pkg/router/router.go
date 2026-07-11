@@ -60,6 +60,7 @@ import (
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/router/endpointcache"
+	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/throttler"
 	"github.com/fission/fission/pkg/utils"
@@ -70,8 +71,6 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
-
-	"github.com/fission/fission/pkg/svcinfo"
 )
 
 // routerScheme is the router Manager's scheme: the Fission CRD types plus the
@@ -188,13 +187,6 @@ type runnableFunc func(context.Context) error
 
 func (f runnableFunc) Start(ctx context.Context) error { return f(ctx) }
 
-// DefaultInternalListenerPort is the default port for the internal
-// listener that serves /fission-function/<ns>/<name>.
-//
-// Deprecated: use svcinfo.PortRouterInternal — pkg/svcinfo is the single
-// source of truth for component ports.
-const DefaultInternalListenerPort = svcinfo.PortRouterInternal
-
 // internalListenerMaxBodyBytes caps the request body size the HMAC
 // verifier on the internal listener will buffer. 64 MiB is large enough
 // for any realistic JSON / form / small-binary payload that flows from
@@ -300,14 +292,14 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port in
 
 // Start starts a router. internalPort is the listener that serves
 // /fission-function/<ns>/<name> and is wrapped with the HMAC verifier;
-// pass DefaultInternalListenerPort to use the default. Zero or
-// negative values are silently substituted with DefaultInternalListenerPort
+// pass svcinfo.PortRouterInternal to use the default. Zero or
+// negative values are silently substituted with svcinfo.PortRouterInternal
 // so callers can omit the flag and still get the GHSA-3g33-6vg6-27m8
 // listener split — the public listener no longer registers those
 // routes, so the internal listener is mandatory.
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int, executor eclient.ClientInterface) error {
 	if internalPort <= 0 {
-		internalPort = DefaultInternalListenerPort
+		internalPort = svcinfo.PortRouterInternal
 	}
 	if internalPort == port {
 		return fmt.Errorf("router internal port (%d) must differ from public port (%d)", internalPort, port)
