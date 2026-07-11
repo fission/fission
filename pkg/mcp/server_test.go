@@ -47,12 +47,12 @@ func TestServerFilterTools(t *testing.T) {
 	assert.Len(t, wild, 2)
 }
 
-// TestServerHTTPHandlerAllowsHostnameOverLoopback pins the DNS-rebinding
-// posture: this is a cluster service (not a local dev MCP server), and
-// port-forwarded traffic always reaches the pod via loopback — a client using
-// a hostname (e.g. the integration framework's mcp.fission route) must not be
-// rejected by the SDK's localhost heuristic with 403.
-func TestServerHTTPHandlerAllowsHostnameOverLoopback(t *testing.T) {
+// TestServerHTTPHandlerLoopbackHostOverLoopback pins the client contract the
+// SDK's DNS-rebinding protection imposes: port-forwarded traffic reaches the
+// pod via loopback, so clients must present a loopback Host header — which is
+// then accepted. (A non-loopback Host over loopback is rejected 403 by the
+// SDK; the integration framework satisfies this via a per-route Host rewrite.)
+func TestServerHTTPHandlerLoopbackHostOverLoopback(t *testing.T) {
 	t.Parallel()
 	// Pass-through authorizer (nil key): authz is not what's under test.
 	s := NewServer(NewRegistry(), NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
@@ -60,16 +60,20 @@ func TestServerHTTPHandlerAllowsHostnameOverLoopback(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader(body))
-	require.NoError(t, err)
-	req.Host = "mcp.fission" // non-loopback Host over a loopback connection
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	do := func(host string) int {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Host = host
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := srv.Client().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
 
-	resp, err := srv.Client().Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.NotEqual(t, http.StatusForbidden, resp.StatusCode,
-		"initialize with a hostname Host header must not trip localhost DNS-rebinding protection")
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusOK, do("127.0.0.1"),
+		"loopback Host over a loopback connection must be accepted")
+	assert.Equal(t, http.StatusForbidden, do("mcp.fission"),
+		"non-loopback Host over a loopback connection is rejected by the SDK's DNS-rebinding protection (clients behind forwards must present a loopback Host)")
 }

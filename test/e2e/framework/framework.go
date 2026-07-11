@@ -6,7 +6,6 @@ package framework
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,12 +30,10 @@ type Framework struct {
 	logger logr.Logger
 	// reg maps service names to their local TCP addresses; dialing a
 	// registered name blocks until the backend accepts, so readiness
-	// waits happen inside the dial instead of in caller poll loops.
+	// waits happen inside the dial instead of in caller poll loops, and
+	// Route.Addr hands real dialable URLs to production consumers
+	// (in-process CLI, publishers) that read plain URLs from env vars.
 	reg *portless.Registry
-	// ports remembers each service's local port so GetServiceURL can hand
-	// real dialable URLs to production consumers (in-process CLI,
-	// publishers) that read plain URLs from env vars.
-	ports map[string]int
 }
 
 func NewWebhookOptions() (*envtest.WebhookInstallOptions, error) {
@@ -79,10 +76,10 @@ func NewFramework() *Framework {
 			WebhookInstallOptions: *webhookOptions,
 			BinaryAssetsDirectory: os.Getenv("KUBEBUILDER_ASSETS"),
 		},
-		// Strict: only registered service names may be dialed through the
-		// registry — a typo'd name errors instead of hitting real DNS.
-		reg:   portless.New(portless.WithStrict()),
-		ports: make(map[string]int),
+		// Strict (the v0.2 default): only registered service names may be
+		// dialed through the registry — a typo'd name errors instead of
+		// hitting real DNS.
+		reg: portless.New(),
 	}
 }
 
@@ -139,7 +136,6 @@ func (f *Framework) RegisterService(name string, port int, opts ...portless.Rout
 	if _, err := f.reg.Add(context.Background(), name, backend.TCP(fmt.Sprintf("127.0.0.1:%d", port)), opts...); err != nil {
 		return fmt.Errorf("error registering service %s: %w", name, err)
 	}
-	f.ports[name] = port
 	f.logger.Info("Registered service", "name", name, "port", port)
 	return nil
 }
@@ -148,29 +144,22 @@ func (f *Framework) RegisterService(name string, port int, opts ...portless.Rout
 // not just a TCP accept — use it for TLS servers (the webhook) where
 // "listening" and "able to serve TLS" can differ (e.g. bad cert material).
 func WithTLSReadyCheck() portless.RouteOption {
-	return portless.RouteWithHealthCheck(func(ctx context.Context, dial portless.DialFunc) error {
-		conn, err := dial(ctx, "tcp", "health:0")
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-		tlsConn := tls.Client(conn, &tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // readiness probe against our own webhook port.
-		})
-		defer tlsConn.Close()
-		return tlsConn.HandshakeContext(ctx)
-	})
+	return portless.RouteWithTLSHealth(0, nil)
 }
 
 // GetServiceURL returns the real local URL of a registered service. Production
 // consumers (the in-process CLI, publishers) dial these URLs with plain HTTP
 // clients, so they must stay resolvable outside the registry.
 func (f *Framework) GetServiceURL(name string) (string, error) {
-	port, ok := f.ports[name]
+	rt, ok := f.reg.Lookup(name)
 	if !ok {
 		return "", fmt.Errorf("service %s not found", name)
 	}
-	return fmt.Sprintf("http://localhost:%d", port), nil
+	addr, ok := rt.Addr()
+	if !ok {
+		return "", fmt.Errorf("service %s has no address", name)
+	}
+	return "http://" + addr.String(), nil
 }
 
 // WaitReady blocks until the named service accepts TCP connections and its
@@ -179,9 +168,5 @@ func (f *Framework) GetServiceURL(name string) (string, error) {
 // default), so callers don't need their own timeout boilerplate. Replaces
 // caller-side poll loops around the old CheckService.
 func (f *Framework) WaitReady(ctx context.Context, name string) error {
-	rt, ok := f.reg.Lookup(name)
-	if !ok {
-		return fmt.Errorf("service %s not found", name)
-	}
-	return rt.Ready(ctx)
+	return f.reg.Ready(ctx, name)
 }

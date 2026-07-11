@@ -96,20 +96,14 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 // wrapped with bearer-token authz (pass-through when no signing key is set) and
 // a per-request body cap. SessionTimeout bounds idle-session accumulation.
 func (s *Server) HTTPHandler() http.Handler {
+	// The SDK's localhost DNS-rebinding protection stays ON: port-forwarded
+	// traffic lands on the pod's loopback, so clients reaching svc/mcp
+	// through a forward must present a loopback Host header (127.0.0.1, the
+	// documented form; the integration framework rewrites its route's Host
+	// accordingly). Non-loopback Hosts over a forward are rejected 403.
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return s.mcp },
-		&mcp.StreamableHTTPOptions{
-			SessionTimeout: sessionTimeout,
-			// The SDK's localhost heuristic targets local dev MCP servers: it
-			// 403s requests whose connection arrives on a loopback local
-			// address with a non-loopback Host header. This server is a
-			// cluster service with its own bearer-token authz — and
-			// port-forwarded traffic (kubectl or SPDY, the standard ops/test
-			// path to the ClusterIP-only svc/mcp) always lands on the pod's
-			// loopback, so the heuristic would 403 any such client that uses
-			// a hostname instead of 127.0.0.1.
-			DisableLocalhostProtection: true,
-		},
+		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout},
 	)
 	return s.authz.HTTPMiddleware(limitRequestBody(streamable))
 }

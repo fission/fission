@@ -13,12 +13,10 @@ package framework
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -115,20 +113,18 @@ func newFramework() (*Framework, error) {
 		return nil, err
 	}
 	secret := internalAuthSecretFromEnv()
-	// One shared transport (one connection pool) for all framework clients;
-	// the signing wrapper adds headers per request and delegates here. The
-	// transport's DialContext keeps the registry alive for the process — the
-	// registry (and its port-forward connections) is never closed, dying
-	// with the test process.
-	transport := reg.Transport()
-	var signing http.RoundTripper = transport
+	// Both clients ride the registry's memoized DefaultTransport (one
+	// connection pool); its DialContext keeps the registry alive for the
+	// process — the registry (and its port-forward connections) is never
+	// closed, dying with the test process.
+	var signing http.RoundTripper = reg.DefaultTransport()
 	if len(secret) > 0 {
 		// Sign requests to /fission-function/... with the
 		// ServiceRouterInternal key; other paths (HTTPTriggers,
 		// /router-healthz) pass through unsigned to match end-user
 		// behaviour against the public listener. Shared with the benchmark
 		// harness via pkg/auth/hmac.
-		signing = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceRouterInternal, transport, "/fission-function/")
+		signing = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceRouterInternal, reg.DefaultTransport(), "/fission-function/")
 	}
 	return &Framework{
 		restConfig:         restConfig,
@@ -137,9 +133,12 @@ func newFramework() (*Framework, error) {
 		kubeClient:         kubeClient,
 		images:             loadRuntimeImages(),
 		internalAuthSecret: secret,
-		httpClient:         &http.Client{Transport: transport},
-		routerHTTP:         &http.Client{Timeout: 30 * time.Second, Transport: signing},
-		logger:             loggerfactory.GetLogger(),
+		httpClient:         reg.DefaultClient(),
+		// WrapRoundTripper applies per-route Host rewrites (the mcp route
+		// declares one) on top of the signing wrapper; HMAC canonicals
+		// cover method+path+body, not Host, so the order is cosmetic.
+		routerHTTP: &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(signing)},
+		logger:     loggerfactory.GetLogger(),
 	}, nil
 }
 
@@ -154,61 +153,43 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 	if namespace == "" {
 		namespace = "fission"
 	}
-	// Strict: the route set is closed, and the names deliberately mirror
-	// in-cluster DNS shortnames (router.fission = <svc>.<ns>) — without
-	// strict mode a typo'd name would silently fall back to a real DNS
-	// dial that could even succeed from inside a pod.
-	reg := portless.New(portless.WithStrict())
-	for _, r := range []struct{ name, envVar, service string }{
-		{RouterName, "FISSION_ROUTER", "router"},
-		{RouterInternalName, "FISSION_ROUTER_INTERNAL", "router-internal"},
-		{MCPName, "FISSION_MCP_BASE_URL", "mcp"},
+	// The registry is strict (the v0.2 default): the route set is closed,
+	// and the names deliberately mirror in-cluster DNS shortnames
+	// (router.fission = <svc>.<ns>) — a fallback would let a typo'd name
+	// silently dial real DNS, which could even succeed from inside a pod.
+	reg := portless.New()
+	for _, r := range []struct {
+		name, envVar, service string
+		opts                  []portless.RouteOption
+	}{
+		{RouterName, "FISSION_ROUTER", "router", nil},
+		{RouterInternalName, "FISSION_ROUTER_INTERNAL", "router-internal", nil},
+		// The MCP SDK's DNS-rebinding heuristic 403s "loopback peer +
+		// non-loopback Host" — which is exactly what a port-forwarded dial
+		// carrying Host: mcp.fission looks like. Present a loopback Host
+		// instead of weakening the server's protection.
+		{MCPName, "FISSION_MCP_BASE_URL", "mcp", []portless.RouteOption{portless.RouteWithHostRewrite("127.0.0.1")}},
 	} {
 		var b portless.Backend
 		var err error
 		if v := os.Getenv(r.envVar); v != "" {
-			b, err = overrideBackend(r.envVar, v)
+			b, err = backend.ParseTCP(v)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", r.envVar, err)
+			}
 		} else {
 			// No explicit target port: all three Services are single-port,
 			// so the resolver uses the Service's own target port.
 			b, err = portlessk8s.PortForward(restConfig, portlessk8s.Service(namespace, r.service))
+			if err != nil {
+				return nil, fmt.Errorf("build %s backend: %w", r.name, err)
+			}
 		}
-		if err != nil {
-			return nil, fmt.Errorf("build %s backend: %w", r.name, err)
-		}
-		if _, err := reg.Add(context.Background(), r.name, b); err != nil {
+		if _, err := reg.Add(context.Background(), r.name, b, r.opts...); err != nil {
 			return nil, fmt.Errorf("register route %s: %w", r.name, err)
 		}
 	}
 	return reg, nil
-}
-
-// overrideBackend parses an env override into a fixed-address backend.
-// Accepted forms: "host:port", "host" (port 80), "http://host[:port]".
-// Anything else fails loudly at framework init: the framework's clients
-// speak plain HTTP over the route, so an https:// endpoint cannot be served
-// by a TCP backend (it would silently downgrade to plaintext), and a URL
-// path has nowhere to go (route names replace base URLs).
-func overrideBackend(envVar, v string) (portless.Backend, error) {
-	raw := v
-	if !strings.Contains(v, "://") {
-		v = "http://" + v
-	}
-	u, err := url.Parse(v)
-	if err != nil {
-		return nil, fmt.Errorf("%s=%q: %w", envVar, raw, err)
-	}
-	if u.Scheme != "http" {
-		return nil, fmt.Errorf("%s=%q: scheme %q not supported (routes are dialed as plain TCP + HTTP; use http:// or host:port)", envVar, raw, u.Scheme)
-	}
-	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Host == "" {
-		return nil, fmt.Errorf("%s=%q: must be host[:port], optionally with an http:// scheme and no path", envVar, raw)
-	}
-	host := u.Host
-	if u.Port() == "" {
-		host = net.JoinHostPort(u.Hostname(), "80")
-	}
-	return backend.TCP(host), nil
 }
 
 // RestConfig returns the cached *rest.Config.
@@ -239,6 +220,14 @@ func (f *Framework) HTTPClient() *http.Client { return f.httpClient }
 // resolvable only by clients built from this framework (HTTPClient, Router).
 func (f *Framework) RouterInternalBaseURL() string {
 	return portless.URL(RouterInternalName, 0, "")
+}
+
+// IsTargetMissing reports whether a client/dial error means the route's
+// Kubernetes target (Service/pod) does not exist at all — as opposed to
+// existing but not ready yet. Tests for optional subsystems use it to skip
+// fast instead of waiting out the full readiness deadline.
+func IsTargetMissing(err error) bool {
+	return errors.Is(err, portlessk8s.ErrTargetNotFound)
 }
 
 // RouterInternalWSURL returns a ws:// URL for `path` on the router's internal

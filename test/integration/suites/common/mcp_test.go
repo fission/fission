@@ -110,24 +110,37 @@ func TestMCPToolsListAndCall(t *testing.T) {
 }
 
 // requireMCPReachable skips the test when the MCP endpoint isn't serving (MCP
-// disabled in this install). The deadline bounds the registry's readiness
-// dial; it must cover a cold in-process port-forward (Service lookup + pod
-// resolution + SPDY tunnel through a possibly-loaded apiserver), so it is
-// deliberately generous — an MCP-less install pays it once, on this one test.
+// disabled in this install). A short first probe distinguishes "not installed"
+// (typed target-not-found — skip fast) from "warming"; only the latter earns
+// the generous deadline a cold in-process port-forward needs (Service lookup +
+// pod resolution + SPDY tunnel through a possibly-loaded apiserver).
 func requireMCPReachable(t *testing.T, ctx context.Context, f *framework.Framework) {
 	t.Helper()
 	base := f.MCPBaseURL()
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
-	require.NoError(t, err)
-	resp, err := f.HTTPClient().Do(req)
+	probe := func(timeout time.Duration) (int, error) {
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
+		require.NoError(t, err)
+		resp, err := f.HTTPClient().Do(req)
+		if err != nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	status, err := probe(5 * time.Second)
+	if framework.IsTargetMissing(err) {
+		t.Skipf("MCP not installed (svc/mcp absent); skipping: %v", err)
+	}
+	if err != nil {
+		status, err = probe(30 * time.Second)
+	}
 	if err != nil {
 		t.Skipf("MCP endpoint %s not reachable (%v); skipping", base, err)
 	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Skipf("MCP endpoint %s returned %d; skipping", base, resp.StatusCode)
+	if status != http.StatusOK {
+		t.Skipf("MCP endpoint %s returned %d; skipping", base, status)
 	}
 }
 
