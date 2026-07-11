@@ -361,9 +361,10 @@ func bundleServices() []bundleService {
 // selectBundleService returns the first table entry whose predicate matches,
 // or nil when no subsystem flag was given.
 func selectBundleService(args *CommandLineArgs) *bundleService {
-	for _, svc := range bundleServices() {
-		if svc.selected(args) {
-			return &svc
+	svcs := bundleServices()
+	for i := range svcs {
+		if svcs[i].selected(args) {
+			return &svcs[i]
 		}
 	}
 	return nil

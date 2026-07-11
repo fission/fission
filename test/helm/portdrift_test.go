@@ -35,8 +35,11 @@ func render(t *testing.T, extraArgs ...string) []map[string]any {
 	_, filename, _, _ := runtime.Caller(0) //nolint
 	chart := filepath.Join(filepath.Dir(filename), "..", "..", "charts", "fission-all")
 	args := append([]string{"template", "fission", chart, "--namespace", "fission"}, extraArgs...)
-	out, err := exec.CommandContext(t.Context(), helm, args...).Output()
-	require.NoError(t, err, "helm template failed")
+	cmd := exec.CommandContext(t.Context(), helm, args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	require.NoErrorf(t, err, "helm template failed: %s", stderr.String())
 
 	var docs []map[string]any
 	for doc := range strings.SplitSeq(string(out), "\n---") {
