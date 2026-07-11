@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -211,15 +212,16 @@ func (c *executorControllers) markSyncedWhenCachesWarm(ctx context.Context) {
 // /healthz and /readyz probes) on every replica, so non-leaders report
 // not-ready and are kept out of the Service endpoints.
 type executorAPIServer struct {
-	api  *Executor
-	port int
+	api      *Executor
+	port     int
+	listener net.Listener
 }
 
 func (a *executorAPIServer) NeedLeaderElection() bool { return false }
 
 func (a *executorAPIServer) Start(ctx context.Context) error {
 	gm := &errgroup.Group{}
-	a.api.Serve(ctx, gm, a.port)
+	a.api.Serve(ctx, gm, a.port, a.listener)
 	_ = gm.Wait()
 	return nil
 }
@@ -261,6 +263,21 @@ func runAdoptCleanup(ctx context.Context, executorTypes map[fv1.ExecutorType]exe
 // StartExecutor Starts executor and the executor components such as Poolmgr,
 // deploymgr and potential future executor types
 func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int) error {
+	return StartExecutorWithOptions(ctx, clientGen, logger, mgr, Options{Port: port})
+}
+
+// Options configures StartExecutorWithOptions. The API listener is either
+// pre-bound by the caller (Listener — e.g. a test harness binding
+// 127.0.0.1:0) or bound here from Port.
+type Options struct {
+	// Port is the executor API port. Ignored when Listener is set.
+	Port int
+	// Listener optionally pre-binds the API listener.
+	Listener net.Listener
+}
+
+// StartExecutorWithOptions is StartExecutor with an injectable listener.
+func StartExecutorWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
 
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
@@ -358,10 +375,6 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	}
 
 	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
-	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
-		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
-		metricsBind = ":0"
-	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: executorScheme,
@@ -453,7 +466,7 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	if err := crMgr.Add(controllers); err != nil {
 		return fmt.Errorf("unable to add executor controllers: %w", err)
 	}
-	if err := crMgr.Add(&executorAPIServer{api: api, port: port}); err != nil {
+	if err := crMgr.Add(&executorAPIServer{api: api, port: opts.Port, listener: opts.Listener}); err != nil {
 		return fmt.Errorf("unable to add executor api server: %w", err)
 	}
 

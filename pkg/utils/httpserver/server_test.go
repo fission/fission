@@ -41,7 +41,7 @@ func TestStartServer(t *testing.T) {
 	}))
 
 	mgr.Go(func() error {
-		StartServer(ctx, logger, mgr, "test", addr, m.Handler())
+		Serve(ctx, logger, mgr, ServerOptions{Name: "test", Addr: addr, Handler: m.Handler()})
 		return nil
 	})
 
@@ -115,7 +115,7 @@ func TestStartServerDrainsInFlightRequest(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr := &errgroup.Group{}
-	go StartServer(ctx, logr.Discard(), mgr, "test", addr, m)
+	go Serve(ctx, logr.Discard(), mgr, ServerOptions{Name: "test", Addr: addr, Handler: m})
 
 	require.Eventually(t, func() bool {
 		c, err := net.DialTimeout("tcp", addr, 50*time.Millisecond)
@@ -188,4 +188,37 @@ func TestBindAddrFromEnv(t *testing.T) {
 
 	t.Setenv("METRICS_ADDR", "0")
 	assert.Equal(t, ":0", BindAddrFromEnv("METRICS_ADDR", 8080))
+}
+
+// TestServeInjectedListener pins the listener-injection path: a caller-bound
+// 127.0.0.1:0 listener is served directly (no second bind), so harnesses can
+// let the kernel assign ports instead of pre-picking them.
+func TestServeInjectedListener(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	mgr := &errgroup.Group{}
+	m := httpmux.New()
+	m.Handle("/ping", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "pong")
+	}))
+	go Serve(ctx, logr.Discard(), mgr, ServerOptions{Name: "test", Listener: l, Handler: m.Handler()})
+
+	var body string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := http.Get(fmt.Sprintf("http://%s/ping", l.Addr()))
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer resp.Body.Close()
+		b, err := io.ReadAll(resp.Body)
+		if !assert.NoError(c, err) {
+			return
+		}
+		body = string(b)
+	}, 5*time.Second, 50*time.Millisecond)
+	assert.Equal(t, "pong", body)
+	cancel()
+	_ = mgr.Wait()
 }

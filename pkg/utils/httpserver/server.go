@@ -7,6 +7,7 @@ package httpserver
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -47,13 +48,33 @@ func BindAddrFromEnv(env string, defPort int) string {
 	return addr
 }
 
-func StartServer(ctx context.Context, log logr.Logger, mgr *errgroup.Group, svc string, port string, handler http.Handler) {
-	if !strings.Contains(port, ":") {
-		port = fmt.Sprintf(":%s", port)
+// ServerOptions configures Serve. Exactly one of Addr or Listener supplies
+// the bind: a non-nil Listener takes precedence (the caller pre-bound it —
+// e.g. a test harness on 127.0.0.1:0), otherwise Addr is bound here.
+type ServerOptions struct {
+	// Name identifies the service in logs.
+	Name string
+	// Addr is the listen address; a bare port ("8888") is prefixed with ":".
+	// Ignored when Listener is set.
+	Addr string
+	// Listener is an optional pre-bound listener the server serves on. The
+	// server takes ownership and closes it on shutdown.
+	Listener net.Listener
+	// Handler is the HTTP handler to serve.
+	Handler http.Handler
+}
+
+// Serve runs an HTTP server until ctx is cancelled, then drains in-flight
+// requests (bounded by GRACEFUL_SHUTDOWN_TIMEOUT, default 30s) before
+// returning.
+func Serve(ctx context.Context, log logr.Logger, mgr *errgroup.Group, opts ServerOptions) {
+	addr := opts.Addr
+	if !strings.Contains(addr, ":") {
+		addr = fmt.Sprintf(":%s", addr)
 	}
 	server := http.Server{
-		Addr:    port,
-		Handler: handler,
+		Addr:    addr,
+		Handler: opts.Handler,
 		// ReadHeaderTimeout bounds only the header read (slowloris hardening);
 		// request bodies and long-running/streaming responses are unaffected —
 		// deliberately no ReadTimeout/WriteTimeout, which would cut both.
@@ -65,13 +86,21 @@ func StartServer(ctx context.Context, log logr.Logger, mgr *errgroup.Group, svc 
 		// failures on non-idempotent internal POSTs.
 		IdleTimeout: 120 * time.Second,
 	}
-	l := log.WithValues("service", svc, "addr", server.Addr)
+	displayAddr := server.Addr
+	if opts.Listener != nil {
+		displayAddr = opts.Listener.Addr().String()
+	}
+	l := log.WithValues("service", opts.Name, "addr", displayAddr)
 	l.Info("starting server")
 	mgr.Go(func() error {
-		if err := server.ListenAndServe(); err != nil {
-			if err != http.ErrServerClosed {
-				l.Error(err, "server error")
-			}
+		var err error
+		if opts.Listener != nil {
+			err = server.Serve(opts.Listener)
+		} else {
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
+			l.Error(err, "server error")
 		}
 		return nil
 	})

@@ -31,5 +31,5 @@ func ServeMetrics(ctx context.Context, parent string, logger logr.Logger, mgr *e
 			EnableOpenMetrics: true,
 		},
 	))
-	httpserver.StartServer(ctx, logger, mgr, parent+"/metrics", metricsAddr, mux)
+	httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: parent + "/metrics", Addr: metricsAddr, Handler: mux})
 }

@@ -111,7 +111,7 @@ func (f *FetcherTestSuite) SetupSuite() {
 	mux.Handle("/files/", http.StripPrefix("/files/", http.FileServer(http.Dir("."))))
 
 	f.mgr.Go(func() error {
-		httpserver.StartServer(ctx, f.logger, f.mgr, "specialize", "8888", mux)
+		httpserver.Serve(ctx, f.logger, f.mgr, httpserver.ServerOptions{Name: "specialize", Addr: "8888", Handler: mux})
 		return nil
 	})
 

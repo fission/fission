@@ -52,25 +52,13 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	}
 
 	os.Setenv("DEBUG_ENV", "true")
-	// The executor and buildermgr run under controller-runtime Managers whose
-	// metrics server binds hard (and buildermgr's health-probe server too;
-	// the executor keeps health on its API mux), unlike the fail-soft
-	// ServeMetrics the other in-process services use. In this single-process
-	// harness METRICS_ADDR is shared and racy, so tell them to bind ephemeral
-	// ports. Set once and never mutated, so their goroutines read it
-	// deterministically.
-	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
-	// Every metrics server binds an ephemeral port: the manager-based
-	// services force :0 under FISSION_TEST_EPHEMERAL_SERVERS, and the
-	// fail-soft ServeMetrics consumers read METRICS_ADDR verbatim — "0"
-	// makes the kernel assign per-listener, so no pre-picked metrics ports
-	// and no collisions, ever.
+	// Every metrics/health server binds an ephemeral port: all consumers
+	// resolve their bind through httpserver.BindAddrFromEnv, and "0" makes
+	// the kernel assign per-listener — no pre-picked ports, no collisions.
 	os.Setenv("METRICS_ADDR", "0")
+	os.Setenv("HEALTH_PROBE_ADDR", "0")
 	env := f.GetEnv()
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
-	// Service ports were reserved together at framework construction
-	// (framework.Ports) — the only port-discovery call in the harness.
-	ports := f.Ports()
 	runService("webhook", func() error {
 		return webhook.Start(ctx, f.ClientGen(), f.Logger(), cnwebhook.Options{
 			Port:    webhookPort,
@@ -94,27 +82,33 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	})
 
 	os.Setenv("POD_READY_TIMEOUT", "300s")
-	// executor now runs under a controller-runtime Manager, so StartExecutor
+	// executor now runs under a controller-runtime Manager, so its Start
 	// blocks (like webhook.Start). Run it in a goroutine so the remaining
-	// services still come up.
-	runService("executor", func() error {
-		return executor.StartExecutor(ctx, f.ClientGen(), f.Logger(), mgr, ports.Executor)
-	})
-	if err := f.RegisterService("executor", ports.Executor); err != nil {
+	// services still come up. The harness binds each service's listener
+	// itself (kernel-assigned port) and injects it, so no port is ever
+	// pre-picked.
+	executorListener, err := f.ListenAndRegister("executor")
+	if err != nil {
 		return err
 	}
+	runService("executor", func() error {
+		return executor.StartExecutorWithOptions(ctx, f.ClientGen(), f.Logger(), mgr, executor.Options{Listener: executorListener})
+	})
 
 	os.Setenv("PRUNE_ENABLED", "true")
 	os.Setenv("PRUNE_INTERVAL", "60")
 
-	if err := StartStorageSvc(ctx, f, mgr, ports.StorageSvc); err != nil {
+	if err := StartStorageSvc(ctx, f, mgr); err != nil {
 		return err
 	}
 
 	// buildermgr's Start blocks (controller-runtime Manager), so run it in a
-	// goroutine; FISSION_TEST_EPHEMERAL_SERVERS (set at the top) makes its
+	// goroutine; METRICS_ADDR/HEALTH_PROBE_ADDR=0 (set at the top) make its
 	// Manager servers bind ephemeral ports.
-	storageSvcURL := fmt.Sprintf("http://localhost:%d", ports.StorageSvc)
+	storageSvcURL, err := f.GetServiceURL("storagesvc")
+	if err != nil {
+		return err
+	}
 	runService("builder manager", func() error {
 		return buildermgr.Start(ctx, f.ClientGen(), f.Logger(), mgr, storageSvcURL)
 	})
@@ -135,19 +129,28 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// flows into both ends of this client/verifier pair via
 	// HMACSecretFromEnv (returns nil when unset, leaving the channel
 	// unsigned).
-	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", ports.Executor), storagesvcClient.HMACSecretFromEnv())
-	// router now runs under a controller-runtime Manager, so Start blocks. Run
-	// it in a goroutine so the harness can continue; FISSION_TEST_EPHEMERAL_SERVERS
-	// (set at the top) makes its Manager metrics server bind an ephemeral port.
+	executorURL, err := f.GetServiceURL("executor")
+	if err != nil {
+		return err
+	}
+	executorClient := eclient.MakeClient(f.Logger(), executorURL, storagesvcClient.HMACSecretFromEnv())
+	routerListener, err := f.ListenAndRegister("router")
+	if err != nil {
+		return err
+	}
+	internalListener, err := f.ListenAndRegister("router-internal")
+	if err != nil {
+		return err
+	}
+	// router now runs under a controller-runtime Manager, so its Start
+	// blocks. Run it in a goroutine so the harness can continue.
 	runService("router", func() error {
-		return router.Start(ctx, f.ClientGen(), f.Logger(), mgr, ports.Router, ports.RouterInternal, executor)
+		return router.StartWithOptions(ctx, f.ClientGen(), f.Logger(), mgr, router.Options{
+			Listener:         routerListener,
+			InternalListener: internalListener,
+			Executor:         executorClient,
+		})
 	})
-	if err := f.RegisterService("router", ports.Router); err != nil {
-		return err
-	}
-	if err := f.RegisterService("router-internal", ports.RouterInternal); err != nil {
-		return err
-	}
 	routerURL, err := f.GetServiceURL("router")
 	if err != nil {
 		return fmt.Errorf("error getting router URL: %w", err)
@@ -186,18 +189,19 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	return nil
 }
 
-func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.Group, storageSvcPort int) error {
+func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.Group) error {
 	storageDir, err := os.MkdirTemp("/tmp", "storagesvc")
 	if err != nil {
 		return fmt.Errorf("error creating temp directory: %w", err)
 	}
 
-	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
+	listener, err := f.ListenAndRegister("storagesvc")
+	if err != nil {
+		return err
+	}
+	err = storagesvc.StartWithOptions(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storagesvc.Options{Listener: listener})
 	if err != nil {
 		return fmt.Errorf("error starting storage service: %w", err)
-	}
-	if err := f.RegisterService("storagesvc", storageSvcPort); err != nil {
-		return err
 	}
 	storagesvcURL, err := f.GetServiceURL("storagesvc")
 	if err != nil {

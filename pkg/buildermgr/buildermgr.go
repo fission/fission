@@ -98,13 +98,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
 	healthBind := httpserver.BindAddrFromEnv("HEALTH_PROBE_ADDR", svcinfo.PortHealthProbe)
-	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
-		// The e2e framework runs every Fission service in one process sharing
-		// METRICS_ADDR, which is fine for the fail-soft ServeMetrics servers but
-		// clashes with the Manager's hard-binding servers. Bind ephemeral ports
-		// (OS-assigned, race-free) in that mode. Never set in production.
-		metricsBind, healthBind = ":0", ":0"
-	}
 
 	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: scheme.Scheme,

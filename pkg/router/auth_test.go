@@ -70,7 +70,7 @@ func TestRouterAuth(t *testing.T) {
 	testmux := GetRouterWithAuth()
 
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "test", "8990", testmux)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: "test", Addr: "8990", Handler: testmux})
 		return nil
 	})
 

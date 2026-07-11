@@ -60,5 +60,5 @@ func Run(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, shareVolu
 	// Builder is a pod-local sidecar with no Service; no legitimate
 	// browser caller. SecurityHeaders + DenyAllCORS as defense-in-depth.
 	handler := httpsecurity.SecurityHeaders(httpsecurity.DenyAllCORS(verifier(mux)))
-	httpserver.StartServer(ctx, logger, mgr, "builder", strconv.Itoa(svcinfo.PortBuilder), handler)
+	httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: "builder", Addr: strconv.Itoa(svcinfo.PortBuilder), Handler: handler})
 }

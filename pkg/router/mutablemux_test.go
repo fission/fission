@@ -74,7 +74,7 @@ func TestMutableMux(t *testing.T) {
 
 	// start http server
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "router", "3333", mr)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{Name: "router", Addr: "3333", Handler: mr})
 		return nil
 	})
 

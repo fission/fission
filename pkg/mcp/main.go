@@ -13,6 +13,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -49,6 +50,22 @@ const envAllowInsecure = "MCP_ALLOW_INSECURE"
 // constructors stay deterministic for unit tests.
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger,
 	mgr *errgroup.Group, port int, routerInternalURL string) error {
+	return StartWithOptions(ctx, clientGen, logger, mgr, Options{Port: port}, routerInternalURL)
+}
+
+// Options configures StartWithOptions. The listener is either pre-bound by
+// the caller (Listener — e.g. a test harness binding 127.0.0.1:0) or bound
+// here from Port.
+type Options struct {
+	// Port is the MCP server port. Ignored when Listener is set.
+	Port int
+	// Listener optionally pre-binds the listener.
+	Listener net.Listener
+}
+
+// StartWithOptions is Start with an injectable listener.
+func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger,
+	mgr *errgroup.Group, opts Options, routerInternalURL string) error {
 	logger = logger.WithName("mcp")
 
 	fissionClient, err := clientGen.GetFissionClient()
@@ -133,17 +150,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	})
 	mux.Handle("/mcp", server.HTTPHandler())
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "mcp", strconv.Itoa(port), mux)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
+			Name: "mcp", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
+		})
 		return nil
 	})
 
 	if authz.Enabled() {
-		logger.Info("starting mcp server", "port", port, "authEnabled", true)
+		logger.Info("starting mcp server", "port", opts.Port, "authEnabled", true)
 	} else {
 		// Pass-through mode grants every caller a wildcard scope. Explicitly
 		// opted in via MCP_ALLOW_INSECURE; loud so it is never mistaken for a
 		// scoped deployment.
-		logger.Info("WARNING: starting mcp server with authentication DISABLED — every caller can list and invoke all tools (set JWT_SIGNING_KEY to scope access)", "port", port)
+		logger.Info("WARNING: starting mcp server with authentication DISABLED — every caller can list and invoke all tools (set JWT_SIGNING_KEY to scope access)", "port", opts.Port)
 	}
 	return crMgr.Start(ctx)
 }

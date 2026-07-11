@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -220,7 +221,7 @@ func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTr
 	return publicMR, internalMR, nil
 }
 
-func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int,
+func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, opts Options,
 	httpTriggerSet *HTTPTriggerSet) error {
 	publicMR, internalMR, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
@@ -241,7 +242,9 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port in
 		otelUtils.GetHandlerWithOTEL(correlation.Middleware(publicMR), "fission-router", otelUtils.UrlsToIgnore("/router-healthz")),
 	)
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "router", fmt.Sprintf("%d", port), publicHandler)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
+			Name: "router", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: publicHandler,
+		})
 		return nil
 	})
 
@@ -283,26 +286,51 @@ func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, port in
 		httpsecurity.DenyAllCORS(verifier(internalHandlerInner)),
 	)
 	mgr.Go(func() error {
-		httpserver.StartServer(ctx, logger, mgr, "router-internal", fmt.Sprintf("%d", internalPort), internalHandler)
+		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
+			Name: "router-internal", Addr: strconv.Itoa(opts.InternalPort), Listener: opts.InternalListener, Handler: internalHandler,
+		})
 		return nil
 	})
 
 	return nil
 }
 
-// Start starts a router. internalPort is the listener that serves
-// /fission-function/<ns>/<name> and is wrapped with the HMAC verifier;
-// pass svcinfo.PortRouterInternal to use the default. Zero or
-// negative values are silently substituted with svcinfo.PortRouterInternal
-// so callers can omit the flag and still get the GHSA-3g33-6vg6-27m8
-// listener split — the public listener no longer registers those
-// routes, so the internal listener is mandatory.
+// Options configures StartWithOptions. Each listener is either pre-bound by
+// the caller (Listener/InternalListener — e.g. a test harness binding
+// 127.0.0.1:0) or bound here from the corresponding port.
+type Options struct {
+	// Port is the public listener port (user HTTPTriggers, /router-healthz,
+	// /_version). Ignored when Listener is set.
+	Port int
+	// InternalPort is the port for the listener serving
+	// /fission-function/<ns>/<name> behind the HMAC verifier
+	// (GHSA-3g33-6vg6-27m8 split). Zero or negative values default to
+	// svcinfo.PortRouterInternal. Ignored when InternalListener is set.
+	InternalPort int
+	// Listener optionally pre-binds the public listener.
+	Listener net.Listener
+	// InternalListener optionally pre-binds the internal listener.
+	InternalListener net.Listener
+	// Executor is the executor API client used on cache misses.
+	Executor eclient.ClientInterface
+}
+
+// Start starts a router on the given ports. See StartWithOptions.
 func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, port int, internalPort int, executor eclient.ClientInterface) error {
-	if internalPort <= 0 {
-		internalPort = svcinfo.PortRouterInternal
+	return StartWithOptions(ctx, clientGen, logger, mgr, Options{Port: port, InternalPort: internalPort, Executor: executor})
+}
+
+// StartWithOptions starts a router. The internal listener is mandatory —
+// the public listener no longer registers /fission-function/... routes.
+func StartWithOptions(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger logr.Logger, mgr *errgroup.Group, opts Options) error {
+	executor := opts.Executor
+	if opts.InternalListener == nil && opts.InternalPort <= 0 {
+		opts.InternalPort = svcinfo.PortRouterInternal
 	}
-	if internalPort == port {
-		return fmt.Errorf("router internal port (%d) must differ from public port (%d)", internalPort, port)
+	// Same-port collision is only possible when both listeners are bound
+	// here from ports; pre-bound listeners are distinct by construction.
+	if opts.Listener == nil && opts.InternalListener == nil && opts.InternalPort == opts.Port {
+		return fmt.Errorf("router internal port (%d) must differ from public port (%d)", opts.InternalPort, opts.Port)
 	}
 	fmap := makeFunctionServiceMap(logger, time.Minute)
 
@@ -372,10 +400,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	}
 
 	metricsBind := httpserver.BindAddrFromEnv("METRICS_ADDR", svcinfo.PortMetrics)
-	if ephemeral, _ := strconv.ParseBool(os.Getenv("FISSION_TEST_EPHEMERAL_SERVERS")); ephemeral {
-		// In-process e2e harness: bind an ephemeral metrics port to avoid clashes.
-		metricsBind = ":0"
-	}
 
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme: routerScheme,
@@ -481,7 +505,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error registering tenant resolver-sync: %w", err)
 	}
 
-	logger.Info("starting router", "port", port, "internalPort", internalPort)
+	logger.Info("starting router", "port", opts.Port, "internalPort", opts.InternalPort)
 
 	// The public/internal listeners run on an internal GroupManager, hosted by a
 	// single Manager runnable.
@@ -490,7 +514,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		tracer := otel.Tracer("router")
 		rctx, span := tracer.Start(rctx, "router/serve")
 		defer span.End()
-		if err := serve(rctx, logger, gm, port, internalPort, triggers); err != nil {
+		if err := serve(rctx, logger, gm, opts, triggers); err != nil {
 			return err
 		}
 		// Kick the initial mux build once the cache has synced, so router-owned
