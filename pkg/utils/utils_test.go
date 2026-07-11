@@ -328,3 +328,23 @@ func TestRootFileChecksum_ConfinesToBase(t *testing.T) {
 	_, err = RootFileChecksum(base, "../../etc/hostname")
 	assert.Error(t, err)
 }
+
+// TestFindFreePortsDistinct pins FindFreePorts' contract: all n ports from
+// one call are distinct. Sequential FindFreePort calls cannot promise this —
+// the kernel may hand a just-freed ephemeral port right back, which is how
+// the e2e harness once assigned the router's public and internal listeners
+// the same port.
+func TestFindFreePortsDistinct(t *testing.T) {
+	t.Parallel()
+	const n = 8
+	ports, err := FindFreePorts(n)
+	require.NoError(t, err)
+	require.Len(t, ports, n)
+	seen := make(map[int]struct{}, n)
+	for _, p := range ports {
+		assert.Positive(t, p)
+		_, dup := seen[p]
+		assert.Falsef(t, dup, "port %d returned twice in one FindFreePorts call", p)
+		seen[p] = struct{}{}
+	}
+}

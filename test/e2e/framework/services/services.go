@@ -62,7 +62,16 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	os.Setenv("FISSION_TEST_EPHEMERAL_SERVERS", "true")
 	env := f.GetEnv()
 	webhookPort := env.WebhookInstallOptions.LocalServingPort
-	err := f.ToggleMetricAddr()
+	// Reserve every fixed port the harness assigns in ONE call — sequential
+	// FindFreePort calls can return duplicates (the kernel may hand a
+	// just-freed port right back), and the router hard-fails when its
+	// public and internal listeners collide.
+	ports, err := utils.FindFreePorts(4)
+	if err != nil {
+		return fmt.Errorf("error finding unused ports: %w", err)
+	}
+	executorPort, storageSvcPort, routerPort, internalRouterPort := ports[0], ports[1], ports[2], ports[3]
+	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %w", err)
 	}
@@ -78,10 +87,6 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 		return err
 	}
 
-	executorPort, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port: %w", err)
-	}
 	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %w", err)
@@ -116,8 +121,7 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 		return fmt.Errorf("error toggling metric address: %w", err)
 	}
 
-	storageSvcPort, err := StartStorageSvc(ctx, f, mgr)
-	if err != nil {
+	if err := StartStorageSvc(ctx, f, mgr, storageSvcPort); err != nil {
 		return err
 	}
 
@@ -140,10 +144,6 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	os.Setenv("USE_ENCODED_PATH", "false")
 	os.Setenv("DISPLAY_ACCESS_LOG", "true")
 	// os.Setenv("DEBUG_ENV", "false")
-	routerPort, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port: %w", err)
-	}
 	err = f.ToggleMetricAddr()
 	if err != nil {
 		return fmt.Errorf("error toggling metric address: %w", err)
@@ -155,10 +155,6 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	// HMACSecretFromEnv (returns nil when unset, leaving the channel
 	// unsigned).
 	executor := eclient.MakeClient(f.Logger(), fmt.Sprintf("http://localhost:%d", executorPort), storagesvcClient.HMACSecretFromEnv())
-	internalRouterPort, err := utils.FindFreePort()
-	if err != nil {
-		return fmt.Errorf("error finding unused port for router internal listener: %w", err)
-	}
 	// router now runs under a controller-runtime Manager, so Start blocks. Run
 	// it in a goroutine so the harness can continue; FISSION_TEST_EPHEMERAL_SERVERS
 	// (set at the top) makes its Manager metrics server bind an ephemeral port.
@@ -209,29 +205,24 @@ func StartServices(ctx context.Context, f *framework.Framework, mgr *errgroup.Gr
 	return nil
 }
 
-func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.Group) (storageSvcPort int, err error) {
+func StartStorageSvc(ctx context.Context, f *framework.Framework, mgr *errgroup.Group, storageSvcPort int) error {
 	storageDir, err := os.MkdirTemp("/tmp", "storagesvc")
 	if err != nil {
-		return 0, fmt.Errorf("error creating temp directory: %w", err)
-	}
-
-	storageSvcPort, err = utils.FindFreePort()
-	if err != nil {
-		return storageSvcPort, fmt.Errorf("error finding unused port: %w", err)
+		return fmt.Errorf("error creating temp directory: %w", err)
 	}
 
 	err = storagesvc.Start(ctx, f.ClientGen(), f.Logger(), storagesvc.NewLocalStorage(storageDir), mgr, storageSvcPort)
 	if err != nil {
-		return storageSvcPort, fmt.Errorf("error starting storage service: %w", err)
+		return fmt.Errorf("error starting storage service: %w", err)
 	}
 	if err := f.RegisterService("storagesvc", storageSvcPort); err != nil {
-		return storageSvcPort, err
+		return err
 	}
 	storagesvcURL, err := f.GetServiceURL("storagesvc")
 	if err != nil {
-		return storageSvcPort, fmt.Errorf("error getting storage service URL: %w", err)
+		return fmt.Errorf("error getting storage service URL: %w", err)
 	}
 	os.Setenv("FISSION_STORAGESVC_URL", storagesvcURL)
 
-	return storageSvcPort, nil
+	return nil
 }
