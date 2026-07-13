@@ -9,6 +9,21 @@ import (
 	"time"
 )
 
+// Cross-driver contract constants: every Queue driver must agree on these, so
+// they live in one place rather than being copy-pasted per driver.
+const (
+	// DefaultMaxAttempts is the queue attempt budget before a Nack or an
+	// exhausted lease expiry dead-letters a message (RFC-0024's default retry
+	// policy).
+	DefaultMaxAttempts = 3
+	// ReasonRetriesExhausted is the dead-letter reason when a Nack spends the
+	// attempt budget.
+	ReasonRetriesExhausted = "retries exhausted"
+	// ReasonLeaseExpired is the dead-letter reason when the budget is spent purely
+	// by lease expiry (the worker never settled).
+	ReasonLeaseExpired = "retries exhausted (lease expired)"
+)
+
 // Scope carries tenancy. Every operation is namespaced to a Fission namespace,
 // an owner object ("<kind>/<name>", e.g. "function/orders" or
 // "workflowrun/abc123"), and a keyspace. Quota and authz are enforced above the

@@ -102,7 +102,7 @@ func (q *queueState) reapExpired(now time.Time, maxAttempts int) int64 {
 		expirations++
 		if m.attempts >= maxAttempts {
 			m.state = qDead
-			m.reason = "retries exhausted (lease expired)"
+			m.reason = statestore.ReasonLeaseExpired
 			m.diedAt = now
 			m.dedupKey = ""
 		} else {
@@ -143,7 +143,7 @@ func (s *Store) Lease(_ context.Context, queue string, n int, leaseFor time.Dura
 		m.expiry = now.Add(leaseFor)
 		out = append(out, statestore.LeasedMessage{
 			ID:       m.id,
-			Receipt:  encodeReceipt(m.id, m.epoch),
+			Receipt:  statestore.EncodeReceipt(m.id, m.epoch),
 			Body:     append([]byte(nil), m.body...),
 			Attempts: m.attempts,
 		})
@@ -155,7 +155,7 @@ func (s *Store) Lease(_ context.Context, queue string, n int, leaseFor time.Dura
 // returns ErrInvalidReceipt for a malformed, unknown, non-leased, or
 // stale-epoch receipt (invariants Q1, Q2). Caller holds s.mu.
 func (q *queueState) settle(receipt string) (*qmsg, error) {
-	id, epoch, ok := decodeReceipt(receipt)
+	id, epoch, ok := statestore.DecodeReceipt(receipt)
 	if !ok {
 		return nil, statestore.ErrInvalidReceipt
 	}
@@ -211,7 +211,7 @@ func (s *Store) Nack(_ context.Context, receipt string, retryAfter time.Duration
 	}
 	if m.attempts >= s.maxAttempts {
 		m.state = qDead
-		m.reason = "retries exhausted"
+		m.reason = statestore.ReasonRetriesExhausted
 		m.diedAt = time.Now()
 		m.dedupKey = ""
 		return nil

@@ -8,10 +8,8 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -36,41 +34,19 @@ func newMessageID(queue string) string {
 	return queue + "/" + hex.EncodeToString(b[:])
 }
 
-// encodeReceipt / decodeReceipt build the lease-scoped settle handle embedding
-// (id, epoch); the settle guard checks state='leased' AND epoch matches, so a
-// stale-epoch receipt can never settle a re-leased message (invariant Q2).
-func encodeReceipt(id string, epoch int64) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(id + "\x00" + strconv.FormatInt(epoch, 10)))
-}
-
-func decodeReceipt(receipt string) (id string, epoch int64, ok bool) {
-	raw, err := base64.RawURLEncoding.DecodeString(receipt)
-	if err != nil {
-		return "", 0, false
-	}
-	sep := strings.LastIndexByte(string(raw), 0)
-	if sep < 0 {
-		return "", 0, false
-	}
-	epoch, err = strconv.ParseInt(string(raw[sep+1:]), 10, 64)
-	if err != nil {
-		return "", 0, false
-	}
-	return string(raw[:sep]), epoch, true
-}
-
-// reapExpired dead-letters leases whose budget is spent (exhausted purely by
-// expiry — SQS maxReceiveCount) and requeues the rest. Caller may run it outside
-// a transaction; the two updates are disjoint on attempts.
-func (q *queueStore) reapExpired(ctx context.Context, queue string, now int64) error {
-	if _, err := q.s.exec(ctx,
+// reap dead-letters leases whose budget is spent (exhausted purely by expiry —
+// SQS maxReceiveCount) and requeues the rest. It runs on e, which is the pool
+// (from DeadLetters) or the lease transaction (from Lease); the two updates are
+// disjoint on attempts.
+func (q *queueStore) reap(ctx context.Context, e execer, queue string, now int64) error {
+	if _, err := q.s.execOn(ctx, e,
 		`UPDATE state_queue SET state = ?, reason = ?, died_at = ?, dedup_key = NULL
 		 WHERE queue = ? AND state = ? AND expiry <= ? AND attempts >= ?`,
-		stDead, "retries exhausted (lease expired)", now, queue, stLeased, now, q.s.maxAttempts,
+		stDead, statestore.ReasonLeaseExpired, now, queue, stLeased, now, q.s.maxAttempts,
 	); err != nil {
 		return err
 	}
-	_, err := q.s.exec(ctx,
+	_, err := q.s.execOn(ctx, e,
 		`UPDATE state_queue SET state = ?, visible_at = ?
 		 WHERE queue = ? AND state = ? AND expiry <= ? AND attempts < ?`,
 		stQueued, now, queue, stLeased, now, q.s.maxAttempts,
@@ -120,7 +96,7 @@ func (q *queueStore) Lease(ctx context.Context, queue string, n int, leaseFor ti
 	now := nowNanos()
 	var out []statestore.LeasedMessage
 	err := q.s.inTx(ctx, func(tx *sql.Tx) error {
-		if err := q.reapInTx(ctx, tx, queue, now); err != nil {
+		if err := q.reap(ctx, tx, queue, now); err != nil {
 			return err
 		}
 		rows, err := tx.QueryContext(ctx, q.s.rebind(
@@ -154,18 +130,18 @@ func (q *queueStore) Lease(ctx context.Context, queue string, n int, leaseFor ti
 		_ = rows.Close()
 
 		expiry := now + leaseFor.Nanoseconds()
+		leaseSQL := q.s.rebind(`UPDATE state_queue SET state = ?, epoch = ?, attempts = ?, expiry = ? WHERE id = ?`)
 		for _, c := range cands {
 			newEpoch := c.epoch + 1
 			newAttempts := c.attempts + 1
-			if _, err := tx.ExecContext(ctx, q.s.rebind(
-				`UPDATE state_queue SET state = ?, epoch = ?, attempts = ?, expiry = ? WHERE id = ?`),
+			if _, err := tx.ExecContext(ctx, leaseSQL,
 				stLeased, newEpoch, newAttempts, expiry, c.id,
 			); err != nil {
 				return err
 			}
 			out = append(out, statestore.LeasedMessage{
 				ID:       c.id,
-				Receipt:  encodeReceipt(c.id, newEpoch),
+				Receipt:  statestore.EncodeReceipt(c.id, newEpoch),
 				Body:     c.body,
 				Attempts: newAttempts,
 			})
@@ -178,26 +154,9 @@ func (q *queueStore) Lease(ctx context.Context, queue string, n int, leaseFor ti
 	return out, nil
 }
 
-// reapInTx is reapExpired within an existing transaction.
-func (q *queueStore) reapInTx(ctx context.Context, tx *sql.Tx, queue string, now int64) error {
-	if _, err := tx.ExecContext(ctx, q.s.rebind(
-		`UPDATE state_queue SET state = ?, reason = ?, died_at = ?, dedup_key = NULL
-		 WHERE queue = ? AND state = ? AND expiry <= ? AND attempts >= ?`),
-		stDead, "retries exhausted (lease expired)", now, queue, stLeased, now, q.s.maxAttempts,
-	); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, q.s.rebind(
-		`UPDATE state_queue SET state = ?, visible_at = ?
-		 WHERE queue = ? AND state = ? AND expiry <= ? AND attempts < ?`),
-		stQueued, now, queue, stLeased, now, q.s.maxAttempts,
-	)
-	return err
-}
-
 // Ack implements statestore.Queue.
 func (q *queueStore) Ack(ctx context.Context, receipt string) error {
-	id, epoch, ok := decodeReceipt(receipt)
+	id, epoch, ok := statestore.DecodeReceipt(receipt)
 	if !ok {
 		return statestore.ErrInvalidReceipt
 	}
@@ -211,7 +170,7 @@ func (q *queueStore) Ack(ctx context.Context, receipt string) error {
 // Nack implements statestore.Queue: requeue after retryAfter, or dead-letter once
 // the attempt budget is spent (invariant Q3).
 func (q *queueStore) Nack(ctx context.Context, receipt string, retryAfter time.Duration) error {
-	id, epoch, ok := decodeReceipt(receipt)
+	id, epoch, ok := statestore.DecodeReceipt(receipt)
 	if !ok {
 		return statestore.ErrInvalidReceipt
 	}
@@ -221,7 +180,7 @@ func (q *queueStore) Nack(ctx context.Context, receipt string, retryAfter time.D
 		dead, err := tx.ExecContext(ctx, q.s.rebind(
 			`UPDATE state_queue SET state = ?, reason = ?, died_at = ?, dedup_key = NULL
 			 WHERE id = ? AND state = ? AND epoch = ? AND attempts >= ?`),
-			stDead, "retries exhausted", now, id, stLeased, epoch, q.s.maxAttempts,
+			stDead, statestore.ReasonRetriesExhausted, now, id, stLeased, epoch, q.s.maxAttempts,
 		)
 		if err != nil {
 			return err
@@ -256,7 +215,7 @@ func (q *queueStore) Nack(ctx context.Context, receipt string, retryAfter time.D
 
 // Kill implements statestore.Queue: dead-letter the current delivery immediately.
 func (q *queueStore) Kill(ctx context.Context, receipt string, reason string) error {
-	id, epoch, ok := decodeReceipt(receipt)
+	id, epoch, ok := statestore.DecodeReceipt(receipt)
 	if !ok {
 		return statestore.ErrInvalidReceipt
 	}
@@ -286,7 +245,7 @@ func settleResult(res sql.Result, err error) error {
 
 // DeadLetters implements statestore.Queue.
 func (q *queueStore) DeadLetters(ctx context.Context, queue string, page statestore.Page) ([]statestore.DeadMessage, error) {
-	if err := q.reapExpired(ctx, queue, nowNanos()); err != nil {
+	if err := q.reap(ctx, q.s.db, queue, nowNanos()); err != nil {
 		return nil, err
 	}
 	col := q.s.dialect.Collate
@@ -341,16 +300,9 @@ func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) er
 	return err
 }
 
-// compile-time guard: the value Queue() returns must be the conservation
-// reporter, or NewScoped's type-assert silently never registers it and the drift
-// gauge is dead on this backend.
-var _ statestore.ConservationReporter = (*queueStore)(nil)
-
-// ConservationStats delegates to the Store so the value returned from Queue()
-// (a *queueStore) satisfies statestore.ConservationReporter.
-func (q *queueStore) ConservationStats(ctx context.Context) statestore.ConservationStats {
-	return q.s.ConservationStats(ctx)
-}
+// compile-time guard: the Store (the Capabilities value) is the conservation
+// reporter NewScoped registers, so the drift gauge actually observes it.
+var _ statestore.ConservationReporter = (*Store)(nil)
 
 // ConservationStats implements statestore.ConservationReporter (invariant T1). On
 // a read failure it records a scrape error and returns a zero value: because

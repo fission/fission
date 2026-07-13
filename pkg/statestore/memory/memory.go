@@ -26,10 +26,6 @@ func init() {
 	})
 }
 
-// defaultMaxAttempts is the queue attempt budget before a Nack dead-letters a
-// message, matching RFC-0024's default retry policy.
-const defaultMaxAttempts = 3
-
 // Store is an in-memory Capabilities implementation. One mutex guards all three
 // capabilities' state.
 type Store struct {
@@ -48,7 +44,7 @@ func newStore() *Store {
 		kv:          make(map[kvKey]kvEntry),
 		streams:     make(map[string]*streamState),
 		queues:      make(map[string]*queueState),
-		maxAttempts: defaultMaxAttempts,
+		maxAttempts: statestore.DefaultMaxAttempts,
 	}
 }
 

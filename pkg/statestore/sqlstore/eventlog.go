@@ -53,12 +53,10 @@ func (e *eventLog) Append(ctx context.Context, stream string, expectedSeq int64,
 		}
 		now := nowNanos()
 		seq := expectedSeq
+		insertSQL := e.s.rebind(`INSERT INTO state_events (stream, seq, type, payload, at) VALUES (?, ?, ?, ?, ?)`)
 		for _, ev := range events {
 			seq++
-			if _, ierr := tx.ExecContext(ctx, e.s.rebind(
-				`INSERT INTO state_events (stream, seq, type, payload, at) VALUES (?, ?, ?, ?, ?)`),
-				stream, seq, ev.Type, ev.Payload, now,
-			); ierr != nil {
+			if _, ierr := tx.ExecContext(ctx, insertSQL, stream, seq, ev.Type, ev.Payload, now); ierr != nil {
 				return ierr
 			}
 		}

@@ -41,10 +41,6 @@ type Dialect struct {
 	AdvisoryLock func(ctx context.Context, tx *sql.Tx) error
 }
 
-// defaultMaxAttempts is the queue attempt budget before a Nack or an exhausted
-// lease expiry dead-letters a message (RFC-0024's default retry policy).
-const defaultMaxAttempts = 3
-
 // Store is the shared SQL-backed Capabilities.
 type Store struct {
 	db          *sql.DB
@@ -55,7 +51,7 @@ type Store struct {
 // Open runs migrations and returns a Store over db. Callers (the postgres/sqlite
 // driver packages) own opening and configuring db (pool size, pragmas).
 func Open(ctx context.Context, db *sql.DB, d Dialect) (*Store, error) {
-	s := &Store{db: db, dialect: d, maxAttempts: defaultMaxAttempts}
+	s := &Store{db: db, dialect: d, maxAttempts: statestore.DefaultMaxAttempts}
 	if err := s.migrate(ctx); err != nil {
 		return nil, fmt.Errorf("statestore/sqlstore: migrate: %w", err)
 	}
@@ -98,6 +94,17 @@ func (s *Store) rebind(query string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// execer is satisfied by both *sql.DB and *sql.Tx, so a statement can run on the
+// pool or inside a transaction without being written twice.
+type execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// execOn runs a rebinding Exec on e (the pool or a tx).
+func (s *Store) execOn(ctx context.Context, e execer, query string, args ...any) (sql.Result, error) {
+	return e.ExecContext(ctx, s.rebind(query), args...)
 }
 
 func (s *Store) exec(ctx context.Context, query string, args ...any) (sql.Result, error) {

@@ -59,10 +59,14 @@ func Start(ctx context.Context, _ crd.ClientGeneratorInterface, logger logr.Logg
 			return fmt.Errorf("statestore: opening embedded store: %w", err)
 		}
 		caps = opened
-		// Close the store we own on shutdown so SQLite checkpoints its WAL; an
-		// injected caps belongs to the caller.
-		defer func() { _ = caps.Close() }()
 	}
+
+	// Wrap server-side so the embedded store emits the statestore metrics and its
+	// conservation drift (invariant T1) is observed where the message accounting
+	// physically lives — a networked client cannot report it. Closing the wrapper
+	// deregisters the reporter and releases the store (SQLite checkpoints its WAL).
+	caps = statestore.NewScoped(caps, nil)
+	defer func() { _ = caps.Close() }()
 
 	handler := httpapi.NewHandler(caps)
 

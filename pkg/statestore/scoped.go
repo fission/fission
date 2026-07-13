@@ -19,11 +19,13 @@ func NewScoped(inner Capabilities, resolver QuotaResolver) Capabilities {
 	if resolver == nil {
 		resolver = StaticQuota{}
 	}
+	// Conservation is a property of where the message accounting physically lives
+	// (the store), not of a consumer, so the reporter is the store itself. A
+	// networked client legitimately does not implement it — the embedded server
+	// observes conservation on its own store.
 	deregister := func() {}
-	if q, err := inner.Queue(); err == nil {
-		if rep, ok := q.(ConservationReporter); ok {
-			deregister = registerConservationReporter(rep)
-		}
+	if rep, ok := inner.(ConservationReporter); ok {
+		deregister = registerConservationReporter(rep)
 	}
 	return &scopedCaps{inner: inner, resolver: resolver, deregister: deregister}
 }
