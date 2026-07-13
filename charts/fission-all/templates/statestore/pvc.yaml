@@ -1,0 +1,19 @@
+{{- if and .Values.statestore.enabled (eq .Values.statestore.mode "embedded") }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: statestore
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: statestore
+    application: fission-statestore
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.statestore.embedded.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.statestore.embedded.storageSize | default "1Gi" }}
+{{- end }}
