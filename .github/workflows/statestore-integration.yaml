@@ -1,0 +1,43 @@
+name: Statestore integration
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pkg/statestore/**'
+      - '.github/workflows/statestore-integration.yaml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'pkg/statestore/**'
+      - '.github/workflows/statestore-integration.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-24.04
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Check out code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: "go.mod"
+
+      # The Postgres driver's integration test starts a throwaway Postgres via
+      # dockertest (Docker is preinstalled on the runner), then runs the shared
+      # conformance suite, KV linearizability (porcupine), and a real-time timing
+      # smoke test against it.
+      - name: Statestore Postgres integration tests
+        run: go test -tags=integration -race -timeout=15m -v ./pkg/statestore/postgres/...
