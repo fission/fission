@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/anishathalye/porcupine"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/pkg/statestore"
@@ -100,7 +101,9 @@ func RunKVLinearizability(t *testing.T, newCaps Factory) {
 				call := tick()
 				v, gerr := kv.Get(ctx, linScope, key)
 				ret := tick()
-				require.NoError(t, gerr) // the key always exists after seeding
+				// assert (not require) — these run in a worker goroutine, where
+				// require's FailNow is unsafe; a failure still fails the test.
+				assert.NoError(t, gerr) // the key always exists after seeding
 				curVal, _ := strconv.Atoi(string(v.Data))
 				record(c, regInput{op: "get"}, call, regOutput{ver: v.Version, val: curVal}, ret)
 
@@ -111,7 +114,7 @@ func RunKVLinearizability(t *testing.T, newCaps Factory) {
 				serr := kv.Set(ctx, linScope, key, []byte(strconv.Itoa(newVal)), statestore.SetOptions{IfVersion: &expected})
 				ret = tick()
 				if serr != nil {
-					require.ErrorIs(t, serr, statestore.ErrVersionConflict)
+					assert.ErrorIs(t, serr, statestore.ErrVersionConflict)
 				}
 				record(c, regInput{op: "cas", expected: expected, newVal: newVal}, call, regOutput{ok: serr == nil}, ret)
 			}

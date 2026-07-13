@@ -88,13 +88,13 @@ func Start(ctx context.Context, _ crd.ClientGeneratorInterface, logger logr.Logg
 		logger.Info("WARNING: embedded statestore HMAC verification DISABLED (empty FISSION_INTERNAL_AUTH_SECRET)")
 	}
 
-	mgr.Go(func() error {
-		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
-			Name: "statestore", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: handler,
-		})
-		return nil
-	})
 	logger.Info("starting embedded statestore", "port", opts.Port)
-	<-ctx.Done()
+	// httpserver.Serve blocks until ctx is cancelled and the in-flight drain
+	// completes, so calling it inline (rather than in mgr.Go with a separate
+	// <-ctx.Done()) guarantees the deferred store Close runs after the drain, not
+	// during it.
+	httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
+		Name: "statestore", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: handler,
+	})
 	return nil
 }
