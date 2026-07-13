@@ -101,7 +101,6 @@ func AggregateValidationErrors(objName string, err error) error {
 			}
 		} else {
 			if level > 0 {
-
 				errMsg.WriteString(strings.Repeat("  ", level-1))
 			}
 			fmt.Fprintf(&errMsg, "* %v\n", err.Error())
@@ -376,6 +375,10 @@ func (spec FunctionSpec) Validate() error {
 		}
 	}
 
+	if spec.ProvisionedConcurrency != nil {
+		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
+	}
+
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
 	errs = errors.Join(errs, spec.validateForAdmission())
@@ -392,11 +395,16 @@ func (spec FunctionSpec) Validate() error {
 // enforce via CEL and the admission webhook must still run: pod-spec security
 // (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92)
 // and the RFC-0024 async invocation bounds (metav1.Duration CEL rules are unproven
-// in this CRD, so the ordering/positivity checks live in Go and run at admission).
+// in this CRD, so the ordering/positivity checks live in Go and run at admission)
+// and provisioned-concurrency Windows-emptiness (RFC-0026 PR 1 limitation).
 func (spec FunctionSpec) validateForAdmission() error {
-	errs := ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
+	var errs error
+	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
 	if spec.Invocation != nil {
 		errs = errors.Join(errs, spec.Invocation.Validate())
+	}
+	if spec.ProvisionedConcurrency != nil {
+		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
 	}
 	return errs
 }
@@ -547,6 +555,16 @@ func ValidateTopicNameForMQType(field, mqType, topic string) error {
 func ValidateTopicName(field, topic string) error {
 	if topic == "" || len(topic) > 249 || !topicNameRegexp.MatchString(topic) {
 		return MakeValidationErr(ErrorInvalidValue, field, topic, "must be 1-249 characters of [a-zA-Z0-9._-]")
+	}
+	return nil
+}
+
+// Validate checks the provisioned-concurrency config (only reached when
+// FunctionSpec.ProvisionedConcurrency is non-nil): RFC-0026 PR 1 rejects any
+// scheduled Windows — only the base Target is supported. PR 2 will lift this.
+func (pcc *ProvisionedConcurrencyConfig) Validate() error {
+	if len(pcc.Windows) > 0 {
+		return MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", pcc.Windows, "scheduled windows are not yet supported (RFC-0026 PR 1)")
 	}
 	return nil
 }
@@ -978,9 +996,9 @@ func (config IngressConfig) Validate() error {
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.key", k, msg))
 		}
-		totalSize += (int64)(len(k)) + (int64)(len(v))
+		totalSize += int64(len(k)) + int64(len(v))
 	}
-	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+	if totalSize > int64(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
@@ -1030,9 +1048,9 @@ func (config RouteConfig) Validate() error {
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.key", k, msg))
 		}
-		totalSize += (int64)(len(k)) + (int64)(len(v))
+		totalSize += int64(len(k)) + int64(len(v))
 	}
-	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+	if totalSize > int64(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
@@ -1087,14 +1105,14 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 func (spec MessageQueueTriggerSpec) validateForAdmission() error {
 	var errs error
 
-	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType), spec.MqtKind) {
+	if !validator.IsValidMessageQueue(string(spec.MessageQueueType), spec.MqtKind) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	} else {
-		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
+		if !validator.IsValidTopic(string(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
 		}
 
-		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
+		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic(string(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 		}
 

@@ -45,7 +45,6 @@ func IsPodTerminated(pod *v1.Pod) bool {
 
 // PodContainerReadyStatus returns the number of ready containers and total containers present in pod
 func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) {
-
 	noOfContainers = len(pod.Status.ContainerStatuses)
 	readyContainers = 0
 
@@ -56,4 +55,18 @@ func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) 
 	}
 
 	return
+}
+
+func IsPodRunning(pod *v1.Pod) bool {
+	return pod.Status.Phase == v1.PodRunning
+}
+
+func ReadyAndRunningPodsFilter(podList *v1.PodList) []v1.Pod {
+	output := []v1.Pod{}
+	for _, pod := range podList.Items {
+		if IsReadyPod(&pod) && IsPodRunning(&pod) {
+			output = append(output, pod)
+		}
+	}
+	return output
 }
