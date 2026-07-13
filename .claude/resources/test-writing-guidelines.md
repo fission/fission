@@ -37,6 +37,39 @@ They reflect the patterns already established across the codebase — match them
 
 - For large or structured expected output (e.g. aggregated validation errors), use the `go-snaps` snapshot pattern already in `pkg/apis/core/v1/validation_test.go`.
 
+## Time-dependent code
+
+- Test timeouts, TTLs, backoff schedules, lease expiry, debounces, and cron windows inside `testing/synctest.Test` bubbles (stable since Go 1.25; this repo is on Go 1.26).
+  The bubble virtualizes `time.Now`, timers, and sleeps: a "wait 6h then act" test completes instantly and deterministically.
+- Because the bubble fakes the standard `time` package, code under test should just use `time` directly — do **not** add an injectable clock seam only for testability.
+- Everything the bubbled code touches must be in-process and in-memory (fakes, memory drivers, channels); real network or filesystem waits are not virtualized and will hang the bubble.
+- Never `time.Sleep` in a test to "wait for" concurrent code outside a bubble; restructure around synctest or an explicit synchronization point.
+
+## Property-based tests
+
+- Use `pgregory.net/rapid` for property-based tests.
+  Do **not** use the stdlib `testing/quick` — it is frozen and rapid is its maintained successor.
+- Reach for properties when the code has algebraic structure examples can't cover: round-trips (encode/decode, publish/resolve), idempotence (`f(f(x)) == f(x)`), invariant bounds (quotas, attempt budgets, jitter ranges), distribution claims (hashing balance), and determinism (same inputs → same output on every replica).
+- Model-based testing: when an in-memory reference implementation exists (e.g. a memory driver next to a real-backend driver), have rapid generate random operation sequences and assert the real implementation's observable behavior equals the model's.
+  This one pattern replaces most hand-written matrix tests for storage-like code.
+- Property tests run with rapid's default deterministic seeds in PR CI; longer randomized runs belong in nightly jobs, and any failing seed goes into the test as a regression case.
+
+## Fuzzing
+
+- Give native `go test -fuzz` targets to parser/decoder/verifier boundaries: token or signature verification, wire envelopes, path and expression parsing, header grammars.
+  The two baseline properties are round-trip stability and never-panic on arbitrary input.
+- For an authn/authz check, fuzz the adversary: mutate valid credentials (bit flips, truncation, field splices, re-encoding) and assert nothing but the exact expected input authenticates.
+- Check the seed corpus into `testdata/`; PR CI runs the corpus as regression tests (`go test` does this automatically), extended fuzzing time belongs in a nightly job.
+
+## Concurrency and crash safety
+
+- Prefer **crash-point enumeration** over random fault injection when the code has identifiable persistence boundaries: list every crash point (before write, between write and side effect, after side effect) and drive a table-driven kill-and-resume test through each.
+  Exhaustive and deterministic beats probabilistic.
+- For concurrent access to a store with consistency claims (CAS, versions), record real concurrent histories and check them with `porcupine` linearizability checking rather than asserting on final state only.
+- Reader/body edge cases (`http.MaxBytesReader` caps, mid-stream failures) are covered by composing `testing/iotest` readers (`ErrReader`, `TimeoutReader`, `OneByteReader`, `HalfReader`) with the code under test.
+- When a component implements a protocol that has a TLA+ spec (see `docs/rfc/specs/` next to the RFC that defines it), the spec is the design authority: change the spec and re-run TLC **before** changing the protocol code, and keep the spec's numbered invariants mirrored as test names so the correspondence is auditable.
+- State the invariants a stateful component guarantees (the RFC's "Invariants & verification" section, if it has one) and write tests that assert the invariant under generated interleavings — not just the happy-path example.
+
 ## Integration tests
 
 - Start the file with `//go:build integration`, a blank line, then `package common_test`, under `test/integration/suites/common/`.
