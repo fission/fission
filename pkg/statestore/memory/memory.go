@@ -32,14 +32,16 @@ type Store struct {
 	mu     sync.Mutex
 	closed bool
 
-	kv map[kvKey]kvEntry
-	// streams (EventLog) and queues (Queue) state are added by their tasks.
+	kv      map[kvKey]kvEntry
+	streams map[string]*streamState
+	// queues (Queue) state is added by its task.
 }
 
 // newStore returns an initialized, empty Store.
 func newStore() *Store {
 	return &Store{
-		kv: make(map[kvKey]kvEntry),
+		kv:      make(map[kvKey]kvEntry),
+		streams: make(map[string]*streamState),
 	}
 }
 
@@ -55,9 +57,8 @@ func (s *Store) KV() (statestore.KVStore, error) {
 }
 
 // EventLog returns the in-memory EventLog.
-// TODO(rfc-0021 task 3): return s once Append/Read/Trim are implemented.
 func (s *Store) EventLog() (statestore.EventLog, error) {
-	return nil, statestore.ErrCapabilityUnavailable
+	return s, nil
 }
 
 // Queue returns the in-memory Queue.
