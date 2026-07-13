@@ -29,13 +29,32 @@ type Factory func(t *testing.T) statestore.Capabilities
 
 var confScope = statestore.Scope{Namespace: "ns", Owner: "function/conf", Keyspace: "ks"}
 
-// RunConformance runs the full behavioral matrix as subtests against the driver
-// built by newCaps. Absent capabilities are skipped, not failed.
+// RunConformance runs the time-independent behavioral matrix as subtests against
+// the driver built by newCaps. Absent capabilities are skipped, not failed. Every
+// driver (memory, SQLite, Postgres, embedded client) runs this.
+//
+// Time-dependent behavior (TTL expiry, lease expiry) is checked separately by
+// RunTimingConformance, which uses testing/synctest and so runs only against
+// in-process drivers.
 func RunConformance(t *testing.T, newCaps Factory) {
 	t.Helper()
 	t.Run("KV", func(t *testing.T) { runKV(t, newCaps) })
 	t.Run("EventLog", func(t *testing.T) { runEventLog(t, newCaps) })
 	t.Run("Queue", func(t *testing.T) { runQueue(t, newCaps) })
+}
+
+// RunTimingConformance checks the time-dependent behavior (K2 exact-on-read TTL,
+// Q2 the lease epoch guard across a re-lease, and dead-lettering on exhausted
+// lease expiry) inside testing/synctest bubbles. Because synctest requires
+// virtualized time and no real I/O, only in-process drivers (memory, SQLite)
+// can run it; networked drivers (Postgres, the embedded HTTP client) share the
+// same sqlstore timing code, which this verifies once, and add a real-time smoke
+// test of their own.
+func RunTimingConformance(t *testing.T, newCaps Factory) {
+	t.Helper()
+	t.Run("KV/TTLExactOnRead", func(t *testing.T) { runTTLExactOnRead(t, newCaps) })
+	t.Run("Queue/Q2_EpochGuard", func(t *testing.T) { runQ2EpochGuard(t, newCaps) })
+	t.Run("Queue/ExhaustedByExpiryDeadLettered", func(t *testing.T) { runExhaustedByExpiry(t, newCaps) })
 }
 
 func kvOrSkip(t *testing.T, newCaps Factory) statestore.KVStore {
@@ -89,20 +108,6 @@ func runKV(t *testing.T, newCaps Factory) {
 		require.NoError(t, kv.Delete(ctx, confScope, "k", 3))
 		_, err = kv.Get(ctx, confScope, "k")
 		require.ErrorIs(t, err, statestore.ErrNotFound)
-	})
-
-	t.Run("TTLExactOnRead", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			kv := kvOrSkip(t, newCaps)
-			ctx := t.Context()
-			require.NoError(t, kv.Set(ctx, confScope, "ttl", []byte("v"), statestore.SetOptions{TTL: time.Hour}))
-			time.Sleep(59 * time.Minute)
-			_, err := kv.Get(ctx, confScope, "ttl")
-			require.NoError(t, err)
-			time.Sleep(2 * time.Minute)
-			_, err = kv.Get(ctx, confScope, "ttl")
-			require.ErrorIs(t, err, statestore.ErrNotFound)
-		})
 	})
 
 	t.Run("ListPrefixPaging", func(t *testing.T) {
@@ -178,24 +183,6 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.Empty(t, l)
 	})
 
-	t.Run("Q2_EpochGuard", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			q := queueOrSkip(t, newCaps)
-			ctx := t.Context()
-			_, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
-			require.NoError(t, err)
-			l1, err := q.Lease(ctx, "cq", 1, time.Minute)
-			require.NoError(t, err)
-			require.Len(t, l1, 1)
-			time.Sleep(2 * time.Minute) // lease expires
-			l2, err := q.Lease(ctx, "cq", 1, time.Minute)
-			require.NoError(t, err)
-			require.Len(t, l2, 1)
-			require.ErrorIs(t, q.Ack(ctx, l1[0].Receipt), statestore.ErrInvalidReceipt)
-			require.NoError(t, q.Ack(ctx, l2[0].Receipt))
-		})
-	})
-
 	t.Run("DedupCollapse", func(t *testing.T) {
 		q := queueOrSkip(t, newCaps)
 		ctx := t.Context()
@@ -204,33 +191,6 @@ func runQueue(t *testing.T, newCaps Factory) {
 		id2, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{DedupKey: "d"})
 		require.NoError(t, err)
 		require.Equal(t, id1, id2)
-	})
-
-	t.Run("ExhaustedByExpiryDeadLettered", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			q := queueOrSkip(t, newCaps)
-			ctx := t.Context()
-			id, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
-			require.NoError(t, err)
-			// Repeatedly lease and let the lease expire (never settle) until the
-			// message is dead-lettered — the attempt budget is driver-configured,
-			// so loop with a safety cap rather than assuming a count.
-			var dead []statestore.DeadMessage
-			for range 20 {
-				l, lerr := q.Lease(ctx, "cq", 1, time.Minute)
-				require.NoError(t, lerr)
-				if len(l) > 0 {
-					time.Sleep(2 * time.Minute) // let the lease expire
-				}
-				dead, err = q.DeadLetters(ctx, "cq", statestore.Page{})
-				require.NoError(t, err)
-				if len(dead) > 0 || len(l) == 0 {
-					break
-				}
-			}
-			require.Len(t, dead, 1, "a message exhausted by lease expiry must be dead-lettered, not stranded")
-			require.Equal(t, id, dead[0].ID)
-		})
 	})
 
 	t.Run("NackToDeadThenRedrive", func(t *testing.T) {
@@ -265,5 +225,66 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.NoError(t, err)
 		require.Len(t, l, 1)
 		assert.Equal(t, 1, l[0].Attempts, "attempts reset on redrive")
+	})
+}
+
+// --- Time-dependent subtests (synctest; in-process drivers only) ---
+
+func runTTLExactOnRead(t *testing.T, newCaps Factory) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := kvOrSkip(t, newCaps)
+		ctx := t.Context()
+		require.NoError(t, kv.Set(ctx, confScope, "ttl", []byte("v"), statestore.SetOptions{TTL: time.Hour}))
+		time.Sleep(59 * time.Minute)
+		_, err := kv.Get(ctx, confScope, "ttl")
+		require.NoError(t, err) // still live
+		time.Sleep(2 * time.Minute)
+		_, err = kv.Get(ctx, confScope, "ttl")
+		require.ErrorIs(t, err, statestore.ErrNotFound) // expired, exact on read
+	})
+}
+
+func runQ2EpochGuard(t *testing.T, newCaps Factory) {
+	synctest.Test(t, func(t *testing.T) {
+		q := queueOrSkip(t, newCaps)
+		ctx := t.Context()
+		_, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+		l1, err := q.Lease(ctx, "cq", 1, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l1, 1)
+		time.Sleep(2 * time.Minute) // lease expires
+		l2, err := q.Lease(ctx, "cq", 1, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l2, 1)
+		require.ErrorIs(t, q.Ack(ctx, l1[0].Receipt), statestore.ErrInvalidReceipt) // stale epoch rejected
+		require.NoError(t, q.Ack(ctx, l2[0].Receipt))                               // current lease decides
+	})
+}
+
+func runExhaustedByExpiry(t *testing.T, newCaps Factory) {
+	synctest.Test(t, func(t *testing.T) {
+		q := queueOrSkip(t, newCaps)
+		ctx := t.Context()
+		id, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+		// Lease and let the lease expire (never settle) until the message is
+		// dead-lettered — the attempt budget is driver-configured, so loop with a
+		// safety cap rather than assuming a count.
+		var dead []statestore.DeadMessage
+		for range 20 {
+			l, lerr := q.Lease(ctx, "cq", 1, time.Minute)
+			require.NoError(t, lerr)
+			if len(l) > 0 {
+				time.Sleep(2 * time.Minute) // let the lease expire
+			}
+			dead, err = q.DeadLetters(ctx, "cq", statestore.Page{})
+			require.NoError(t, err)
+			if len(dead) > 0 || len(l) == 0 {
+				break
+			}
+		}
+		require.Len(t, dead, 1, "a message exhausted by lease expiry must be dead-lettered, not stranded")
+		require.Equal(t, id, dead[0].ID)
 	})
 }

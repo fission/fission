@@ -17,10 +17,13 @@ const defaultDriver = "memory"
 
 // Config selects and configures a driver set. It is read once at component start
 // (via FromEnv or an explicit literal) and passed to Open. Fields beyond Driver
-// are added as drivers land (Postgres DSN, Redis address, embedded-store URL).
+// are added as drivers land (Redis address, embedded-store URL).
 type Config struct {
 	// Driver names the registered driver to open. Empty means "memory".
 	Driver string
+	// DSN is the driver connection string: a Postgres DSN for the "postgres"
+	// driver, a file path for the "sqlite" driver. Ignored by "memory".
+	DSN string
 }
 
 // FromEnv builds a Config from the environment. This is the only place the
@@ -29,6 +32,7 @@ type Config struct {
 func FromEnv() Config {
 	return Config{
 		Driver: os.Getenv("STATESTORE_DRIVER"),
+		DSN:    os.Getenv("STATESTORE_DSN"),
 	}
 }
 

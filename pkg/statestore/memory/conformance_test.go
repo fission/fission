@@ -15,12 +15,15 @@ import (
 )
 
 // The memory driver is the executable spec, so it must pass the shared
-// conformance suite that every other driver is also held to.
+// conformance suite that every other driver is also held to — including the
+// virtual-time timing suite.
 func TestConformance_Memory(t *testing.T) {
-	statestoretest.RunConformance(t, func(t *testing.T) statestore.Capabilities {
+	factory := func(t *testing.T) statestore.Capabilities {
 		caps, err := memory.New()
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = caps.Close() })
 		return caps
-	})
+	}
+	statestoretest.RunConformance(t, factory)
+	statestoretest.RunTimingConformance(t, factory)
 }
