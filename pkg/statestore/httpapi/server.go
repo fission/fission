@@ -47,9 +47,11 @@ func (h *handler) readyz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// decode reads a JSON request body into dst, writing a 400 on failure.
+// decode reads a JSON request body into dst, writing a 400 on failure. The body
+// is bounded so an oversized or unbounded request cannot balloon memory.
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var dst T
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(&dst); err != nil {
 		writeCode(w, http.StatusBadRequest, Error{Code: CodeBadRequest, Message: err.Error()})
 		return dst, false

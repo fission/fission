@@ -4,7 +4,10 @@
 
 package statestore
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Scope carries tenancy. Every operation is namespaced to a Fission namespace,
 // an owner object ("<kind>/<name>", e.g. "function/orders" or
@@ -122,7 +125,8 @@ func (c ConservationStats) Drift() int64 {
 
 // ConservationReporter is implemented by Queue drivers that can report their
 // message accounting for the conservation drift gauge. The metrics wrapper
-// registers a single observable-gauge callback over all live reporters.
+// registers a single observable-gauge callback over all live reporters and
+// passes the callback's context so a slow backend read can be cancelled.
 type ConservationReporter interface {
-	ConservationStats() ConservationStats
+	ConservationStats(ctx context.Context) ConservationStats
 }

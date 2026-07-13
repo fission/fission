@@ -36,8 +36,8 @@ var dialect = sqlstore.Dialect{
 }
 
 // New opens an embedded SQLite statestore at dsn (a file path; empty means an
-// ephemeral in-memory database). Access is serialized to one connection, giving
-// BEGIN IMMEDIATE single-writer semantics without SKIP LOCKED.
+// ephemeral in-memory database). Access is serialized to a single connection, so
+// all writes are single-writer and the queue lease needs no SKIP LOCKED.
 func New(ctx context.Context, dsn string) (statestore.Capabilities, error) {
 	if dsn == "" {
 		dsn = ":memory:"
@@ -56,6 +56,9 @@ func New(ctx context.Context, dsn string) (statestore.Capabilities, error) {
 		"PRAGMA journal_mode=WAL",
 		"PRAGMA busy_timeout=5000",
 		"PRAGMA foreign_keys=ON",
+		// LIKE is case-insensitive for ASCII by default; force byte-exact prefix
+		// matching so List semantics match the memory driver.
+		"PRAGMA case_sensitive_like=ON",
 	} {
 		if _, err := db.ExecContext(ctx, pragma); err != nil {
 			_ = db.Close()

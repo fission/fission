@@ -15,6 +15,13 @@ import (
 	"github.com/fission/fission/pkg/statestore"
 )
 
+// MaxRequestBytes bounds the size of a decoded request body, so the JSON
+// decoders never read an unbounded body (this holds even in the HMAC
+// pass-through mode where the verifier's own cap is absent). A KV value is capped
+// at 256KiB (RFC-0023); base64 + the JSON envelope inflate that, so 4MiB is
+// generous headroom.
+const MaxRequestBytes = 4 << 20
+
 // Route paths, versioned under /v1.
 const (
 	PathHealthz         = "/healthz"

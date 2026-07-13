@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +82,10 @@ func (q *queueStore) reapExpired(ctx context.Context, queue string, now int64) e
 func (q *queueStore) Enqueue(ctx context.Context, queue string, msg statestore.Message, o statestore.EnqueueOptions) (string, error) {
 	now := nowNanos()
 	if o.DedupKey != "" {
+		// Best-effort collapse: two truly-concurrent enqueues with the same key on
+		// Postgres can both miss and both insert (dedup is a hint on an
+		// at-least-once queue; consumers must still be idempotent). SQLite
+		// serializes, so it always collapses.
 		var id string
 		err := q.s.queryRow(ctx,
 			`SELECT id FROM state_queue WHERE queue = ? AND dedup_key = ? AND state IN (?, ?) LIMIT 1`,
@@ -89,7 +94,7 @@ func (q *queueStore) Enqueue(ctx context.Context, queue string, msg statestore.M
 		if err == nil {
 			return id, nil
 		}
-		if err != sql.ErrNoRows {
+		if !errors.Is(err, sql.ErrNoRows) {
 			return "", err
 		}
 	}
@@ -229,8 +234,14 @@ func (q *queueStore) Nack(ctx context.Context, receipt string, retryAfter time.D
 		if err != nil {
 			return err
 		}
-		a, _ := dead.RowsAffected()
-		b, _ := requeue.RowsAffected()
+		a, err := dead.RowsAffected()
+		if err != nil {
+			return err
+		}
+		b, err := requeue.RowsAffected()
+		if err != nil {
+			return err
+		}
 		affected = a + b
 		return nil
 	})
@@ -278,15 +289,15 @@ func (q *queueStore) DeadLetters(ctx context.Context, queue string, page statest
 	if err := q.reapExpired(ctx, queue, nowNanos()); err != nil {
 		return nil, err
 	}
-	limit := page.Limit
-	if limit <= 0 {
-		limit = 1000
+	col := q.s.dialect.Collate
+	query := `SELECT id, body, reason, attempts, enqueued_at, died_at FROM state_queue
+		 WHERE queue = ? AND state = ? AND id > ?` + col + ` ORDER BY id` + col
+	args := []any{queue, stDead, page.Token}
+	if page.Limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, page.Limit)
 	}
-	rows, err := q.s.query(ctx,
-		`SELECT id, body, reason, attempts, enqueued_at, died_at FROM state_queue
-		 WHERE queue = ? AND state = ? AND id > ? ORDER BY id LIMIT ?`,
-		queue, stDead, page.Token, limit,
-	)
+	rows, err := q.s.query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -330,11 +341,26 @@ func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) er
 	return err
 }
 
-// ConservationStats implements statestore.ConservationReporter (invariant T1).
-func (s *Store) ConservationStats() statestore.ConservationStats {
+// compile-time guard: the value Queue() returns must be the conservation
+// reporter, or NewScoped's type-assert silently never registers it and the drift
+// gauge is dead on this backend.
+var _ statestore.ConservationReporter = (*queueStore)(nil)
+
+// ConservationStats delegates to the Store so the value returned from Queue()
+// (a *queueStore) satisfies statestore.ConservationReporter.
+func (q *queueStore) ConservationStats(ctx context.Context) statestore.ConservationStats {
+	return q.s.ConservationStats(ctx)
+}
+
+// ConservationStats implements statestore.ConservationReporter (invariant T1). On
+// a read failure it records a scrape error and returns a zero value: because
+// Drift() would then read 0 (the healthy value), the separate scrape-error
+// counter is what tells operators the gauge is stale rather than clean.
+func (s *Store) ConservationStats(ctx context.Context) statestore.ConservationStats {
 	var st statestore.ConservationStats
-	rows, err := s.db.QueryContext(context.Background(), `SELECT state, COUNT(*) FROM state_queue GROUP BY state`)
+	rows, err := s.db.QueryContext(ctx, `SELECT state, COUNT(*) FROM state_queue GROUP BY state`)
 	if err != nil {
+		statestore.RecordConservationScrapeError(ctx)
 		return st
 	}
 	defer func() { _ = rows.Close() }()
@@ -344,7 +370,8 @@ func (s *Store) ConservationStats() statestore.ConservationStats {
 			count int64
 		)
 		if err := rows.Scan(&state, &count); err != nil {
-			return st
+			statestore.RecordConservationScrapeError(ctx)
+			return statestore.ConservationStats{}
 		}
 		st.Enqueued += count
 		switch state {
@@ -357,6 +384,10 @@ func (s *Store) ConservationStats() statestore.ConservationStats {
 		case stDead:
 			st.Dead += count
 		}
+	}
+	if err := rows.Err(); err != nil {
+		statestore.RecordConservationScrapeError(ctx)
+		return statestore.ConservationStats{}
 	}
 	return st
 }

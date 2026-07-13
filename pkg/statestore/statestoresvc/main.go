@@ -29,11 +29,6 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 )
 
-// maxBodyBytes caps request bodies the HMAC verifier buffers. A KV value is
-// capped at 256KiB (RFC-0023); base64 + the JSON envelope inflate that, so 4MiB
-// leaves generous headroom.
-const maxBodyBytes = 4 << 20
-
 // Options configures Start. The listener is either pre-bound by the caller
 // (Listener — e.g. a test harness binding 127.0.0.1:0) or bound from Port.
 type Options struct {
@@ -64,6 +59,9 @@ func Start(ctx context.Context, _ crd.ClientGeneratorInterface, logger logr.Logg
 			return fmt.Errorf("statestore: opening embedded store: %w", err)
 		}
 		caps = opened
+		// Close the store we own on shutdown so SQLite checkpoints its WAL; an
+		// injected caps belongs to the caller.
+		defer func() { _ = caps.Close() }()
 	}
 
 	handler := httpapi.NewHandler(caps)
@@ -76,7 +74,7 @@ func Start(ctx context.Context, _ crd.ClientGeneratorInterface, logger logr.Logg
 	if len(master) > 0 {
 		verifier := hmacauth.ServiceVerifier(master, masterOld, hmacauth.ServiceStatestore, hmacauth.VerifierOpts{
 			SkewSec:      60,
-			MaxBodyBytes: maxBodyBytes,
+			MaxBodyBytes: httpapi.MaxRequestBytes,
 			Bypass:       []string{httpapi.PathHealthz, httpapi.PathReadyz},
 			Logger:       logger,
 		})

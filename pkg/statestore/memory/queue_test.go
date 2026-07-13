@@ -167,7 +167,7 @@ func TestMemoryQueue_T1_Conservation(t *testing.T) {
 	require.NoError(t, q.Kill(ctx, l[1].Receipt, "boom"))
 	// l[2] stays leased; two remain queued.
 
-	st := s.ConservationStats()
+	st := s.ConservationStats(t.Context())
 	assert.EqualValues(t, 5, st.Enqueued)
 	assert.EqualValues(t, 5, st.Queued+st.Leased+st.Acked+st.Dead)
 	assert.Zero(t, st.Enqueued-(st.Queued+st.Leased+st.Acked+st.Dead), "conservation drift must be zero")
@@ -198,7 +198,7 @@ func TestMemoryQueue_ExhaustedByExpiry_DeadLettered(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, dl, 1)
 		require.Equal(t, id, dl[0].ID)
-		require.Zero(t, s.ConservationStats().Leased, "nothing stranded in leased")
+		require.Zero(t, s.ConservationStats(t.Context()).Leased, "nothing stranded in leased")
 	})
 }
 
@@ -229,7 +229,7 @@ func TestMemoryQueue_DedupCollapse(t *testing.T) {
 	id2, err := q.Enqueue(ctx, qn, statestore.Message{Body: []byte("m2")}, statestore.EnqueueOptions{DedupKey: "k"})
 	require.NoError(t, err)
 	require.Equal(t, id1, id2, "same dedup key collapses to the same message")
-	require.EqualValues(t, 1, s.ConservationStats().Enqueued)
+	require.EqualValues(t, 1, s.ConservationStats(t.Context()).Enqueued)
 }
 
 func TestMemoryQueue_NackRequeueBackoff(t *testing.T) {

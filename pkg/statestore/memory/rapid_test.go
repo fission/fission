@@ -113,7 +113,7 @@ func TestMemoryQueue_Invariants_Rapid(t *testing.T) {
 					held = held[1:]
 				}
 			}
-			require.Zero(t, s.ConservationStats().Drift(), "T1: conservation drift must stay zero") // T1
+			require.Zero(t, s.ConservationStats(ctx).Drift(), "T1: conservation drift must stay zero") // T1
 		}
 	})
 }

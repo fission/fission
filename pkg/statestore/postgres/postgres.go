@@ -37,6 +37,7 @@ var dialect = sqlstore.Dialect{
 	BlobType:   "BYTEA",
 	IntType:    "BIGINT",
 	LockClause: " FOR UPDATE SKIP LOCKED",
+	Collate:    ` COLLATE "C"`,
 	AdvisoryLock: func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", migrationLockKey)
 		return err

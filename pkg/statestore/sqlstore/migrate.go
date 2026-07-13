@@ -77,23 +77,26 @@ func (d Dialect) migrations() []migration {
 // advisory lock serializes concurrent starters; on SQLite the single writer
 // makes that unnecessary.
 func (s *Store) migrate(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, fmt.Sprintf(
-		`CREATE TABLE IF NOT EXISTS statestore_migrations (version %s NOT NULL PRIMARY KEY, applied_at %s NOT NULL)`,
-		s.dialect.IntType, s.dialect.IntType,
-	)); err != nil {
-		return err
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Take the advisory lock first so concurrent starters serialize before any
+	// DDL — including the bookkeeping table's own CREATE (Postgres CREATE TABLE IF
+	// NOT EXISTS is not atomic against a concurrent CREATE).
 	if s.dialect.AdvisoryLock != nil {
 		if err := s.dialect.AdvisoryLock(ctx, tx); err != nil {
 			return err
 		}
+	}
+
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS statestore_migrations (version %s NOT NULL PRIMARY KEY, applied_at %s NOT NULL)`,
+		s.dialect.IntType, s.dialect.IntType,
+	)); err != nil {
+		return err
 	}
 
 	for _, m := range s.dialect.migrations() {

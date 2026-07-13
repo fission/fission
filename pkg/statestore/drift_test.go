@@ -5,6 +5,7 @@
 package statestore
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,7 +13,7 @@ import (
 
 type fakeReporter struct{ stats ConservationStats }
 
-func (f fakeReporter) ConservationStats() ConservationStats { return f.stats }
+func (f fakeReporter) ConservationStats(context.Context) ConservationStats { return f.stats }
 
 // The conservation gauge must actually detect a nonzero drift — the memory
 // driver derives Enqueued and the state counts from one loop so its drift is 0
@@ -24,13 +25,14 @@ func TestSumConservationDriftDetectsImbalance(t *testing.T) {
 		Enqueued: 5, Queued: 1, Leased: 1, Acked: 1, Dead: 1, // drift = 5 - 4 = 1
 	}})
 	t.Cleanup(dereg)
-	require.GreaterOrEqual(t, sumConservationDrift(), int64(1))
+	require.GreaterOrEqual(t, sumConservationDrift(context.Background()), int64(1))
 }
 
 func TestRegisterConservationReporterDeregisters(t *testing.T) {
-	before := sumConservationDrift()
+	ctx := context.Background()
+	before := sumConservationDrift(ctx)
 	dereg := registerConservationReporter(fakeReporter{ConservationStats{Enqueued: 3}}) // drift = 3
-	require.Equal(t, before+3, sumConservationDrift())
+	require.Equal(t, before+3, sumConservationDrift(ctx))
 	dereg()
-	require.Equal(t, before, sumConservationDrift(), "deregister removes the reporter")
+	require.Equal(t, before, sumConservationDrift(ctx), "deregister removes the reporter")
 }

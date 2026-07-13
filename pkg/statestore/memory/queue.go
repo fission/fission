@@ -299,10 +299,15 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 	return nil
 }
 
+// compile-time guard: the memory Store is the conservation reporter it returns
+// from Queue(), so the drift gauge actually observes it.
+var _ statestore.ConservationReporter = (*Store)(nil)
+
 // ConservationStats is the reporter the metrics layer reads for the conservation
 // drift gauge (invariant T1): every enqueued message is in exactly one state, so
-// Enqueued == Queued + Leased + Acked + Dead by construction.
-func (s *Store) ConservationStats() statestore.ConservationStats {
+// Enqueued == Queued + Leased + Acked + Dead by construction. The context is
+// unused (in-memory read).
+func (s *Store) ConservationStats(context.Context) statestore.ConservationStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var st statestore.ConservationStats

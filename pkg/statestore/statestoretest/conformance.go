@@ -9,6 +9,7 @@
 package statestoretest
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -124,6 +125,40 @@ func runKV(t *testing.T, newCaps Factory) {
 		require.NoError(t, err)
 		require.Equal(t, []string{"a3"}, p2.Keys)
 		require.Empty(t, p2.Next)
+	})
+
+	t.Run("ListByteExact", func(t *testing.T) {
+		// The prefix match must be case-sensitive and ordering byte-exact, so the
+		// SQL drivers match the memory driver regardless of DB locale / LIKE
+		// case-folding.
+		kv := kvOrSkip(t, newCaps)
+		ctx := t.Context()
+		for _, k := range []string{"Ax", "aa", "az", "b"} {
+			require.NoError(t, kv.Set(ctx, confScope, k, []byte("v"), statestore.SetOptions{}))
+		}
+		p, err := kv.List(ctx, confScope, "a", statestore.Page{})
+		require.NoError(t, err)
+		require.Equal(t, []string{"aa", "az"}, p.Keys, "prefix is case-sensitive; 'Ax' excluded")
+
+		all, err := kv.List(ctx, confScope, "", statestore.Page{})
+		require.NoError(t, err)
+		// ASCII byte order: uppercase 'A' (0x41) sorts before lowercase.
+		require.Equal(t, []string{"Ax", "aa", "az", "b"}, all.Keys, "ordering is byte-exact")
+	})
+
+	t.Run("ListUnboundedWhenNoLimit", func(t *testing.T) {
+		// limit <= 0 returns everything (parity with the memory driver), so a SQL
+		// driver's default page cap can never silently truncate.
+		kv := kvOrSkip(t, newCaps)
+		ctx := t.Context()
+		const n = 1200 // more than the old 1000 SQL cap
+		for i := range n {
+			require.NoError(t, kv.Set(ctx, confScope, fmt.Sprintf("k%05d", i), []byte("v"), statestore.SetOptions{}))
+		}
+		p, err := kv.List(ctx, confScope, "k", statestore.Page{})
+		require.NoError(t, err)
+		require.Len(t, p.Keys, n)
+		require.Empty(t, p.Next)
 	})
 }
 

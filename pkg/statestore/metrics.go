@@ -30,7 +30,18 @@ var (
 		"fission_statestore_quota_rejections_total",
 		"Writes rejected by a scope quota, by reason.",
 	)
+	conservationScrapeErrorsTotal = metrics.Int64Counter(
+		"fission_statestore_conservation_scrape_errors_total",
+		"Failures reading a driver's conservation stats — a nonzero value means the drift gauge below is stale (read 0 does not imply healthy).",
+	)
 )
+
+// RecordConservationScrapeError marks that a driver could not read its
+// conservation accounting, so a failed read is visible instead of masquerading
+// as a healthy drift of zero.
+func RecordConservationScrapeError(ctx context.Context) {
+	conservationScrapeErrorsTotal.Add(ctx, 1)
+}
 
 // reporters is the set of live Queue drivers whose message accounting feeds the
 // conservation drift gauge. A single observable callback sums over it, so N
@@ -61,12 +72,12 @@ func registerConservationReporter(r ConservationReporter) (deregister func()) {
 	}
 }
 
-func sumConservationDrift() int64 {
+func sumConservationDrift(ctx context.Context) int64 {
 	reportersMu.Lock()
 	defer reportersMu.Unlock()
 	var drift int64
 	for _, r := range reporters {
-		drift += r.ConservationStats().Drift()
+		drift += r.ConservationStats(ctx).Drift()
 	}
 	return drift
 }
@@ -76,8 +87,8 @@ func sumConservationDrift() int64 {
 var _ = metrics.Int64ObservableGauge(
 	"fission_statestore_conservation_drift",
 	"Queue conservation drift (enqueued - inflight - acked - dead); must be zero.",
-	func(_ context.Context, o metric.Int64Observer) error {
-		o.Observe(sumConservationDrift())
+	func(ctx context.Context, o metric.Int64Observer) error {
+		o.Observe(sumConservationDrift(ctx))
 		return nil
 	},
 )

@@ -31,6 +31,11 @@ type Dialect struct {
 	// LockClause is appended to the lease SELECT to skip contended rows
 	// ("FOR UPDATE SKIP LOCKED" on Postgres; empty on single-writer SQLite).
 	LockClause string
+	// Collate is appended to key/id comparisons and ORDER BY so ordering and
+	// prefix cursors are byte-exact (matching the memory driver) regardless of the
+	// database's locale: ` COLLATE "C"` on Postgres, empty on SQLite (whose default
+	// BINARY collation is already byte order).
+	Collate string
 	// AdvisoryLock, if non-nil, is run before migrations to serialize concurrent
 	// starters (Postgres pg_advisory_xact_lock); nil on single-writer SQLite.
 	AdvisoryLock func(ctx context.Context, tx *sql.Tx) error
