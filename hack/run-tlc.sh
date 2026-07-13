@@ -36,9 +36,14 @@ else
   fi
 fi
 
-# tlc runs one config; returns non-zero on an invariant violation or error.
+# Copy the specs into the work dir and run TLC there, so its output (states/,
+# error-trace *_TTrace_* files) never lands in the tracked docs/rfc/specs/.
+cp "${SPECS_DIR}"/*.tla "${SPECS_DIR}"/*.cfg "${WORK_DIR}/"
+
+# tlc runs one config from the isolated work dir; returns non-zero on an
+# invariant violation or error.
 tlc() {
-  java -XX:+UseParallelGC -jar "${JAR}" -deadlock -config "${SPECS_DIR}/$1" "${SPECS_DIR}/$2"
+  ( cd "${WORK_DIR}" && java -XX:+UseParallelGC -jar "${JAR}" -deadlock -config "$1" "$2" )
 }
 
 fail=0
