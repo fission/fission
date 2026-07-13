@@ -86,22 +86,36 @@ func (s *Store) Enqueue(_ context.Context, queue string, msg statestore.Message,
 	return m.id, nil
 }
 
-// leasable reports whether m can be (re-)leased now, and whether it was a lease
-// that had expired (so the caller can count the expiration).
-func (m *qmsg) leasable(now time.Time, maxAttempts int) (ok, expired bool) {
-	if m.attempts >= maxAttempts {
-		return false, false
+// reapExpired processes leases whose visibility timeout has passed. A message
+// whose attempt budget is spent (every delivery expired without a settle — e.g.
+// a repeatedly-crashing worker) is dead-lettered, matching SQS maxReceiveCount
+// semantics; any other expired lease is returned to the queue for re-lease. This
+// is what stops an exhausted-by-expiry message from being stranded, and it
+// mirrors queue.tla's Expire action. Returns the number of expirations observed.
+// Caller holds s.mu.
+func (q *queueState) reapExpired(now time.Time, maxAttempts int) int64 {
+	var expirations int64
+	for _, m := range q.msgs {
+		if m.state != qLeased || now.Before(m.expiry) {
+			continue
+		}
+		expirations++
+		if m.attempts >= maxAttempts {
+			m.state = qDead
+			m.reason = "retries exhausted (lease expired)"
+			m.diedAt = now
+			m.dedupKey = ""
+		} else {
+			m.state = qQueued
+			m.visibleAt = now
+		}
 	}
-	switch m.state {
-	case qQueued:
-		return !now.Before(m.visibleAt), false
-	case qLeased:
-		// A lease past its expiry becomes leasable again; the old delivery is
-		// now stale (its receipt's epoch will no longer match).
-		return !now.Before(m.expiry), true
-	default:
-		return false, false
-	}
+	return expirations
+}
+
+// leasable reports whether a queued message is currently visible for lease.
+func (m *qmsg) leasable(now time.Time, maxAttempts int) bool {
+	return m.state == qQueued && !now.Before(m.visibleAt) && m.attempts < maxAttempts
 }
 
 // Lease implements statestore.Queue: up to n currently-visible messages, each
@@ -114,17 +128,14 @@ func (s *Store) Lease(_ context.Context, queue string, n int, leaseFor time.Dura
 	}
 	now := time.Now()
 	q := s.queue(queue)
+	q.leaseExpirations += q.reapExpired(now, s.maxAttempts)
 	var out []statestore.LeasedMessage
 	for _, m := range q.msgs {
 		if len(out) >= n {
 			break
 		}
-		ok, expired := m.leasable(now, s.maxAttempts)
-		if !ok {
+		if !m.leasable(now, s.maxAttempts) {
 			continue
-		}
-		if expired {
-			q.leaseExpirations++
 		}
 		m.state = qLeased
 		m.epoch++
@@ -238,6 +249,9 @@ func (s *Store) DeadLetters(_ context.Context, queue string, page statestore.Pag
 		return nil, statestore.ErrClosed
 	}
 	q := s.queue(queue)
+	// Surface messages exhausted purely by lease expiry even if no Lease call has
+	// run since, so DeadLetters reflects the true dead set.
+	q.leaseExpirations += q.reapExpired(time.Now(), s.maxAttempts)
 	var dead []statestore.DeadMessage
 	for _, m := range q.msgs {
 		if m.state != qDead || (page.Token != "" && m.id <= page.Token) {

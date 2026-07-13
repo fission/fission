@@ -4,10 +4,16 @@
 (* by RFC-0024 async invocation.                                           *)
 (*                                                                         *)
 (* Models: enqueue-at-init, lease with visibility timeout, lease expiry    *)
-(* and re-lease, settle (ack on success / nack-or-kill on failure), and    *)
-(* the *lease epoch* guard on settles.  Dispatchers may hold a delivery    *)
-(* past their lease (slow worker / stale process) — the guard is what      *)
-(* stops a stale settle from corrupting a newer delivery.                  *)
+(* and re-lease, dead-lettering on the retry path (nack-at-budget and       *)
+(* expiry-at-budget, SQS maxReceiveCount), and the *lease epoch* guard on   *)
+(* settles.  Dispatchers may hold a delivery past their lease (slow worker  *)
+(* / stale process) — the guard is what stops a stale settle from           *)
+(* corrupting a newer delivery.                                            *)
+(*                                                                         *)
+(* NOT modeled: the driver's Kill(receipt) — a permanent-failure escape    *)
+(* hatch (RFC-0024's 4xx path) that dead-letters regardless of attempts.   *)
+(* It sits outside the retry protocol, so DeadImpliesExhausted (which holds *)
+(* for nack/expiry dead-lettering here) does not constrain it by design.    *)
 (*                                                                         *)
 (* Run with EpochGuard = TRUE  : all invariants hold (the design).         *)
 (* Run with EpochGuard = FALSE : TLC finds the stale-settle trace — a      *)
@@ -89,15 +95,28 @@ Lease(d, m) ==
   /\ inflight' = inflight \cup {<<d, m, epoch[m] + 1>>}
   /\ UNCHANGED <<visibleAt, settles, now>>
 
-(* Visibility timeout: the row becomes leasable again.  The old delivery *)
-(* stays inflight — that is the slow/stale worker this spec is about.    *)
+(* Visibility timeout.  A message whose attempt budget is spent (every      *)
+(* delivery expired without a settle — e.g. a repeatedly-crashing worker)   *)
+(* is dead-lettered here, matching SQS maxReceiveCount semantics, so it is   *)
+(* never stranded.  The epoch is bumped on that transition so a still-       *)
+(* inflight stale delivery no longer matches the current epoch, keeping      *)
+(* NoOrphanedCurrentDelivery valid.  Any other expired lease returns to      *)
+(* "queued" for re-lease; the old delivery stays inflight — the slow/stale   *)
+(* worker this spec is about.                                               *)
 Expire(m) ==
   /\ state[m] = "leased"
   /\ now >= expiry[m]
-  /\ state' = [state EXCEPT ![m] = "queued"]
-  /\ visibleAt' = [visibleAt EXCEPT ![m] = now]
-  /\ holder' = [holder EXCEPT ![m] = NoOne]
-  /\ UNCHANGED <<attempts, epoch, expiry, inflight, settles, now>>
+  /\ IF attempts[m] >= MaxAttempts
+     THEN /\ state' = [state EXCEPT ![m] = "dead"]
+          /\ settles' = [settles EXCEPT ![m] = @ + 1]
+          /\ epoch' = [epoch EXCEPT ![m] = @ + 1]
+          /\ holder' = [holder EXCEPT ![m] = NoOne]
+          /\ UNCHANGED visibleAt
+     ELSE /\ state' = [state EXCEPT ![m] = "queued"]
+          /\ visibleAt' = [visibleAt EXCEPT ![m] = now]
+          /\ holder' = [holder EXCEPT ![m] = NoOne]
+          /\ UNCHANGED <<settles, epoch>>
+  /\ UNCHANGED <<attempts, expiry, inflight, now>>
 
 (* The settle guard.  Guarded (the design): only the current lease may    *)
 (* settle.  Unguarded (the bug): any settle lands while the row exists.   *)

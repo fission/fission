@@ -173,6 +173,35 @@ func TestMemoryQueue_T1_Conservation(t *testing.T) {
 	assert.Zero(t, st.Enqueued-(st.Queued+st.Leased+st.Acked+st.Dead), "conservation drift must be zero")
 }
 
+// A message whose whole attempt budget is consumed by lease expiry (a worker
+// that keeps crashing before settling) must be dead-lettered, not stranded in
+// leased forever. This is the DLQ-completeness property RFC-0024 relies on.
+func TestMemoryQueue_ExhaustedByExpiry_DeadLettered(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := newStore()
+		s.maxAttempts = 2
+		q, err := s.Queue()
+		require.NoError(t, err)
+		ctx := t.Context()
+		id, err := q.Enqueue(ctx, qn, statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+
+		// Lease and let the lease expire, twice — the worker never settles.
+		for range s.maxAttempts {
+			l, err := q.Lease(ctx, qn, 1, time.Minute)
+			require.NoError(t, err)
+			require.Len(t, l, 1)
+			time.Sleep(2 * time.Minute) // lease expires
+		}
+
+		dl, err := q.DeadLetters(ctx, qn, statestore.Page{})
+		require.NoError(t, err)
+		require.Len(t, dl, 1)
+		require.Equal(t, id, dl[0].ID)
+		require.Zero(t, s.ConservationStats().Leased, "nothing stranded in leased")
+	})
+}
+
 func TestMemoryQueue_Delay(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		q, _ := newQueue(t)

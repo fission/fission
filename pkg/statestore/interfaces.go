@@ -59,7 +59,12 @@ type Queue interface {
 	// Nack settles a delivery as failed and requeues it after retryAfter, unless
 	// the attempt budget is spent, in which case the message is dead-lettered.
 	Nack(ctx context.Context, receipt string, retryAfter time.Duration) error
-	// Kill dead-letters a delivery immediately with reason (permanent failure).
+	// Kill dead-letters the current delivery immediately with reason. Unlike the
+	// retry path (Nack and lease expiry, which dead-letter only once the attempt
+	// budget is spent — invariant Q3), Kill is a permanent-failure escape hatch:
+	// it dead-letters regardless of remaining attempts, so RFC-0024 can drop a
+	// message on a permanent 4xx without burning retries. It is deliberately
+	// outside the retry protocol modeled in queue.tla.
 	Kill(ctx context.Context, receipt string, reason string) error
 	// DeadLetters returns a page of dead-lettered messages for queue.
 	DeadLetters(ctx context.Context, queue string, page Page) ([]DeadMessage, error)

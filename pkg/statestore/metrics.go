@@ -32,22 +32,33 @@ var (
 	)
 )
 
-// conservationReporters is the set of live Queue drivers whose message
-// accounting feeds the conservation drift gauge. A single observable callback
-// sums over it, so N scoped wrappers do not register N double-observing
-// callbacks.
+// reporters is the set of live Queue drivers whose message accounting feeds the
+// conservation drift gauge. A single observable callback sums over it, so N
+// scoped wrappers do not register N double-observing callbacks. Entries are keyed
+// by an incrementing handle so a wrapper can deregister on Close (otherwise the
+// slice — and the stores it pins — would grow unboundedly).
 var (
 	reportersMu sync.Mutex
-	reporters   []ConservationReporter
+	reporters   = map[uint64]ConservationReporter{}
+	reporterSeq uint64
 )
 
-func registerConservationReporter(r ConservationReporter) {
+// registerConservationReporter adds r and returns a function that removes it.
+// A nil reporter yields a no-op deregister.
+func registerConservationReporter(r ConservationReporter) (deregister func()) {
 	if r == nil {
-		return
+		return func() {}
 	}
 	reportersMu.Lock()
-	defer reportersMu.Unlock()
-	reporters = append(reporters, r)
+	reporterSeq++
+	id := reporterSeq
+	reporters[id] = r
+	reportersMu.Unlock()
+	return func() {
+		reportersMu.Lock()
+		delete(reporters, id)
+		reportersMu.Unlock()
+	}
 }
 
 func sumConservationDrift() int64 {

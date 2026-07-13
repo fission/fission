@@ -70,6 +70,7 @@ func scoped(t *testing.T, q statestore.Quota) (statestore.KVStore, statestore.Ca
 	inner, err := memory.New()
 	require.NoError(t, err)
 	caps := statestore.NewScoped(inner, statestore.StaticQuota(q))
+	t.Cleanup(func() { _ = caps.Close() }) // deregisters the conservation reporter
 	kv, err := caps.KV()
 	require.NoError(t, err)
 	return kv, caps

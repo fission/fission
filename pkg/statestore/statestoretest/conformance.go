@@ -206,6 +206,33 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.Equal(t, id1, id2)
 	})
 
+	t.Run("ExhaustedByExpiryDeadLettered", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			q := queueOrSkip(t, newCaps)
+			ctx := t.Context()
+			id, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+			require.NoError(t, err)
+			// Repeatedly lease and let the lease expire (never settle) until the
+			// message is dead-lettered — the attempt budget is driver-configured,
+			// so loop with a safety cap rather than assuming a count.
+			var dead []statestore.DeadMessage
+			for range 20 {
+				l, lerr := q.Lease(ctx, "cq", 1, time.Minute)
+				require.NoError(t, lerr)
+				if len(l) > 0 {
+					time.Sleep(2 * time.Minute) // let the lease expire
+				}
+				dead, err = q.DeadLetters(ctx, "cq", statestore.Page{})
+				require.NoError(t, err)
+				if len(dead) > 0 || len(l) == 0 {
+					break
+				}
+			}
+			require.Len(t, dead, 1, "a message exhausted by lease expiry must be dead-lettered, not stranded")
+			require.Equal(t, id, dead[0].ID)
+		})
+	})
+
 	t.Run("NackToDeadThenRedrive", func(t *testing.T) {
 		q := queueOrSkip(t, newCaps)
 		ctx := t.Context()
