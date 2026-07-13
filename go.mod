@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	dario.cat/mergo v1.0.2
 	github.com/IBM/sarama v1.50.3
+	github.com/anishathalye/porcupine v1.3.0
 	github.com/bep/debounce v1.2.1
 	github.com/coder/websocket v1.8.15
 	github.com/dchest/uniuri v1.2.0
@@ -63,6 +64,7 @@ require (
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
 	k8s.io/metrics v0.36.2
+	pgregory.net/rapid v1.3.0
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/gateway-api v1.5.1
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0

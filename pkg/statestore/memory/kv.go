@@ -75,15 +75,15 @@ func (s *Store) Set(_ context.Context, scope statestore.Scope, key string, val [
 	k := scopeKey(scope, key)
 	cur, exists := s.liveEntry(k, now)
 
-	switch {
-	case o.IfVersion == nil:
-		// unconditional set
-	case *o.IfVersion == 0:
+	// IfVersion is a compare-and-swap on the current version, treating an absent
+	// key as version 0. So IfVersion==0 is create-only, IfVersion==N requires the
+	// key to exist at version N, and nil skips the check entirely.
+	if o.IfVersion != nil {
+		curVersion := int64(0)
 		if exists {
-			return statestore.ErrVersionConflict // create-only
+			curVersion = cur.version
 		}
-	default: // *o.IfVersion != 0: compare-and-swap
-		if !exists || cur.version != *o.IfVersion {
+		if curVersion != *o.IfVersion {
 			return statestore.ErrVersionConflict
 		}
 	}
