@@ -100,3 +100,29 @@ type EnqueueOptions struct {
 	Delay    time.Duration
 	DedupKey string
 }
+
+// ConservationStats is a snapshot of a Queue driver's message accounting,
+// consumed by the metrics layer to compute the conservation drift gauge. By
+// invariant T1, Enqueued == Queued + Leased + Acked + Dead at all times; a
+// nonzero drift means an accounting bug in the driver.
+type ConservationStats struct {
+	Enqueued         int64
+	Queued           int64
+	Leased           int64
+	Acked            int64
+	Dead             int64
+	LeaseExpirations int64
+}
+
+// Drift is Enqueued minus the sum of the terminal and in-flight states. It must
+// be zero (invariant T1).
+func (c ConservationStats) Drift() int64 {
+	return c.Enqueued - (c.Queued + c.Leased + c.Acked + c.Dead)
+}
+
+// ConservationReporter is implemented by Queue drivers that can report their
+// message accounting for the conservation drift gauge. The metrics wrapper
+// registers a single observable-gauge callback over all live reporters.
+type ConservationReporter interface {
+	ConservationStats() ConservationStats
+}

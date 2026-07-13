@@ -26,29 +26,53 @@ func init() {
 	})
 }
 
+// defaultMaxAttempts is the queue attempt budget before a Nack dead-letters a
+// message, matching RFC-0024's default retry policy.
+const defaultMaxAttempts = 3
+
 // Store is an in-memory Capabilities implementation. One mutex guards all three
 // capabilities' state.
 type Store struct {
 	mu     sync.Mutex
 	closed bool
 
-	kv      map[kvKey]kvEntry
-	streams map[string]*streamState
-	// queues (Queue) state is added by its task.
+	kv          map[kvKey]kvEntry
+	streams     map[string]*streamState
+	queues      map[string]*queueState
+	maxAttempts int
 }
 
 // newStore returns an initialized, empty Store.
 func newStore() *Store {
 	return &Store{
-		kv:      make(map[kvKey]kvEntry),
-		streams: make(map[string]*streamState),
+		kv:          make(map[kvKey]kvEntry),
+		streams:     make(map[string]*streamState),
+		queues:      make(map[string]*queueState),
+		maxAttempts: defaultMaxAttempts,
+	}
+}
+
+// Option configures an in-memory Store.
+type Option func(*Store)
+
+// WithMaxAttempts sets the queue attempt budget (deliveries before a Nack
+// dead-letters). n <= 0 is ignored.
+func WithMaxAttempts(n int) Option {
+	return func(s *Store) {
+		if n > 0 {
+			s.maxAttempts = n
+		}
 	}
 }
 
 // New returns an in-memory Capabilities. The error return keeps the signature
 // uniform with drivers that can fail to open.
-func New() (statestore.Capabilities, error) {
-	return newStore(), nil
+func New(opts ...Option) (statestore.Capabilities, error) {
+	s := newStore()
+	for _, o := range opts {
+		o(s)
+	}
+	return s, nil
 }
 
 // KV returns the in-memory KVStore.
@@ -62,9 +86,8 @@ func (s *Store) EventLog() (statestore.EventLog, error) {
 }
 
 // Queue returns the in-memory Queue.
-// TODO(rfc-0021 task 4): return s once the Queue methods are implemented.
 func (s *Store) Queue() (statestore.Queue, error) {
-	return nil, statestore.ErrCapabilityUnavailable
+	return s, nil
 }
 
 // Ping always succeeds for the in-memory store (unless closed).
