@@ -55,7 +55,7 @@ Integration tests (`test/integration/`, Go + testify, build tag `//go:build inte
 ## Testing conventions
 
 When writing or modifying tests, follow `.claude/resources/test-writing-guidelines.md`.
-Key points: use `testify` (`require` for preconditions, `assert` for independent checks) over hand-written comparisons; use `t.Context()` instead of `context.Background()`; prefer fake clientsets over `envtest` for unit tests; table-driven subtests with `t.Parallel()`.
+Key points: use `testify` (`require` for preconditions, `assert` for independent checks) over hand-written comparisons; use `t.Context()` instead of `context.Background()`; prefer fake clientsets over `envtest` for unit tests; table-driven subtests with `t.Parallel()`; `testing/synctest` bubbles for time-dependent code (no sleeps, no clock seams); `pgregory.net/rapid` for property-based tests (never the frozen `testing/quick`); fuzz parser/verifier boundaries; crash-point enumeration and `porcupine` for concurrency/consistency claims.
 
 ## Dependency management
 
