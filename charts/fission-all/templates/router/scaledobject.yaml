@@ -1,0 +1,58 @@
+{{- if .Values.router.keda.enabled }}
+{{- /*
+RFC-0024 async-invocation autoscaling for the router (opt-in). KEDA scales the
+router Deployment on the statestore async queue backlog via the postgresql scaler.
+Render gates below fail fast on an unsupported combination.
+*/ -}}
+{{- if not (dig "enabled" false (.Values.asyncInvocation | default dict)) }}
+{{ required "router.keda.enabled requires asyncInvocation.enabled." nil }}
+{{- end }}
+{{- if ne .Values.statestore.mode "external" }}
+{{ required "router.keda.enabled requires statestore.mode=external (the postgresql scaler cannot reach an embedded SQLite store)." nil }}
+{{- end }}
+{{- if .Values.router.autoscaling.enabled }}
+{{ required "router.keda.enabled conflicts with router.autoscaling.enabled — KEDA manages its own HPA on the router; disable router.autoscaling." nil }}
+{{- end }}
+{{- $secret := .Values.statestore.external.existingSecret | default "statestore-postgres" }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: router-async-scaler
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: {{ $secret }}
+      key: dsn
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: router-async
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: router
+    application: fission-router
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: router
+  minReplicaCount: {{ .Values.router.keda.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.router.keda.maxReplicas | default 10 }}
+  pollingInterval: {{ .Values.router.keda.pollingInterval | default 15 }}
+  cooldownPeriod: {{ .Values.router.keda.cooldownPeriod | default 120 }}
+  triggers:
+    - type: postgresql
+      metadata:
+        # Scale toward ceil(visible_backlog / targetQueryValue). The query counts
+        # visible (not yet leased, past their visible_at) messages on the single
+        # global async queue; visible_at is stored as bigint nanoseconds.
+        targetQueryValue: "{{ .Values.router.keda.targetBacklogPerReplica | default 50 }}"
+        query: "SELECT COUNT(*) FROM state_queue WHERE queue = 'asyncinv' AND state = 'queued' AND visible_at <= (extract(epoch from now()) * 1000000000)::bigint"
+      authenticationRef:
+        name: router-async-scaler
+{{- end }}

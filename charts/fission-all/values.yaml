@@ -396,6 +396,23 @@ router:
     minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 80
+  ## keda (opt-in) scales the router on the RFC-0024 async-invocation backlog via a
+  ## KEDA ScaledObject using the postgresql scaler on the statestore queue depth.
+  ## Requires KEDA installed, asyncInvocation.enabled, and statestore.mode=external
+  ## (the postgresql scaler cannot reach an embedded SQLite store). It is mutually
+  ## exclusive with router.autoscaling (KEDA manages its own HPA on the router).
+  ## The Prometheus-scaler variant (mode-agnostic, needs an external Prometheus +
+  ## the router ServiceMonitor) is a documented follow-up.
+  ##
+  keda:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    ## Desired visible async backlog per router replica; replicas scale toward
+    ## ceil(backlog / targetBacklogPerReplica).
+    targetBacklogPerReplica: 50
+    pollingInterval: 15
+    cooldownPeriod: 120
   ## router priorityClassName
   ## Ref. https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
   ## Recommended to use system-cluster-critical for router pods.
