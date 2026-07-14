@@ -75,6 +75,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 		ht.Spec.KeepPrefix = input.Bool(flagkey.HtKeepPrefix)
 	}
 
+	if input.IsSet(flagkey.HtInvocationMode) {
+		ht.Spec.InvocationMode = input.String(flagkey.HtInvocationMode)
+	}
+
 	methods := input.StringSlice(flagkey.HtMethod)
 	if len(methods) > 0 {
 		for _, method := range methods {

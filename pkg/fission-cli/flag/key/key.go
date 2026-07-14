@@ -104,6 +104,7 @@ const (
 
 	HtName              = resourceName
 	HtMethod            = "method"
+	HtInvocationMode    = "invocation-mode"
 	HtUrl               = "url"
 	HtHost              = "host"
 	HtIngress           = "createingress"

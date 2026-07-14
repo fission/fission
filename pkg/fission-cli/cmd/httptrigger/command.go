@@ -22,7 +22,7 @@ func Commands() *cobra.Command {
 			flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath, flag.HtRouteAnnotation,
 			flag.HtRouteTLS, flag.HtGateway,
 			flag.HtFnWeight, flag.HtHost, flag.SpecSave, flag.SpecDry,
-			flag.HtPrefix, flag.HtKeepPrefix},
+			flag.HtPrefix, flag.HtKeepPrefix, flag.HtInvocationMode},
 	})
 
 	getCmd := wrapper.SubCommand(&cobra.Command{
@@ -44,7 +44,7 @@ func Commands() *cobra.Command {
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
 			flag.HtIngressTLS, flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath,
 			flag.HtRouteAnnotation, flag.HtRouteTLS, flag.HtGateway,
-			flag.HtFnWeight, flag.HtHost, flag.HtPrefix, flag.HtKeepPrefix},
+			flag.HtFnWeight, flag.HtHost, flag.HtPrefix, flag.HtKeepPrefix, flag.HtInvocationMode},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
