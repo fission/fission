@@ -94,6 +94,15 @@ spec:
         - podSelector:
             matchLabels:
               svc: mcp
+        {{- if .Values.asyncInvocation.enabled }}
+        # RFC-0024: the in-router async dispatcher POSTs deliveries to
+        # svc/router-internal, which may land on a DIFFERENT router replica —
+        # so the router's own svc label must be allowed on the internal port,
+        # else cross-replica delivery is silently dropped in CI.
+        - podSelector:
+            matchLabels:
+              svc: router
+        {{- end }}
       ports:
         - port: {{ include "fission.routerInternalPort" . }}
           protocol: TCP

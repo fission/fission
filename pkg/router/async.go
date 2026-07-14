@@ -16,9 +16,11 @@ import (
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
 
-	// Register the statestore HTTP client driver so Start can Open(driver=client)
-	// to reach the embedded statestore service for async invocation.
+	// Register the statestore drivers the router opens for async invocation: the
+	// HTTP client (embedded statestore mode → svc/statestore) and Postgres
+	// (external mode → the DB directly). STATESTORE_DRIVER selects at runtime.
 	_ "github.com/fission/fission/pkg/statestore/client"
+	_ "github.com/fission/fission/pkg/statestore/postgres"
 )
 
 // asyncInvoker is the router's RFC-0024 async-enqueue entry point, wired into the

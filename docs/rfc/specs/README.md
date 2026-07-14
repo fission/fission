@@ -8,6 +8,12 @@ The specs are the design source of truth for these protocols: change the protoco
 | `queue.tla` | Queue lease/settle lifecycle: visibility timeout, re-lease, epoch-guarded ack/nack/kill | RFC-0021 `Queue`, RFC-0024 dispatcher |
 | `workflowfold.tla` | CAS-append event-log fold: racing reconcilers, crash/replan, retries, cancel, terminal stability | RFC-0021 `EventLog`, RFC-0022 engine |
 
+## RFC-0024 async dispatcher
+
+The dispatcher's settle matrix maps onto `queue.tla` directly: a 2xx delivery is `Ack`, a permanent 4xx is `Kill`, and a 5xx / timeout / transport error is `Nack` (which the model dead-letters once the attempt budget is spent).
+Its invariants A2/A3/A4 are the model's I1/I2/I3 — settled-exactly-once, current-lease-decides (the epoch guard), and honest dead-letter — so the dispatcher inherits them rather than re-proving them.
+MaxAge expiry is an immediate `Kill`, which the model already covers; the age clock itself is not simulated (it is checked in the `testing/synctest` layer instead, per the simplifications below).
+
 ## Running TLC
 
 Requires Java 11+ and `tla2tools.jar` from the official release (https://github.com/tlaplus/tlaplus/releases).

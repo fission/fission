@@ -198,6 +198,59 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 	})
 }
 
+// npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
+// given svc label via a podSelector.
+func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
+	spec, _ := doc["spec"].(map[string]any)
+	ingress, _ := spec["ingress"].([]any)
+	for _, r := range ingress {
+		rule, _ := r.(map[string]any)
+		froms, _ := rule["from"].([]any)
+		for _, f := range froms {
+			sel, _ := f.(map[string]any)["podSelector"].(map[string]any)
+			ml, _ := sel["matchLabels"].(map[string]any)
+			if ml["svc"] == svcLabel {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// TestAsyncInvocationChart checks the RFC-0024 chart wiring: the router gains the
+// async env and the internal-listener NetworkPolicy admits svc: router (the
+// dispatcher's cross-replica delivery) only when asyncInvocation.enabled, and
+// neither renders by default.
+func TestAsyncInvocationChart(t *testing.T) {
+	t.Run("enabled: router env + svc:router NetworkPolicy row", func(t *testing.T) {
+		docs := render(t,
+			"--set", "asyncInvocation.enabled=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+			"--set", "networkPolicy.enabled=true")
+
+		env := containerEnv(t, find(docs, "Deployment", svcinfo.SvcRouter))
+		assert.Equal(t, "true", env["ASYNC_INVOCATION_ENABLED"])
+		assert.Equal(t, "client", env["STATESTORE_DRIVER"])
+		assert.Contains(t, env["STATESTORE_DSN"], svcinfo.SvcStatestore)
+		assert.Equal(t, svcinfo.RouterInternalURL("fission"), env["ROUTER_INTERNAL_URL"])
+
+		np := find(docs, "NetworkPolicy", "router-allow-ingress")
+		require.NotNil(t, np, "router NetworkPolicy must render with networkPolicy.enabled")
+		assert.True(t, npAllowsFromSvc(np, svcinfo.SvcRouter),
+			"async delivery is cross-replica; the internal-listener allowlist must admit svc: router")
+	})
+
+	t.Run("disabled by default: no async env, no svc:router row", func(t *testing.T) {
+		docs := render(t, "--set", "networkPolicy.enabled=true")
+		env := containerEnv(t, find(docs, "Deployment", svcinfo.SvcRouter))
+		assert.NotContains(t, env, "ASYNC_INVOCATION_ENABLED")
+		np := find(docs, "NetworkPolicy", "router-allow-ingress")
+		require.NotNil(t, np)
+		assert.False(t, npAllowsFromSvc(np, svcinfo.SvcRouter),
+			"svc: router must not be in the allowlist unless async is enabled")
+	})
+}
+
 // TestStatestoreChartPorts is the drift check for the embedded statestore head:
 // its --statestorePort arg and Service port must equal svcinfo.PortStatestore
 // (RFC-0021). It renders with the store enabled, since it is off by default.
