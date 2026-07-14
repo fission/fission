@@ -45,8 +45,8 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 		return
 	}
 	p := asyncinvoke.Params{
-		Namespace:       fn.ObjectMeta.Namespace,
-		Function:        fn.ObjectMeta.Name,
+		Namespace:       fn.Namespace,
+		Function:        fn.Name,
 		FunctionTimeout: fn.Spec.FunctionTimeout,
 		DedupKey:        r.Header.Get(asyncinvoke.HeaderDedupKey),
 		Depth:           parseDepthHeader(r.Header.Get(asyncinvoke.HeaderInvocationDepth)),
