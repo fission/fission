@@ -197,3 +197,16 @@ func (c *Client) DeadLetters(ctx context.Context, queue string, page statestore.
 func (c *Client) Redrive(ctx context.Context, queue string, ids []string) error {
 	return c.post(ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, nil)
 }
+
+func (c *Client) Stats(ctx context.Context, queue string) (statestore.QueueStats, error) {
+	var resp httpapi.QueueStatsResp
+	if err := c.post(ctx, httpapi.PathQueueStats, httpapi.QueueStatsReq{Queue: queue}, &resp); err != nil {
+		return statestore.QueueStats{}, err
+	}
+	return statestore.QueueStats{
+		Visible:          resp.Visible,
+		Leased:           resp.Leased,
+		Dead:             resp.Dead,
+		OldestVisibleAge: time.Duration(resp.OldestVisibleAgeNanos),
+	}, nil
+}

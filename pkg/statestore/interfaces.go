@@ -71,6 +71,10 @@ type Queue interface {
 	// Redrive re-enqueues dead-lettered messages by durable id with attempts
 	// reset.
 	Redrive(ctx context.Context, queue string, ids []string) error
+	// Stats returns a point-in-time snapshot of queue's backlog (visible / leased
+	// / dead counts and the oldest visible message's age), for the RFC-0024 async
+	// depth/oldest-age metrics and DLQ dashboards. It does not reap expired leases.
+	Stats(ctx context.Context, queue string) (QueueStats, error)
 }
 
 // Capabilities is the driver set a component opens once at start. A consumer asks

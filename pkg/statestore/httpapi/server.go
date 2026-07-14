@@ -34,6 +34,7 @@ func NewHandler(caps statestore.Capabilities) http.Handler {
 	mux.HandleFunc("POST "+PathQueueKill, h.queueKill)
 	mux.HandleFunc("POST "+PathQueueDeadLetter, h.queueDeadLetters)
 	mux.HandleFunc("POST "+PathQueueRedrive, h.queueRedrive)
+	mux.HandleFunc("POST "+PathQueueStats, h.queueStats)
 	return mux
 }
 
@@ -339,4 +340,26 @@ func (h *handler) queueRedrive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *handler) queueStats(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[QueueStatsReq](w, r)
+	if !ok {
+		return
+	}
+	q, ok := h.q(w)
+	if !ok {
+		return
+	}
+	st, err := q.Stats(r.Context(), req.Queue)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, QueueStatsResp{
+		Visible:               st.Visible,
+		Leased:                st.Leased,
+		Dead:                  st.Dead,
+		OldestVisibleAgeNanos: st.OldestVisibleAge.Nanoseconds(),
+	})
 }
