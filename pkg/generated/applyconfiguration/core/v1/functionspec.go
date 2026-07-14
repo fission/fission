@@ -59,6 +59,12 @@ type FunctionSpecApplyConfiguration struct {
 	// the on switch (like Streaming): nil (the default) means the function is
 	// never advertised as a tool. Additive and backward compatible.
 	Tool *ToolConfigApplyConfiguration `json:"tool,omitempty"`
+	// Invocation, when non-nil, tunes RFC-0024 asynchronous invocation
+	// (X-Fission-Invoke-Mode: async) for this function: the durable retry policy
+	// and the maximum event age before an undelivered invocation is
+	// dead-lettered. A function without it still accepts async mode with platform
+	// defaults; this field only tunes them. Additive and backward compatible.
+	Invocation *InvocationConfigApplyConfiguration `json:"invocation,omitempty"`
 	// Maximum number of pods to be specialized which will serve requests
 	// This is optional. If not specified default value will be taken as 500
 	Concurrency *int `json:"concurrency,omitempty"`
@@ -169,6 +175,14 @@ func (b *FunctionSpecApplyConfiguration) WithStreaming(value *StreamingConfigApp
 // If called multiple times, the Tool field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithTool(value *ToolConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
 	b.Tool = value
+	return b
+}
+
+// WithInvocation sets the Invocation field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Invocation field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithInvocation(value *InvocationConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.Invocation = value
 	return b
 }
 
