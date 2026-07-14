@@ -91,7 +91,7 @@ jobs:
       versions: ${{ steps.versions.outputs.list }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
       - id: versions
@@ -127,7 +127,7 @@ jobs:
         fission_version: ${{ fromJSON(needs.setup.outputs.versions) }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
 
@@ -388,7 +388,7 @@ jobs:
       # one direction per file, one series per fission version.
       - name: Publish latency trend (lower is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
+        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           name: "Fission latency (${{ matrix.fission_version }})"
           tool: customSmallerIsBetter
@@ -403,7 +403,7 @@ jobs:
 
       - name: Publish throughput trend (higher is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@fd31771ce86cc65eab85653da103f71ab1b4479c # v1.9.0
+        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           name: "Fission throughput (${{ matrix.fission_version }})"
           tool: customBiggerIsBetter
