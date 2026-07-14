@@ -152,10 +152,12 @@ func TestAsyncInvocationDepthCapBounds(t *testing.T) {
 		return strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker)-baseline >= asyncinvoke.MaxChainDepth
 	}, 3*time.Minute, 3*time.Second)
 
-	// After it settles the count is BOUNDED — the depth cap stopped the runaway.
-	// A self-loop invoked once executes at depths 0..MaxChainDepth (the depth+1
-	// enqueue past the cap is dropped); the slack tolerates at-least-once redelivery.
-	time.Sleep(20 * time.Second)
-	got := strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker) - baseline
-	assert.LessOrEqualf(t, got, asyncinvoke.MaxChainDepth+3, "depth cap must bound the chain (got %d executions)", got)
+	// The depth cap must BOUND the chain: over a settle window the execution count
+	// must NEVER exceed the bound. require.Never fails the instant a runaway breaches
+	// it (rather than a single end-of-sleep check that could miss a late hop). A
+	// self-loop invoked once executes at depths 0..MaxChainDepth (the depth+1 enqueue
+	// past the cap is dropped); the slack tolerates at-least-once redelivery.
+	require.Neverf(t, func() bool {
+		return strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker)-baseline > asyncinvoke.MaxChainDepth+3
+	}, 20*time.Second, 2*time.Second, "depth cap must bound the chain (runaway past %d executions)", asyncinvoke.MaxChainDepth+3)
 }

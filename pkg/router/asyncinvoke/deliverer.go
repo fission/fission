@@ -94,9 +94,15 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 		return DeliveryResult{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if env.OnSuccess == nil && env.OnFailure == nil {
-		// No destination declared → the body feeds nothing; skip the up-to-64KiB
-		// capture and just drain for keep-alive.
+	// Capture the body only for the destination this outcome can actually fire: a
+	// 2xx settles to OnSuccess, any other status settles (now or on exhaustion) to
+	// OnFailure. So skip the up-to-64KiB read when the relevant destination is unset
+	// — a 2xx with only OnFailure, or a non-2xx with only OnSuccess, feeds nothing.
+	// This only ever skips a body no destination would consume (it never drops one a
+	// fire needs), and drains for keep-alive either way.
+	is2xx := resp.StatusCode >= 200 && resp.StatusCode < 300
+	needBody := (is2xx && env.OnSuccess != nil) || (!is2xx && env.OnFailure != nil)
+	if !needBody {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return DeliveryResult{StatusCode: resp.StatusCode}
 	}

@@ -92,6 +92,30 @@ func TestHTTPDelivererSkipsBodyWithoutDestination(t *testing.T) {
 	assert.False(t, res.BodyTruncated)
 }
 
+// TestHTTPDelivererCapturesOnlyFiringDestinationBody proves the capture is
+// status-aware: the body is read only for the destination this outcome fires (2xx
+// → OnSuccess, non-2xx → OnFailure), so the non-firing destination's presence does
+// not trigger a wasted read.
+func TestHTTPDelivererCapturesOnlyFiringDestinationBody(t *testing.T) {
+	t.Parallel()
+	body := func(status int, env Envelope) []byte {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, "resp")
+		}))
+		defer srv.Close()
+		env.Namespace, env.Function = "ns", "fn"
+		return NewHTTPDeliverer(srv.URL, nil, nil).Deliver(context.Background(), env, "id", 1).Body
+	}
+	onSuccess := Envelope{OnSuccess: &Destination{FunctionName: "s"}}
+	onFailure := Envelope{OnFailure: &Destination{FunctionName: "f"}}
+
+	assert.Equal(t, []byte("resp"), body(http.StatusOK, onSuccess), "2xx + OnSuccess → captured")
+	assert.Nil(t, body(http.StatusOK, onFailure), "2xx + only OnFailure → not captured (OnFailure won't fire)")
+	assert.Equal(t, []byte("resp"), body(http.StatusForbidden, onFailure), "4xx + OnFailure → captured")
+	assert.Nil(t, body(http.StatusForbidden, onSuccess), "4xx + only OnSuccess → not captured (OnSuccess won't fire)")
+}
+
 func TestHTTPDelivererDefaultNamespaceFold(t *testing.T) {
 	t.Parallel()
 	var gotPath string
