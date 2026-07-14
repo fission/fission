@@ -147,17 +147,22 @@ func TestAsyncInvocationDepthCapBounds(t *testing.T) {
 		assert.Equal(c, http.StatusAccepted, status)
 	}, 2*time.Minute, 2*time.Second)
 
-	// The chain ran several hops (destinations chained), proving the loop works.
+	// The chain runs several hops then the depth cap STOPS it: poll until the
+	// execution count has reached the cap AND stopped growing (two equal reads a
+	// tick apart ⇒ the chain settled), then assert the settled count is bounded.
+	// Waiting for convergence (rather than a fixed sleep) is both faster on a quick
+	// cluster and correct on a slow one, and the assert runs synchronously in the
+	// test goroutine — no polling closure straggles into teardown calling
+	// FunctionLogs on a cancelled context. A self-loop invoked once executes at
+	// depths 0..MaxChainDepth (the depth+1 enqueue past the cap is dropped); the
+	// slack tolerates at-least-once redelivery.
+	settled := -1
 	require.Eventually(t, func() bool {
-		return strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker)-baseline >= asyncinvoke.MaxChainDepth
+		n := strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker) - baseline
+		converged := n >= asyncinvoke.MaxChainDepth && n == settled
+		settled = n
+		return converged
 	}, 3*time.Minute, 3*time.Second)
-
-	// The depth cap must BOUND the chain: over a settle window the execution count
-	// must NEVER exceed the bound. require.Never fails the instant a runaway breaches
-	// it (rather than a single end-of-sleep check that could miss a late hop). A
-	// self-loop invoked once executes at depths 0..MaxChainDepth (the depth+1 enqueue
-	// past the cap is dropped); the slack tolerates at-least-once redelivery.
-	require.Neverf(t, func() bool {
-		return strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker)-baseline > asyncinvoke.MaxChainDepth+3
-	}, 20*time.Second, 2*time.Second, "depth cap must bound the chain (runaway past %d executions)", asyncinvoke.MaxChainDepth+3)
+	assert.LessOrEqualf(t, settled, asyncinvoke.MaxChainDepth+3,
+		"depth cap must bound the chain (got %d executions)", settled)
 }
