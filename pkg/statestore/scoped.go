@@ -225,6 +225,12 @@ func (q *meteredQueue) Redrive(ctx context.Context, queue string, ids []string) 
 	return err
 }
 
+func (q *meteredQueue) Purge(ctx context.Context, queue string) (int64, error) {
+	n, err := q.inner.Purge(ctx, queue)
+	observe(ctx, "queue", "purge", err)
+	return n, err
+}
+
 func (q *meteredQueue) Stats(ctx context.Context, queue string) (QueueStats, error) {
 	st, err := q.inner.Stats(ctx, queue)
 	observe(ctx, "queue", "stats", err)

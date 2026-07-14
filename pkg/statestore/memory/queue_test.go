@@ -173,6 +173,40 @@ func TestMemoryQueue_T1_Conservation(t *testing.T) {
 	assert.Zero(t, st.Enqueued-(st.Queued+st.Leased+st.Acked+st.Dead), "conservation drift must be zero")
 }
 
+// Purge deletes dead rows; because Enqueued is the live-row total, dropping the
+// dead rows lowers Enqueued and Dead equally, so conservation drift stays zero.
+func TestMemoryQueue_T1_ConservationAfterPurge(t *testing.T) {
+	t.Parallel()
+	q, s := newQueue(t)
+	ctx := t.Context()
+
+	for i := range 4 {
+		_, err := q.Enqueue(ctx, qn, statestore.Message{Body: []byte{byte('a' + i)}}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+	}
+	l, err := q.Lease(ctx, qn, 2, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 2)
+	require.NoError(t, q.Kill(ctx, l[0].Receipt, "boom")) // one dead
+	require.NoError(t, q.Ack(ctx, l[1].Receipt))          // one acked; two still queued
+
+	before := s.ConservationStats(ctx)
+	require.EqualValues(t, 4, before.Enqueued)
+	require.EqualValues(t, 1, before.Dead)
+	require.Zero(t, before.Drift())
+
+	n, err := q.Purge(ctx, qn)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, n)
+
+	after := s.ConservationStats(ctx)
+	assert.EqualValues(t, 3, after.Enqueued, "Enqueued drops by the purged count")
+	assert.Zero(t, after.Dead, "dead rows are gone")
+	assert.EqualValues(t, 1, after.Acked, "acked row untouched")
+	assert.EqualValues(t, 2, after.Queued, "queued rows untouched")
+	assert.Zero(t, after.Drift(), "conservation drift stays zero after purge")
+}
+
 // A message whose whole attempt budget is consumed by lease expiry (a worker
 // that keeps crashing before settling) must be dead-lettered, not stranded in
 // leased forever. This is the DLQ-completeness property RFC-0024 relies on.

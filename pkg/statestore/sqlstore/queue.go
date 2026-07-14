@@ -300,6 +300,24 @@ func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) er
 	return err
 }
 
+// Purge implements statestore.Queue: delete every dead-lettered row for queue and
+// return the count removed. Deleting only dead rows lowers the live-row total
+// (Enqueued) and Dead equally, so conservation drift stays zero (invariant T1).
+func (q *queueStore) Purge(ctx context.Context, queue string) (int64, error) {
+	res, err := q.s.exec(ctx,
+		`DELETE FROM state_queue WHERE queue = ? AND state = ?`,
+		queue, stDead,
+	)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 // Stats implements statestore.Queue: a read-only aggregate snapshot of the
 // queue's backlog. It does not reap expired leases (see statestore.QueueStats),
 // so the counts reflect stored state; the dispatcher's lease loop reaps

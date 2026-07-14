@@ -299,6 +299,30 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 	return nil
 }
 
+// Purge implements statestore.Queue: permanently drop every dead-lettered message
+// for queue, returning the count removed. Removing the dead rows lowers both the
+// live-row total (Enqueued) and Dead by the same amount, so conservation drift
+// stays zero (invariant T1).
+func (s *Store) Purge(_ context.Context, queue string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return 0, statestore.ErrClosed
+	}
+	q := s.queue(queue)
+	kept := q.msgs[:0]
+	var removed int64
+	for _, m := range q.msgs {
+		if m.state == qDead {
+			removed++
+			continue
+		}
+		kept = append(kept, m)
+	}
+	q.msgs = kept
+	return removed, nil
+}
+
 // Stats implements statestore.Queue: a read-only snapshot of the queue's backlog.
 // It does not reap expired leases (see statestore.QueueStats), and it does not
 // create the queue if absent — an unknown queue reports a zero snapshot.

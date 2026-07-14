@@ -218,6 +218,14 @@ func (c *Client) Redrive(ctx context.Context, queue string, ids []string) error 
 	return c.post(ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, nil)
 }
 
+func (c *Client) Purge(ctx context.Context, queue string) (int64, error) {
+	var resp httpapi.QueuePurgeResp
+	if err := c.post(ctx, httpapi.PathQueuePurge, httpapi.QueuePurgeReq{Queue: queue}, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Purged, nil
+}
+
 func (c *Client) Stats(ctx context.Context, queue string) (statestore.QueueStats, error) {
 	var resp httpapi.QueueStatsResp
 	if err := c.post(ctx, httpapi.PathQueueStats, httpapi.QueueStatsReq{Queue: queue}, &resp); err != nil {

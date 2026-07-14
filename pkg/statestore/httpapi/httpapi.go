@@ -40,6 +40,7 @@ const (
 	PathQueueKill       = "/v1/queue/kill"
 	PathQueueDeadLetter = "/v1/queue/deadletters"
 	PathQueueRedrive    = "/v1/queue/redrive"
+	PathQueuePurge      = "/v1/queue/purge"
 	PathQueueStats      = "/v1/queue/stats"
 )
 
@@ -201,6 +202,12 @@ type QueueDeadLettersResp struct {
 type QueueRedriveReq struct {
 	Queue string   `json:"queue"`
 	IDs   []string `json:"ids"`
+}
+type QueuePurgeReq struct {
+	Queue string `json:"queue"`
+}
+type QueuePurgeResp struct {
+	Purged int64 `json:"purged"`
 }
 type QueueStatsReq struct {
 	Queue string `json:"queue"`
