@@ -30,6 +30,9 @@ import (
 	"github.com/fission/fission/test/integration/framework"
 )
 
+// logMarker is the line the nodejs/log/log.js fixture writes on each invocation.
+const logMarker = "log test"
+
 // requireAsyncEnabled skips the test unless the router runs with async invocation
 // on (ASYNC_INVOCATION_ENABLED=true), so the suite passes on installs that leave
 // the feature off.
@@ -108,21 +111,43 @@ func TestAsyncInvocationExecutes(t *testing.T) {
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fn, Env: env, Code: code, ExecutorType: "poolmgr"})
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fn, URL: route, Method: http.MethodPost})
 
+	// Warm the function with a synchronous POST so the route is live and a pod is
+	// specialized BEFORE the async path is exercised: this keeps the async delivery
+	// off the cold-start path (whose specialization latency under a loaded CI node
+	// can otherwise exhaust the delivery retry budget and dead-letter the message)
+	// and gives a stable baseline marker count.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.Router(t).BaseURL()+route, strings.NewReader("warm"))
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := f.HTTPClient().Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Less(c, resp.StatusCode, 400, "route live and function ready")
+	}, 3*time.Minute, 2*time.Second)
+	baseline := strings.Count(ns.FunctionLogs(t, ctx, fn), logMarker)
+
+	// Async POST returns 202 + an invocation id; the dedup key collapses the
+	// route-liveness retries into a single durable invocation.
 	dedup := "async-once-" + ns.ID
 	var invID string
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		status, id := asyncPost(t, ctx, f, route, dedup)
-		assert.Equal(c, http.StatusAccepted, status) // 404 until the trigger route materializes
+		assert.Equal(c, http.StatusAccepted, status)
 		invID = id
 		assert.NotEmpty(c, id)
-	}, 3*time.Minute, 2*time.Second)
+	}, 2*time.Minute, 2*time.Second)
 	require.NotEmpty(t, invID, "202 must carry an X-Fission-Invocation-Id")
 
-	// The invocation is delivered to the function out-of-band: its marker appears
-	// in the pod logs after the enqueue.
+	// The async invocation runs the function out-of-band: the marker count grows
+	// beyond the warm-up baseline (proving the async delivery executed it, not just
+	// that the marker is present from the warm-up).
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		out := ns.FunctionLogs(t, ctx, fn)
-		assert.Contains(c, out, "log test", "async invocation must execute the function")
+		got := strings.Count(ns.FunctionLogs(t, ctx, fn), logMarker)
+		assert.Greater(c, got, baseline, "async invocation must execute the function")
 	}, 3*time.Minute, 3*time.Second)
 }
 
