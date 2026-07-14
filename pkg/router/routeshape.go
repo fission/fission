@@ -310,8 +310,4 @@ func (ts *HTTPTriggerSet) registerRouterOwnedRoutes(public *httpmux.Mux, feature
 	// Readiness: 200 only once the first mux build succeeded.
 	public.Handle("/readyz", httpsecurity.DenyAllCORS(http.HandlerFunc(ts.routerReadinessHandler))).Methods(http.MethodGet, http.MethodOptions)
 	public.Handle("/_version", httpsecurity.DenyAllCORS(http.HandlerFunc(versionHandler))).Methods(http.MethodGet, http.MethodOptions)
-
-	// RFC-0024 async DLQ admin API (JWT-gated by authMiddleware; 501 when async is
-	// disabled). Registered in both mux builders via this shared helper.
-	ts.registerAsyncDLQRoutes(public)
 }

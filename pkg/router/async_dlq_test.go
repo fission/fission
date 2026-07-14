@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
 	_ "github.com/fission/fission/pkg/statestore/memory"
@@ -176,39 +175,26 @@ func TestDLQDisabledReturns501(t *testing.T) {
 	}
 }
 
-// TestDLQRoutesRegistered asserts the four DLQ paths are registered in the built
-// public mux with the right methods (via the shared helper, so both mux builders
-// register them).
-func TestDLQRoutesRegistered(t *testing.T) {
+// TestDLQRoutesOnInternalListenerNotPublic asserts the four DLQ admin paths are
+// registered on the INTERNAL mux (where the listener-level HMAC verifier gates
+// them) and are absent from the PUBLIC mux — so an operator running with the
+// default authentication.enabled=false does not expose an unauthenticated
+// cross-namespace read/redrive/purge surface on the public router.
+func TestDLQRoutesOnInternalListenerNotPublic(t *testing.T) {
 	t.Parallel()
 	ts := newShapeTS(t, []fv1.Function{shapeFn("fn")}, nil)
-	public, _, err := ts.buildMuxes(t.Context(), nil)
+	public, internal, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)
 
-	assert.True(t, muxMatches(public, http.MethodGet, dlqPathList), "GET list registered")
-	assert.True(t, muxMatches(public, http.MethodGet, dlqPathShow), "GET show registered")
-	assert.True(t, muxMatches(public, http.MethodPost, dlqPathRedrive), "POST redrive registered")
-	assert.True(t, muxMatches(public, http.MethodPost, dlqPathPurge), "POST purge registered")
-}
-
-// TestDLQRoutesAuthGated proves the DLQ paths are NOT in authMiddleware's exemption
-// list: with auth enabled a tokenless DLQ request is rejected 401, while the
-// exempt /router-healthz probe passes through.
-func TestDLQRoutesAuthGated(t *testing.T) {
-	t.Setenv("JWT_SIGNING_KEY", "test-key")
-	featureConfig := &config.FeatureConfig{}
-	featureConfig.AuthConfig.AuthUriPath = "/auth/login"
-	gated := authMiddleware(featureConfig)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	for _, p := range []string{dlqPathList, dlqPathShow, dlqPathRedrive, dlqPathPurge} {
-		rr := httptest.NewRecorder()
-		gated.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, p, nil))
-		assert.Equalf(t, http.StatusUnauthorized, rr.Code, "%s must require a JWT", p)
+	for _, tc := range []struct {
+		method, path string
+	}{
+		{http.MethodGet, dlqPathList},
+		{http.MethodGet, dlqPathShow},
+		{http.MethodPost, dlqPathRedrive},
+		{http.MethodPost, dlqPathPurge},
+	} {
+		assert.Truef(t, muxMatches(internal, tc.method, tc.path), "%s %s must be on the internal mux", tc.method, tc.path)
+		assert.Falsef(t, muxMatches(public, tc.method, tc.path), "%s %s must NOT be on the public mux", tc.method, tc.path)
 	}
-	// The exempt probe still passes without a token.
-	rr := httptest.NewRecorder()
-	gated.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/router-healthz", nil))
-	assert.Equal(t, http.StatusOK, rr.Code, "/router-healthz stays exempt")
 }

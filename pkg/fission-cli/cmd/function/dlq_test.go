@@ -44,9 +44,9 @@ type recordedReq struct {
 	Body   string
 }
 
-// mockRouter starts an httptest.Server standing in for the router DLQ API, points
-// FISSION_ROUTER_URL at it, and records every request. handler returns the JSON
-// body per path.
+// mockRouter starts an httptest.Server standing in for the router internal DLQ API,
+// points FISSION_ROUTER_INTERNAL_URL at it, and records every request. handler
+// returns the JSON body per request.
 func mockRouter(t *testing.T, handler func(r *http.Request) (int, string)) *[]recordedReq {
 	t.Helper()
 	var got []recordedReq
@@ -61,7 +61,7 @@ func mockRouter(t *testing.T, handler func(r *http.Request) (int, string)) *[]re
 		_, _ = io.WriteString(w, resp)
 	}))
 	t.Cleanup(srv.Close)
-	t.Setenv("FISSION_ROUTER_URL", srv.URL)
+	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 	return &got
 }
 
@@ -69,7 +69,6 @@ func TestDLQCLIList(t *testing.T) {
 	got := mockRouter(t, func(*http.Request) (int, string) {
 		return http.StatusOK, `{"messages":[{"id":"asyncinv/1","namespace":"ns","function":"fn","reason":"http_4xx","attempts":3}]}`
 	})
-	t.Setenv("FISSION_AUTH_TOKEN", "tok")
 	in := fakeDLQInput{
 		s:   map[string]string{flagkey.Namespace: "ns"},
 		i:   map[string]int{flagkey.DlqLimit: 50},
@@ -82,8 +81,27 @@ func TestDLQCLIList(t *testing.T) {
 	assert.Equal(t, http.MethodGet, req.Method)
 	assert.Equal(t, dlqAPIList, req.Path)
 	assert.Contains(t, req.Query, "namespace=ns")
-	assert.Contains(t, req.Query, "limit=50")
-	assert.Equal(t, "Bearer tok", req.Auth, "the auth token is sent")
+	assert.Contains(t, req.Query, "limit=50", "per-page limit is capped to the requested max")
+}
+
+// TestDLQCLIListPagesAllResults proves list follows nextToken across pages rather
+// than showing only the first — the operator sees the whole (large) DLQ.
+func TestDLQCLIListPagesAllResults(t *testing.T) {
+	page := 0
+	got := mockRouter(t, func(*http.Request) (int, string) {
+		page++
+		if page == 1 {
+			return http.StatusOK, `{"messages":[{"id":"a"},{"id":"b"}],"nextToken":"b"}`
+		}
+		return http.StatusOK, `{"messages":[{"id":"c"}]}`
+	})
+	// max=0 (no --limit) → fetch every page.
+	msgs, more, err := (&dlqSubCommand{}).fetchDeadLetters(fakeDLQInput{}, "", 0)
+	require.NoError(t, err)
+	assert.False(t, more)
+	assert.Len(t, msgs, 3, "both pages accumulated")
+	require.Len(t, *got, 2, "followed nextToken to the second page")
+	assert.Contains(t, (*got)[1].Query, "token=b", "second page continues from nextToken")
 }
 
 func TestDLQCLIShow(t *testing.T) {

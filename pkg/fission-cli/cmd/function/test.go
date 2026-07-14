@@ -234,6 +234,12 @@ func (opts *TestSubCommand) invokeAsync(ctx context.Context, input cli.Input, m 
 				id = decoded["invocationId"]
 			}
 		}
+		if id == "" {
+			// The router always returns an id (invariant A1); an empty one means a
+			// proxy stripped the header and mangled the body — accepted, but untrackable.
+			fmt.Fprintln(os.Stderr, "warning: accepted (202) but no invocation id was returned")
+			return nil
+		}
 		fmt.Printf("Accepted (202)\ninvocationId: %s\n", id)
 		return nil
 	case http.StatusNotImplemented:

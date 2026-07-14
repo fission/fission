@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -29,14 +30,20 @@ import (
 )
 
 // RFC-0024 async dead-letter-queue admin CLI. It drives the router's DLQ admin API
-// over HTTP (util.GetRouterURL + a Bearer FISSION_AUTH_TOKEN) rather than the
-// Kubernetes clientset, because the dead-lettered state lives in the statestore
-// behind the router, not in a CRD. These are the wire paths the router registers.
+// on the INTERNAL listener (HMAC-signed with FISSION_INTERNAL_AUTH_SECRET) rather
+// than the Kubernetes clientset, because the dead-lettered state lives in the
+// statestore behind the router, not in a CRD. These are the wire paths the router
+// registers.
 const (
 	dlqAPIList    = "/v1/async/dlq/list"
 	dlqAPIShow    = "/v1/async/dlq/show"
 	dlqAPIRedrive = "/v1/async/dlq/redrive"
 	dlqAPIPurge   = "/v1/async/dlq/purge"
+
+	// dlqPageSize is the per-request page the CLI fetches while paging the list API
+	// (matches the router's max limit), so list/redrive --all see the whole DLQ,
+	// not just the first page.
+	dlqPageSize = 1000
 )
 
 type dlqMessage struct {
@@ -114,28 +121,56 @@ func (opts *dlqSubCommand) list(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	q := url.Values{}
-	if ns := input.String(flagkey.Namespace); ns != "" {
-		q.Set("namespace", ns)
-	}
-	if input.IsSet(flagkey.DlqLimit) {
-		q.Set("limit", strconv.Itoa(input.Int(flagkey.DlqLimit)))
-	}
-	var resp dlqListResp
-	if err := opts.call(input, http.MethodGet, dlqAPIList, q, nil, &resp); err != nil {
+	limit := input.Int(flagkey.DlqLimit)
+	msgs, more, err := opts.fetchDeadLetters(input, input.String(flagkey.Namespace), limit)
+	if err != nil {
 		return err
 	}
 	headers := []string{"ID", "NAMESPACE", "FUNCTION", "REASON", "ATTEMPTS", "DIED"}
 	row := func(m dlqMessage) []string {
 		return []string{m.ID, m.Namespace, m.Function, m.Reason, strconv.Itoa(m.Attempts), util.AgeOf(metav1.NewTime(m.DiedAt))}
 	}
-	if err := util.PrintObjects(format, resp.Messages, headers, row, nil, func(dlqMessage) []string { return nil }); err != nil {
+	if err := util.PrintObjects(format, msgs, headers, row, nil, func(dlqMessage) []string { return nil }); err != nil {
 		return err
 	}
-	if resp.NextToken != "" {
-		fmt.Printf("\nMore results available; narrow with a smaller page or re-run to continue.\n")
+	if more {
+		fmt.Printf("\nShowing the first %d; raise --limit to see more.\n", len(msgs))
 	}
 	return nil
+}
+
+// fetchDeadLetters pages the DLQ list API, accumulating up to max messages (max <= 0
+// means every one), filtered to namespace when set. It follows the API's nextToken
+// so a large DLQ is fully traversed, not just its first page. The bool reports
+// whether more messages remain beyond what was returned (only when max capped it).
+func (opts *dlqSubCommand) fetchDeadLetters(input cli.Input, namespace string, max int) ([]dlqMessage, bool, error) {
+	pageSize := dlqPageSize
+	if max > 0 && max < pageSize {
+		pageSize = max
+	}
+	var all []dlqMessage
+	token := ""
+	for {
+		q := url.Values{"limit": {strconv.Itoa(pageSize)}}
+		if namespace != "" {
+			q.Set("namespace", namespace)
+		}
+		if token != "" {
+			q.Set("token", token)
+		}
+		var resp dlqListResp
+		if err := opts.call(input, http.MethodGet, dlqAPIList, q, nil, &resp); err != nil {
+			return nil, false, err
+		}
+		all = append(all, resp.Messages...)
+		if max > 0 && len(all) >= max {
+			return all[:max], resp.NextToken != "" || len(all) > max, nil
+		}
+		if resp.NextToken == "" {
+			return all, false, nil
+		}
+		token = resp.NextToken
+	}
 }
 
 func (opts *dlqSubCommand) show(input cli.Input) error {
@@ -180,12 +215,12 @@ func (opts *dlqSubCommand) redriveIDs(input cli.Input) ([]string, error) {
 	case id != "":
 		return []string{id}, nil
 	case all:
-		var ids []string
-		var resp dlqListResp
-		if err := opts.call(input, http.MethodGet, dlqAPIList, url.Values{"limit": {"1000"}}, nil, &resp); err != nil {
+		msgs, _, err := opts.fetchDeadLetters(input, "", 0) // 0 = every dead letter, all pages
+		if err != nil {
 			return nil, err
 		}
-		for _, m := range resp.Messages {
+		ids := make([]string, 0, len(msgs))
+		for _, m := range msgs {
 			ids = append(ids, m.ID)
 		}
 		return ids, nil
@@ -203,15 +238,17 @@ func (opts *dlqSubCommand) purge(input cli.Input) error {
 	return nil
 }
 
-// call performs one router DLQ API request, signing it with the Bearer auth token
-// (empty when auth is disabled) and decoding a JSON response into out (nil to
-// ignore the body).
+// call performs one DLQ API request against the router INTERNAL listener,
+// HMAC-signing it with the ServiceRouterInternal key (from FISSION_INTERNAL_AUTH_SECRET,
+// empty → pass-through) the same way `test --async` does, and decoding a JSON
+// response into out (nil to ignore the body). The endpoints are on the internal
+// listener precisely so they are never an unauthenticated public surface.
 func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.Values, reqBody, out any) error {
-	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
+	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
 	if err != nil {
-		return fmt.Errorf("connecting to the Fission router: %w", err)
+		return fmt.Errorf("connecting to the Fission router internal listener: %w", err)
 	}
-	u := *routerURL
+	u := *internalURL
 	u.Path = path
 	if len(query) > 0 {
 		u.RawQuery = query.Encode()
@@ -231,9 +268,12 @@ func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+os.Getenv(util.FISSION_AUTH_TOKEN))
 
-	resp, err := http.DefaultClient.Do(req)
+	transport := http.DefaultTransport
+	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
+		transport = hmacauth.NewServiceSigningTransport([]byte(secret), hmacauth.ServiceRouterInternal, transport, "/v1/async/dlq/")
+	}
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		return fmt.Errorf("calling the router DLQ API: %w", err)
 	}
@@ -243,7 +283,7 @@ func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.
 	case resp.StatusCode == http.StatusNotImplemented:
 		return errors.New("async invocation is not enabled on this cluster")
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return fmt.Errorf("router DLQ API rejected the request (%s); set %s if authentication is enabled", resp.Status, util.FISSION_AUTH_TOKEN)
+		return fmt.Errorf("router DLQ API rejected the request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
 	case resp.StatusCode != http.StatusOK:
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("router DLQ API returned %s: %s", resp.Status, strings.TrimSpace(string(msg)))

@@ -133,13 +133,17 @@ func asyncQueryFloat(ctx context.Context, env *harness.Env, query string) float6
 }
 
 // asyncDrainSeconds polls the async queue-depth gauge until it reaches zero,
-// returning the elapsed time. ok is false if the deadline elapses with a nonzero
-// backlog (a stuck dispatcher) so the caller records no misleading drain number.
+// returning the elapsed time. It concludes "drained" ONLY on a successful read of a
+// non-positive depth; a query error or an absent/not-yet-scraped sample is treated
+// as "not yet drained" (keep polling), never as drained — so a transient Prometheus
+// hiccup can't fabricate a ~0s drain. ok is false when the deadline elapses without
+// a confirmed zero (a stuck dispatcher, or Prometheus never answering), so the
+// caller records no misleading drain number.
 func asyncDrainSeconds(ctx context.Context, env *harness.Env, timeout time.Duration) (float64, bool) {
 	start := time.Now()
 	deadline := start.Add(timeout)
 	for {
-		if asyncQueryFloat(ctx, env, asyncQueueDepthQuery) <= 0 {
+		if v, found, err := env.Capturer.QueryInstant(ctx, asyncQueueDepthQuery); err == nil && found && v <= 0 {
 			return time.Since(start).Seconds(), true
 		}
 		if time.Now().After(deadline) {

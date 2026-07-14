@@ -13,15 +13,19 @@ import (
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils/httpmux"
-	"github.com/fission/fission/pkg/utils/httpsecurity"
 )
 
-// RFC-0024 async dead-letter-queue admin API. It lives on the PUBLIC listener so
-// it is gated by the same JWT authMiddleware as the auth-login endpoint (these
-// paths are deliberately NOT in auth.go's exemption list) — a coarse operator
-// gate; per-namespace scoping of the JWT is a follow-up. When async invocation is
-// disabled the handlers return 501 rather than 404, so the surface is
-// discoverable. All operate on the single global asyncinvoke.DefaultQueue.
+// RFC-0024 async dead-letter-queue admin API. It lives on the INTERNAL listener
+// (ClusterIP-only svc/router-internal), so every request is HMAC-verified with the
+// ServiceRouterInternal key and gated by the internal NetworkPolicy allowlist —
+// fail-closed by construction and independent of the public listener's optional
+// JWT auth. It is NOT on the public listener, where an operator running with the
+// default authentication.enabled=false would otherwise expose an unauthenticated
+// cross-namespace read/redrive/purge surface. `fission function dlq` signs its
+// requests with FISSION_INTERNAL_AUTH_SECRET the same way `test --async` does. When
+// async invocation is disabled the handlers return 501 rather than 404, so the
+// surface is discoverable. All operate on the single global asyncinvoke.DefaultQueue;
+// per-namespace scoping of access is a follow-up.
 const (
 	dlqPathList    = "/v1/async/dlq/list"
 	dlqPathShow    = "/v1/async/dlq/show"
@@ -69,15 +73,15 @@ type dlqMutateResp struct {
 	Count int64 `json:"count"`
 }
 
-// registerAsyncDLQRoutes adds the DLQ admin endpoints to the public mux. Called
-// from registerRouterOwnedRoutes so both the full and incremental mux builders
-// register them identically.
-func (ts *HTTPTriggerSet) registerAsyncDLQRoutes(public *httpmux.Mux) {
-	deny := httpsecurity.DenyAllCORS
-	public.Handle(dlqPathList, deny(http.HandlerFunc(ts.dlqList))).Methods(http.MethodGet, http.MethodOptions)
-	public.Handle(dlqPathShow, deny(http.HandlerFunc(ts.dlqShow))).Methods(http.MethodGet, http.MethodOptions)
-	public.Handle(dlqPathRedrive, deny(http.HandlerFunc(ts.dlqRedrive))).Methods(http.MethodPost, http.MethodOptions)
-	public.Handle(dlqPathPurge, deny(http.HandlerFunc(ts.dlqPurge))).Methods(http.MethodPost, http.MethodOptions)
+// registerAsyncDLQRoutes adds the DLQ admin endpoints to the INTERNAL mux, where
+// the listener-level HMAC verifier + DenyAllCORS + SecurityHeaders already wrap
+// every handler. Called from both the full and incremental mux builders so they
+// register identically.
+func (ts *HTTPTriggerSet) registerAsyncDLQRoutes(internal *httpmux.Mux) {
+	internal.HandleFunc(dlqPathList, ts.dlqList).Methods(http.MethodGet)
+	internal.HandleFunc(dlqPathShow, ts.dlqShow).Methods(http.MethodGet)
+	internal.HandleFunc(dlqPathRedrive, ts.dlqRedrive).Methods(http.MethodPost)
+	internal.HandleFunc(dlqPathPurge, ts.dlqPurge).Methods(http.MethodPost)
 }
 
 // dlqQueue returns the async DLQ queue, or writes 501 and returns false when async
@@ -163,12 +167,18 @@ func (ts *HTTPTriggerSet) dlqShow(w http.ResponseWriter, r *http.Request) {
 		}
 		token = dead[len(dead)-1].ID
 	}
+	if scanned >= dlqShowScanCap {
+		// Distinguish "absent" from "beyond the scan bound" so an operator does not
+		// conclude a still-present message is gone.
+		http.Error(w, "dead-lettered message not found within the first "+strconv.Itoa(dlqShowScanCap)+" scanned; narrow the dead set (redrive/purge) and retry", http.StatusNotFound)
+		return
+	}
 	http.Error(w, "dead-lettered message not found", http.StatusNotFound)
 }
 
 // dlqRedrive re-enqueues the given dead-lettered invocations (attempts reset) so
-// they are delivered again. Ids that are not currently dead are silently skipped
-// by the store; Count reports the number requested.
+// they are delivered again. Ids that are not currently dead are skipped by the
+// store; Count reports the number actually re-enqueued (may be < len(ids)).
 func (ts *HTTPTriggerSet) dlqRedrive(w http.ResponseWriter, r *http.Request) {
 	q, ok := ts.dlqQueue(w)
 	if !ok {
@@ -182,12 +192,13 @@ func (ts *HTTPTriggerSet) dlqRedrive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ids must not be empty", http.StatusBadRequest)
 		return
 	}
-	if err := q.Redrive(r.Context(), asyncinvoke.DefaultQueue, req.IDs); err != nil {
+	n, err := q.Redrive(r.Context(), asyncinvoke.DefaultQueue, req.IDs)
+	if err != nil {
 		ts.logger.Error(err, "redriving async dead letters")
 		http.Error(w, "redriving dead letters", http.StatusInternalServerError)
 		return
 	}
-	dlqWriteJSON(w, ts, dlqMutateResp{Count: int64(len(req.IDs))})
+	dlqWriteJSON(w, ts, dlqMutateResp{Count: n})
 }
 
 // dlqPurge permanently deletes every dead-lettered invocation and reports the

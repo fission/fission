@@ -98,8 +98,8 @@ Function destinations are themselves enqueued async (depth+1); topic destination
 - **Configure:** `fission function create|update` sets `FunctionSpec.Invocation` via `--async-retry-max-attempts`, `--async-max-age`, `--async-on-success <fn>`, `--async-on-failure <fn>` (update merges onto the existing config; an empty destination clears it).
 - **Trigger mode:** `fission route create|update --invocation-mode async` sets `httptrigger.spec.invocationMode`, forcing async for every request through that trigger (for callers that cannot set the header).
 - **DLQ:** default DLQ is the statestore dead-letter table (`Queue.DeadLetters`/`Redrive`/`Purge`), so the feature is complete with zero brokers.
-  `fission function dlq list [--namespace <ns>] [--limit N]` (id, namespace, function, reason, attempts, died), `show --id <id>` (full envelope), `redrive --id <id>|--all` (re-enqueue with attempts reset), `purge`.
-  Served by the router admin endpoints `/v1/async/dlq/{list,show,redrive,purge}` on the public listener, gated by the same JWT `authMiddleware` as the login endpoint (operator JWT when `authentication.enabled`; the paths are deliberately not in the auth exemption list) — a coarse gate, with per-namespace JWT scoping a follow-up.
+  `fission function dlq list [--namespace <ns>] [--limit N]` (id, namespace, function, reason, attempts, died; pages the API so a large DLQ is fully traversed), `show --id <id>` (full envelope), `redrive --id <id>|--all` (re-enqueue with attempts reset; reports the count actually re-enqueued), `purge`.
+  Served by the router admin endpoints `/v1/async/dlq/{list,show,redrive,purge}` on the **internal** listener (ClusterIP-only `svc/router-internal`), so every request is HMAC-verified (`ServiceRouterInternal`) and NetworkPolicy-gated — fail-closed by construction and independent of the public listener's optional JWT auth (which defaults off; putting the admin API on the public listener would have exposed an unauthenticated cross-namespace read/redrive/purge surface). The CLI signs with `FISSION_INTERNAL_AUTH_SECRET`, exactly as `test --async` does. Per-namespace scoping of access is a follow-up.
 
 ### Observability
 
