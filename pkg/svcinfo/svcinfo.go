@@ -45,6 +45,8 @@ const (
 	PortStorageSvc = 8000
 	// PortMCP is the MCP tool server's port (RFC-0011).
 	PortMCP = 8890
+	// PortStatestore is the embedded statestore's capability API port (RFC-0021).
+	PortStatestore = 8891
 	// PortMetrics is the default Prometheus metrics port every component
 	// serves when METRICS_ADDR is unset; chart ServiceMonitors scrape it.
 	PortMetrics = 8080
@@ -64,6 +66,7 @@ const (
 	SvcStorage        = "storagesvc"
 	SvcWebhook        = "webhook-service"
 	SvcMCP            = "mcp"
+	SvcStatestore     = "statestore"
 )
 
 // RouterURL returns the in-cluster URL of the router's public listener

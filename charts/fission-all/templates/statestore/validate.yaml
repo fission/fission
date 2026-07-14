@@ -1,0 +1,20 @@
+{{- /*
+Render-time gates for the RFC-0021 statestore, mirroring the mcp auth gate.
+This template emits no manifests; it only fails the render on an invalid config.
+*/ -}}
+{{- if .Values.statestore.enabled }}
+{{-   if not (or (eq .Values.statestore.mode "external") (eq .Values.statestore.mode "embedded") ) }}
+{{      required "statestore.enabled requires statestore.mode to be 'external' or 'embedded'." nil }}
+{{-   end }}
+{{-   if and (eq .Values.statestore.mode "external") (not .Values.statestore.external.dsn) (not .Values.statestore.external.existingSecret) }}
+{{      required "statestore.mode=external requires statestore.external.dsn or statestore.external.existingSecret." nil }}
+{{-   end }}
+{{- end }}
+{{- /*
+Forward-compatible dependent-feature gate: a statestore consumer (RFC-0022
+workflows, RFC-0023 function state, RFC-0024 async invocation) enabled without a
+statestore fails the render. Dormant until those features add their flags.
+*/ -}}
+{{- if and (or (dig "enabled" false (.Values.workflows | default dict)) (dig "enabled" false (.Values.functionState | default dict)) (dig "enabled" false (.Values.asyncInvocation | default dict))) (not .Values.statestore.enabled) }}
+{{  required "a statestore-dependent feature (workflows/functionState/asyncInvocation) is enabled but statestore.enabled is false — set statestore.enabled=true and choose a mode." nil }}
+{{- end }}

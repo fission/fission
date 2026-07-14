@@ -273,3 +273,11 @@ pkg/svcinfo.PortMCP.
 {{- define "fission.mcpPort" -}}
 {{ .Values.mcp.port | default 8890 }}
 {{- end -}}
+
+{{/*
+fission.statestorePort is the embedded statestore's capability API port.
+Mirrored by pkg/svcinfo.PortStatestore (RFC-0021).
+*/}}
+{{- define "fission.statestorePort" -}}
+{{ (.Values.statestore | default dict).port | default 8891 }}
+{{- end -}}

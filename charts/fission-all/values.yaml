@@ -706,6 +706,40 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## Statestore — the durable-state substrate (RFC-0021) consumed by workflows
+## (RFC-0022), stateful functions (RFC-0023), and async invocation (RFC-0024).
+##
+## Fission never deploys a database product. In "external" mode the chart only
+## wires a user-managed Postgres DSN into a Secret; in "embedded" mode it runs a
+## single-replica, PVC-backed SQLite store (Fission's own binary) for local/small
+## deployments — explicitly single-writer and NOT HA.
+statestore:
+  ## Off by default. A statestore-dependent feature that is enabled without this
+  ## fails the chart render.
+  enabled: false
+  ## "external" | "embedded" — required when enabled.
+  mode: ""
+  ## Capability API port (mirrors pkg/svcinfo.PortStatestore).
+  port: 8891
+  external:
+    ## Externally deployed Postgres DSN (recommended for production). Stored into
+    ## a Secret named statestore-postgres (key: dsn).
+    dsn: ""
+    ## Or reference a pre-created Secret instead of dsn.
+    existingSecret: ""
+  embedded:
+    ## PVC size for the embedded SQLite file.
+    storageSize: 1Gi
+    ## StorageClass for the PVC ("" uses the cluster default).
+    storageClassName: ""
+    resources: {}
+    securityContext:
+      enabled: true
+      runAsNonRoot: true
+      fsGroup: 10001
+      runAsUser: 10001
+      runAsGroup: 10001
+
 ## Multi-namespace tenancy (docs/multiple-namespace).
 ##
 tenancy:

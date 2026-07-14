@@ -197,3 +197,22 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 		assert.Equal(t, fmt.Sprint(svcinfo.PortWebhook), argAfter(args, "--webhookPort"))
 	})
 }
+
+// TestStatestoreChartPorts is the drift check for the embedded statestore head:
+// its --statestorePort arg and Service port must equal svcinfo.PortStatestore
+// (RFC-0021). It renders with the store enabled, since it is off by default.
+func TestStatestoreChartPorts(t *testing.T) {
+	docs := render(t, "--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+
+	t.Run("statestore deployment arg", func(t *testing.T) {
+		args := containerArgs(t, find(docs, "Deployment", svcinfo.SvcStatestore))
+		assert.Equal(t, fmt.Sprint(svcinfo.PortStatestore), argAfter(args, "--statestorePort"))
+	})
+
+	t.Run("statestore service", func(t *testing.T) {
+		svc := servicePorts(t, find(docs, "Service", svcinfo.SvcStatestore))
+		require.Len(t, svc, 1)
+		assert.EqualValues(t, svcinfo.PortStatestore, svc[0]["port"])
+		assert.EqualValues(t, svcinfo.PortStatestore, svc[0]["targetPort"])
+	})
+}

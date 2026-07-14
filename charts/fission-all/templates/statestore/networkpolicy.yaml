@@ -1,0 +1,28 @@
+{{- if and .Values.networkPolicy.enabled .Values.statestore.enabled (eq .Values.statestore.mode "embedded") }}
+# Only control-plane pods may reach the embedded store's capability API, by their
+# svc: label — the same allowlist convention as the router-internal listener. The
+# consumers (RFC-0022 workflow controller, RFC-0023 statesvc, RFC-0024 router
+# async dispatcher) are pre-listed so they connect the moment they ship.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: statestore
+  labels:
+    svc: statestore
+    application: fission-statestore
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  podSelector:
+    matchLabels:
+      svc: statestore
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { svc: workflow } }
+        - podSelector: { matchLabels: { svc: statesvc } }
+        - podSelector: { matchLabels: { svc: router } }
+      ports:
+        - port: {{ include "fission.statestorePort" . }}
+          protocol: TCP
+{{- end }}

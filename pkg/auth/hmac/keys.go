@@ -41,6 +41,9 @@ const (
 	// ServiceRouterInternal gates the router's internal listener
 	// (advisory 4) that hosts /fission-function/<ns>/<name>.
 	ServiceRouterInternal Service = "router-internal"
+	// ServiceStatestore gates the embedded statestore's capability API
+	// (pkg/statestore/httpapi) served by the --statestorePort head (RFC-0021).
+	ServiceStatestore Service = "statestore"
 )
 
 // derivedKeyLength is the size of every per-service signing key. 32

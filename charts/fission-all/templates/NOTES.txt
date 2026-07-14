@@ -40,3 +40,12 @@ Windows:
   $ fission function test --name hello --namespace {{ .Values.defaultNamespace }}
   Hello, world!
 
+{{- if and .Values.statestore.enabled (eq .Values.statestore.mode "embedded") }}
+
+  ⚠ Statestore embedded mode is enabled.
+  Durability posture: all durable state lives on ONE PersistentVolumeClaim
+  (statestore, {{ .Values.statestore.embedded.storageSize | default "1Gi" }}),
+  owned by a SINGLE non-HA replica. This is for local and small deployments.
+  For production, deploy your own Postgres and switch to external mode:
+    statestore.mode=external, statestore.external.dsn=<your Postgres DSN>
+{{- end }}

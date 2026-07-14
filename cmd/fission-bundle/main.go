@@ -27,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/mcp"
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
+	"github.com/fission/fission/pkg/statestore/statestoresvc"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -59,6 +60,7 @@ type CommandLineArgs struct {
 	executorPort       int
 	storageServicePort int
 	mcpPort            int
+	statestorePort     int
 
 	// URL values — empty means "not set": the resolver derives the
 	// in-cluster default from POD_NAMESPACE (see svcinfo.AddressResolver)
@@ -202,6 +204,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.executorPort, "executorPort", 0, "Port that the executor should listen on")
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
+	flag.IntVar(&args.statestorePort, "statestorePort", 0, "Port that the embedded statestore should listen on (RFC-0021 embedded mode)")
 
 	// URL flags
 	flag.StringVar(&args.executorUrl, "executorUrl", "", "Executor URL (default http://executor.<POD_NAMESPACE>)")
@@ -332,6 +335,16 @@ func bundleServices() []bundleService {
 			selected: func(a *CommandLineArgs) bool { return a.mcpPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
 				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, mcp.Options{Port: d.args.mcpPort, RouterInternalURL: d.resolver.RouterInternalURL()})
+			},
+		},
+		{
+			// The embedded statestore (RFC-0021) owns a PVC-backed SQLite file and
+			// serves the capability API over the ServiceStatestore HMAC-verified
+			// listener. It reads its DSN and secrets from the environment.
+			name:     "Fission-Statestore",
+			selected: func(a *CommandLineArgs) bool { return a.statestorePort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return statestoresvc.Start(ctx, d.clientGen, d.logger, d.mgr, statestoresvc.Options{Port: d.args.statestorePort})
 			},
 		},
 		{

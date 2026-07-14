@@ -1,0 +1,94 @@
+{{- if and .Values.statestore.enabled (eq .Values.statestore.mode "embedded") }}
+# The embedded statestore is single-writer by construction: exactly one replica
+# owns the PVC-backed SQLite file. It is deliberately NOT HA — the migration path
+# to HA is to point statestore.external.dsn at a real Postgres and flip the mode.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: statestore
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: statestore
+    application: fission-statestore
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, never RollingUpdate: two pods must never hold the file at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      svc: statestore
+  template:
+    metadata:
+      labels:
+        svc: statestore
+        application: fission-statestore
+    spec:
+      {{- if .Values.statestore.embedded.securityContext.enabled }}
+      securityContext: {{- omit .Values.statestore.embedded.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: statestore
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--statestorePort", "{{ include "fission.statestorePort" . }}"]
+        env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # The SQLite file lives on the mounted PVC.
+        - name: STATESTORE_DSN
+          value: /var/lib/fission-statestore/state.db
+        {{- include "kube_client.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        # internalAuth.envs supplies FISSION_INTERNAL_AUTH_SECRET; the capability
+        # API is HMAC-verified for the ServiceStatestore identity (empty secret =
+        # pass-through, matching the router-internal listener).
+        {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ include "fission.statestorePort" . }}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ include "fission.statestorePort" . }}
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.statestore.embedded.resources | nindent 10 }}
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/fission-statestore
+        {{- if .Values.coverage.enabled }}
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+      serviceAccountName: fission-statestore
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: statestore
+      {{- if .Values.coverage.enabled }}
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}

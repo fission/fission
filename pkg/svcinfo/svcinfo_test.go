@@ -34,6 +34,7 @@ func TestPortValues(t *testing.T) {
 	assert.Equal(t, 8001, PortBuilder)
 	assert.Equal(t, 8000, PortStorageSvc)
 	assert.Equal(t, 8890, PortMCP)
+	assert.Equal(t, 8891, PortStatestore)
 	assert.Equal(t, 8080, PortMetrics)
 	assert.Equal(t, 8081, PortHealthProbe)
 	assert.Equal(t, 9443, PortWebhook)

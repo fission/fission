@@ -1,0 +1,20 @@
+{{- if and .Values.statestore.enabled (eq .Values.statestore.mode "embedded") }}
+# ClusterIP-only: only control-plane pods (gated by the NetworkPolicy) reach the
+# capability API. It never joins the public router listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: statestore
+  labels:
+    svc: statestore
+    application: fission-statestore
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - name: statestore
+    port: {{ include "fission.statestorePort" . }}
+    targetPort: {{ include "fission.statestorePort" . }}
+  selector:
+    svc: statestore
+{{- end }}
