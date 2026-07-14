@@ -142,13 +142,32 @@ var poolmgrWarmPodPredicate = predicate.NewPredicateFuncs(func(obj client.Object
 // change (GenerationChangedPredicate), and the istio Service is keyed on the
 // stable function name/uid, so it only needs create/delete.
 func (gpm *GenericPoolManager) ReconcileFunction(ctx context.Context, old, fn *fv1.Function) error {
-	return reconcilePoolmgrFunc(ctx, gpm, gpm.enableIstio, old, fn)
+	err := reconcilePoolmgrFunc(ctx, gpm, gpm.enableIstio, old, fn)
+	if err != nil {
+		return err
+	}
+	if gpm.provisioner != nil {
+		if fn.Spec.ProvisionedConcurrency != nil {
+			gpm.provisioner.reconcileFunction(ctx, fn)
+		} else {
+			// Provisioned concurrency was removed (e.g. --provisioned-concurrency 0):
+			// clear labels on any previously-provisioned pods and reset status.
+			gpm.provisioner.StopProvisioning(ctx, fn)
+			if err := gpm.provisioner.UpdateFunctionStatusZero(ctx, fn); err != nil {
+				gpm.logger.Error(err, "failed to reset provisioned status", "function", fn.Name, "namespace", fn.Namespace)
+			}
+		}
+	}
+	return nil
 }
 
 // DeleteFunction satisfies executortype.FuncReconciler: it marks the function's
 // fsCache entries deleted (so the reaper recycles its pods) and removes its istio
 // Service (when enabled) or its headless function Service (RFC-0002, when enabled).
 func (gpm *GenericPoolManager) DeleteFunction(ctx context.Context, fn *fv1.Function) error {
+	if gpm.provisioner != nil {
+		gpm.provisioner.StopProvisioning(ctx, fn)
+	}
 	return cleanupPoolmgrFunc(ctx, gpm, gpm.enableIstio, gpm.functionServicesEnabled, fn)
 }
 
@@ -234,6 +253,16 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 		logger:   gpm.logger.WithName("readypod_reconciler"),
 		client:   mgr.GetClient(),
 		enqueuer: gpm,
+	}
+
+	// RFC-0026 provisioner: construct after crClient is set so it can
+	// list Functions and Pods from the shared cache. Env-var config is
+	// wired in Step 9; defaults are applied in NewProvisioner.
+	cfg, ok := ProvisionerConfigFromEnv()
+	if !ok {
+		gpm.provisioner = nil // feature off
+	} else {
+		gpm.provisioner = NewProvisioner(gpm.logger.WithName("provisioner"), gpm, gpm.fissionClient, gpm.kubernetesClient, gpm.crClient, cfg)
 	}
 	return controller.RegisterWithPredicates(mgr, &apiv1.Pod{}, pr, "poolmgr-readypod", 0,
 		poolmgrWarmPodPredicate)

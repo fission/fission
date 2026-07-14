@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
@@ -131,4 +132,64 @@ func TestGetObjectReaperInterval(t *testing.T) {
 	os.Unsetenv("OBJECT_REAPER_INTERVAL")
 	got = GetObjectReaperInterval(logger, fv1.ExecutorTypeContainer, 5)
 	require.Equal(t, want, got)
+}
+
+func TestAtoiOr(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVal string
+		envSet bool
+		def    int
+		want   int
+	}{
+		{"unset returns default", "", false, 42, 42},
+		{"empty string returns default", "", true, 42, 42},
+		{"valid int returns parsed", "100", true, 42, 100},
+		{"zero returns zero", "0", true, 42, 0},
+		{"negative returns negative", "-5", true, 42, -5},
+		{"garbage returns default", "abc", true, 42, 42},
+		{"float string returns default", "3.14", true, 42, 42},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := "TEST_ATOI_OR"
+			if tt.envSet {
+				t.Setenv(key, tt.envVal)
+			} else {
+				t.Setenv(key, "")
+			}
+			got := AtoiOr(key, tt.def)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestDurOr(t *testing.T) {
+	tests := []struct {
+		name   string
+		envVal string
+		envSet bool
+		def    time.Duration
+		want   time.Duration
+	}{
+		{"unset returns default", "", false, 30 * time.Second, 30 * time.Second},
+		{"empty string returns default", "", true, 30 * time.Second, 30 * time.Second},
+		{"valid duration returns parsed", "1m", true, 30 * time.Second, time.Minute},
+		{"seconds form", "45s", true, 30 * time.Second, 45 * time.Second},
+		{"zero", "0", true, 30 * time.Second, 0},
+		{"garbage returns default", "notaduration", true, 30 * time.Second, 30 * time.Second},
+		{"complex form", "1h30m", true, 30 * time.Second, 90 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := "TEST_DUR_OR"
+			if tt.envSet {
+				t.Setenv(key, tt.envVal)
+			} else {
+				t.Setenv(key, "")
+			}
+			got := DurOr(key, tt.def)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -96,6 +96,11 @@ const (
 	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
 	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
 
+	// Provisioned condition reasons (RFC-0026 provisioner).
+	FunctionReasonProvisionedSatisfied = "ProvisionedSatisfied" // ProvisionedReady >= ProvisionedTarget
+	FunctionReasonProvisionedWarming   = "ProvisionedWarming"   // ProvisionedReady < ProvisionedTarget (still warming or draining)
+	FunctionReasonProvisionedDisabled  = "ProvisionedDisabled"  // provisioned concurrency off (target=0 / spec field nil)
+
 	// Package condition reasons (mirror BuildStatus enum + composites)
 	PackageReasonBuildSucceeded  = "BuildSucceeded"
 	PackageReasonBuildFailed     = "BuildFailed"

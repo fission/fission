@@ -44,6 +44,22 @@ func Create(input cli.Input) error {
 	return (&CreateSubCommand{}).do(input)
 }
 
+// getProvisionedConcurrencyConfig builds a ProvisionedConcurrencyConfig from
+// the --provisioned-concurrency flag, or nil when the flag is not set (the
+// classic on-demand cold-start path). PR 1 supports only the base Target;
+// schedule windows arrive in PR 2.
+func getProvisionedConcurrencyConfig(input cli.Input) *fv1.ProvisionedConcurrencyConfig {
+	if !input.IsSet(flagkey.FnProvisionedConcurrency) {
+		return nil
+	}
+	target := input.Int(flagkey.FnProvisionedConcurrency)
+	if target <= 0 {
+		// 0 or negative = off switch (update path clears the config)
+		return nil
+	}
+	return &fv1.ProvisionedConcurrencyConfig{Target: target}
+}
+
 // getStreamingConfig builds a StreamingConfig from the --streaming* flags, or
 // nil when --streaming is not set (the classic, non-streaming proxy path).
 func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
@@ -398,20 +414,21 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Namespace: fnNamespace,
 		},
 		Spec: fv1.FunctionSpec{
-			Secrets:         secrets,
-			ConfigMaps:      cfgmaps,
-			Resources:       *resourceReq,
-			InvokeStrategy:  *invokeStrategy,
-			FunctionTimeout: fnTimeout,
-			IdleTimeout:     &fnIdleTimeout,
-			Streaming:       getStreamingConfig(input),
-			Tool:            toolConfig,
-			State:           getStateConfig(input, nil),
-			Invocation:      invocation,
-			Concurrency:     fnConcurrency,
-			RequestsPerPod:  requestsPerPod,
-			RetainPods:      retainPods,
-			OnceOnly:        fnOnceOnly,
+			Secrets:                secrets,
+			ConfigMaps:             cfgmaps,
+			Resources:              *resourceReq,
+			InvokeStrategy:         *invokeStrategy,
+			FunctionTimeout:        fnTimeout,
+			IdleTimeout:            &fnIdleTimeout,
+			Streaming:              getStreamingConfig(input),
+			Tool:                   toolConfig,
+			State:                  getStateConfig(input, nil),
+			Invocation:             invocation,
+			ProvisionedConcurrency: getProvisionedConcurrencyConfig(input),
+			Concurrency:            fnConcurrency,
+			RequestsPerPod:         requestsPerPod,
+			RetainPods:             retainPods,
+			OnceOnly:               fnOnceOnly,
 		},
 	}
 

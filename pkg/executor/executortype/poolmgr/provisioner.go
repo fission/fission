@@ -7,12 +7,16 @@ package poolmgr
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/go-logr/logr"
@@ -76,6 +80,22 @@ type Provisioner struct {
 	inflight sync.Map // map[types.UID]*atomic.Int32
 }
 
+// ProvisionerConfigFromEnv build ProvisionerConfig from
+// EXECUTOR_PROVISIONED_* env vars.
+// Returns zero ProvisionerConfig when EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED is unset/false
+func ProvisionerConfigFromEnv() (ProvisionerConfig, bool) {
+	enabled, err := strconv.ParseBool(os.Getenv("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED"))
+	if !enabled || err != nil {
+		return ProvisionerConfig{}, false
+	}
+	cfg := ProvisionerConfig{
+		MaxPerFunction:         util.AtoiOr("EXECUTOR_PROVISIONED_MAX_PER_FUNCTION", 20),
+		MaxInflightPerFunction: util.AtoiOr("EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION", 4),
+		ReconcileInterval:      util.DurOr("EXECUTOR_PROVISIONED_RECONCILE_INTERVAL", 30*time.Second),
+	}
+	return cfg, true
+}
+
 // NewProvisioner creates a new Provisioner. If any fields in config is missing/zero, default values
 // are applied.
 func NewProvisioner(
@@ -86,15 +106,6 @@ func NewProvisioner(
 	crClient client.Client,
 	config ProvisionerConfig,
 ) *Provisioner {
-	if config.MaxPerFunction == 0 {
-		config.MaxPerFunction = 20
-	}
-	if config.MaxInflightPerFunction == 0 {
-		config.MaxInflightPerFunction = 4
-	}
-	if config.ReconcileInterval == 0 {
-		config.ReconcileInterval = time.Second * 30
-	}
 	return &Provisioner{
 		logger:           logger,
 		gpm:              gpm,
@@ -245,7 +256,11 @@ func (p *Provisioner) clearExcessProvisionedLabels(ctx context.Context, fn *fv1.
 func (p *Provisioner) tryAcquire(fnUID types.UID) bool {
 	v, _ := p.inflight.LoadOrStore(fnUID, new(atomic.Int32))
 	count := v.(*atomic.Int32)
-	return count.Add(1) <= int32(p.config.MaxInflightPerFunction)
+	if count.Add(1) <= int32(p.config.MaxInflightPerFunction) {
+		return true
+	}
+	count.Add(-1) // rollback: rejected acquire must not hold a slot
+	return false
 }
 
 func (p *Provisioner) release(fnUID types.UID) {
@@ -276,7 +291,9 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 		return err
 	}
 	for _, obj := range funSvc.KubernetesObjects {
-		if obj.Kind == "Pod" {
+		// gp.go builds kubeObjRefs with Kind "pod" (lowercase), so match
+		// case-insensitively rather than relying on canonical capitalization.
+		if strings.EqualFold(obj.Kind, "Pod") {
 			patch := fmt.Sprintf(`{"metadata":{"labels":{"%s":"%s"}}}`,
 				fv1.PROVISIONED_LABEL, fv1.PROVISIONED_VALUE)
 			_, err := p.kubernetesClient.CoreV1().Pods(obj.Namespace).Patch(
@@ -305,6 +322,17 @@ func (p *Provisioner) countProvisionedPods(ctx context.Context, fn *fv1.Function
 func statusSet(latestFunc *fv1.Function, ready, target int) {
 	latestFunc.Status.ProvisionedReady = ready
 	latestFunc.Status.ProvisionedTarget = target
+	if target == 0 {
+		// Provisioned concurrency is off (target=0): condition False,
+		// regardless of ready count (which should also be 0).
+		meta.SetStatusCondition(&latestFunc.Status.Conditions, metav1.Condition{
+			Type:               fv1.FunctionConditionProvisioned,
+			Status:             metav1.ConditionFalse,
+			Reason:             fv1.FunctionReasonProvisionedDisabled,
+			ObservedGeneration: latestFunc.Generation,
+		})
+		return
+	}
 	if ready >= target {
 		meta.SetStatusCondition(&latestFunc.Status.Conditions, metav1.Condition{
 			Type:               fv1.FunctionConditionProvisioned,
@@ -372,4 +400,11 @@ func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
 func (p *Provisioner) StopProvisioning(ctx context.Context, fn *fv1.Function) {
 	p.clearAllProvisionedLabels(ctx, fn)
 	p.inflight.Delete(fn.UID)
+}
+
+// UpdateFunctionStatusZero resets the provisioned status fields to 0 and
+// marks the Provisioned condition False. Called when provisioned concurrency
+// is removed from the spec (target set to 0 / field nil).
+func (p *Provisioner) UpdateFunctionStatusZero(ctx context.Context, fn *fv1.Function) error {
+	return p.updateFunctionStatus(ctx, fn, 0, 0)
 }

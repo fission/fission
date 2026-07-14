@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +43,8 @@ const (
 // with the Function reconciler rather than racing it. A list error in one
 // namespace is logged and skipped rather than aborting the whole sweep.
 func AdoptFunctions(ctx context.Context, logger logr.Logger, fissionClient versioned.Interface,
-	executorType fv1.ExecutorType, create func(context.Context, *fv1.Function) error) {
+	executorType fv1.ExecutorType, create func(context.Context, *fv1.Function) error,
+) {
 	g := new(errgroup.Group)
 	g.SetLimit(adoptConcurrency)
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
@@ -102,7 +104,6 @@ func WaitTimeout(wg *sync.WaitGroup, timeout time.Duration) {
 
 // ConvertConfigSecrets returns envFromSource which can be passed directly into the pod spec
 func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.Interface) ([]apiv1.EnvFromSource, error) {
-
 	cmList := fn.Spec.ConfigMaps
 	secList := fn.Spec.Secrets
 	cmEnvSources := make([]*apiv1.ConfigMapEnvSource, 0)
@@ -142,7 +143,6 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 	envFromSources := make([]apiv1.EnvFromSource, 0)
 	for _, cmEnvSource := range cmEnvSources {
 		envFromSource := apiv1.EnvFromSource{
-
 			ConfigMapRef: cmEnvSource,
 		}
 		envFromSources = append(envFromSources, envFromSource)
@@ -150,7 +150,6 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 
 	for _, secEnvSource := range secEnvSources {
 		envFromSource := apiv1.EnvFromSource{
-
 			SecretRef: secEnvSource,
 		}
 		envFromSources = append(envFromSources, envFromSource)
@@ -173,7 +172,6 @@ func GetSpecFromConfigMap(filePath string) (*apiv1.PodSpec, error) {
 }
 
 func GetObjectReaperInterval(logger logr.Logger, executorType fv1.ExecutorType, defaultReaperInterval uint) uint {
-
 	// TODO think about migration to executor package as const.
 	globalEnvVarName := "OBJECT_REAPER_INTERVAL"
 
@@ -211,4 +209,24 @@ func DoesContainerExistInPodSpec(containerName string, podSpec *apiv1.PodSpec) b
 		}
 	}
 	return false
+}
+
+// AtoiOr fetches Int value from envvar. If not set, returns def value
+func AtoiOr(envVar string, def int) int {
+	got := os.Getenv(envVar)
+	output, err := strconv.Atoi(got)
+	if err != nil {
+		return def
+	}
+	return output
+}
+
+// DurOr fetches time.Duration value from envvar. If not set, returns def value
+func DurOr(envVar string, def time.Duration) time.Duration {
+	got := os.Getenv(envVar)
+	output, err := time.ParseDuration(got)
+	if err != nil {
+		return def
+	}
+	return output
 }

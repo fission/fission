@@ -98,6 +98,16 @@ spec:
         - name: EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION
           value: {{ .Values.executor.maxPendingSpecializations | quote }}
         {{- end }}
+        {{- if .Values.executor.provisionedConcurrency.enabled }}
+        - name: EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED
+          value: "true"
+        - name: EXECUTOR_PROVISIONED_MAX_PER_FUNCTION
+          value: {{ .Values.executor.provisionedConcurrency.maxPerFunction | quote }}
+        - name: EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION
+          value: {{ .Values.executor.provisionedConcurrency.maxInflightPerFunction | quote }}
+        - name: EXECUTOR_PROVISIONED_RECONCILE_INTERVAL
+          value: {{ .Values.executor.provisionedConcurrency.reconcileInterval | quote }}
+        {{- end }}
         - name: DEBUG_ENV
           value: {{ .Values.debugEnv | quote }}
         - name: PPROF_ENABLED
