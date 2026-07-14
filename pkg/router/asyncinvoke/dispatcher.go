@@ -196,6 +196,7 @@ func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) 
 	dctx, cancel := context.WithTimeout(ctx, d.deliveryTimeout(env))
 	res := d.deliverer.Deliver(dctx, env, msg.ID, msg.Attempts)
 	cancel()
+	recordDelivery(ctx, deliveryCondition(res))
 
 	switch classify(res) {
 	case actionAck:
@@ -225,13 +226,20 @@ func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, en
 	}
 	if err := d.q.Nack(ctx, msg.Receipt, backoff); err != nil {
 		d.logger.Error(err, "nack failed", "id", msg.ID)
+		return
 	}
+	recordRetry(ctx)
 }
 
+// kill dead-letters the message and, only on a successful settle, records the DLQ
+// counter — a stale-receipt Kill (a newer lease already settled) must not be
+// counted as a dead-letter this delivery caused.
 func (d *Dispatcher) kill(ctx context.Context, msg statestore.LeasedMessage, reason string) {
 	if err := d.q.Kill(ctx, msg.Receipt, reason); err != nil {
 		d.logger.Error(err, "kill failed", "id", msg.ID, "reason", reason)
+		return
 	}
+	recordDLQ(ctx, reason)
 }
 
 // deliveryTimeout bounds one delivery attempt: the function timeout plus a buffer,

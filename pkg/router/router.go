@@ -533,6 +533,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		})); aerr != nil {
 			return fmt.Errorf("async invocation: adding dispatcher runnable: %w", aerr)
 		}
+		asyncinvoke.RegisterQueueGauges(queue, asyncinvoke.DefaultQueue)
 		logger.Info("async invocation enabled", "queue", asyncinvoke.DefaultQueue, "deliveryURL", internalURL, "driver", cfg.statestoreDriver)
 	}
 
