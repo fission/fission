@@ -149,9 +149,21 @@ func TestAsyncInvocationStatestoreDown503(t *testing.T) {
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fn, Env: env, Code: code, ExecutorType: "poolmgr"})
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fn, URL: route, Method: http.MethodPost})
 
-	// Warm the route synchronously so a later async 503 is attributable to the
-	// enqueue, not to a not-yet-materialized trigger.
-	f.Router(t).GetEventually(t, ctx, route, framework.BodyContains(""))
+	// Warm the route with a synchronous POST (no async header) so the later async
+	// 503 is attributable to the enqueue, not a not-yet-materialized trigger. The
+	// trigger is POST-only, so a GET would 405 — warm with the method it accepts.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.Router(t).BaseURL()+route, strings.NewReader("warm"))
+		if !assert.NoError(c, err) {
+			return
+		}
+		resp, err := f.HTTPClient().Do(req)
+		if !assert.NoError(c, err) {
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Less(c, resp.StatusCode, 400, "route live and function ready")
+	}, 2*time.Minute, 2*time.Second)
 
 	// Take the statestore down and confirm the enqueue fails loud (503), restoring
 	// it afterward for the rest of the suite.
