@@ -121,6 +121,27 @@ func TestHandlerAsyncBranchPublicOnly(t *testing.T) {
 	require.Len(t, l, 1)
 }
 
+func TestDestinationsFromSpec(t *testing.T) {
+	t.Parallel()
+	onS, onF := destinationsFromSpec(nil, "ns")
+	assert.Nil(t, onS)
+	assert.Nil(t, onF)
+
+	ic := &fv1.InvocationConfig{
+		OnSuccess: &fv1.DestinationRef{Function: &fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "next"}},
+		OnFailure: &fv1.DestinationRef{Topic: &fv1.TopicRef{MessageQueueType: "kafka", Topic: "errs"}},
+	}
+	onS, onF = destinationsFromSpec(ic, "ns")
+	require.NotNil(t, onS)
+	assert.Equal(t, "ns", onS.FunctionNamespace, "function destination inherits the source namespace")
+	assert.Equal(t, "next", onS.FunctionName)
+	assert.True(t, onS.IsFunction())
+	require.NotNil(t, onF)
+	assert.Equal(t, "errs", onF.Topic)
+	assert.Equal(t, "kafka", onF.MQType)
+	assert.True(t, onF.IsTopic())
+}
+
 func TestPolicyFromSpec(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, asyncinvoke.Policy{}, policyFromSpec(nil), "nil config → zero policy")

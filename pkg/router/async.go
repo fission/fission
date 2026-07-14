@@ -43,15 +43,18 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 		http.Error(w, "async invocation is not enabled on this cluster", http.StatusNotImplemented)
 		return
 	}
+	onSuccess, onFailure := destinationsFromSpec(fn.Spec.Invocation, fn.Namespace)
 	p := asyncinvoke.Params{
 		Namespace:       fn.Namespace,
 		Function:        fn.Name,
 		FunctionTimeout: fn.Spec.FunctionTimeout,
 		DedupKey:        r.Header.Get(asyncinvoke.HeaderDedupKey),
 		// Depth stays 0: a public caller must not seed the destination-chain depth
-		// (phase 2 derives it from the signed internal replay, not the request), so
-		// the loop guard cannot be defeated by an external X-Fission-Invocation-Depth.
-		Policy: policyFromSpec(fn.Spec.Invocation),
+		// (it is derived from the signed internal replay, not the request), so the
+		// loop guard cannot be defeated by an external X-Fission-Invocation-Depth.
+		Policy:    policyFromSpec(fn.Spec.Invocation),
+		OnSuccess: onSuccess,
+		OnFailure: onFailure,
 	}
 	id, err := asyncinvoke.Enqueue(r.Context(), a.queue, w, r, p)
 	if err != nil {
@@ -93,4 +96,27 @@ func policyFromSpec(ic *fv1.InvocationConfig) asyncinvoke.Policy {
 		p.MaxAge = ic.MaxAge.Duration
 	}
 	return p
+}
+
+// destinationsFromSpec maps a function's InvocationConfig destinations to the
+// flat envelope form. Function destinations are same-namespace (FunctionReference
+// has no namespace), so they inherit the source function's namespace.
+func destinationsFromSpec(ic *fv1.InvocationConfig, fnNamespace string) (onSuccess, onFailure *asyncinvoke.Destination) {
+	if ic == nil {
+		return nil, nil
+	}
+	return destFromRef(ic.OnSuccess, fnNamespace), destFromRef(ic.OnFailure, fnNamespace)
+}
+
+func destFromRef(ref *fv1.DestinationRef, fnNamespace string) *asyncinvoke.Destination {
+	switch {
+	case ref == nil:
+		return nil
+	case ref.Function != nil:
+		return &asyncinvoke.Destination{FunctionNamespace: fnNamespace, FunctionName: ref.Function.Name}
+	case ref.Topic != nil:
+		return &asyncinvoke.Destination{Topic: ref.Topic.Topic, MQType: string(ref.Topic.MessageQueueType)}
+	default:
+		return nil
+	}
 }

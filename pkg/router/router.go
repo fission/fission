@@ -528,10 +528,30 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
+		// Resolve a destination function's config from the Manager's Function cache
+		// when the dispatcher fires a function destination, so each hop of a
+		// destination chain stamps its own policy + onward destinations (and the
+		// depth cap is reachable). A missing function → not found → the destination
+		// is dropped rather than looping.
+		crClient := crMgr.GetClient()
+		resolveFn := func(rctx context.Context, ns, name string) (asyncinvoke.FunctionConfig, bool) {
+			var fn fv1.Function
+			if err := crClient.Get(rctx, client.ObjectKey{Namespace: ns, Name: name}, &fn); err != nil {
+				return asyncinvoke.FunctionConfig{}, false
+			}
+			onSuccess, onFailure := destinationsFromSpec(fn.Spec.Invocation, fn.Namespace)
+			return asyncinvoke.FunctionConfig{
+				Policy:          policyFromSpec(fn.Spec.Invocation),
+				OnSuccess:       onSuccess,
+				OnFailure:       onFailure,
+				FunctionTimeout: fn.Spec.FunctionTimeout,
+			}, true
+		}
 		dispatcher := asyncinvoke.New(asyncinvoke.Options{
-			Queue:     queue,
-			Deliverer: deliverer,
-			Logger:    logger.WithName("async_dispatcher"),
+			Queue:                 queue,
+			Deliverer:             deliverer,
+			Logger:                logger.WithName("async_dispatcher"),
+			ResolveFunctionConfig: resolveFn,
 		})
 		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
 			_ = dispatcher.Run(rctx) // returns only on ctx cancellation

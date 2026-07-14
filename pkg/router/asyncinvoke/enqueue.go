@@ -33,6 +33,10 @@ type Params struct {
 	// Policy is the resolved retry/age policy stamped into the envelope (zero
 	// fields take dispatcher defaults).
 	Policy Policy
+	// OnSuccess/OnFailure are the resolved destinations stamped into the envelope
+	// (nil = none), so the dispatcher fires them without re-reading the Function.
+	OnSuccess *Destination
+	OnFailure *Destination
 	// QueueName defaults to DefaultQueue when empty. MaxBodyBytes defaults to
 	// DefaultMaxBodyBytes when <= 0.
 	QueueName    string
@@ -65,6 +69,8 @@ func Enqueue(ctx context.Context, q statestore.Queue, w http.ResponseWriter, r *
 		Depth:           p.Depth,
 		FunctionTimeout: p.FunctionTimeout,
 		Policy:          p.Policy,
+		OnSuccess:       p.OnSuccess,
+		OnFailure:       p.OnFailure,
 	}
 	data, err := env.Encode()
 	if err != nil {
