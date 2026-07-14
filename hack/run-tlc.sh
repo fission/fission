@@ -13,7 +13,14 @@
 set -euo pipefail
 
 TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-33de7da9ce1b7fffb9d1c184021178dbb051747be48504e65c584c423721a32e}"
+# SHA256 of the tla2tools.jar attached to the v1.8.0 GitHub release. NOTE: the
+# tlaplus project periodically REBUILDS and re-uploads this release asset (the jar
+# manifest carries a build date), so its SHA drifts over time. A checksum mismatch
+# here therefore usually means an upstream rebuild, not corruption or tampering —
+# re-verify the jar is genuine tla2tools (manifest Main-class tlc2.TLC, Microsoft
+# vendor) and bump this pin. The pin stays so an UNEXPECTED artifact still fails
+# loudly rather than silently running arbitrary downloaded code.
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-150b0294c3d407c15f0c971351ccd4ae8c6d885397546dff87871a14be2b4ee4}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"
@@ -22,7 +29,7 @@ trap 'rm -rf "${WORK_DIR}"' EXIT
 JAR="${WORK_DIR}/tla2tools.jar"
 
 echo "Downloading tla2tools ${TLA2TOOLS_VERSION}..."
-curl -fsSL -o "${JAR}" \
+curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o "${JAR}" \
   "https://github.com/tlaplus/tlaplus/releases/download/v${TLA2TOOLS_VERSION}/tla2tools.jar"
 
 echo "Verifying checksum..."
