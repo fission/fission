@@ -90,6 +90,10 @@ const (
 	FnLogAllPods            = "all-pods"
 	FnRetainPods            = "retainpods"
 
+	DlqID    = "id"
+	DlqAll   = "all"
+	DlqLimit = "limit"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtUrl               = "url"

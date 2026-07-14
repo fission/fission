@@ -138,6 +138,11 @@ var (
 	FnRunBuilderImage       = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
 	FnLogAllPods            = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods            = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
+
+	// RFC-0024 async dead-letter-queue admin flags.
+	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}
+	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
+	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}
 	// Termination Grace Period configurable at function creation/update only for container functions
 	FnTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.FnGracePeriod, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}
 
