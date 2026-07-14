@@ -208,6 +208,7 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &buildTime{timeout: p.BuildTimeout.D()})
 	out = append(out, &routerIndexScale{count: p.IndexScaleCount})
 	out = append(out, &routeChurn{count: p.RouteChurnCount})
+	out = append(out, &asyncInvoke{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	return out
 }
 

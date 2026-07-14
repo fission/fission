@@ -91,6 +91,17 @@ func TestConfigDepsScenarioRegistered(t *testing.T) {
 	assert.Equal(t, 3, cd.configMaps)
 }
 
+// TestAsyncInvokeScenarioRegistered pins that the RFC-0024 async scenario is built
+// and is deliberately OFF the smoke subset (it needs a warm drain window, so it
+// runs in the weekly/dispatch suite, not per-PR).
+func TestAsyncInvokeScenarioRegistered(t *testing.T) {
+	t.Parallel()
+	all := BuildAll(DefaultParams())
+	assert.Contains(t, Names(all), "async-invoke")
+	assert.NotContains(t, Names(Select(all, nil, []string{"smoke"})), "async-invoke",
+		"async-invoke must stay out of the fast per-PR smoke subset")
+}
+
 func TestColdBurstScenariosRegistered(t *testing.T) {
 	t.Parallel()
 	names := Names(BuildAll(DefaultParams()))
