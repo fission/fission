@@ -375,7 +375,7 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 	}
 	body, err := result.Encode()
 	if err != nil {
-		recordDestination(ctx, "error")
+		recordDestination(ctx, "encode_error")
 		d.logger.Error(err, "encoding destination result envelope", "function", dest.FunctionName)
 		return
 	}
