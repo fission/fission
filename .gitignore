@@ -11,6 +11,7 @@ cmd/reporter/reporter
 test/logs/
 test/e2e/cli/fission-dump/
 test/integration/logs/
+test/integration/suites/*/test/
 
 # Pycharm IDE
 .idea

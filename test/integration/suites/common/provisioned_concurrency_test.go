@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -133,17 +134,26 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 	ns.WaitForFunction(t, ctx, fnName)
 
 	// Fetch the live CR, add a scheduled window, attempt update — webhook
-	// must reject.
-	fn := ns.GetFunction(t, ctx, fnName)
-	fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{{
-		Name:     "w1",
-		Start:    "0 0 * * *",
-		Duration: "1h",
-		Target:   1,
-	}}
-	_, err := f.FissionClient().CoreV1().Functions(ns.Name).Update(ctx, fn, metav1.UpdateOptions{})
-	require.Error(t, err, "expected webhook rejection of scheduled windows")
-	assert.Contains(t, err.Error(), "scheduled windows are not yet supported")
+	// must reject. Retry on conflict: the provisioner may write status
+	// (bumping resourceVersion) between our Get and Update, causing a
+	// stale-version conflict that masks the webhook error.
+	var err error
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		fn := ns.GetFunction(t, ctx, fnName)
+		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{{
+			Name:     "w1",
+			Start:    "0 0 * * *",
+			Duration: "1h",
+			Target:   1,
+		}}
+		_, err = f.FissionClient().CoreV1().Functions(ns.Name).Update(ctx, fn, metav1.UpdateOptions{})
+		// Conflict = retry (provisioner raced us). Webhook error = done.
+		if apierrors.IsConflict(err) {
+			return // keep polling
+		}
+		assert.Error(c, err, "expected webhook rejection of scheduled windows")
+		assert.Contains(c, err.Error(), "scheduled windows are not yet supported")
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 // TestProvisionedConcurrencyLifecycle exercises the RFC-0026 PR1 provisioner

@@ -14,6 +14,12 @@ const (
 	// FunctionConditionToolExposed reports whether the MCP server is advertising
 	// this function as a tool (set by pkg/mcp's reconciler).
 	FunctionConditionToolExposed = "ToolExposed"
+	// FunctionConditionProvisioned reports whether the executor's provisioner
+	// (RFC-0026) has reached the requested warm-pod floor for this function.
+	// True = ProvisionedReady >= ProvisionedTarget; False with reason
+	// ProvisionedWarming = still warming or draining; False with reason
+	// ProvisionedDisabled = provisioned concurrency off (target=0 / spec nil).
+	FunctionConditionProvisioned = "Provisioned"
 
 	// Package conditions
 	PackageConditionBuildSucceeded = "BuildSucceeded"

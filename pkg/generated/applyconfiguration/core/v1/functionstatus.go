@@ -18,6 +18,15 @@ type FunctionStatusApplyConfiguration struct {
 	// ObservedGeneration reflects the .metadata.generation that the
 	// controller observed when it last updated the status.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
+	// ProvisionedReady is the number of warm specialized pods the provisioner
+	// is currently maintaining for this function (RFC-0026). Only meaningful
+	// when Spec.ProvisionedConcurrency is non-nil. Reported by the executor's
+	// provisioner on each reconcile pass.
+	ProvisionedReady *int `json:"provisionedReady,omitempty"`
+	// ProvisionedTarget is the effective target the provisioner is currently
+	// aiming for (base Target, or a schedule-window override in PR 2). Lets
+	// `fission fn get` show "3/5 provisioned pods ready".
+	ProvisionedTarget *int `json:"provisionedTarget,omitempty"`
 	// Conditions represent the latest observations of the function's state.
 	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
@@ -33,6 +42,22 @@ func FunctionStatus() *FunctionStatusApplyConfiguration {
 // If called multiple times, the ObservedGeneration field is set to the value of the last call.
 func (b *FunctionStatusApplyConfiguration) WithObservedGeneration(value int64) *FunctionStatusApplyConfiguration {
 	b.ObservedGeneration = &value
+	return b
+}
+
+// WithProvisionedReady sets the ProvisionedReady field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProvisionedReady field is set to the value of the last call.
+func (b *FunctionStatusApplyConfiguration) WithProvisionedReady(value int) *FunctionStatusApplyConfiguration {
+	b.ProvisionedReady = &value
+	return b
+}
+
+// WithProvisionedTarget sets the ProvisionedTarget field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProvisionedTarget field is set to the value of the last call.
+func (b *FunctionStatusApplyConfiguration) WithProvisionedTarget(value int) *FunctionStatusApplyConfiguration {
+	b.ProvisionedTarget = &value
 	return b
 }
 
