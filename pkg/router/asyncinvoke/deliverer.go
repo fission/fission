@@ -31,8 +31,11 @@ type DeliveryResult struct {
 	StatusCode int
 	Err        error
 	// Body is the function's response body, captured up to MaxPayloadBytes for a
-	// destination result envelope (empty on a transport error).
-	Body []byte
+	// destination result envelope (empty on a transport error, or when the function
+	// declares no destination). BodyTruncated is true when the body was cut at the
+	// cap or a mid-stream read left it incomplete.
+	Body          []byte
+	BodyTruncated bool
 }
 
 // httpDeliverer POSTs to the router internal listener, byte-identical to the
@@ -91,9 +94,20 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 		return DeliveryResult{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	// Capture up to MaxPayloadBytes for a destination result envelope, then drain
-	// the remainder to io.Discard so keep-alive can reuse the connection.
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, MaxPayloadBytes))
+	if env.OnSuccess == nil && env.OnFailure == nil {
+		// No destination declared → the body feeds nothing; skip the up-to-64KiB
+		// capture and just drain for keep-alive.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return DeliveryResult{StatusCode: resp.StatusCode}
+	}
+	// Capture up to MaxPayloadBytes for a destination result envelope, flagging any
+	// truncation (over the cap, or a mid-stream read error that leaves the body
+	// incomplete), then drain the remainder so keep-alive can reuse the connection.
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxPayloadBytes+1))
+	truncated := readErr != nil || len(body) > MaxPayloadBytes
+	if len(body) > MaxPayloadBytes {
+		body = body[:MaxPayloadBytes]
+	}
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return DeliveryResult{StatusCode: resp.StatusCode, Body: body}
+	return DeliveryResult{StatusCode: resp.StatusCode, Body: body, BodyTruncated: truncated}
 }

@@ -42,6 +42,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -531,12 +532,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// Resolve a destination function's config from the Manager's Function cache
 		// when the dispatcher fires a function destination, so each hop of a
 		// destination chain stamps its own policy + onward destinations (and the
-		// depth cap is reachable). A missing function → not found → the destination
-		// is dropped rather than looping.
+		// depth cap is reachable). A genuinely missing function → not found → the
+		// destination is dropped rather than looping; a transient lookup error is
+		// logged (not silently conflated with absence) so a lost destination is
+		// diagnosable.
 		crClient := crMgr.GetClient()
 		resolveFn := func(rctx context.Context, ns, name string) (asyncinvoke.FunctionConfig, bool) {
 			var fn fv1.Function
 			if err := crClient.Get(rctx, client.ObjectKey{Namespace: ns, Name: name}, &fn); err != nil {
+				if !apierrors.IsNotFound(err) {
+					logger.Error(err, "resolving async destination function config; dropping destination",
+						"namespace", ns, "function", name)
+				}
 				return asyncinvoke.FunctionConfig{}, false
 			}
 			onSuccess, onFailure := destinationsFromSpec(fn.Spec.Invocation, fn.Namespace)

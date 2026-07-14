@@ -5,8 +5,10 @@
 package asyncinvoke
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -120,6 +122,42 @@ func TestFireDestinationDepthCap(t *testing.T) {
 	require.Len(t, l, 1)
 	destEnv, _ := Decode(l[0].Body)
 	assert.Equal(t, MaxChainDepth, destEnv.Depth)
+
+	// A forged envelope with a corrupt depth (negative, or one that overflows on
+	// +1) must still be capped — the guard rejects any next <= 0 (SEC hardening).
+	for _, badDepth := range []int{-1, math.MaxInt} {
+		d.fireDestination(context.Background(), dest, badDepth, ResultEnvelope{})
+		l, err = q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+		require.NoError(t, err)
+		assert.Emptyf(t, l, "corrupt depth %d must be dropped, not enqueued", badDepth)
+	}
+}
+
+// TestBuildResultFlagsTruncationAndOmission proves the result envelope flags a
+// truncated response and an omitted (over-cap) request body, so a destination can
+// tell partial/elided from empty.
+func TestBuildResultFlagsTruncationAndOmission(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	d := destDispatcher(q, scriptedDeliverer{}, time.Unix(1, 0), resolverFor(FunctionConfig{}))
+	now := time.Unix(1_000_000, 0)
+
+	big := bytes.Repeat([]byte("a"), MaxPayloadBytes+1)
+	env := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: big}
+	_, msg := leaseOne(t, q, env)
+	re := d.buildResult(env, msg, ConditionSuccess, DeliveryResult{StatusCode: 200, Body: []byte("partial"), BodyTruncated: true})
+
+	assert.True(t, re.RequestPayloadOmitted, "over-cap request body is omitted and flagged")
+	assert.Nil(t, re.RequestPayload, "omitted request payload is not embedded")
+	assert.True(t, re.ResponseContext.Truncated, "truncated response is flagged")
+
+	// A within-cap body is embedded whole and unflagged.
+	small := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: []byte("ok")}
+	_, msg2 := leaseOne(t, q, small)
+	re2 := d.buildResult(small, msg2, ConditionSuccess, DeliveryResult{StatusCode: 200, Body: []byte("resp")})
+	assert.False(t, re2.RequestPayloadOmitted)
+	assert.Equal(t, []byte("ok"), re2.RequestPayload)
+	assert.False(t, re2.ResponseContext.Truncated)
 }
 
 // ackErrorQueue errors every Ack and counts Enqueue calls, to prove a stale ack

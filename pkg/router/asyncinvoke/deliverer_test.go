@@ -64,9 +64,32 @@ func TestHTTPDelivererCapturesAndTruncatesBody(t *testing.T) {
 	defer srv.Close()
 
 	d := NewHTTPDeliverer(srv.URL, nil, nil)
-	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
+	// A destination is declared, so the response body is captured for the result
+	// envelope — and flagged truncated when it exceeds the cap.
+	env := Envelope{Namespace: "ns", Function: "fn", OnSuccess: &Destination{FunctionName: "next"}}
+	res := d.Deliver(context.Background(), env, "id", 1)
 	require.NoError(t, res.Err)
 	assert.Len(t, res.Body, MaxPayloadBytes, "response body captured and truncated at MaxPayloadBytes")
+	assert.True(t, res.BodyTruncated, "over-cap body is flagged truncated")
+}
+
+// TestHTTPDelivererSkipsBodyWithoutDestination proves the no-destination fast-path:
+// with neither OnSuccess nor OnFailure set the response body is drained, not
+// captured, so a destination-less invocation never allocates up to 64KiB.
+func TestHTTPDelivererSkipsBodyWithoutDestination(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "response-body")
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Nil(t, res.Body, "no destination → body not captured")
+	assert.False(t, res.BodyTruncated)
 }
 
 func TestHTTPDelivererDefaultNamespaceFold(t *testing.T) {

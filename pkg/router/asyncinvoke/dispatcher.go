@@ -336,11 +336,17 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 		// Topic destinations are rejected at admission (not yet supported); this
 		// guards a forged or pre-validation envelope.
 		recordDestination(ctx, "topic_unsupported")
+		d.logger.Info("async topic destination not yet supported; dropping",
+			"topic", dest.Topic, "mqType", dest.MQType)
 		return
 	}
 	next := depth + 1
-	if next > MaxChainDepth {
+	// Drop once the chain would exceed MaxChainDepth; the negative/zero guard also
+	// rejects a forged envelope with a corrupt (negative or overflowed) depth, so the
+	// cap holds regardless of provenance (invariant A6).
+	if next <= 0 || next > MaxChainDepth {
 		recordDepthCap(ctx)
+		recordDestination(ctx, "depth_capped")
 		d.logger.Info("async destination chain hit the depth cap; dropping",
 			"function", dest.FunctionName, "depth", next, "cap", MaxChainDepth)
 		return
@@ -353,8 +359,10 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 		cfg, found = d.resolveFn(ctx, dest.FunctionNamespace, dest.FunctionName)
 	}
 	if !found {
+		// The resolver reports absent OR unresolvable (it logs a real lookup error at
+		// Error itself); either way the destination cannot be fired.
 		recordDestination(ctx, "dropped")
-		d.logger.Info("async destination function not found; dropping",
+		d.logger.Info("async destination function unavailable; dropping",
 			"namespace", dest.FunctionNamespace, "function", dest.FunctionName)
 		return
 	}
@@ -393,8 +401,9 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 }
 
 // buildResult assembles the Lambda-shaped result envelope for a destination. The
-// request payload is included only when the original body fits MaxPayloadBytes;
-// the response payload was already truncated by the deliverer.
+// request payload is included only when the original body fits MaxPayloadBytes
+// (RequestPayloadOmitted flags the elision); the response payload was captured and
+// truncation-flagged by the deliverer, so a destination can tell partial from whole.
 func (d *Dispatcher) buildResult(env Envelope, msg statestore.LeasedMessage, condition string, res DeliveryResult) ResultEnvelope {
 	re := ResultEnvelope{
 		Version: EnvelopeVersion,
@@ -404,11 +413,13 @@ func (d *Dispatcher) buildResult(env Envelope, msg statestore.LeasedMessage, con
 			Condition:    condition,
 			Attempts:     msg.Attempts,
 		},
-		ResponseContext: ResponseContext{StatusCode: res.StatusCode},
+		ResponseContext: ResponseContext{StatusCode: res.StatusCode, Truncated: res.BodyTruncated},
 		ResponsePayload: res.Body,
 	}
 	if len(env.Body) <= MaxPayloadBytes {
 		re.RequestPayload = env.Body
+	} else {
+		re.RequestPayloadOmitted = true
 	}
 	return re
 }

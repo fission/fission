@@ -147,11 +147,14 @@ const MaxPayloadBytes = 64 << 10
 // the original request body (omitted when >MaxPayloadBytes) and the function's
 // response body (truncated at MaxPayloadBytes) — not guaranteed to be JSON.
 type ResultEnvelope struct {
-	Version         string          `json:"version"`
-	RequestContext  RequestContext  `json:"requestContext"`
-	RequestPayload  []byte          `json:"requestPayload,omitempty"`
-	ResponseContext ResponseContext `json:"responseContext"`
-	ResponsePayload []byte          `json:"responsePayload,omitempty"`
+	Version        string         `json:"version"`
+	RequestContext RequestContext `json:"requestContext"`
+	RequestPayload []byte         `json:"requestPayload,omitempty"`
+	// RequestPayloadOmitted is true when the original request body was dropped for
+	// exceeding MaxPayloadBytes, so a destination can tell "elided" from "empty".
+	RequestPayloadOmitted bool            `json:"requestPayloadOmitted,omitempty"`
+	ResponseContext       ResponseContext `json:"responseContext"`
+	ResponsePayload       []byte          `json:"responsePayload,omitempty"`
 }
 
 // RequestContext identifies the settled invocation the result envelope describes.
@@ -165,6 +168,10 @@ type RequestContext struct {
 // ResponseContext carries the function's delivery response status.
 type ResponseContext struct {
 	StatusCode int `json:"statusCode"`
+	// Truncated is true when the response body was cut at MaxPayloadBytes or a
+	// mid-stream read left it incomplete, so a destination knows responsePayload
+	// may be partial.
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Encode marshals the result envelope for a destination invocation body.
