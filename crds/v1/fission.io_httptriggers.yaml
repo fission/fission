@@ -192,6 +192,16 @@ spec:
                     subdomain, or a wildcard DNS1123 subdomain (e.g. *.example.com)
                   rule: '!has(self.host) || self.host == '''' || self.host == ''*''
                     || self.host.matches(r''^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'')'
+              invocationMode:
+                description: |-
+                  InvocationMode, when "async", forces every request to this trigger into
+                  RFC-0024 asynchronous invocation even without the X-Fission-Invoke-Mode
+                  header (webhooks from third parties cannot set headers). "" (the default)
+                  leaves the per-request header in control.
+                enum:
+                - ""
+                - async
+                type: string
               keepPrefix:
                 description: |-
                   When function is exposed with Prefix based path,
