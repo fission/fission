@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +22,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sync/atomic"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"

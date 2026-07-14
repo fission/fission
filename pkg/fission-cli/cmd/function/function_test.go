@@ -363,9 +363,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 
 func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 	cases := []struct {
-		name        string
-		testArgs    map[string]any
-		expected    *fv1.ProvisionedConcurrencyConfig
+		name     string
+		testArgs map[string]any
+		expected *fv1.ProvisionedConcurrencyConfig
 	}{
 		{
 			name:     "flag not set returns nil",
