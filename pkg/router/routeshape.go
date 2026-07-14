@@ -188,6 +188,7 @@ func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *reso
 		functionTimeoutMap:       fnTimeoutMap,
 		rtLogger:                 routeLogger.WithName("roundtripper"),
 		policyByUID:              precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
+		asyncInvoker:             ts.asyncInvoker,
 	}
 
 	// For FunctionReferenceTypeFunctionName the backend is fixed at build

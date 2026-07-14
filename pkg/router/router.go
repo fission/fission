@@ -60,7 +60,9 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/router/endpointcache"
+	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/tenant"
 	"github.com/fission/fission/pkg/throttler"
@@ -498,6 +500,40 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// AddResolverSync is a no-op when dynamic tenancy is off.
 	if err := tenant.AddResolverSync(crMgr); err != nil {
 		return fmt.Errorf("error registering tenant resolver-sync: %w", err)
+	}
+
+	// RFC-0024 async invocation: open the statestore queue, wire the enqueue
+	// branch onto public handlers, and start the per-replica dispatcher. Gated on
+	// ASYNC_INVOCATION_ENABLED (the chart sets it only when statestore is on).
+	// Open does not dial, so an unreachable statestore does not block startup — an
+	// enqueue then 503s (A1) and the dispatcher's leases retry.
+	if cfg.asyncInvocationEnabled {
+		caps, oerr := statestore.Open(ctx, statestore.Config{Driver: cfg.statestoreDriver, DSN: cfg.statestoreDSN})
+		if oerr != nil {
+			return fmt.Errorf("async invocation: opening statestore: %w", oerr)
+		}
+		defer func() { _ = caps.Close() }()
+		queue, qerr := caps.Queue()
+		if qerr != nil {
+			return fmt.Errorf("async invocation: statestore queue capability: %w", qerr)
+		}
+		triggers.asyncInvoker = &asyncInvoker{queue: queue, logger: logger.WithName("async_invoker")}
+
+		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
+		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil,
+			logger.WithName("async_deliverer"))
+		dispatcher := asyncinvoke.New(asyncinvoke.Options{
+			Queue:     queue,
+			Deliverer: deliverer,
+			Logger:    logger.WithName("async_dispatcher"),
+		})
+		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
+			_ = dispatcher.Run(rctx) // returns only on ctx cancellation
+			return nil
+		})); aerr != nil {
+			return fmt.Errorf("async invocation: adding dispatcher runnable: %w", aerr)
+		}
+		logger.Info("async invocation enabled", "queue", asyncinvoke.DefaultQueue, "deliveryURL", internalURL, "driver", cfg.statestoreDriver)
 	}
 
 	logger.Info("starting router", "port", opts.Port, "internalPort", opts.InternalPort)

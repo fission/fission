@@ -22,6 +22,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
+	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/router/streaming"
 	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -64,6 +65,11 @@ type functionHandler struct {
 	// canary path selects the backend per request, hence per-UID).
 	rtLogger    logr.Logger
 	policyByUID map[k8stypes.UID]proxyPolicy
+	// asyncInvoker enqueues RFC-0024 async invocations. Set only on public
+	// HTTPTrigger handlers (buildTriggerHandler); nil on internal function
+	// handlers so a dispatcher delivery is always a synchronous proxy and can
+	// never re-enqueue. May be nil (or hold a nil queue) when the feature is off.
+	asyncInvoker *asyncInvoker
 }
 
 // proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
@@ -104,6 +110,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 
 	// system params
 	setFunctionMetadataToHeader(&fh.function.ObjectMeta, request)
+
+	// RFC-0024: async invocation. Only public HTTPTrigger handlers
+	// (httpTrigger != nil) honor X-Fission-Invoke-Mode: async — the dispatcher's
+	// delivery lands on the internal function handler (httpTrigger == nil), which
+	// skips this branch and proxies synchronously, so a delivery never
+	// re-enqueues. handle() writes 501 when the feature is off (nil invoker/queue),
+	// so an async-mode request is answered honestly rather than run synchronously.
+	if fh.httpTrigger != nil && strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync) {
+		fh.asyncInvoker.handle(responseWriter, request, fh.function)
+		return
+	}
 
 	director := func(req *http.Request) {
 		if _, ok := req.Header["User-Agent"]; !ok {
