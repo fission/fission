@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,21 @@ func TestHTTPDelivererDelivers(t *testing.T) {
 	assert.Equal(t, "inv-123", gotHeaders.Get(HeaderInvocationID), "invocation id replayed")
 	assert.Equal(t, "4", gotHeaders.Get(HeaderInvocationAttempt), "attempt replayed")
 	assert.Equal(t, "2", gotHeaders.Get(HeaderInvocationDepth), "depth replayed")
+}
+
+func TestHTTPDelivererCapturesAndTruncatesBody(t *testing.T) {
+	t.Parallel()
+	big := strings.Repeat("a", MaxPayloadBytes+100)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, big)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Len(t, res.Body, MaxPayloadBytes, "response body captured and truncated at MaxPayloadBytes")
 }
 
 func TestHTTPDelivererDefaultNamespaceFold(t *testing.T) {

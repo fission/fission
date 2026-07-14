@@ -30,6 +30,9 @@ type Deliverer interface {
 type DeliveryResult struct {
 	StatusCode int
 	Err        error
+	// Body is the function's response body, captured up to MaxPayloadBytes for a
+	// destination result envelope (empty on a transport error).
+	Body []byte
 }
 
 // httpDeliverer POSTs to the router internal listener, byte-identical to the
@@ -88,6 +91,9 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 		return DeliveryResult{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
-	return DeliveryResult{StatusCode: resp.StatusCode}
+	// Capture up to MaxPayloadBytes for a destination result envelope, then drain
+	// the remainder to io.Discard so keep-alive can reuse the connection.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, MaxPayloadBytes))
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return DeliveryResult{StatusCode: resp.StatusCode, Body: body}
 }

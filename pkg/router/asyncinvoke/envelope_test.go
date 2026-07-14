@@ -6,6 +6,7 @@ package asyncinvoke
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -13,6 +14,58 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEnvelopeRoundTripWithDestinations(t *testing.T) {
+	t.Parallel()
+	env := Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "fn", Method: "POST",
+		Body: []byte("x"), EnqueueTime: time.Unix(1000, 0).UTC(), Depth: 1,
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next"},
+		OnFailure: &Destination{Topic: "dlq", MQType: "kafka"},
+	}
+	data, err := env.Encode()
+	require.NoError(t, err)
+	got, err := Decode(data)
+	require.NoError(t, err)
+	require.Equal(t, env, got)
+	assert.True(t, got.OnSuccess.IsFunction())
+	assert.True(t, got.OnFailure.IsTopic())
+}
+
+func TestResultEnvelopeRoundTrip(t *testing.T) {
+	t.Parallel()
+	re := ResultEnvelope{
+		Version:         EnvelopeVersion,
+		RequestContext:  RequestContext{InvocationID: "id", FunctionRef: "ns/fn", Condition: ConditionSuccess, Attempts: 2},
+		RequestPayload:  []byte("req"),
+		ResponseContext: ResponseContext{StatusCode: 200},
+		ResponsePayload: []byte("resp"),
+	}
+	data, err := re.Encode()
+	require.NoError(t, err)
+	var got ResultEnvelope
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.Equal(t, re, got)
+}
+
+// FuzzResultEnvelopeDecode asserts the result envelope never panics on arbitrary
+// bytes and re-encodes stably.
+func FuzzResultEnvelopeDecode(f *testing.F) {
+	seed, _ := ResultEnvelope{Version: "1.0", RequestContext: RequestContext{InvocationID: "id"}}.Encode()
+	f.Add(seed)
+	f.Add([]byte(`{}`))
+	f.Add([]byte(`not json`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var re ResultEnvelope
+		if json.Unmarshal(data, &re) != nil {
+			return
+		}
+		out, err := re.Encode()
+		require.NoError(t, err)
+		var re2 ResultEnvelope
+		require.NoError(t, json.Unmarshal(out, &re2))
+	})
+}
 
 func TestEnvelopeRoundTrip(t *testing.T) {
 	t.Parallel()
