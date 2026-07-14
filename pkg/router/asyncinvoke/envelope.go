@@ -36,6 +36,33 @@ const (
 	DefaultMaxBodyBytes = 256 << 10
 )
 
+// Request/replay headers. The enqueue branch reads the first three from the
+// incoming request; the dispatcher sets the last three on each delivery so the
+// function (and downstream correlation) can see the invocation identity.
+const (
+	HeaderInvokeMode        = "X-Fission-Invoke-Mode"        // "async" opts a request into async mode
+	HeaderDedupKey          = "X-Fission-Dedup-Key"          // idempotency key for enqueue collapse
+	HeaderInvocationID      = "X-Fission-Invocation-Id"      // durable invocation id, replayed on delivery
+	HeaderInvocationAttempt = "X-Fission-Invocation-Attempt" // 1-based delivery attempt, replayed on delivery
+	HeaderInvocationDepth   = "X-Fission-Invocation-Depth"   // destination-chain depth, replayed on delivery
+)
+
+// InvokeModeAsync is the HeaderInvokeMode value that requests async invocation.
+const InvokeModeAsync = "async"
+
+// Policy is the resolved async delivery policy carried in the envelope, stamped
+// from the function's InvocationConfig at enqueue so the dispatcher is
+// self-contained (it never re-reads the Function, which may have changed or been
+// deleted). Durations are nanoseconds on the wire; a zero field means the
+// dispatcher's platform default.
+type Policy struct {
+	MaxAttempts int           `json:"maxAttempts,omitempty"`
+	BackoffBase time.Duration `json:"backoffBase,omitempty"`
+	BackoffCap  time.Duration `json:"backoffCap,omitempty"`
+	MaxAge      time.Duration `json:"maxAge,omitempty"`
+	NoJitter    bool          `json:"noJitter,omitempty"`
+}
+
 // Envelope is the durable, self-contained record of one asynchronous invocation.
 // It carries everything the dispatcher needs to replay the request to the
 // function's internal listener without re-resolving the trigger, so a delivery
@@ -66,6 +93,10 @@ type Envelope struct {
 	// default). The dispatcher derives leaseFor from it so the lease strictly
 	// exceeds the function timeout (invariant A7).
 	FunctionTimeout int `json:"functionTimeout"`
+	// Policy is the resolved retry/age policy for this invocation, stamped from
+	// the function's InvocationConfig at enqueue. Zero fields take dispatcher
+	// defaults.
+	Policy Policy `json:"policy,omitzero"`
 }
 
 // Encode marshals the envelope for a statestore Queue message body.

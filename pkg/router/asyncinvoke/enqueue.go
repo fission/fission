@@ -30,6 +30,9 @@ type Params struct {
 	FunctionTimeout int // seconds; 0 = platform default
 	Depth           int
 	DedupKey        string
+	// Policy is the resolved retry/age policy stamped into the envelope (zero
+	// fields take dispatcher defaults).
+	Policy Policy
 	// QueueName defaults to DefaultQueue when empty. MaxBodyBytes defaults to
 	// DefaultMaxBodyBytes when <= 0.
 	QueueName    string
@@ -61,6 +64,7 @@ func Enqueue(ctx context.Context, q statestore.Queue, w http.ResponseWriter, r *
 		EnqueueTime:     time.Now(),
 		Depth:           p.Depth,
 		FunctionTimeout: p.FunctionTimeout,
+		Policy:          p.Policy,
 	}
 	data, err := env.Encode()
 	if err != nil {
