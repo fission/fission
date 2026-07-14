@@ -321,6 +321,12 @@ func (s *Store) Purge(_ context.Context, queue string) (int64, error) {
 		}
 		kept = append(kept, m)
 	}
+	// Clear the tail of the backing array so the removed *qmsg (and their body
+	// buffers) are unreferenced and can be GC'd, rather than lingering past
+	// len(kept) in the shared array.
+	for i := len(kept); i < len(q.msgs); i++ {
+		q.msgs[i] = nil
+	}
 	q.msgs = kept
 	return removed, nil
 }
