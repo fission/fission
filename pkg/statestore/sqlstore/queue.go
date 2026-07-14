@@ -283,21 +283,24 @@ func (q *queueStore) DeadLetters(ctx context.Context, queue string, page statest
 
 // Redrive implements statestore.Queue: return dead messages to the queue with
 // attempts reset.
-func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) error {
+func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) (int64, error) {
 	if len(ids) == 0 {
-		return nil
+		return 0, nil
 	}
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	args := []any{stQueued, nowNanos(), queue, stDead}
 	for _, id := range ids {
 		args = append(args, id)
 	}
-	_, err := q.s.exec(ctx,
+	res, err := q.s.exec(ctx,
 		`UPDATE state_queue SET state = ?, attempts = 0, visible_at = ?, reason = NULL, died_at = NULL
 		 WHERE queue = ? AND state = ? AND id IN (`+placeholders+`)`,
 		args...,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // Purge implements statestore.Queue: delete every dead-lettered row for queue and

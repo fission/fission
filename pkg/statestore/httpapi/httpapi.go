@@ -203,6 +203,9 @@ type QueueRedriveReq struct {
 	Queue string   `json:"queue"`
 	IDs   []string `json:"ids"`
 }
+type QueueRedriveResp struct {
+	Redriven int64 `json:"redriven"`
+}
 type QueuePurgeReq struct {
 	Queue string `json:"queue"`
 }

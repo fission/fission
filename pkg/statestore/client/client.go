@@ -214,8 +214,12 @@ func (c *Client) DeadLetters(ctx context.Context, queue string, page statestore.
 	return resp.Messages, nil
 }
 
-func (c *Client) Redrive(ctx context.Context, queue string, ids []string) error {
-	return c.post(ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, nil)
+func (c *Client) Redrive(ctx context.Context, queue string, ids []string) (int64, error) {
+	var resp httpapi.QueueRedriveResp
+	if err := c.post(ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Redriven, nil
 }
 
 func (c *Client) Purge(ctx context.Context, queue string) (int64, error) {

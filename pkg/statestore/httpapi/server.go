@@ -336,11 +336,12 @@ func (h *handler) queueRedrive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := q.Redrive(r.Context(), req.Queue, req.IDs); err != nil {
+	n, err := q.Redrive(r.Context(), req.Queue, req.IDs)
+	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, QueueRedriveResp{Redriven: n})
 }
 
 func (h *handler) queuePurge(w http.ResponseWriter, r *http.Request) {

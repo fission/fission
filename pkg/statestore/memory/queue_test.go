@@ -304,7 +304,9 @@ func TestMemoryQueue_KillImmediateAndRedrive(t *testing.T) {
 	require.Equal(t, "http_4xx", dl[0].Reason)
 
 	// Redrive returns it to the queue with attempts reset.
-	require.NoError(t, q.Redrive(ctx, qn, []string{id}))
+	n, err := q.Redrive(ctx, qn, []string{id})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
 	dl, err = q.DeadLetters(ctx, qn, statestore.Page{})
 	require.NoError(t, err)
 	require.Empty(t, dl)

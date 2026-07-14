@@ -253,7 +253,13 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.Len(t, dead, 1)
 		require.Equal(t, id, dead[0].ID)
 
-		require.NoError(t, q.Redrive(ctx, "cq", []string{id}))
+		n, err := q.Redrive(ctx, "cq", []string{id})
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, n, "Redrive reports the count actually re-enqueued")
+		// A second redrive of the same (now-requeued, not dead) id re-enqueues nothing.
+		n, err = q.Redrive(ctx, "cq", []string{id})
+		require.NoError(t, err)
+		assert.Zero(t, n, "an id that is not dead-lettered is not redriven")
 		dead, err = q.DeadLetters(ctx, "cq", statestore.Page{})
 		require.NoError(t, err)
 		require.Empty(t, dead)

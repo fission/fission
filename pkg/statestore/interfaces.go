@@ -69,8 +69,9 @@ type Queue interface {
 	// DeadLetters returns a page of dead-lettered messages for queue.
 	DeadLetters(ctx context.Context, queue string, page Page) ([]DeadMessage, error)
 	// Redrive re-enqueues dead-lettered messages by durable id with attempts
-	// reset.
-	Redrive(ctx context.Context, queue string, ids []string) error
+	// reset, returning the number actually re-enqueued — ids that are not currently
+	// dead-lettered are skipped, so the count can be less than len(ids).
+	Redrive(ctx context.Context, queue string, ids []string) (int64, error)
 	// Purge permanently deletes every dead-lettered message for queue and returns
 	// the number removed. It touches only the dead set (never queued/leased/acked
 	// work), so it drops the conservation Enqueued and Dead counts equally and the

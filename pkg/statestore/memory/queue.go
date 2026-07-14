@@ -275,11 +275,11 @@ func (s *Store) DeadLetters(_ context.Context, queue string, page statestore.Pag
 
 // Redrive implements statestore.Queue: return dead-lettered messages to the
 // queue with attempts reset.
-func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
+func (s *Store) Redrive(_ context.Context, queue string, ids []string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return statestore.ErrClosed
+		return 0, statestore.ErrClosed
 	}
 	q := s.queue(queue)
 	want := make(map[string]bool, len(ids))
@@ -287,6 +287,7 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 		want[id] = true
 	}
 	now := time.Now()
+	var redriven int64
 	for _, m := range q.msgs {
 		if m.state == qDead && want[m.id] {
 			m.state = qQueued
@@ -294,9 +295,10 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 			m.visibleAt = now
 			m.reason = ""
 			m.diedAt = time.Time{}
+			redriven++
 		}
 	}
-	return nil
+	return redriven, nil
 }
 
 // Purge implements statestore.Queue: permanently drop every dead-lettered message
