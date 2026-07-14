@@ -268,13 +268,79 @@ func TestProcessKillOnUndecodable(t *testing.T) {
 }
 
 // TestDeliveryTimeoutBelowLease asserts A7: the per-delivery timeout is always
-// strictly less than the lease duration, for any function timeout.
+// positive and strictly less than the lease duration — for any function timeout
+// AND any lease duration (including a lease shorter than the buffer, which the
+// earlier fixed-guard skipped).
 func TestDeliveryTimeoutBelowLease(t *testing.T) {
 	t.Parallel()
 	rapid.Check(t, func(t *rapid.T) {
 		ftSec := rapid.IntRange(0, 100_000).Draw(t, "ftSec")
-		d := New(Options{Logger: logr.Discard()})
+		leaseMs := rapid.IntRange(1, 10*60*1000).Draw(t, "leaseMs") // 1ms .. 10min
+		d := New(Options{Logger: logr.Discard(), LeaseDuration: time.Duration(leaseMs) * time.Millisecond})
 		got := d.deliveryTimeout(Envelope{FunctionTimeout: ftSec})
-		require.Less(t, got, d.leaseDuration, "delivery timeout must stay below the lease (A7)")
+		require.Positive(t, got, "delivery timeout must be positive")
+		require.Less(t, got, d.leaseDuration, "delivery timeout must stay below the lease (A7), for any lease")
 	})
+}
+
+// erroringQueue returns a fixed error from every settle/lease op, to exercise the
+// dispatcher's failure branches (which must not panic, double-settle, or spin).
+type erroringQueue struct {
+	statestore.Queue
+	err error
+}
+
+func (e erroringQueue) Ack(context.Context, string) error                 { return e.err }
+func (e erroringQueue) Nack(context.Context, string, time.Duration) error { return e.err }
+func (e erroringQueue) Kill(context.Context, string, string) error        { return e.err }
+func (e erroringQueue) Lease(context.Context, string, int, time.Duration) ([]statestore.LeasedMessage, error) {
+	return nil, e.err
+}
+
+// TestProcessSurvivesSettleErrors: every settle branch (ack / kill-4xx / nack /
+// kill-exhausted) tolerates a store error without panicking.
+func TestProcessSurvivesSettleErrors(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1_000_000, 0)
+	cases := []struct {
+		name string
+		res  DeliveryResult
+		att  int
+	}{
+		{"ack error", DeliveryResult{StatusCode: 200}, 1},
+		{"kill-4xx error", DeliveryResult{StatusCode: 400}, 1},
+		{"nack error", DeliveryResult{StatusCode: 500}, 1},
+		{"kill-exhausted error", DeliveryResult{StatusCode: 500}, DefaultMaxAttempts},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			q := erroringQueue{err: errors.New("store down")}
+			d := newTestDispatcher(q, scriptedDeliverer{tc.res}, now)
+			require.NotPanics(t, func() {
+				d.process(context.Background(), leasedMsg(t, Envelope{EnqueueTime: now}, tc.att))
+			})
+		})
+	}
+}
+
+// TestProcessStaleReceiptTolerated: an ErrInvalidReceipt settle (a newer lease
+// already decided the outcome — invariant A3) is handled without panic.
+func TestProcessStaleReceiptTolerated(t *testing.T) {
+	t.Parallel()
+	now := time.Unix(1_000_000, 0)
+	q := erroringQueue{err: statestore.ErrInvalidReceipt}
+	d := newTestDispatcher(q, scriptedDeliverer{DeliveryResult{StatusCode: 200}}, now)
+	require.NotPanics(t, func() {
+		d.process(context.Background(), leasedMsg(t, Envelope{EnqueueTime: now}, 1))
+	})
+}
+
+// TestPollOnceSurvivesLeaseError: a Lease error yields zero processed (so Run
+// backs off rather than spinning or exiting) and does not panic.
+func TestPollOnceSurvivesLeaseError(t *testing.T) {
+	t.Parallel()
+	q := erroringQueue{err: errors.New("lease failed")}
+	d := New(Options{Queue: q, Deliverer: scriptedDeliverer{DeliveryResult{StatusCode: 200}}, Logger: logr.Discard()})
+	require.Equal(t, 0, d.pollOnce(context.Background()))
 }

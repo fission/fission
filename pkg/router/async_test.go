@@ -143,10 +143,48 @@ func TestPolicyFromSpec(t *testing.T) {
 	assert.True(t, got.NoJitter, "Jitter:false → NoJitter:true")
 }
 
-func TestParseDepthHeader(t *testing.T) {
+// TestAsyncInvokerHandleDedup asserts the handler wires X-Fission-Dedup-Key
+// through to Enqueue: two async requests with the same key collapse to one
+// durable invocation (same id, one queued message).
+func TestAsyncInvokerHandleDedup(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, 0, parseDepthHeader(""))
-	assert.Equal(t, 3, parseDepthHeader("3"))
-	assert.Equal(t, 0, parseDepthHeader("-1"))
-	assert.Equal(t, 0, parseDepthHeader("abc"))
+	q := routerMemQueue(t)
+	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	post := func() string {
+		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
+		r.Header.Set(asyncinvoke.HeaderDedupKey, "same")
+		w := httptest.NewRecorder()
+		inv.handle(w, r, fn)
+		require.Equal(t, 202, w.Code)
+		return w.Header().Get(asyncinvoke.HeaderInvocationID)
+	}
+	id1, id2 := post(), post()
+	assert.Equal(t, id1, id2, "same dedup key → same invocation id")
+
+	st, err := q.Stats(t.Context(), asyncinvoke.DefaultQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, st.Visible, "dedup collapses to a single queued message")
+}
+
+// TestAsyncInvokerHandleIgnoresCallerDepth asserts a public caller cannot seed the
+// destination-chain depth: an X-Fission-Invocation-Depth header on the incoming
+// request is not reflected into the enqueued envelope (it stays 0).
+func TestAsyncInvokerHandleIgnoresCallerDepth(t *testing.T) {
+	t.Parallel()
+	q := routerMemQueue(t)
+	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
+	r.Header.Set(asyncinvoke.HeaderInvocationDepth, "5")
+	w := httptest.NewRecorder()
+	inv.handle(w, r, fn)
+	require.Equal(t, 202, w.Code)
+
+	l, err := q.Lease(t.Context(), asyncinvoke.DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1)
+	env, err := asyncinvoke.Decode(l[0].Body)
+	require.NoError(t, err)
+	assert.Equal(t, 0, env.Depth, "caller-supplied depth must not be trusted")
 }

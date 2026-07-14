@@ -508,10 +508,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// Open does not dial, so an unreachable statestore does not block startup — an
 	// enqueue then 503s (A1) and the dispatcher's leases retry.
 	if cfg.asyncInvocationEnabled {
-		caps, oerr := statestore.Open(ctx, statestore.Config{Driver: cfg.statestoreDriver, DSN: cfg.statestoreDSN})
+		opened, oerr := statestore.Open(ctx, statestore.Config{Driver: cfg.statestoreDriver, DSN: cfg.statestoreDSN})
 		if oerr != nil {
 			return fmt.Errorf("async invocation: opening statestore: %w", oerr)
 		}
+		// Wrap so the async path emits the statestore op metrics and — in external
+		// (Postgres-direct) mode, where there is no statestore service to do it —
+		// the conservation drift gauge (invariant A5) is observed here. In embedded
+		// mode the client driver is not a ConservationReporter, so NewScoped
+		// registers no reporter (the statestore service emits it), avoiding double
+		// counting.
+		caps := statestore.NewScoped(opened, nil)
 		defer func() { _ = caps.Close() }()
 		queue, qerr := caps.Queue()
 		if qerr != nil {
@@ -520,8 +527,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		triggers.asyncInvoker = &asyncInvoker{queue: queue, logger: logger.WithName("async_invoker")}
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
-		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil,
-			logger.WithName("async_deliverer"))
+		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
 		dispatcher := asyncinvoke.New(asyncinvoke.Options{
 			Queue:     queue,
 			Deliverer: deliverer,

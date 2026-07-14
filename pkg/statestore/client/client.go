@@ -14,8 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statestore/httpapi"
 )
@@ -25,8 +27,26 @@ func init() {
 		if c.DSN == "" {
 			return nil, fmt.Errorf("statestore/client: empty DSN (embedded store base URL)")
 		}
-		return New(c.DSN, nil), nil
+		return New(c.DSN, signedClient()), nil
 	})
+}
+
+// signedClient returns an http.Client that signs requests with the
+// ServiceStatestore HMAC key when FISSION_INTERNAL_AUTH_SECRET is set, which the
+// embedded statestore head verifies for that identity (statestoresvc). This
+// mirrors the timer/mqtrigger/router-async publishers; an empty secret leaves
+// requests unsigned (pass-through), matching the server's pass-through mode. Read
+// here at the driver-open boundary (not in New) so the deterministic New(dsn, hc)
+// constructor stays env-free for tests.
+func signedClient() *http.Client {
+	master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET")
+	if master == "" {
+		return &http.Client{Timeout: 30 * time.Second} // nil Transport → http.DefaultTransport (unsigned)
+	}
+	return &http.Client{
+		Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceStatestore, http.DefaultTransport, time.Now),
+		Timeout:   30 * time.Second,
+	}
 }
 
 // Client is an HTTP-backed Capabilities. It implements all three capability

@@ -6,6 +6,7 @@ package asyncinvoke
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"net/http"
 	"sync"
@@ -47,6 +48,11 @@ const (
 	// lease (invariant A7): a slow-but-alive delivery is cancelled and retried,
 	// never left to ack against a lease a newer delivery already owns.
 	deliveryTimeoutBuffer = 10 * time.Second
+
+	// settleTimeout bounds a terminal settle (Ack/Nack/Kill) on the detached
+	// context, so a settle during graceful drain persists the outcome of finished
+	// work without hanging shutdown.
+	settleTimeout = 15 * time.Second
 )
 
 // action is the settle decision for one delivery attempt.
@@ -181,51 +187,69 @@ func (d *Dispatcher) pollOnce(ctx context.Context) int {
 }
 
 // process delivers one leased invocation and settles it per the settle matrix.
+// The terminal settle (Ack/Nack/Kill) runs on a context detached from ctx, so a
+// settle for already-completed work still lands during a graceful drain rather
+// than being abandoned to a lease-expiry redelivery. Lease and Deliver keep ctx
+// and abort on shutdown.
 func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) {
+	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+	defer scancel()
+
 	env, err := Decode(msg.Body)
 	if err != nil {
-		d.kill(ctx, msg, ReasonUndecodable)
+		d.logger.Error(err, "async envelope will not decode; dead-lettering", "id", msg.ID)
+		d.kill(sctx, msg, ReasonUndecodable)
 		return
 	}
+	policy := resolvePolicy(env.Policy)
+
 	// Dead-letter an invocation that waited past its MaxAge before delivering it.
-	if d.expired(env, d.now()) {
-		d.kill(ctx, msg, ReasonExpired)
+	if d.now().Sub(env.EnqueueTime) > policy.MaxAge {
+		d.kill(sctx, msg, ReasonExpired)
 		return
 	}
 
-	dctx, cancel := context.WithTimeout(ctx, d.deliveryTimeout(env))
+	dctx, dcancel := context.WithTimeout(ctx, d.deliveryTimeout(env))
 	res := d.deliverer.Deliver(dctx, env, msg.ID, msg.Attempts)
-	cancel()
-	recordDelivery(ctx, deliveryCondition(res))
+	dcancel()
+	recordDelivery(sctx, deliveryCondition(res))
 
-	switch classify(res) {
+	action := classify(res)
+	if action != actionAck {
+		// One V(1) line with the per-invocation detail (function, status, error)
+		// an operator needs to root-cause a delivery failure — the aggregate
+		// deliveries/dlq counters alone cannot attribute it.
+		d.logger.V(1).Info("async delivery failed",
+			"id", msg.ID, "namespace", env.Namespace, "function", env.Function,
+			"attempt", msg.Attempts, "statusCode", res.StatusCode, "err", res.Err)
+	}
+
+	switch action {
 	case actionAck:
-		if err := d.q.Ack(ctx, msg.Receipt); err != nil {
-			d.logger.Error(err, "ack failed", "id", msg.ID)
-		}
+		d.logSettle("ack", msg.ID, d.q.Ack(sctx, msg.Receipt))
 	case actionKill:
-		d.kill(ctx, msg, ReasonHTTP4xx)
+		d.kill(sctx, msg, ReasonHTTP4xx)
 	case actionRetry:
-		d.retry(ctx, msg, env)
+		d.retry(sctx, msg, env, policy)
 	}
 }
 
 // retry either requeues with backoff or dead-letters when the attempt budget is
-// spent or the next attempt would exceed MaxAge.
-func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, env Envelope) {
-	if msg.Attempts >= maxAttempts(env.Policy) {
+// spent or the next attempt would exceed MaxAge. policy is the resolved policy.
+func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, env Envelope, policy Policy) {
+	if msg.Attempts >= policy.MaxAttempts {
 		d.kill(ctx, msg, statestore.ReasonRetriesExhausted)
 		return
 	}
-	backoff := d.backoff(env.Policy, msg.Attempts)
+	backoff := d.backoff(policy, msg.Attempts)
 	// If the retry would land after MaxAge, dead-letter now rather than requeue
 	// work that can only expire (invariant A4: the reason is the true one).
-	if d.now().Add(backoff).Sub(env.EnqueueTime) > maxAge(env.Policy) {
+	if d.now().Add(backoff).Sub(env.EnqueueTime) > policy.MaxAge {
 		d.kill(ctx, msg, ReasonExpired)
 		return
 	}
 	if err := d.q.Nack(ctx, msg.Receipt, backoff); err != nil {
-		d.logger.Error(err, "nack failed", "id", msg.ID)
+		d.logSettle("nack", msg.ID, err)
 		return
 	}
 	recordRetry(ctx)
@@ -236,45 +260,58 @@ func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, en
 // counted as a dead-letter this delivery caused.
 func (d *Dispatcher) kill(ctx context.Context, msg statestore.LeasedMessage, reason string) {
 	if err := d.q.Kill(ctx, msg.Receipt, reason); err != nil {
-		d.logger.Error(err, "kill failed", "id", msg.ID, "reason", reason)
+		d.logSettle("kill", msg.ID, err)
 		return
 	}
 	recordDLQ(ctx, reason)
 }
 
+// logSettle logs a settle error, quieting the expected stale-receipt case — a
+// delivery whose lease a newer lease already superseded (invariant A3) — to V(1)
+// so it does not drown a genuine store failure (DB down, receipt bug) logged at
+// Error.
+func (d *Dispatcher) logSettle(op, id string, err error) {
+	if err == nil {
+		return
+	}
+	if errors.Is(err, statestore.ErrInvalidReceipt) {
+		d.logger.V(1).Info("settle raced a newer lease (expected)", "op", op, "id", id)
+		return
+	}
+	d.logger.Error(err, op+" failed", "id", id)
+}
+
 // deliveryTimeout bounds one delivery attempt: the function timeout plus a buffer,
-// but always at least deliveryTimeoutBuffer below the lease so the delivery
-// context expires before the lease (invariant A7).
+// but always strictly below the lease so the delivery context expires before the
+// lease (invariant A7) for ANY lease duration. When the lease is shorter than the
+// buffer the floor falls back to half the lease rather than going non-positive
+// (which would skip the cap and let a delivery outlive its lease).
 func (d *Dispatcher) deliveryTimeout(env Envelope) time.Duration {
 	ft := time.Duration(env.FunctionTimeout) * time.Second
 	if ft <= 0 {
 		ft = DefaultFunctionTimeout
 	}
 	timeout := ft + deliveryTimeoutBuffer
-	if maxTimeout := d.leaseDuration - deliveryTimeoutBuffer; maxTimeout > 0 && timeout > maxTimeout {
+	maxTimeout := d.leaseDuration - deliveryTimeoutBuffer
+	if maxTimeout <= 0 {
+		maxTimeout = d.leaseDuration / 2
+	}
+	if timeout > maxTimeout {
 		timeout = maxTimeout
 	}
 	return timeout
 }
 
 // backoff is the delay before the next retry: exponential base·2^(attempt-1)
-// capped, with full jitter (a uniform draw in [0, computed)) unless disabled. The
-// result is always in [0, cap].
+// capped, with full jitter (a uniform draw in [0, computed)) unless disabled. It
+// assumes p is a resolved policy (non-zero base/cap); the result is in [0, cap].
 func (d *Dispatcher) backoff(p Policy, attempt int) time.Duration {
-	base := p.BackoffBase
-	if base <= 0 {
-		base = DefaultBackoffBase
-	}
-	capD := p.BackoffCap
-	if capD <= 0 {
-		capD = DefaultBackoffCap
-	}
 	if attempt < 1 {
 		attempt = 1
 	}
-	delay := capD
+	delay := p.BackoffCap
 	if shift := attempt - 1; shift < 62 {
-		if e := base << shift; e > 0 && e < capD {
+		if e := p.BackoffBase << shift; e > 0 && e < p.BackoffCap {
 			delay = e
 		}
 	}
@@ -284,22 +321,30 @@ func (d *Dispatcher) backoff(p Policy, attempt int) time.Duration {
 	return delay
 }
 
-func (d *Dispatcher) expired(env Envelope, now time.Time) bool {
-	return now.Sub(env.EnqueueTime) > maxAge(env.Policy)
-}
-
-func maxAttempts(p Policy) int {
-	if p.MaxAttempts > 0 {
-		return p.MaxAttempts
+// resolvePolicy fills a Policy's zero fields with the dispatcher's platform
+// defaults and clamps MaxAttempts to the store's attempt budget
+// (DefaultMaxAttempts). It runs per delivery (not at enqueue) so a default change
+// reaches in-flight messages, and it is the single place the "zero means default"
+// rule lives — retry/backoff then read plain fields. The MaxAttempts clamp keeps
+// the dispatcher's kill-vs-nack decision in step with the store's own exhaustion
+// budget: a policy MaxAttempts above the store budget would otherwise let the
+// store dead-letter on a Nack the dispatcher believes is a requeue, mis-counting
+// a dead-letter as a retry. Admission validation already rejects such values;
+// this is the defense-in-depth clamp.
+func resolvePolicy(p Policy) Policy {
+	if p.MaxAttempts <= 0 || p.MaxAttempts > DefaultMaxAttempts {
+		p.MaxAttempts = DefaultMaxAttempts
 	}
-	return DefaultMaxAttempts
-}
-
-func maxAge(p Policy) time.Duration {
-	if p.MaxAge > 0 {
-		return p.MaxAge
+	if p.BackoffBase <= 0 {
+		p.BackoffBase = DefaultBackoffBase
 	}
-	return DefaultMaxAge
+	if p.BackoffCap <= 0 {
+		p.BackoffCap = DefaultBackoffCap
+	}
+	if p.MaxAge <= 0 {
+		p.MaxAge = DefaultMaxAge
+	}
+	return p
 }
 
 // sleepCtx sleeps for d or until ctx is cancelled; it returns false if cancelled.

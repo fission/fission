@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/go-logr/logr"
 
@@ -49,8 +48,10 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 		Function:        fn.Name,
 		FunctionTimeout: fn.Spec.FunctionTimeout,
 		DedupKey:        r.Header.Get(asyncinvoke.HeaderDedupKey),
-		Depth:           parseDepthHeader(r.Header.Get(asyncinvoke.HeaderInvocationDepth)),
-		Policy:          policyFromSpec(fn.Spec.Invocation),
+		// Depth stays 0: a public caller must not seed the destination-chain depth
+		// (phase 2 derives it from the signed internal replay, not the request), so
+		// the loop guard cannot be defeated by an external X-Fission-Invocation-Depth.
+		Policy: policyFromSpec(fn.Spec.Invocation),
 	}
 	id, err := asyncinvoke.Enqueue(r.Context(), a.queue, w, r, p)
 	if err != nil {
@@ -66,19 +67,6 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 	w.Header().Set(asyncinvoke.HeaderInvocationID, id)
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{"invocationId": id})
-}
-
-// parseDepthHeader reads the destination-chain depth from the replay header,
-// defaulting to 0 on absence or a malformed/negative value.
-func parseDepthHeader(raw string) int {
-	if raw == "" {
-		return 0
-	}
-	d, err := strconv.Atoi(raw)
-	if err != nil || d < 0 {
-		return 0
-	}
-	return d
 }
 
 // policyFromSpec maps a function's InvocationConfig to the durable async policy

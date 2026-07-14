@@ -21,12 +21,16 @@ func TestInvocationConfigValidate(t *testing.T) {
 	}{
 		{"zero value ok", InvocationConfig{}, false},
 		{"valid full", InvocationConfig{
-			Retry:  RetryPolicy{MaxAttempts: new(5), BackoffBase: md(time.Second), BackoffCap: md(time.Minute), Jitter: new(false)},
+			Retry:  RetryPolicy{MaxAttempts: new(3), BackoffBase: md(time.Second), BackoffCap: md(time.Minute), Jitter: new(false)},
 			MaxAge: md(6 * time.Hour),
 		}, false},
 		{"maxAttempts zero", InvocationConfig{Retry: RetryPolicy{MaxAttempts: new(0)}}, true},
 		{"maxAttempts negative", InvocationConfig{Retry: RetryPolicy{MaxAttempts: new(-1)}}, true},
 		{"maxAttempts one ok", InvocationConfig{Retry: RetryPolicy{MaxAttempts: new(1)}}, false},
+		{"maxAttempts at cap ok", InvocationConfig{Retry: RetryPolicy{MaxAttempts: new(MaxAsyncAttempts)}}, false},
+		{"maxAttempts over cap", InvocationConfig{Retry: RetryPolicy{MaxAttempts: new(MaxAsyncAttempts + 1)}}, true},
+		{"maxAge at cap ok", InvocationConfig{MaxAge: md(MaxAsyncMaxAge)}, false},
+		{"maxAge over cap", InvocationConfig{MaxAge: md(MaxAsyncMaxAge + time.Hour)}, true},
 		{"negative backoffBase", InvocationConfig{Retry: RetryPolicy{BackoffBase: md(-time.Second)}}, true},
 		{"negative backoffCap", InvocationConfig{Retry: RetryPolicy{BackoffCap: md(-time.Second)}}, true},
 		{"cap below base", InvocationConfig{Retry: RetryPolicy{BackoffBase: md(time.Minute), BackoffCap: md(time.Second)}}, true},

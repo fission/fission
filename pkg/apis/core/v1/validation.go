@@ -394,16 +394,33 @@ func (spec FunctionSpec) validateForAdmission() error {
 	return errs
 }
 
+const (
+	// MaxAsyncAttempts bounds RetryPolicy.MaxAttempts. It matches the statestore
+	// queue's fixed attempt budget (statestore.DefaultMaxAttempts): the async
+	// dispatcher clamps to the same value, and a larger MaxAttempts would be
+	// silently capped (the store dead-letters at its budget), so it is rejected at
+	// admission instead. Raising it requires a per-message store budget (an
+	// RFC-0024 follow-up).
+	MaxAsyncAttempts = 3
+	// MaxAsyncMaxAge bounds InvocationConfig.MaxAge — a platform ceiling so one
+	// namespace cannot park work on the shared async queue indefinitely.
+	MaxAsyncMaxAge = 7 * 24 * time.Hour
+)
+
 // Validate checks the async invocation config (only reached when
-// FunctionSpec.Invocation is non-nil): a positive attempt budget, a non-negative
-// and well-ordered backoff schedule, and a positive max age. These bounds keep
-// the dispatcher's retry loop well-defined — a zero attempt budget or max age
-// would mean "accepted but never deliverable".
+// FunctionSpec.Invocation is non-nil): an attempt budget in [1, MaxAsyncAttempts],
+// a non-negative and well-ordered backoff schedule, and a max age in
+// (0, MaxAsyncMaxAge]. These bounds keep the dispatcher's retry loop well-defined
+// (a zero attempt budget or max age would mean "accepted but never deliverable")
+// and keep one tenant from setting absurd values on the shared queue.
 func (ic *InvocationConfig) Validate() error {
 	var errs error
 	r := ic.Retry
 	if r.MaxAttempts != nil && *r.MaxAttempts < 1 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.MaxAttempts", *r.MaxAttempts, "must be >= 1"))
+	}
+	if r.MaxAttempts != nil && *r.MaxAttempts > MaxAsyncAttempts {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.MaxAttempts", *r.MaxAttempts, fmt.Sprintf("must be <= %d (the platform async attempt budget)", MaxAsyncAttempts)))
 	}
 	if r.BackoffBase != nil && r.BackoffBase.Duration < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffBase", r.BackoffBase.Duration, "must be >= 0"))
@@ -416,6 +433,9 @@ func (ic *InvocationConfig) Validate() error {
 	}
 	if ic.MaxAge != nil && ic.MaxAge.Duration <= 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, "must be > 0"))
+	}
+	if ic.MaxAge != nil && ic.MaxAge.Duration > MaxAsyncMaxAge {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, fmt.Sprintf("must be <= %s", MaxAsyncMaxAge)))
 	}
 	return errs
 }

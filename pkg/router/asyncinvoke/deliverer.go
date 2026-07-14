@@ -13,8 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
-
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -35,11 +33,12 @@ type DeliveryResult struct {
 }
 
 // httpDeliverer POSTs to the router internal listener, byte-identical to the
-// timer/mqtrigger publishers, and reports the response status.
+// timer/mqtrigger publishers, and reports the response status. It does not log:
+// the dispatcher owns failure logging, where the invocation id / function / attempt
+// context lives.
 type httpDeliverer struct {
 	client  *http.Client
 	baseURL string
-	logger  logr.Logger
 }
 
 // NewHTTPDeliverer builds a Deliverer that POSTs to the router internal listener
@@ -47,7 +46,7 @@ type httpDeliverer struct {
 // master is non-empty (the same signer the timer/mqtrigger publishers use, so
 // the router's internal verifier accepts it). An empty master leaves requests
 // unsigned (pass-through mode). A nil transport uses http.DefaultTransport.
-func NewHTTPDeliverer(baseURL string, master []byte, transport http.RoundTripper, logger logr.Logger) Deliverer {
+func NewHTTPDeliverer(baseURL string, master []byte, transport http.RoundTripper) Deliverer {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
@@ -57,7 +56,6 @@ func NewHTTPDeliverer(baseURL string, master []byte, transport http.RoundTripper
 	return &httpDeliverer{
 		client:  &http.Client{Transport: transport},
 		baseURL: strings.TrimRight(baseURL, "/"),
-		logger:  logger,
 	}
 }
 

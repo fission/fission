@@ -90,8 +90,9 @@ type Envelope struct {
 	// depth cap enforces against it. Carried now so phase 2 is additive.
 	Depth int `json:"depth"`
 	// FunctionTimeout is FunctionSpec.FunctionTimeout in seconds (0 = platform
-	// default). The dispatcher derives leaseFor from it so the lease strictly
-	// exceeds the function timeout (invariant A7).
+	// default). The dispatcher bounds the per-delivery timeout by it and caps that
+	// timeout strictly below the (fixed) lease duration, so a delivery's context
+	// always expires before its lease (invariant A7).
 	FunctionTimeout int `json:"functionTimeout"`
 	// Policy is the resolved retry/age policy for this invocation, stamped from
 	// the function's InvocationConfig at enqueue. Zero fields take dispatcher

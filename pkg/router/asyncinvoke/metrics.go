@@ -58,27 +58,30 @@ func deliveryCondition(res DeliveryResult) string {
 
 // RegisterQueueGauges registers the async depth and oldest-age observable gauges,
 // read from q.Stats(queueName) on each metrics collection. Call it once at router
-// start (only when async invocation is enabled). A per-scrape Stats read failure
-// is swallowed so a transient statestore blip does not fail the whole scrape.
+// start (only when async invocation is enabled).
 func RegisterQueueGauges(q statestore.Queue, queueName string) {
 	metrics.Int64ObservableGauge("fission_async_queue_depth",
 		"Async invocation queue depth: visible messages awaiting delivery",
-		func(ctx context.Context, o metric.Int64Observer) error {
-			st, err := q.Stats(ctx, queueName)
-			if err != nil {
-				return nil
-			}
-			o.Observe(st.Visible)
-			return nil
-		})
+		observeStat(q, queueName, func(st statestore.QueueStats) int64 { return st.Visible }))
 	metrics.Int64ObservableGauge("fission_async_oldest_age_seconds",
 		"Age in seconds of the oldest visible async invocation (0 when none)",
-		func(ctx context.Context, o metric.Int64Observer) error {
-			st, err := q.Stats(ctx, queueName)
-			if err != nil {
-				return nil
-			}
-			o.Observe(int64(st.OldestVisibleAge.Seconds()))
-			return nil
-		})
+		observeStat(q, queueName, func(st statestore.QueueStats) int64 {
+			return int64(st.OldestVisibleAge.Seconds())
+		}))
+}
+
+// observeStat builds an observable-gauge callback that reads q.Stats(queueName)
+// and observes one field. A Stats read failure is RETURNED (routed to
+// otel.Handle) rather than swallowed: the OTel SDK skips only this instrument's
+// observation and continues the collection, so the scrape still succeeds AND the
+// failure produces a signal instead of the gauge silently freezing at zero.
+func observeStat(q statestore.Queue, queueName string, pick func(statestore.QueueStats) int64) metric.Int64Callback {
+	return func(ctx context.Context, o metric.Int64Observer) error {
+		st, err := q.Stats(ctx, queueName)
+		if err != nil {
+			return err
+		}
+		o.Observe(pick(st))
+		return nil
+	}
 }
