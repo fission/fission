@@ -27,6 +27,8 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
+			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			// TODO retired pkg & trigger related flags from function cmd
@@ -85,6 +87,8 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
+			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,

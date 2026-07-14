@@ -144,6 +144,12 @@ var (
 	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}
 	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
 	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}
+
+	// RFC-0024 async invocation config (fn create/update).
+	FnAsyncMaxAttempts = Flag{Type: Int, Name: flagkey.FnAsyncMaxAttempts, Usage: "Async delivery attempt budget before dead-lettering (RFC-0024)"}
+	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered (RFC-0024)"}
+	FnAsyncOnSuccess   = Flag{Type: String, Name: flagkey.FnAsyncOnSuccess, Usage: "Same-namespace function to invoke with the result after a successful async delivery (RFC-0024); empty clears it"}
+	FnAsyncOnFailure   = Flag{Type: String, Name: flagkey.FnAsyncOnFailure, Usage: "Same-namespace function to invoke with the result after a permanent async failure (RFC-0024); empty clears it"}
 	// Termination Grace Period configurable at function creation/update only for container functions
 	FnTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.FnGracePeriod, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}
 

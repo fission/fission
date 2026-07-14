@@ -96,6 +96,12 @@ const (
 
 	FnTestAsync = "async"
 
+	// RFC-0024 async invocation config (fn create/update).
+	FnAsyncMaxAttempts = "async-retry-max-attempts"
+	FnAsyncMaxAge      = "async-max-age"
+	FnAsyncOnSuccess   = "async-on-success"
+	FnAsyncOnFailure   = "async-on-failure"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtUrl               = "url"
