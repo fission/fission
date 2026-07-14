@@ -94,6 +94,8 @@ const (
 	DlqAll   = "all"
 	DlqLimit = "limit"
 
+	FnTestAsync = "async"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtUrl               = "url"

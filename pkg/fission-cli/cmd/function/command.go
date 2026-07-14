@@ -136,7 +136,7 @@ func Commands() *cobra.Command {
 	}, Test, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnTestQuery, flag.FnTestTimeout,
+			flag.FnTestQuery, flag.FnTestTimeout, flag.FnTestAsync,
 			// for getting log from log database if we failed to get logs from function pod.
 			flag.FnLogDBType,
 			flag.FnSubPath,

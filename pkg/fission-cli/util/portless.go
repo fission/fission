@@ -96,6 +96,44 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 // forward to. It preserves the CLI's disambiguation UX: an empty namespace
 // searches everywhere, and matches across several namespaces are an error
 // telling the user to set FISSION_NAMESPACE.
+// SetupPortForwardToPort is SetupPortForward pinned to an explicit pod target
+// port. It exists for a listener whose Service selector is ambiguous: the router
+// pods back BOTH the public svc/router and the ClusterIP-only svc/router-internal
+// under the same application=fission-router label, so the internal listener must
+// be addressed by port rather than by the Service's (public) targetPort.
+func SetupPortForwardToPort(ctx context.Context, client cmd.Client, namespace, labelSelector string, port int) (string, error) {
+	pfMu.Lock()
+	defer pfMu.Unlock()
+
+	key := fmt.Sprintf("%s/%s/%d", namespace, labelSelector, port)
+	if p, ok := pfBridges[key]; ok {
+		return p, nil
+	}
+	ns, _, err := resolveFissionService(ctx, client.KubernetesClient, namespace, labelSelector)
+	if err != nil {
+		return "", err
+	}
+	backend, err := portlessk8s.PortForward(client.RestConfig,
+		portlessk8s.LabelSelector(ns, labelSelector), portlessk8s.TargetPort(intstr.FromInt(port)))
+	if err != nil {
+		return "", fmt.Errorf("error creating port-forward backend for %v: %w", labelSelector, err)
+	}
+	if pfReg == nil {
+		pfReg = portless.New()
+	}
+	if _, err := pfReg.AddReady(ctx, key, backend); err != nil {
+		return "", fmt.Errorf("error setting up %v port-forward: %w", labelSelector, err)
+	}
+	l, err := pfReg.ListenLocal(key)
+	if err != nil {
+		_ = pfReg.Remove(ctx, key)
+		return "", fmt.Errorf("error bridging %v port-forward locally: %w", labelSelector, err)
+	}
+	localPort := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+	pfBridges[key] = localPort
+	return localPort, nil
+}
+
 func resolveFissionService(ctx context.Context, kube kubernetes.Interface, namespace, labelSelector string) (string, intstr.IntOrString, error) {
 	none := intstr.IntOrString{}
 	ns := namespace

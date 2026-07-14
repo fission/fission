@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -31,6 +32,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -130,6 +132,9 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
+	if input.Bool(flagkey.FnTestAsync) {
+		return opts.invokeAsync(ctx, input, m, method)
+	}
 	resp, err := DoHTTPRequest(ctx, fnURL.String(),
 		input.StringSlice(flagkey.FnTestHeader),
 		method,
@@ -173,6 +178,84 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		fmt.Fprintf(os.Stderr, "Correlated logs: fission function logs --name %s --request-id %s --dbtype loki\n", m.Name, reqID)
 	}
 	return errors.New("error getting function response")
+}
+
+// invokeAsync runs `fission function test --async` (RFC-0024): it POSTs to the
+// function on the router INTERNAL listener with X-Fission-Invoke-Mode: async,
+// HMAC-signing the request (ServiceRouterInternal) when FISSION_INTERNAL_AUTH_SECRET
+// is set so the internal verifier accepts it. The router returns 202 with the
+// durable invocation id, which is printed; the response body is not awaited.
+func (opts *TestSubCommand) invokeAsync(ctx context.Context, input cli.Input, m *metav1.ObjectMeta, method string) error {
+	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
+	if err != nil {
+		return fmt.Errorf("resolving the router internal listener: %w", err)
+	}
+	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
+	if input.IsSet(flagkey.FnSubPath) {
+		subPath := input.String(flagkey.FnSubPath)
+		if !strings.HasPrefix(subPath, "/") {
+			fnURI += "/"
+		}
+		fnURI += subPath
+	}
+	fnURL := internalURL.JoinPath(fnURI)
+	if q := testQueryValues(input); len(q) > 0 {
+		fnURL.RawQuery = q.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, fnURL.String(), strings.NewReader(input.String(flagkey.FnTestBody)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
+	for _, h := range input.StringSlice(flagkey.FnTestHeader) {
+		if k, v, ok := strings.Cut(h, ":"); ok {
+			req.Header.Set(strings.TrimSpace(k), strings.TrimSpace(v))
+		}
+	}
+
+	var transport http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
+		transport = hmacauth.NewServiceSigningTransport([]byte(secret), hmacauth.ServiceRouterInternal, transport, "/fission-function/")
+	}
+	resp, err := (&http.Client{Transport: transport}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+
+	switch resp.StatusCode {
+	case http.StatusAccepted:
+		id := resp.Header.Get(asyncinvoke.HeaderInvocationID)
+		if id == "" {
+			var decoded map[string]string
+			if json.Unmarshal(body, &decoded) == nil {
+				id = decoded["invocationId"]
+			}
+		}
+		fmt.Printf("Accepted (202)\ninvocationId: %s\n", id)
+		return nil
+	case http.StatusNotImplemented:
+		return errors.New("async invocation is not enabled on this cluster")
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("router rejected the async request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
+	default:
+		return fmt.Errorf("async invocation failed (%s): %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+}
+
+// testQueryValues builds the request query from repeated --query key=value flags.
+func testQueryValues(input cli.Input) url.Values {
+	query := url.Values{}
+	for _, q := range input.StringSlice(flagkey.FnTestQuery) {
+		key, value, _ := strings.Cut(q, "=")
+		if key == "" {
+			continue
+		}
+		query.Set(key, value)
+	}
+	return query
 }
 
 // renderInvocationFailure writes a one-line diagnosis for a failed `function
