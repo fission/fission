@@ -118,8 +118,15 @@ func TestRunRetryThenSucceed(t *testing.T) {
 	defer cancel()
 	go func() { _ = d.Run(ctx) }()
 
-	require.Eventually(t, func() bool { return drained(t, q) }, 2*time.Second, 5*time.Millisecond)
-	assert.GreaterOrEqual(t, attempts.Load(), int64(2), "retry then success")
+	// Wait for the retry to have happened AND the message to be fully drained
+	// (acked). drained() alone is insufficient: between the failed delivery and its
+	// retry the message is backoff-delayed — Queued but neither visible, leased,
+	// nor dead — so a bare drained() check can observe that window and pass before
+	// the retry delivery occurs.
+	require.Eventually(t, func() bool {
+		return attempts.Load() >= 2 && drained(t, q)
+	}, 3*time.Second, 5*time.Millisecond)
+	assert.GreaterOrEqual(t, attempts.Load(), int64(2), "delivered at least twice (retry then success)")
 }
 
 // TestBackoffDelaysRedelivery runs the loop under virtual time and asserts a
