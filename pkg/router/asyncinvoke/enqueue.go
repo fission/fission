@@ -72,15 +72,24 @@ func Enqueue(ctx context.Context, q statestore.Queue, w http.ResponseWriter, r *
 		OnSuccess:       p.OnSuccess,
 		OnFailure:       p.OnFailure,
 	}
-	data, err := env.Encode()
-	if err != nil {
-		return "", fmt.Errorf("asyncinvoke: encoding envelope: %w", err)
-	}
 	queue := p.QueueName
 	if queue == "" {
 		queue = DefaultQueue
 	}
-	id, err := q.Enqueue(ctx, queue, statestore.Message{Body: data}, statestore.EnqueueOptions{DedupKey: p.DedupKey})
+	return encodeAndEnqueue(ctx, q, queue, env, statestore.EnqueueOptions{DedupKey: p.DedupKey})
+}
+
+// encodeAndEnqueue is the single write path for the durable envelope wire-shape:
+// it encodes env and enqueues it on queueName, returning the durable message id.
+// Both the initial enqueue and the dispatcher's destination fire go through it so
+// the persist step lives in one place. The wrapped error distinguishes an encode
+// failure from an enqueue failure for the caller's log/metric.
+func encodeAndEnqueue(ctx context.Context, q statestore.Queue, queueName string, env Envelope, opts statestore.EnqueueOptions) (string, error) {
+	data, err := env.Encode()
+	if err != nil {
+		return "", fmt.Errorf("asyncinvoke: encoding envelope: %w", err)
+	}
+	id, err := q.Enqueue(ctx, queueName, statestore.Message{Body: data}, opts)
 	if err != nil {
 		return "", fmt.Errorf("asyncinvoke: enqueue: %w", err)
 	}

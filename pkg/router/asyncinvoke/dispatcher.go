@@ -252,16 +252,23 @@ func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) 
 
 	switch action {
 	case actionAck:
-		if err := d.q.Ack(sctx, msg.Receipt); err != nil {
-			d.logSettle("ack", msg.ID, err)
-			return // a stale/failed ack must not fire the OnSuccess destination (A3)
-		}
-		d.fireDestination(sctx, env.OnSuccess, env.Depth, d.buildResult(env, msg, ConditionSuccess, res))
+		d.settleSuccess(sctx, msg, env, res)
 	case actionKill:
 		d.settleFail(sctx, msg, env, res, ReasonHTTP4xx, ConditionHTTP4xx)
 	case actionRetry:
 		d.retry(sctx, msg, env, policy, res)
 	}
+}
+
+// settleSuccess acks the delivered message and, only when the Ack actually landed
+// (not a stale receipt — A3), fires the OnSuccess destination. It mirrors
+// settleFail so every settle arm of process is a single settle-then-fire call.
+func (d *Dispatcher) settleSuccess(ctx context.Context, msg statestore.LeasedMessage, env Envelope, res DeliveryResult) {
+	if err := d.q.Ack(ctx, msg.Receipt); err != nil {
+		d.logSettle("ack", msg.ID, err)
+		return // a stale/failed ack must not fire the OnSuccess destination (A3)
+	}
+	d.fireDestination(ctx, env.OnSuccess, env.Depth, d.buildResult(env, msg, ConditionSuccess, res))
 }
 
 // retry either requeues with backoff or dead-letters when the attempt budget is
@@ -386,13 +393,8 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 		OnSuccess:       cfg.OnSuccess,
 		OnFailure:       cfg.OnFailure,
 	}
-	data, err := env.Encode()
-	if err != nil {
-		recordDestination(ctx, "error")
-		d.logger.Error(err, "encoding destination envelope", "function", dest.FunctionName)
-		return
-	}
-	if _, err := d.q.Enqueue(ctx, d.queueName, statestore.Message{Body: data}, statestore.EnqueueOptions{}); err != nil {
+	if _, err := encodeAndEnqueue(ctx, d.q, d.queueName, env, statestore.EnqueueOptions{}); err != nil {
+		// The wrapped error already says encode-vs-enqueue; the function names the hop.
 		recordDestination(ctx, "enqueue_error")
 		d.logger.Error(err, "enqueuing destination invocation", "function", dest.FunctionName)
 		return
