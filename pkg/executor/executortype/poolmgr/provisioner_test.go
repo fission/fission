@@ -486,6 +486,32 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionTrue, cond.Status)
 	})
+
+	t.Run("disabled: target=0 sets False/ProvisionedDisabled", func(t *testing.T) {
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 0, 0))
+		st := getFnStatus(t, p, "fn")
+		assert.Equal(t, 0, st.ProvisionedReady)
+		assert.Equal(t, 0, st.ProvisionedTarget)
+		cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, fv1.FunctionReasonProvisionedDisabled, cond.Reason)
+	})
+}
+
+func TestProvisioner_UpdateFunctionStatusZero(t *testing.T) {
+	fn := provisionedFn("fn", 5)
+	p := newTestProvisioner(t, fn)
+	p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
+
+	require.NoError(t, p.UpdateFunctionStatusZero(t.Context(), fn))
+	st := getFnStatus(t, p, "fn")
+	assert.Equal(t, 0, st.ProvisionedReady)
+	assert.Equal(t, 0, st.ProvisionedTarget)
+	cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, fv1.FunctionReasonProvisionedDisabled, cond.Reason)
 }
 
 // ---------------------------------------------------------------------------
