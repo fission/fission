@@ -740,6 +740,13 @@ statestore:
       runAsUser: 10001
       runAsGroup: 10001
 
+## RFC-0024 asynchronous invocation (X-Fission-Invoke-Mode: async): the router
+## durably enqueues the request and a per-replica dispatcher delivers it
+## at-least-once with retries and a dead-letter queue. Requires statestore.enabled
+## (the render gate in statestore/validate.yaml enforces it). Off by default.
+asyncInvocation:
+  enabled: false
+
 ## Multi-namespace tenancy (docs/multiple-namespace).
 ##
 tenancy:

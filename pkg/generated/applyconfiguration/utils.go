@@ -74,6 +74,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.HTTPTriggerStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("IngressConfig"):
 		return &corev1.IngressConfigApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("InvocationConfig"):
+		return &corev1.InvocationConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("InvokeStrategy"):
 		return &corev1.InvokeStrategyApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("KubernetesWatchTrigger"):
@@ -98,6 +100,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.PackageSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageStatus"):
 		return &corev1.PackageStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("RetryPolicy"):
+		return &corev1.RetryPolicyApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("RouteConfig"):
 		return &corev1.RouteConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Runtime"):

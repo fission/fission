@@ -775,6 +775,48 @@ spec:
                   is detected within the idle timeout, the executor will then recycle the
                   function pod(s) to release resources.
                 type: integer
+              invocation:
+                description: |-
+                  Invocation, when non-nil, tunes RFC-0024 asynchronous invocation
+                  (X-Fission-Invoke-Mode: async) for this function: the durable retry policy
+                  and the maximum event age before an undelivered invocation is
+                  dead-lettered. A function without it still accepts async mode with platform
+                  defaults; this field only tunes them. Additive and backward compatible.
+                properties:
+                  maxAge:
+                    description: |-
+                      MaxAge caps how long an invocation may wait for successful delivery,
+                      measured from its enqueue time; once exceeded it is dead-lettered with
+                      reason "expired". nil means the platform default. Must be > 0 when set.
+                    type: string
+                  retry:
+                    description: |-
+                      Retry is the durable delivery retry policy. The zero value means platform
+                      defaults (a bounded exponential backoff over DefaultMaxAttempts attempts).
+                    properties:
+                      backoffBase:
+                        description: |-
+                          BackoffBase is the delay before the first retry; it grows exponentially per
+                          attempt up to BackoffCap. nil means the platform default. Must be >= 0.
+                        type: string
+                      backoffCap:
+                        description: |-
+                          BackoffCap bounds the per-retry backoff. nil means the platform default.
+                          Must be >= 0 and >= BackoffBase when both are set.
+                        type: string
+                      jitter:
+                        description: |-
+                          Jitter, when non-nil and false, disables the randomized jitter the
+                          dispatcher otherwise adds to each backoff to avoid synchronized retries.
+                          nil means the platform default (jitter enabled).
+                        type: boolean
+                      maxAttempts:
+                        description: |-
+                          MaxAttempts is the total number of delivery attempts before the invocation
+                          is dead-lettered. nil means DefaultMaxAttempts. Must be >= 1 when set.
+                        type: integer
+                    type: object
+                type: object
               onceOnly:
                 description: |-
                   OnceOnly specifies if specialized pod will serve exactly one request in its lifetime and would be garbage collected after serving that one request

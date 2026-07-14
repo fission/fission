@@ -119,6 +119,25 @@ type EnqueueOptions struct {
 	DedupKey string
 }
 
+// QueueStats is a point-in-time snapshot of one queue's backlog, powering the
+// RFC-0024 async depth / oldest-age gauges and DLQ dashboards. It is read from
+// stored state WITHOUT reaping expired leases (the dispatcher's lease loop reaps
+// continuously), so an expired-but-unreaped lease still counts as Leased until
+// the next lease cycle — a bounded staleness acceptable for a gauge, and it keeps
+// the metrics scrape read-only (no write-on-scrape).
+type QueueStats struct {
+	// Visible is queued messages whose visibility delay has elapsed and are
+	// leasable now — the depth a scaler acts on.
+	Visible int64
+	// Leased is in-flight messages (leased, not yet settled or expiry-reaped).
+	Leased int64
+	// Dead is dead-lettered messages awaiting inspection or redrive.
+	Dead int64
+	// OldestVisibleAge is now minus the enqueue time of the oldest visible
+	// message, or 0 when none are visible.
+	OldestVisibleAge time.Duration
+}
+
 // ConservationStats is a snapshot of a Queue driver's message accounting,
 // consumed by the metrics layer to compute the conservation drift gauge. By
 // invariant T1, Enqueued == Queued + Leased + Acked + Dead at all times; a

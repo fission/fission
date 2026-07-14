@@ -95,6 +95,11 @@ type HTTPTriggerSet struct {
 	// featureConfigFn is the materializer's feature-config source —
 	// injectable so tests can exercise the materialize failure path.
 	featureConfigFn func(logr.Logger) (*config.FeatureConfig, error)
+
+	// asyncInvoker enqueues RFC-0024 async invocations. Set by Start after
+	// makeHTTPTriggerSet (like addressResolver) when ASYNC_INVOCATION_ENABLED, and
+	// copied into public function handlers by buildTriggerHandler. nil = feature off.
+	asyncInvoker *asyncInvoker
 }
 
 // initIncrementalRoutes wires the route table and feature-config source for the

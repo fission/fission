@@ -299,6 +299,45 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 	return nil
 }
 
+// Stats implements statestore.Queue: a read-only snapshot of the queue's backlog.
+// It does not reap expired leases (see statestore.QueueStats), and it does not
+// create the queue if absent — an unknown queue reports a zero snapshot.
+func (s *Store) Stats(_ context.Context, queue string) (statestore.QueueStats, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return statestore.QueueStats{}, statestore.ErrClosed
+	}
+	q := s.queues[queue]
+	if q == nil {
+		return statestore.QueueStats{}, nil
+	}
+	now := time.Now()
+	var (
+		st     statestore.QueueStats
+		oldest time.Time
+	)
+	for _, m := range q.msgs {
+		switch m.state {
+		case qQueued:
+			if !now.Before(m.visibleAt) {
+				st.Visible++
+				if oldest.IsZero() || m.enqueuedAt.Before(oldest) {
+					oldest = m.enqueuedAt
+				}
+			}
+		case qLeased:
+			st.Leased++
+		case qDead:
+			st.Dead++
+		}
+	}
+	if !oldest.IsZero() {
+		st.OldestVisibleAge = now.Sub(oldest)
+	}
+	return st, nil
+}
+
 // compile-time guard: the memory Store is the conservation reporter it returns
 // from Queue(), so the drift gauge actually observes it.
 var _ statestore.ConservationReporter = (*Store)(nil)

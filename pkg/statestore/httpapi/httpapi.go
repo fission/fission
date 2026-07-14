@@ -40,6 +40,7 @@ const (
 	PathQueueKill       = "/v1/queue/kill"
 	PathQueueDeadLetter = "/v1/queue/deadletters"
 	PathQueueRedrive    = "/v1/queue/redrive"
+	PathQueueStats      = "/v1/queue/stats"
 )
 
 // Error is the JSON error envelope. Code is a stable machine string mapped to a
@@ -200,4 +201,13 @@ type QueueDeadLettersResp struct {
 type QueueRedriveReq struct {
 	Queue string   `json:"queue"`
 	IDs   []string `json:"ids"`
+}
+type QueueStatsReq struct {
+	Queue string `json:"queue"`
+}
+type QueueStatsResp struct {
+	Visible               int64 `json:"visible"`
+	Leased                int64 `json:"leased"`
+	Dead                  int64 `json:"dead"`
+	OldestVisibleAgeNanos int64 `json:"oldestVisibleAgeNanos"`
 }

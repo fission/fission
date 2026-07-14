@@ -224,3 +224,9 @@ func (q *meteredQueue) Redrive(ctx context.Context, queue string, ids []string) 
 	observe(ctx, "queue", "redrive", err)
 	return err
 }
+
+func (q *meteredQueue) Stats(ctx context.Context, queue string) (QueueStats, error) {
+	st, err := q.inner.Stats(ctx, queue)
+	observe(ctx, "queue", "stats", err)
+	return st, err
+}

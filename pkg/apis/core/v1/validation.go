@@ -383,9 +383,61 @@ func (spec FunctionSpec) Validate() error {
 
 // validateForAdmission returns the FunctionSpec checks the API server cannot
 // enforce via CEL and the admission webhook must still run: pod-spec security
-// (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92).
+// (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92)
+// and the RFC-0024 async invocation bounds (metav1.Duration CEL rules are unproven
+// in this CRD, so the ordering/positivity checks live in Go and run at admission).
 func (spec FunctionSpec) validateForAdmission() error {
-	return ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
+	errs := ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
+	if spec.Invocation != nil {
+		errs = errors.Join(errs, spec.Invocation.Validate())
+	}
+	return errs
+}
+
+const (
+	// MaxAsyncAttempts bounds RetryPolicy.MaxAttempts. It matches the statestore
+	// queue's fixed attempt budget (statestore.DefaultMaxAttempts): the async
+	// dispatcher clamps to the same value, and a larger MaxAttempts would be
+	// silently capped (the store dead-letters at its budget), so it is rejected at
+	// admission instead. Raising it requires a per-message store budget (an
+	// RFC-0024 follow-up).
+	MaxAsyncAttempts = 3
+	// MaxAsyncMaxAge bounds InvocationConfig.MaxAge — a platform ceiling so one
+	// namespace cannot park work on the shared async queue indefinitely.
+	MaxAsyncMaxAge = 7 * 24 * time.Hour
+)
+
+// Validate checks the async invocation config (only reached when
+// FunctionSpec.Invocation is non-nil): an attempt budget in [1, MaxAsyncAttempts],
+// a non-negative and well-ordered backoff schedule, and a max age in
+// (0, MaxAsyncMaxAge]. These bounds keep the dispatcher's retry loop well-defined
+// (a zero attempt budget or max age would mean "accepted but never deliverable")
+// and keep one tenant from setting absurd values on the shared queue.
+func (ic *InvocationConfig) Validate() error {
+	var errs error
+	r := ic.Retry
+	if r.MaxAttempts != nil && *r.MaxAttempts < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.MaxAttempts", *r.MaxAttempts, "must be >= 1"))
+	}
+	if r.MaxAttempts != nil && *r.MaxAttempts > MaxAsyncAttempts {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.MaxAttempts", *r.MaxAttempts, fmt.Sprintf("must be <= %d (the platform async attempt budget)", MaxAsyncAttempts)))
+	}
+	if r.BackoffBase != nil && r.BackoffBase.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffBase", r.BackoffBase.Duration, "must be >= 0"))
+	}
+	if r.BackoffCap != nil && r.BackoffCap.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffCap", r.BackoffCap.Duration, "must be >= 0"))
+	}
+	if r.BackoffBase != nil && r.BackoffCap != nil && r.BackoffCap.Duration < r.BackoffBase.Duration {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffCap", r.BackoffCap.Duration, "must be >= BackoffBase"))
+	}
+	if ic.MaxAge != nil && ic.MaxAge.Duration <= 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, "must be > 0"))
+	}
+	if ic.MaxAge != nil && ic.MaxAge.Duration > MaxAsyncMaxAge {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, fmt.Sprintf("must be <= %s", MaxAsyncMaxAge)))
+	}
+	return errs
 }
 
 // Validate checks the streaming config: a known protocol, non-negative timeouts,

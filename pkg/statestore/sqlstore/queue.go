@@ -300,6 +300,38 @@ func (q *queueStore) Redrive(ctx context.Context, queue string, ids []string) er
 	return err
 }
 
+// Stats implements statestore.Queue: a read-only aggregate snapshot of the
+// queue's backlog. It does not reap expired leases (see statestore.QueueStats),
+// so the counts reflect stored state; the dispatcher's lease loop reaps
+// continuously, bounding the staleness. The single aggregate row is produced even
+// for an unknown queue (all-zero, oldest NULL).
+func (q *queueStore) Stats(ctx context.Context, queue string) (statestore.QueueStats, error) {
+	now := nowNanos()
+	var (
+		visible, leased, dead int64
+		oldest                sql.NullInt64
+	)
+	err := q.s.queryRow(ctx,
+		`SELECT
+		   COALESCE(SUM(CASE WHEN state = ? AND visible_at <= ? THEN 1 ELSE 0 END), 0),
+		   COALESCE(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0),
+		   COALESCE(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0),
+		   MIN(CASE WHEN state = ? AND visible_at <= ? THEN enqueued_at END)
+		 FROM state_queue WHERE queue = ?`,
+		stQueued, now, stLeased, stDead, stQueued, now, queue,
+	).Scan(&visible, &leased, &dead, &oldest)
+	if err != nil {
+		return statestore.QueueStats{}, err
+	}
+	st := statestore.QueueStats{Visible: visible, Leased: leased, Dead: dead}
+	if oldest.Valid {
+		if age := now - oldest.Int64; age > 0 {
+			st.OldestVisibleAge = time.Duration(age)
+		}
+	}
+	return st, nil
+}
+
 // compile-time guard: the Store (the Capabilities value) is the conservation
 // reporter NewScoped registers, so the drift gauge actually observes it.
 var _ statestore.ConservationReporter = (*Store)(nil)

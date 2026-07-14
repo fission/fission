@@ -51,6 +51,38 @@ func TestLoadRouterConfig(t *testing.T) {
 	assert.Equal(t, 90*time.Second, cfg.streamIdleDefault)
 }
 
+// TestLoadRouterConfigAsync locks the RFC-0024 async fields' lenient contract:
+// unset ⇒ disabled, an unparsable flag ⇒ disabled (never a startup abort), and a
+// set driver/DSN are read through.
+func TestLoadRouterConfigAsync(t *testing.T) {
+	t.Run("unset means disabled", func(t *testing.T) {
+		setRequiredRouterEnv(t)
+		cfg, err := loadRouterConfig(logr.Discard())
+		require.NoError(t, err)
+		assert.False(t, cfg.asyncInvocationEnabled)
+		assert.Empty(t, cfg.statestoreDriver)
+		assert.Empty(t, cfg.statestoreDSN)
+	})
+	t.Run("enabled with driver and dsn", func(t *testing.T) {
+		setRequiredRouterEnv(t)
+		t.Setenv("ASYNC_INVOCATION_ENABLED", "true")
+		t.Setenv("STATESTORE_DRIVER", "client")
+		t.Setenv("STATESTORE_DSN", "http://statestore.fission:8891")
+		cfg, err := loadRouterConfig(logr.Discard())
+		require.NoError(t, err)
+		assert.True(t, cfg.asyncInvocationEnabled)
+		assert.Equal(t, "client", cfg.statestoreDriver)
+		assert.Equal(t, "http://statestore.fission:8891", cfg.statestoreDSN)
+	})
+	t.Run("garbage flag disables, never aborts", func(t *testing.T) {
+		setRequiredRouterEnv(t)
+		t.Setenv("ASYNC_INVOCATION_ENABLED", "notabool")
+		cfg, err := loadRouterConfig(logr.Discard())
+		require.NoError(t, err, "an unparsable async flag must not abort router startup")
+		assert.False(t, cfg.asyncInvocationEnabled)
+	})
+}
+
 // TestLoadRouterConfigDefaults locks the soft-fail fields: unset (or
 // unparsable) values fall back to defaults instead of erroring.
 func TestLoadRouterConfigDefaults(t *testing.T) {

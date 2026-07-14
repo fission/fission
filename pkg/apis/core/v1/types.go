@@ -592,6 +592,14 @@ type (
 		// +optional
 		Tool *ToolConfig `json:"tool,omitempty"`
 
+		// Invocation, when non-nil, tunes RFC-0024 asynchronous invocation
+		// (X-Fission-Invoke-Mode: async) for this function: the durable retry policy
+		// and the maximum event age before an undelivered invocation is
+		// dead-lettered. A function without it still accepts async mode with platform
+		// defaults; this field only tunes them. Additive and backward compatible.
+		// +optional
+		Invocation *InvocationConfig `json:"invocation,omitempty"`
+
 		// Maximum number of pods to be specialized which will serve requests
 		// This is optional. If not specified default value will be taken as 500
 		// +optional
@@ -673,6 +681,53 @@ type (
 		// +optional
 		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]{1,64}$`
 		ToolName string `json:"toolName,omitempty"`
+	}
+
+	// InvocationConfig tunes RFC-0024 asynchronous invocation for a function.
+	// Presence of the enclosing FunctionSpec.Invocation is optional — a function
+	// without it still accepts async mode (X-Fission-Invoke-Mode: async) with
+	// platform defaults; this struct only tunes them. Field bounds are validated in
+	// Go (InvocationConfig.Validate, run at admission via validateForAdmission),
+	// not CEL, because metav1.Duration CEL rules are unproven in this CRD.
+	// Destinations (onSuccess/onFailure) and an external dead-letter target are a
+	// later RFC-0024 phase.
+	InvocationConfig struct {
+		// Retry is the durable delivery retry policy. The zero value means platform
+		// defaults (a bounded exponential backoff over DefaultMaxAttempts attempts).
+		// +optional
+		Retry RetryPolicy `json:"retry,omitempty"`
+
+		// MaxAge caps how long an invocation may wait for successful delivery,
+		// measured from its enqueue time; once exceeded it is dead-lettered with
+		// reason "expired". nil means the platform default. Must be > 0 when set.
+		// +optional
+		MaxAge *metav1.Duration `json:"maxAge,omitempty"`
+	}
+
+	// RetryPolicy is the async delivery retry policy: the attempt budget and the
+	// exponential-backoff schedule between delivery attempts. All fields are
+	// optional; a nil field takes the platform default.
+	RetryPolicy struct {
+		// MaxAttempts is the total number of delivery attempts before the invocation
+		// is dead-lettered. nil means DefaultMaxAttempts. Must be >= 1 when set.
+		// +optional
+		MaxAttempts *int `json:"maxAttempts,omitempty"`
+
+		// BackoffBase is the delay before the first retry; it grows exponentially per
+		// attempt up to BackoffCap. nil means the platform default. Must be >= 0.
+		// +optional
+		BackoffBase *metav1.Duration `json:"backoffBase,omitempty"`
+
+		// BackoffCap bounds the per-retry backoff. nil means the platform default.
+		// Must be >= 0 and >= BackoffBase when both are set.
+		// +optional
+		BackoffCap *metav1.Duration `json:"backoffCap,omitempty"`
+
+		// Jitter, when non-nil and false, disables the randomized jitter the
+		// dispatcher otherwise adds to each backoff to avoid synchronized retries.
+		// nil means the platform default (jitter enabled).
+		// +optional
+		Jitter *bool `json:"jitter,omitempty"`
 	}
 
 	// InvokeStrategy is a set of controls over how the function executes.

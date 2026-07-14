@@ -56,6 +56,7 @@ func RunTimingConformance(t *testing.T, newCaps Factory) {
 	t.Run("KV/TTLExactOnRead", func(t *testing.T) { runTTLExactOnRead(t, newCaps) })
 	t.Run("Queue/Q2_EpochGuard", func(t *testing.T) { runQ2EpochGuard(t, newCaps) })
 	t.Run("Queue/ExhaustedByExpiryDeadLettered", func(t *testing.T) { runExhaustedByExpiry(t, newCaps) })
+	t.Run("Queue/StatsOldestVisibleAge", func(t *testing.T) { runStatsOldestAge(t, newCaps) })
 }
 
 func kvOrSkip(t *testing.T, newCaps Factory) statestore.KVStore {
@@ -261,6 +262,42 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.Len(t, l, 1)
 		assert.Equal(t, 1, l[0].Attempts, "attempts reset on redrive")
 	})
+
+	t.Run("Stats", func(t *testing.T) {
+		q := queueOrSkip(t, newCaps)
+		ctx := t.Context()
+		const sq = "statsq"
+		// Unknown queue → zero snapshot (no side effect that creates it).
+		st, err := q.Stats(ctx, sq)
+		require.NoError(t, err)
+		require.Equal(t, statestore.QueueStats{}, st)
+		// Enqueue three: all visible.
+		for range 3 {
+			_, eerr := q.Enqueue(ctx, sq, statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+			require.NoError(t, eerr)
+		}
+		st, err = q.Stats(ctx, sq)
+		require.NoError(t, err)
+		assert.EqualValues(t, 3, st.Visible)
+		assert.Zero(t, st.Leased)
+		assert.Zero(t, st.Dead)
+		assert.GreaterOrEqual(t, st.OldestVisibleAge, time.Duration(0))
+		// Lease two: visible drops, leased rises (acked/leased are disjoint states).
+		l, err := q.Lease(ctx, sq, 2, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l, 2)
+		st, err = q.Stats(ctx, sq)
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, st.Visible)
+		assert.EqualValues(t, 2, st.Leased)
+		// Ack one: acked is terminal, counted in neither visible nor leased nor dead.
+		require.NoError(t, q.Ack(ctx, l[0].Receipt))
+		st, err = q.Stats(ctx, sq)
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, st.Visible)
+		assert.EqualValues(t, 1, st.Leased)
+		assert.Zero(t, st.Dead)
+	})
 }
 
 // --- Time-dependent subtests (synctest; in-process drivers only) ---
@@ -294,6 +331,22 @@ func runQ2EpochGuard(t *testing.T, newCaps Factory) {
 		require.Len(t, l2, 1)
 		require.ErrorIs(t, q.Ack(ctx, l1[0].Receipt), statestore.ErrInvalidReceipt) // stale epoch rejected
 		require.NoError(t, q.Ack(ctx, l2[0].Receipt))                               // current lease decides
+	})
+}
+
+func runStatsOldestAge(t *testing.T, newCaps Factory) {
+	// OldestVisibleAge is time-dependent, so it is checked under virtual time where
+	// the elapsed duration is exact rather than a jittery wall-clock delta.
+	synctest.Test(t, func(t *testing.T) {
+		q := queueOrSkip(t, newCaps)
+		ctx := t.Context()
+		_, err := q.Enqueue(ctx, "cq", statestore.Message{Body: []byte("m")}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+		time.Sleep(5 * time.Minute)
+		st, err := q.Stats(ctx, "cq")
+		require.NoError(t, err)
+		require.EqualValues(t, 1, st.Visible)
+		require.Equal(t, 5*time.Minute, st.OldestVisibleAge)
 	})
 }
 

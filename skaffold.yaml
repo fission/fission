@@ -29,6 +29,9 @@ manifests:
         namespace: fission
         setValues:
           analytics: "false"
+          # RFC-0024 async invocation needs the RFC-0021 statestore; enable both
+          # (embedded SQLite) so the integration suite can exercise async invoke.
+          asyncInvocation.enabled: "true"
           builderNamespace: ""
           builderPodSpec.enabled: "false"
           canaryDeployment.enabled: "false"
@@ -67,6 +70,8 @@ manifests:
           serviceMonitor.additionalServiceMonitorLabels.release: prometheus
           serviceMonitor.enabled: "false"
           serviceMonitor.namespace: monitoring
+          statestore.enabled: "true"
+          statestore.mode: "embedded"
           storagesvc.archivePruner.enabled: "true"
           storagesvc.archivePruner.interval: "60"
           # Multi-namespace tenancy is static by default; the dynamic-tenancy and
