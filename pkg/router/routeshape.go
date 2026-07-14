@@ -231,6 +231,10 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 		rtLogger:             routeLogger.WithName("roundtripper"),
 		policyByUID: precomputePolicies(map[string]*fv1.Function{fn.Name: fn},
 			fnTimeoutMap, streamIdleDefault),
+		// Direct callers can go async on this path too (RFC-0024); the dispatcher's
+		// own deliveries are gated out by the X-Fission-Invocation-Id guard in
+		// handler(), so they still proxy synchronously and never re-enqueue.
+		asyncInvoker: ts.asyncInvoker,
 	}
 	return http.HandlerFunc(fh.handler)
 }
