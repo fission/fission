@@ -33,6 +33,7 @@ Each document carries a `Status` header naming the implementing PRs and, where a
 | [0024](0024-async-invocation-retries-dlq-destinations.md) | Async Invocation — Retries, DLQ, Destinations | Proposed: `X-Fission-Invoke-Mode: async` → durable enqueue, at-least-once dispatch, dead-letter queue + redrive, on-success/failure destinations; shares the 0021 queue spec |
 | [0025](0025-function-versions-aliases-rollback.md) | Function Versions, Aliases & Instant Rollback | Proposed: immutable `FunctionVersion` snapshots + movable aliases with weighted splits over the RFC-0013 pointer-swap path; one-command rollback; absorbs CanaryConfig |
 | [0026](0026-provisioned-concurrency-scheduled-warming.md) | Provisioned Concurrency & Scheduled Warming | Proposed: `FunctionSpec.ProvisionedConcurrency` — poolmgr keeps N pre-specialized pods, cron windows; directly kills cold starts for opted-in functions |
+| [0027](0027-statestore-backed-eventing.md) | Statestore-Backed Eventing — Built-in MQ Provider | Proposed: `Publisher` interface + durable topics on the 0021 `EventLog` + `messageQueueType: statestore` MQ-trigger provider — pub/sub function pipelines with zero brokers; un-defers 0024 topic destinations; broker egress as the scale path |
 
 ## Companion material
 
