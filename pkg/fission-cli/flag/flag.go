@@ -140,6 +140,13 @@ var (
 	FnLogAllPods            = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods            = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 
+	// RFC-0027 `fission topic` dev commands.
+	TopicName        = Flag{Type: String, Name: flagkey.TopicName, Usage: "Topic name"}
+	TopicData        = Flag{Type: String, Name: flagkey.TopicData, Usage: "Event payload to publish"}
+	TopicContentType = Flag{Type: String, Name: flagkey.TopicContentType, Usage: "Content type the payload travels with (consuming triggers replay it)", DefaultValue: "application/json"}
+	TopicMQType      = Flag{Type: String, Name: flagkey.TopicMQType, Usage: "Message queue provider: statestore (built-in), or a broker type with an egress head (kafka)", DefaultValue: "statestore"}
+	TopicLimit       = Flag{Type: Int, Name: flagkey.TopicLimit, Usage: "Maximum events to peek", DefaultValue: 10}
+
 	// RFC-0024 async dead-letter-queue admin flags.
 	DlqQueue = Flag{Type: String, Name: flagkey.DlqQueue, Usage: "Dead-letter queue to operate on: empty for async invocations, or an RFC-0027 broker egress queue (mq-egress-<type>, e.g. mq-egress-kafka)"}
 	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}

@@ -33,6 +33,11 @@ import (
 type asyncInvoker struct {
 	queue  statestore.Queue
 	logger logr.Logger
+	// eventLog and publishTopic power the RFC-0027 topic admin surface
+	// (/v1/eventing/topic/*): peek reads the topic stream, publish goes through
+	// the same MultiPublisher as async topic destinations.
+	eventLog     statestore.EventLog
+	publishTopic asyncinvoke.TopicPublishFunc
 }
 
 func (a *asyncInvoker) enabled() bool { return a != nil && a.queue != nil }

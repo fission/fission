@@ -550,6 +550,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			}
 			return err
 		}
+		// The topic admin surface (fission topic publish|peek) shares the same
+		// publisher and store handles.
+		triggers.asyncInvoker.eventLog = eventLog
+		triggers.asyncInvoker.publishTopic = publishTopic
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
