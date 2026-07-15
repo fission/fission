@@ -257,6 +257,9 @@ func runEventLog(t *testing.T, newCaps Factory) {
 		const anyWriters = 8
 		const casWriters = 4
 		var casWins, anyFailures atomic.Int64
+		// Collected in the workers, asserted after Wait: testify must not run on
+		// non-test goroutines (require.FailNow would Goexit the wrong goroutine).
+		casErrs := make(chan error, casWriters)
 		var wg sync.WaitGroup
 		for range anyWriters {
 			wg.Go(func() {
@@ -270,11 +273,15 @@ func runEventLog(t *testing.T, newCaps Factory) {
 				if _, err := el.Append(ctx, "mixedrace", 0, []statestore.Event{{Type: "cas"}}); err == nil {
 					casWins.Add(1)
 				} else {
-					require.ErrorIs(t, err, statestore.ErrVersionConflict, "a losing CAS gets the conflict sentinel, not a raw error")
+					casErrs <- err
 				}
 			})
 		}
 		wg.Wait()
+		close(casErrs)
+		for err := range casErrs {
+			require.ErrorIs(t, err, statestore.ErrVersionConflict, "a losing CAS gets the conflict sentinel, not a raw error")
+		}
 		require.Zero(t, anyFailures.Load(), "AppendAny never conflicts, even racing CAS writers")
 		require.LessOrEqual(t, casWins.Load(), int64(1), "at most one CAS-at-0 can win")
 
