@@ -233,6 +233,16 @@ func (mqt *MessageQueueTriggerManager) updateTrigger(trigger *fv1.MessageQueueTr
 	return nil
 }
 
+// Owns reports whether this head's manager consumes trigger: a classic
+// (non-KEDA) trigger of this head's MESSAGE_QUEUE_TYPE. One classic head runs
+// per MQ type (mqtrigger-kafka, mqtrigger-statestore, ...) and all of them
+// watch the same CRD, so each must claim only its own type — and never a
+// KEDA-kind trigger, which the --mqt_keda scaler manager owns.
+func (mqt *MessageQueueTriggerManager) Owns(trigger *fv1.MessageQueueTrigger) bool {
+	return trigger.Spec.MqtKind != MqtKindKeda &&
+		trigger.Spec.MessageQueueType == mqt.messageQueueType
+}
+
 // RegisterTrigger subscribes to (or re-subscribes, on a spec change) the message
 // queue for trigger and records the subscription. It is the create/update path
 // the reconciler calls; the delete path is unsubscribe. Subscriptions use the

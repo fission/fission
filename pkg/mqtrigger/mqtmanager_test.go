@@ -146,7 +146,7 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	ctx := t.Context()
 	mqt := &fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "mqt1", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a"},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
 	}
 	c := crfake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -181,4 +181,56 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	// Unsubscribing an unknown trigger is a no-op, not an error.
 	_, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
+}
+
+// TestReconcilerOwnership: every classic head watches the same CRD, so each
+// must subscribe only its own MQ type and never a KEDA-kind trigger — and a
+// spec update that moves a trigger away from this head must tear its
+// subscription down.
+func TestReconcilerOwnership(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	ctx := t.Context()
+	kafkaMqt := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "kafka-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
+	}
+	otherType := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "ss-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-b", MessageQueueType: fv1.MessageQueueTypeStatestore},
+	}
+	kedaKind := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "keda-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-c", MessageQueueType: fv1.MessageQueueTypeKafka, MqtKind: MqtKindKeda},
+	}
+	c := crfake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(kafkaMqt, otherType, kedaKind).
+		WithStatusSubresource(&fv1.MessageQueueTrigger{}).
+		Build()
+
+	mgr := MakeMessageQueueTriggerManager(logger, nil, fv1.MessageQueueTypeKafka, fakeMessageQueue{})
+	mgr.bind(ctx)
+	r := NewMessageQueueTriggerReconciler(logger, c, mgr)
+
+	reconcile := func(name string) {
+		t.Helper()
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: name}})
+		require.NoError(t, err)
+	}
+
+	reconcile("kafka-mqt")
+	reconcile("ss-mqt")
+	reconcile("keda-mqt")
+	assert.True(t, mgr.checkTriggerSubscription(kafkaMqt), "own type: subscribed")
+	assert.False(t, mgr.checkTriggerSubscription(otherType), "another head's MQ type: not subscribed")
+	assert.False(t, mgr.checkTriggerSubscription(kedaKind), "KEDA-kind: the scaler manager owns it")
+
+	// A spec update that changes the MQ type moves the trigger to another head:
+	// this head must drop its subscription.
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: "kafka-mqt"}, kafkaMqt))
+	kafkaMqt.Spec.MessageQueueType = fv1.MessageQueueTypeStatestore
+	kafkaMqt.Generation = 2
+	require.NoError(t, c.Update(ctx, kafkaMqt))
+	reconcile("kafka-mqt")
+	assert.False(t, mgr.checkTriggerSubscription(kafkaMqt), "type change away from this head unsubscribes")
 }

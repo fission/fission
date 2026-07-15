@@ -65,6 +65,14 @@ func (r *MessageQueueTriggerReconciler) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
+	// Not this head's trigger: a different MQ type (another classic head owns
+	// it) or a KEDA-kind trigger (the scaler manager owns it). Unsubscribe
+	// rather than plain skip — a spec update can move a trigger away from this
+	// head, and unsubscribe is a no-op when we never held a subscription.
+	if !r.mqtMgr.Owns(mqt) {
+		return ctrl.Result{}, r.mqtMgr.unsubscribe(req.NamespacedName)
+	}
+
 	// RegisterTrigger subscribes on first sight and re-subscribes on a spec
 	// change (it checks the in-memory map). A failure returns an error so the
 	// workqueue requeues with backoff.
