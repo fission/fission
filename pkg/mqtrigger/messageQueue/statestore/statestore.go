@@ -32,12 +32,6 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/mqpub"
 	"github.com/fission/fission/pkg/mqtrigger/validator"
 	"github.com/fission/fission/pkg/statestore"
-
-	// Register the statestore drivers this head opens: the HTTP client
-	// (embedded mode → svc/statestore) and Postgres (external mode → the DB
-	// directly). STATESTORE_DRIVER selects at runtime, exactly as in the router.
-	_ "github.com/fission/fission/pkg/statestore/client"
-	_ "github.com/fission/fission/pkg/statestore/postgres"
 )
 
 func init() {
@@ -56,8 +50,11 @@ const (
 	// defaultPollInterval paces Read polls on an idle topic;
 	// MessageQueueTriggerSpec.PollingInterval (seconds) overrides per trigger.
 	defaultPollInterval = time.Second
-	// readBatch bounds one Read — also the redelivery tail bound on a crash
-	// between delivery and cursor commit (at-least-once).
+	// readBatch bounds one Read — and, while cursor commits are succeeding, the
+	// redelivery tail on a crash between delivery and commit (at-least-once).
+	// Under persistent commit failure the loop keeps delivering past the failed
+	// commit, so the crash-redelivery tail is bounded by the outage, not by
+	// readBatch.
 	readBatch = 32
 	// retryBackoff spaces delivery retries. A deliberate (small) deviation from
 	// the kafka provider's immediate retries: hammering a failing function
@@ -105,6 +102,11 @@ type Statestore struct {
 // embedded → "client" → svc/statestore, external → "postgres" → the secret DSN).
 // Open does not dial, so an unreachable store does not block startup; the
 // subscription loops surface read errors and retry.
+//
+// Driver registration is the BINARY's job (cmd/fission-bundle/mqtrigger blank-
+// imports statestore/client and statestore/postgres): this package stays
+// driver-free so the fission CLI, which imports it only for the init()
+// validator/factory registration, does not link pgx and the HTTP store client.
 func New(logger logr.Logger, _ messageQueue.Config, routerURL string) (messageQueue.MessageQueue, error) {
 	if routerURL == "" {
 		return nil, fmt.Errorf("statestore mq provider: router URL is required")
@@ -179,6 +181,12 @@ func (s *Statestore) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTri
 		return nil, fmt.Errorf("statestore mq provider: %w", err)
 	}
 	sub := newSubscription(s, trigger)
+	// Fail a malformed delivery URL (bad routerURL) HERE, where the reconciler
+	// surfaces and retries the error — inside the loop it would deterministically
+	// burn the retry budget of every event on the topic.
+	if _, err := http.NewRequest(http.MethodPost, sub.fnURL, nil); err != nil {
+		return nil, fmt.Errorf("statestore mq provider: invalid delivery URL %q: %w", sub.fnURL, err)
+	}
 	s.subs.add(sub)
 	subCtx, cancel := context.WithCancel(ctx)
 	sub.cancel = cancel

@@ -9,6 +9,7 @@ package serial_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,12 +92,22 @@ func TestStatestoreEventingPipeline(t *testing.T) {
 	// publish (fresh invocation per poll, no dedup key) makes the test immune to
 	// the ms-scale race between BindingReady and the consumer's start-at-head
 	// cursor snapshot; the Contains assertion is idempotent under the extra
-	// deliveries at-least-once implies anyway.
+	// deliveries at-least-once implies anyway. Everything inside the closure is
+	// non-fatal (asyncPostE/FunctionLogsE) so a transient apiserver or router
+	// hiccup is a retried tick, not a test failure from inside the retry loop.
 	marker := ns.Name + "/" + srcFn
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		status, _ := asyncPost(t, ctx, f, route, "")
-		assert.Equal(c, http.StatusAccepted, status)
-		assert.Contains(c, ns.FunctionLogs(t, ctx, dstFn), marker,
-			"the result envelope must flow src → topic → statestore mqt → dst")
-	}, 4*time.Minute, 5*time.Second)
+	require.Eventually(t, func() bool {
+		status, _, err := asyncPostE(t, ctx, f, route, "")
+		if err != nil || status != http.StatusAccepted {
+			t.Logf("async post: status=%d err=%v (retrying)", status, err)
+			return false
+		}
+		logs, err := ns.FunctionLogsE(t, ctx, dstFn)
+		if err != nil {
+			t.Logf("destination logs: %v (retrying)", err)
+			return false
+		}
+		return strings.Contains(logs, marker)
+	}, 4*time.Minute, 5*time.Second,
+		"the result envelope must flow src → topic → statestore mqt → dst (marker %q in %s logs)", marker, dstFn)
 }

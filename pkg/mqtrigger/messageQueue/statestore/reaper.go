@@ -27,6 +27,11 @@ const (
 	// ageScanPages bounds the age-backstop scan per stream per tick, so one huge
 	// backlog cannot monopolize a tick (the scan resumes next tick).
 	ageScanPages = 10
+	// reaperTickTimeout deadlines one tick's store calls: the embedded client
+	// driver has its own HTTP timeout, but the external Postgres driver would
+	// otherwise inherit no deadline — one hung connection would wedge the single
+	// reaper goroutine forever and silently stall retention.
+	reaperTickTimeout = 30 * time.Second
 )
 
 // subscriptionSet tracks the provider's live subscriptions for the reaper.
@@ -51,18 +56,29 @@ func (ss *subscriptionSet) remove(s *subscription) {
 	delete(ss.subs, s)
 }
 
-// byStream snapshots the minimum committed cursor per stream over STARTED
-// subscriptions (one stream can have several triggers).
+// noMinCursor marks a stream whose loss-free floor is unknown this tick; the
+// min-cursor trim candidate is skipped (any floor >= 0 exceeds it) and only the
+// documented-loss backstops apply.
+const noMinCursor = int64(-1)
+
+// byStream snapshots the minimum committed cursor per subscribed stream (one
+// stream can have several triggers). A subscription that has not yet
+// established its cursor (started == false — e.g. stuck retrying a KV read
+// after a failover) has an unknown durable floor that may lie BELOW every
+// started sibling's cursor, so its stream gets noMinCursor: trimming to the
+// started-only minimum there would delete events the latecomer has not
+// consumed and mislabel the loss "mincursor" (invariant E3).
 func (ss *subscriptionSet) byStream() map[string]int64 {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	min := map[string]int64{}
 	for s := range ss.subs {
 		if !s.started.Load() {
+			min[s.stream] = noMinCursor
 			continue
 		}
 		c := s.committed.Load()
-		if cur, ok := min[s.stream]; !ok || c < cur {
+		if cur, ok := min[s.stream]; !ok || (cur != noMinCursor && c < cur) {
 			min[s.stream] = c
 		}
 	}
@@ -89,14 +105,20 @@ func (s *Statestore) runReaper() {
 		case <-s.reaperStop:
 			return
 		case <-ticker.C:
-			s.reapTick(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), reaperTickTimeout)
+			s.reapTick(ctx)
+			cancel()
 		}
 	}
 }
 
 // reapTick trims every subscribed stream. Per stream, the trim point is the max
-// of three candidates: the min committed cursor (exact, loss-free), the age
-// backstop, and the size backstop (both documented loss for stalled consumers).
+// of three candidates: the min committed cursor (exact, loss-free; noMinCursor
+// disables it while a subscription's floor is unknown), the age backstop, and
+// the size backstop (both documented loss for stalled consumers). Streams whose
+// last trigger was deleted are no longer reaped — their residue is bounded by
+// the publisher's backlog cap; a subscription-free age sweep is the egress
+// phase's problem (needs stream listing).
 func (s *Statestore) reapTick(ctx context.Context) {
 	for stream, minCursor := range s.subs.byStream() {
 		s.reapStream(ctx, stream, minCursor)

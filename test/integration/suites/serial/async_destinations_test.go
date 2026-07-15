@@ -111,10 +111,15 @@ func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 	}, 2*time.Minute, 2*time.Second)
 
 	marker := ns.Name + "/" + srcFn
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Contains(c, ns.FunctionLogs(t, ctx, dstFn), marker,
-			"onSuccess destination function must execute out-of-band with the result envelope")
-	}, 3*time.Minute, 3*time.Second)
+	require.Eventually(t, func() bool {
+		logs, err := ns.FunctionLogsE(t, ctx, dstFn)
+		if err != nil {
+			t.Logf("destination logs: %v (retrying)", err)
+			return false
+		}
+		return strings.Contains(logs, marker)
+	}, 3*time.Minute, 3*time.Second,
+		"onSuccess destination function must execute out-of-band with the result envelope (marker %q)", marker)
 }
 
 // TestAsyncInvocationDepthCapBounds: a function whose onSuccess points back at

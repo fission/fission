@@ -771,6 +771,9 @@ asyncInvocation:
 ## a statestore-enabled install gets the full eventing loop out of the box.
 eventing:
   enabled: true
+  ## replicas > 1 REQUIRES leaderElection.enabled: true — without election every
+  ## replica is a live consumer of every trigger (permanent duplicate delivery
+  ## and cursor churn, not HA).
   replicas: 1
   leaderElection:
     enabled: false

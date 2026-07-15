@@ -57,7 +57,7 @@ func (r *MessageQueueTriggerReconciler) Reconcile(ctx context.Context, req ctrl.
 		if apierrors.IsNotFound(err) {
 			// Deleted: tear down the subscription. Identified by name only —
 			// the object is already gone.
-			if err := r.mqtMgr.unsubscribe(req.NamespacedName); err != nil {
+			if _, err := r.mqtMgr.unsubscribe(req.NamespacedName); err != nil {
 				return ctrl.Result{}, err
 			}
 			return ctrl.Result{}, nil
@@ -68,9 +68,21 @@ func (r *MessageQueueTriggerReconciler) Reconcile(ctx context.Context, req ctrl.
 	// Not this head's trigger: a different MQ type (another classic head owns
 	// it) or a KEDA-kind trigger (the scaler manager owns it). Unsubscribe
 	// rather than plain skip — a spec update can move a trigger away from this
-	// head, and unsubscribe is a no-op when we never held a subscription.
+	// head, and unsubscribe is a no-op when we never held a subscription. When
+	// we DID hold one, flip the Subscribed conditions we wrote to
+	// NotOwned=False so the CR doesn't keep claiming Ready while nothing
+	// consumes its topic. (A trigger whose owning head is not deployed at all
+	// keeps an empty status — no head exists to write one; that is inherent to
+	// the head-per-type layout, kafka included.)
 	if !r.mqtMgr.Owns(mqt) {
-		return ctrl.Result{}, r.mqtMgr.unsubscribe(req.NamespacedName)
+		removed, err := r.mqtMgr.unsubscribe(req.NamespacedName)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if removed {
+			r.mqtMgr.markMessageQueueTriggerNotOwned(ctx, mqt)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// RegisterTrigger subscribes on first sight and re-subscribes on a spec

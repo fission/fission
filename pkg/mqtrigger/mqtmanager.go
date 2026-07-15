@@ -291,25 +291,67 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 	return nil
 }
 
-// unsubscribe tears down the subscription for a deleted MessageQueueTrigger,
-// identified by name (a delete reconcile only has the NamespacedName). It is a
-// no-op if no subscription is recorded for the key.
-func (mqt *MessageQueueTriggerManager) unsubscribe(key types.NamespacedName) error {
+// unsubscribe tears down the subscription for a deleted (or no-longer-owned)
+// MessageQueueTrigger, identified by name (a delete reconcile only has the
+// NamespacedName). It reports whether a subscription was actually removed —
+// false with a nil error is the no-op case (this head never held one).
+func (mqt *MessageQueueTriggerManager) unsubscribe(key types.NamespacedName) (bool, error) {
 	stub := &fv1.MessageQueueTrigger{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}
 	sub := mqt.getTriggerSubscription(stub)
 	if sub == nil {
-		return nil
+		return false, nil
 	}
 	if err := mqt.messageQueue.Unsubscribe(sub.subscription); err != nil {
 		mqt.logger.Error(err, "failed to unsubscribe from message queue trigger", "trigger_name", key.Name)
-		return err
+		return false, err
 	}
 	if err := mqt.delTriggerSubscription(stub); err != nil {
 		mqt.logger.Error(err, "error deleting message queue trigger subscription", "trigger_name", key.Name)
-		return err
+		return false, err
 	}
 	mqt.logger.Info("message queue trigger deleted", "trigger_name", key.Name)
-	return nil
+	return true, nil
+}
+
+// markMessageQueueTriggerNotOwned overwrites the Subscribed conditions this
+// head wrote after it tears down the subscription of a trigger it no longer
+// owns (spec moved to another MQ type/kind). Without this the CR keeps a stale
+// Ready=True — for delivery infrastructure, an affirmative lie. Best-effort,
+// like markMessageQueueTriggerBound.
+func (mqt *MessageQueueTriggerManager) markMessageQueueTriggerNotOwned(ctx context.Context, trigger *fv1.MessageQueueTrigger) {
+	if mqt.fissionClient == nil {
+		return
+	}
+	wantBind := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionBindingReady, Status: metav1.ConditionFalse,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonNotOwned,
+		Message:            "subscription released: trigger moved to MQ type " + string(trigger.Spec.MessageQueueType) + "/" + trigger.Spec.MqtKind,
+	}
+	wantReady := metav1.Condition{
+		Type: fv1.MessageQueueTriggerConditionReady, Status: metav1.ConditionFalse,
+		ObservedGeneration: trigger.Generation,
+		Reason:             fv1.MessageQueueTriggerReasonNotOwned,
+		Message:            "not dispatching: waiting for the owning head to subscribe",
+	}
+	if conditions.IsAt(trigger.Status.Conditions, wantBind) && conditions.IsAt(trigger.Status.Conditions, wantReady) {
+		return
+	}
+	cur, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).Get(ctx, trigger.Name, metav1.GetOptions{})
+	if err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: get failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+		return
+	}
+	wantBind.ObservedGeneration = cur.Generation
+	wantReady.ObservedGeneration = cur.Generation
+	if conditions.IsAt(cur.Status.Conditions, wantBind) && conditions.IsAt(cur.Status.Conditions, wantReady) {
+		return
+	}
+	conditions.Set(&cur.Status.Conditions, wantBind)
+	conditions.Set(&cur.Status.Conditions, wantReady)
+	if _, err := mqt.fissionClient.CoreV1().MessageQueueTriggers(trigger.Namespace).UpdateStatus(ctx, cur, metav1.UpdateOptions{}); err != nil {
+		mqt.logger.V(1).Info("mqtrigger status: update failed", "name", trigger.Name, "namespace", trigger.Namespace, "error", err)
+	}
 }
 
 // markMessageQueueTriggerBound writes BindingReady + Ready on a

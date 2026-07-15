@@ -296,3 +296,39 @@ func TestReapStreamMinCursorAndBackstops(t *testing.T) {
 	// Idempotent when nothing to trim.
 	s.reapStream(t.Context(), stream, 0)
 }
+
+// TestByStreamBlocksUnstartedSubscriptions: a subscription that has not
+// established its cursor yet has an unknown durable floor that may lie below
+// every started sibling's — its stream must lose the loss-free min-cursor trim
+// candidate entirely (invariant E3), regardless of map iteration order.
+func TestByStreamBlocksUnstartedSubscriptions(t *testing.T) {
+	t.Parallel()
+	started := func(stream string, committed int64) *subscription {
+		s := &subscription{stream: stream}
+		s.committed.Store(committed)
+		s.started.Store(true)
+		return s
+	}
+	unstarted := func(stream string) *subscription { return &subscription{stream: stream} }
+
+	ss := newSubscriptionSet()
+	ss.add(started("topic/ns/a", 100))
+	ss.add(unstarted("topic/ns/a"))
+	ss.add(started("topic/ns/b", 7))
+
+	got := ss.byStream()
+	assert.EqualValues(t, noMinCursor, got["topic/ns/a"],
+		"an unstarted subscription must block min-cursor trimming for its stream")
+	assert.EqualValues(t, 7, got["topic/ns/b"], "unrelated streams keep their floor")
+
+	// noMinCursor disables candidate 1 in reapStream: nothing may be trimmed.
+	s := newTestProvider(t, "http://unused")
+	for range 3 {
+		publish(t, s, "orders", "", "x")
+	}
+	stream := mqpub.StreamForTopic("ns", "orders")
+	s.reapStream(t.Context(), stream, noMinCursor)
+	evs, err := s.el.Read(t.Context(), stream, 0, 10)
+	require.NoError(t, err)
+	assert.Len(t, evs, 3, "no loss-free trim while any floor is unknown")
+}

@@ -129,6 +129,16 @@ func (sub *subscription) run(ctx context.Context) {
 			}
 			continue
 		}
+		// Gap detection: a first event above cursor+1 means retention trimmed
+		// events this subscription never delivered (an age/size backstop
+		// overriding a stalled floor). The loss already happened — surface it
+		// HERE, at the subscriber that suffered it, or "my function missed
+		// events" is undebuggable later.
+		if gap := events[0].Seq - cursor - 1; gap > 0 {
+			recordGap(ctx, gap)
+			sub.logger.Error(nil, "topic events were trimmed before delivery to this subscription",
+				"stream", sub.stream, "cursor", cursor, "resumedAt", events[0].Seq, "missed", gap)
+		}
 		progressed := false
 		for _, ev := range events {
 			if ctx.Err() != nil {
@@ -229,10 +239,12 @@ func (sub *subscription) handle(ctx context.Context, ev statestore.Event) bool {
 	if ctx.Err() != nil {
 		return false // shutting down: leave the event for redelivery
 	}
-	recordDelivery(ctx, "exhausted")
 	// Poison isolation (E5): route to the ErrorTopic BEFORE advancing, so a
 	// crash in between redelivers the event rather than skipping it. Without an
 	// ErrorTopic the event is dropped-with-log (kafka-provider parity).
+	// While the ErrorTopic publish keeps failing, each re-read re-runs the full
+	// delivery budget against the (already failing) function — E5 deliberately
+	// prices re-delivery below losing the event.
 	if sub.trigger.Spec.ErrorTopic != "" {
 		err := sub.s.pub.Publish(ctx, sub.trigger.Namespace, fv1.MessageQueueTypeStatestore,
 			sub.trigger.Spec.ErrorTopic, ev.Type, ev.Payload)
@@ -243,11 +255,18 @@ func (sub *subscription) handle(ctx context.Context, ev statestore.Event) bool {
 			return false
 		}
 		recordErrorTopic(ctx, "published")
+		sub.logger.Info("event exhausted retries; routed to error topic",
+			"stream", sub.stream, "seq", ev.Seq, "errorTopic", sub.trigger.Spec.ErrorTopic,
+			"maxRetries", sub.trigger.Spec.MaxRetries)
 	} else {
 		sub.logger.Error(nil, "event exhausted retries and no error topic is set; dropping",
 			"stream", sub.stream, "seq", ev.Seq, "maxRetries", sub.trigger.Spec.MaxRetries)
 		recordErrorTopic(ctx, "dropped")
 	}
+	// Counted only once terminal handling is secured: counting before the
+	// ErrorTopic publish would inflate "exhausted" once per retry cycle while
+	// that publish is broken — dashboards would lie mid-incident.
+	recordDelivery(ctx, "exhausted")
 	return true
 }
 
@@ -267,10 +286,15 @@ func (sub *subscription) deliver(ctx context.Context, ev statestore.Event) bool 
 				return false
 			}
 		}
+		// fnURL is validated at Subscribe time, so this branch is
+		// defense-in-depth; continue treats it like any other failed attempt
+		// rather than short-circuiting a "terminal" verdict the event never
+		// earned (zero real attempts must not read as exhausted-and-error-
+		// topic'd in the normal way retries do).
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, sub.fnURL, bytes.NewReader(ev.Payload))
 		if err != nil {
-			sub.logger.Error(err, "building delivery request", "url", sub.fnURL)
-			return false
+			sub.logger.Error(err, "building delivery request", "url", sub.fnURL, "seq", ev.Seq, "attempt", attempt)
+			continue
 		}
 		if contentType != "" {
 			req.Header.Set("Content-Type", contentType)
@@ -290,7 +314,10 @@ func (sub *subscription) deliver(ctx context.Context, ev statestore.Event) bool 
 		body, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		_ = resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			sub.logger.V(1).Info("topic delivery failed",
+			// Error level for kafka-provider parity: a function 500-ing on every
+			// event must be visible in the head's logs at default verbosity, not
+			// quieter than a connection failure.
+			sub.logger.Error(nil, "topic delivery failed",
 				"status", resp.StatusCode, "seq", ev.Seq, "attempt", attempt)
 			continue
 		}
@@ -302,8 +329,11 @@ func (sub *subscription) deliver(ctx context.Context, ev statestore.Event) bool 
 			respCT := resp.Header.Get("Content-Type")
 			if err := sub.s.pub.Publish(ctx, sub.trigger.Namespace, fv1.MessageQueueTypeStatestore,
 				sub.trigger.Spec.ResponseTopic, respCT, body); err != nil {
+				recordResponseTopic(ctx, "error")
 				sub.logger.Error(err, "publishing response to response topic (best-effort)",
 					"responseTopic", sub.trigger.Spec.ResponseTopic, "seq", ev.Seq)
+			} else {
+				recordResponseTopic(ctx, "published")
 			}
 		}
 		return true

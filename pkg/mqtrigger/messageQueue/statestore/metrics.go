@@ -25,6 +25,10 @@ var (
 		"Count of exhausted events routed to the error topic, labeled by outcome (published/error/dropped — dropped = no error topic configured)")
 	eventingTrimmed = metrics.Int64Counter("fission_eventing_trimmed_total",
 		"Count of topic events trimmed by retention, labeled by reason (mincursor/age/size)")
+	eventingResponseTopic = metrics.Int64Counter("fission_eventing_responsetopic_total",
+		"Count of best-effort response-topic publishes after successful deliveries, labeled by outcome (published/error)")
+	eventingGaps = metrics.Int64Counter("fission_eventing_gap_events_total",
+		"Count of topic events a subscription found already trimmed when it resumed — retention loss observed at the subscriber that suffered it")
 )
 
 func recordDelivery(ctx context.Context, condition string) {
@@ -41,4 +45,12 @@ func recordErrorTopic(ctx context.Context, outcome string) {
 
 func recordTrimmed(ctx context.Context, reason string, n int64) {
 	eventingTrimmed.Add(ctx, n, metric.WithAttributes(attribute.String("reason", reason)))
+}
+
+func recordResponseTopic(ctx context.Context, outcome string) {
+	eventingResponseTopic.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+func recordGap(ctx context.Context, n int64) {
+	eventingGaps.Add(ctx, n)
 }
