@@ -387,6 +387,14 @@ func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *meta
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
 	key := crd.CacheKeyUGFromMeta(fnMeta)
+	if gpm.logger.V(1).Enabled() {
+		gpm.logger.V(1).Info("UnTapService",
+			"key", key.String(),
+			"svcHost", svcHost,
+			"uid", fnMeta.UID,
+			"resourceVersion", fnMeta.ResourceVersion,
+			"generation", fnMeta.Generation)
+	}
 	otelUtils.SpanTrackEvent(ctx, "UnTapService",
 		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())},
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
