@@ -104,6 +104,37 @@ rules:
   - update
   - patch
 {{- end }}
+{{- define "statestore-mqt-rules" }}
+rules:
+# functions list is required by the boot path (crd.WaitForFunctionCRDs probes
+# CRD readiness with a Functions List; Forbidden there crash-loops the head).
+# Delivery itself is HTTP via the router, so no environments/packages needed.
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
+{{- end }}
+
 {{- define "kafka-rules" }}
 rules:
 - apiGroups:

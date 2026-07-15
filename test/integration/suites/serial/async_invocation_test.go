@@ -77,16 +77,29 @@ func scaleDeployment(t *testing.T, ctx context.Context, f *framework.Framework, 
 // returns the status and the X-Fission-Invocation-Id header.
 func asyncPost(t *testing.T, ctx context.Context, f *framework.Framework, route, dedupKey string) (int, string) {
 	t.Helper()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.Router(t).BaseURL()+route, strings.NewReader("payload"))
+	status, id, err := asyncPostE(t, ctx, f, route, dedupKey)
 	require.NoError(t, err)
+	return status, id
+}
+
+// asyncPostE is asyncPost without the fatal require, for use inside polling
+// closures where a transient error must mean "retry this tick" (t is only
+// forwarded to Router for its Helper bookkeeping — never failed).
+func asyncPostE(t *testing.T, ctx context.Context, f *framework.Framework, route, dedupKey string) (int, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.Router(t).BaseURL()+route, strings.NewReader("payload"))
+	if err != nil {
+		return 0, "", err
+	}
 	req.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
 	if dedupKey != "" {
 		req.Header.Set(asyncinvoke.HeaderDedupKey, dedupKey)
 	}
 	resp, err := f.HTTPClient().Do(req)
-	require.NoError(t, err)
+	if err != nil {
+		return 0, "", err
+	}
 	defer func() { _ = resp.Body.Close() }()
-	return resp.StatusCode, resp.Header.Get(asyncinvoke.HeaderInvocationID)
+	return resp.StatusCode, resp.Header.Get(asyncinvoke.HeaderInvocationID), nil
 }
 
 // TestAsyncInvocationExecutes: an async request returns 202 + an invocation id

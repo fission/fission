@@ -117,6 +117,11 @@ const (
 
 	// MessageQueueTrigger condition reasons
 	MessageQueueTriggerReasonSubscribed = "Subscribed"
+	// MessageQueueTriggerReasonNotOwned: the head that held this trigger's
+	// subscription tore it down because a spec change moved the trigger to a
+	// different MQ type/kind — whether another head picks it up depends on that
+	// head being deployed.
+	MessageQueueTriggerReasonNotOwned = "NotOwned"
 
 	// CanaryConfig condition reasons (mirror Status string enum)
 	CanaryConfigReasonInProgress = "InProgress"

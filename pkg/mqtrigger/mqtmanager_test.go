@@ -10,12 +10,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -146,7 +148,7 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	ctx := t.Context()
 	mqt := &fv1.MessageQueueTrigger{
 		ObjectMeta: metav1.ObjectMeta{Name: "mqt1", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a"},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
 	}
 	c := crfake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -181,4 +183,71 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	// Unsubscribing an unknown trigger is a no-op, not an error.
 	_, err = r.Reconcile(ctx, req)
 	require.NoError(t, err)
+}
+
+// TestReconcilerOwnership: every classic head watches the same CRD, so each
+// must subscribe only its own MQ type and never a KEDA-kind trigger — and a
+// spec update that moves a trigger away from this head must tear its
+// subscription down.
+func TestReconcilerOwnership(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	ctx := t.Context()
+	kafkaMqt := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "kafka-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
+	}
+	otherType := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "ss-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-b", MessageQueueType: fv1.MessageQueueTypeStatestore},
+	}
+	kedaKind := &fv1.MessageQueueTrigger{
+		ObjectMeta: metav1.ObjectMeta{Name: "keda-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
+		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-c", MessageQueueType: fv1.MessageQueueTypeKafka, MqtKind: MqtKindKeda},
+	}
+	c := crfake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(kafkaMqt, otherType, kedaKind).
+		WithStatusSubresource(&fv1.MessageQueueTrigger{}).
+		Build()
+
+	// A real (fake) fissionClient so the status writes (Subscribed on register,
+	// NotOwned on release) are assertable.
+	fissionClient := fissionfake.NewSimpleClientset(kafkaMqt.DeepCopy(), otherType.DeepCopy(), kedaKind.DeepCopy())
+	mgr := MakeMessageQueueTriggerManager(logger, fissionClient, fv1.MessageQueueTypeKafka, fakeMessageQueue{})
+	mgr.bind(ctx)
+	r := NewMessageQueueTriggerReconciler(logger, c, mgr)
+
+	reconcile := func(name string) {
+		t.Helper()
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: name}})
+		require.NoError(t, err)
+	}
+
+	reconcile("kafka-mqt")
+	reconcile("ss-mqt")
+	reconcile("keda-mqt")
+	assert.True(t, mgr.checkTriggerSubscription(kafkaMqt), "own type: subscribed")
+	assert.False(t, mgr.checkTriggerSubscription(otherType), "another head's MQ type: not subscribed")
+	assert.False(t, mgr.checkTriggerSubscription(kedaKind), "KEDA-kind: the scaler manager owns it")
+
+	// A spec update that changes the MQ type moves the trigger to another head:
+	// this head must drop its subscription AND flip the Subscribed conditions it
+	// wrote — a released trigger keeping Ready=True would claim delivery while
+	// nothing consumes its topic.
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: "kafka-mqt"}, kafkaMqt))
+	kafkaMqt.Spec.MessageQueueType = fv1.MessageQueueTypeStatestore
+	kafkaMqt.Generation = 2
+	require.NoError(t, c.Update(ctx, kafkaMqt))
+	reconcile("kafka-mqt")
+	assert.False(t, mgr.checkTriggerSubscription(kafkaMqt), "type change away from this head unsubscribes")
+
+	cur, err := fissionClient.CoreV1().MessageQueueTriggers(metav1.NamespaceDefault).Get(ctx, "kafka-mqt", metav1.GetOptions{})
+	require.NoError(t, err)
+	bind := meta.FindStatusCondition(cur.Status.Conditions, fv1.MessageQueueTriggerConditionBindingReady)
+	require.NotNil(t, bind, "released trigger carries a BindingReady condition")
+	assert.Equal(t, metav1.ConditionFalse, bind.Status)
+	assert.Equal(t, fv1.MessageQueueTriggerReasonNotOwned, bind.Reason)
+	ready := meta.FindStatusCondition(cur.Status.Conditions, fv1.MessageQueueTriggerConditionReady)
+	require.NotNil(t, ready)
+	assert.Equal(t, metav1.ConditionFalse, ready.Status)
 }

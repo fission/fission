@@ -8,6 +8,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -287,13 +288,28 @@ func (ns *TestNamespace) WaitForFunction(t *testing.T, ctx context.Context, name
 //   - builder pods (separate deployment): `envName=<env>` (legacy label).
 func (ns *TestNamespace) FunctionLogs(t *testing.T, ctx context.Context, fnName string) string {
 	t.Helper()
+	logs, err := ns.FunctionLogsE(t, ctx, fnName)
+	require.NoErrorf(t, err, "FunctionLogs: %s", fnName)
+	return logs
+}
+
+// FunctionLogsE is FunctionLogs without the fatal require: inside a polling
+// closure (require.Eventually and friends) a transient apiserver error must
+// surface as "retry", not fail the test from a goroutine the retry loop cannot
+// recover. Per-pod stream errors are still tolerated (churned pods).
+func (ns *TestNamespace) FunctionLogsE(t *testing.T, ctx context.Context, fnName string) (string, error) {
+	t.Helper()
 	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{
 		LabelSelector: "functionName=" + fnName,
 	})
-	require.NoErrorf(t, err, "FunctionLogs: list pods (functionName=%s)", fnName)
+	if err != nil {
+		return "", fmt.Errorf("list pods (functionName=%s): %w", fnName, err)
+	}
 
 	fn, err := ns.f.fissionClient.CoreV1().Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
-	require.NoErrorf(t, err, "FunctionLogs: get function %q", fnName)
+	if err != nil {
+		return "", fmt.Errorf("get function %q: %w", fnName, err)
+	}
 	envName := fn.Spec.Environment.Name
 
 	var combined strings.Builder
@@ -312,7 +328,7 @@ func (ns *TestNamespace) FunctionLogs(t *testing.T, ctx context.Context, fnName 
 		}
 		combined.Write(b)
 	}
-	return combined.String()
+	return combined.String(), nil
 }
 
 // GetFunction returns the live Function CR by name. Use it to assert on

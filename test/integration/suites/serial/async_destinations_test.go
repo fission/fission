@@ -89,9 +89,12 @@ func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 	route := "/async-src-" + ns.ID
 
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: env, Image: image})
-	code := framework.WriteTestData(t, "nodejs/log/log.js")
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: dstFn, Env: env, Code: code, ExecutorType: "poolmgr"})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: srcFn, Env: env, Code: code, ExecutorType: "poolmgr"})
+	// The destination logs its request body: the result envelope's functionRef
+	// ("<ns>/<srcFn>", unique per test run) is asserted with Contains — a
+	// count-over-baseline assertion is sensitive to pod churn re-baselining the
+	// visible logs (a CI flake this test used to have).
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: dstFn, Env: env, Code: framework.WriteTestData(t, "nodejs/log/logbody.js"), ExecutorType: "poolmgr"})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: srcFn, Env: env, Code: framework.WriteTestData(t, "nodejs/log/log.js"), ExecutorType: "poolmgr"})
 	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: srcFn, URL: route, Method: http.MethodPost})
 
 	setInvocation(t, ctx, f, ns, srcFn, &fv1.InvocationConfig{
@@ -100,7 +103,6 @@ func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 
 	warmRoute(t, ctx, f, route)
 	warmInternal(t, ctx, f, dstFn)
-	baseline := strings.Count(ns.FunctionLogs(t, ctx, dstFn), logMarker)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		status, id := asyncPost(t, ctx, f, route, "dest-once-"+ns.ID)
@@ -108,10 +110,16 @@ func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 		assert.NotEmpty(c, id)
 	}, 2*time.Minute, 2*time.Second)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		got := strings.Count(ns.FunctionLogs(t, ctx, dstFn), logMarker)
-		assert.Greater(c, got, baseline, "onSuccess destination function must execute out-of-band")
-	}, 3*time.Minute, 3*time.Second)
+	marker := ns.Name + "/" + srcFn
+	require.Eventually(t, func() bool {
+		logs, err := ns.FunctionLogsE(t, ctx, dstFn)
+		if err != nil {
+			t.Logf("destination logs: %v (retrying)", err)
+			return false
+		}
+		return strings.Contains(logs, marker)
+	}, 3*time.Minute, 3*time.Second,
+		"onSuccess destination function must execute out-of-band with the result envelope (marker %q)", marker)
 }
 
 // TestAsyncInvocationDepthCapBounds: a function whose onSuccess points back at

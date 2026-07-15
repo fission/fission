@@ -31,6 +31,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/statestore"
 )
 
 const (

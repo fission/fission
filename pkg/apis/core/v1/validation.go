@@ -975,6 +975,13 @@ func (spec MessageQueueTriggerSpec) validateForAdmission() error {
 		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 		}
+
+		// An invalid ErrorTopic is worse than an invalid ResponseTopic: the
+		// consumer refuses to advance past a poison event whose error-topic
+		// publish keeps failing (E5), so the trigger wedges re-delivering it.
+		if len(spec.ErrorTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ErrorTopic, spec.MqtKind) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ErrorTopic", spec.ErrorTopic, "not a valid topic"))
+		}
 	}
 
 	return errs

@@ -92,14 +92,16 @@ func getToolConfig(input cli.Input, existing *fv1.ToolConfig) (*fv1.ToolConfig, 
 // getInvocationConfig builds the RFC-0024 async InvocationConfig from the
 // --async-* flags, merging onto existing (the function's current config, or nil on
 // create) so an `fn update` that sets only one field keeps the rest. It returns nil
-// when nothing is configured. An empty --async-on-success/--async-on-failure clears
-// that destination. Field bounds and the destination shape are validated server-side
-// by the Function admission webhook, so the CLI stays thin.
-func getInvocationConfig(input cli.Input, existing *fv1.InvocationConfig) *fv1.InvocationConfig {
+// when nothing is configured. An empty --async-on-success/--async-on-failure (or
+// their -topic variants) clears that destination. Field bounds and the destination
+// shape are validated server-side by the Function admission webhook, so the CLI
+// stays thin.
+func getInvocationConfig(input cli.Input, existing *fv1.InvocationConfig) (*fv1.InvocationConfig, error) {
 	set := input.IsSet(flagkey.FnAsyncMaxAttempts) || input.IsSet(flagkey.FnAsyncMaxAge) ||
-		input.IsSet(flagkey.FnAsyncOnSuccess) || input.IsSet(flagkey.FnAsyncOnFailure)
+		input.IsSet(flagkey.FnAsyncOnSuccess) || input.IsSet(flagkey.FnAsyncOnFailure) ||
+		input.IsSet(flagkey.FnAsyncOnSuccessTopic) || input.IsSet(flagkey.FnAsyncOnFailureTopic)
 	if !set {
-		return existing
+		return existing, nil
 	}
 	ic := &fv1.InvocationConfig{}
 	if existing != nil {
@@ -111,23 +113,40 @@ func getInvocationConfig(input cli.Input, existing *fv1.InvocationConfig) *fv1.I
 	if input.IsSet(flagkey.FnAsyncMaxAge) {
 		ic.MaxAge = &metav1.Duration{Duration: input.Duration(flagkey.FnAsyncMaxAge)}
 	}
-	if input.IsSet(flagkey.FnAsyncOnSuccess) {
-		ic.OnSuccess = functionDestination(input.String(flagkey.FnAsyncOnSuccess))
+	var err error
+	if ic.OnSuccess, err = destinationFromFlags(input, flagkey.FnAsyncOnSuccess, flagkey.FnAsyncOnSuccessTopic, ic.OnSuccess); err != nil {
+		return nil, err
 	}
-	if input.IsSet(flagkey.FnAsyncOnFailure) {
-		ic.OnFailure = functionDestination(input.String(flagkey.FnAsyncOnFailure))
+	if ic.OnFailure, err = destinationFromFlags(input, flagkey.FnAsyncOnFailure, flagkey.FnAsyncOnFailureTopic, ic.OnFailure); err != nil {
+		return nil, err
 	}
-	return ic
+	return ic, nil
 }
 
-// functionDestination builds a same-namespace function DestinationRef, or nil for
-// an empty name (clearing the destination).
-func functionDestination(name string) *fv1.DestinationRef {
-	if name == "" {
-		return nil
+// destinationFromFlags resolves one destination condition from its flag pair —
+// a same-namespace function (fnKey) or a statestore topic (topicKey). A
+// DestinationRef holds exactly one kind, so setting both non-empty is an
+// error; setting either to "" clears the destination; setting neither keeps
+// current.
+func destinationFromFlags(input cli.Input, fnKey, topicKey string, current *fv1.DestinationRef) (*fv1.DestinationRef, error) {
+	if !input.IsSet(fnKey) && !input.IsSet(topicKey) {
+		return current, nil
 	}
-	return &fv1.DestinationRef{
-		Function: &fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: name},
+	fnName, topic := input.String(fnKey), input.String(topicKey)
+	if fnName != "" && topic != "" {
+		return nil, fmt.Errorf("--%s and --%s are mutually exclusive (a destination is a function OR a topic)", fnKey, topicKey)
+	}
+	switch {
+	case fnName != "":
+		return &fv1.DestinationRef{
+			Function: &fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: fnName},
+		}, nil
+	case topic != "":
+		return &fv1.DestinationRef{
+			Topic: &fv1.TopicRef{MessageQueueType: fv1.MessageQueueTypeStatestore, Topic: topic},
+		}, nil
+	default:
+		return nil, nil // explicit empty clears the destination
 	}
 }
 
@@ -330,6 +349,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	invocation, err := getInvocationConfig(input, nil)
+	if err != nil {
+		return err
+	}
+
 	opts.function = &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
@@ -344,7 +368,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Streaming:       getStreamingConfig(input),
 			Tool:            toolConfig,
-			Invocation:      getInvocationConfig(input, nil),
+			Invocation:      invocation,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
 			RetainPods:      retainPods,

@@ -10,7 +10,39 @@ import (
 
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
+
+// TestMessageQueueTriggerSpecValidateForAdmission: Topic, ResponseTopic AND
+// ErrorTopic are all validated for a classic-kind trigger — an invalid
+// ErrorTopic is the worst of the three to admit, since the consumer refuses to
+// advance past a poison event whose error-topic publish keeps failing (E5) and
+// the trigger wedges.
+func TestMessageQueueTriggerSpecValidateForAdmission(t *testing.T) {
+	t.Parallel()
+	validator.Register("test-classic-mq", func(topic string) bool { return !strings.Contains(topic, "/") })
+
+	base := func(mutate func(*MessageQueueTriggerSpec)) MessageQueueTriggerSpec {
+		spec := MessageQueueTriggerSpec{
+			FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn"},
+			MessageQueueType:  "test-classic-mq",
+			MqtKind:           "fission",
+			Topic:             "orders",
+		}
+		if mutate != nil {
+			mutate(&spec)
+		}
+		return spec
+	}
+
+	require.NoError(t, base(nil).validateForAdmission())
+	require.NoError(t, base(func(s *MessageQueueTriggerSpec) { s.ResponseTopic, s.ErrorTopic = "replies", "errs" }).validateForAdmission())
+	require.Error(t, base(func(s *MessageQueueTriggerSpec) { s.Topic = "bad/topic" }).validateForAdmission())
+	require.Error(t, base(func(s *MessageQueueTriggerSpec) { s.ResponseTopic = "bad/topic" }).validateForAdmission())
+	require.Error(t, base(func(s *MessageQueueTriggerSpec) { s.ErrorTopic = "bad/topic" }).validateForAdmission())
+	require.Error(t, base(func(s *MessageQueueTriggerSpec) { s.MessageQueueType = "unregistered" }).validateForAdmission())
+}
 
 func TestValidateKubeName(t *testing.T) {
 	t.Parallel()

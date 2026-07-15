@@ -21,6 +21,14 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/statestore"
+
+	// Statestore drivers the statestore MQ provider opens via STATESTORE_DRIVER:
+	// the HTTP client (embedded mode → svc/statestore) and Postgres (external
+	// mode → the DB directly). Registered here, not in the provider package, so
+	// importing the provider for its validator (fission CLI) links no drivers.
+	_ "github.com/fission/fission/pkg/statestore/client"
+	_ "github.com/fission/fission/pkg/statestore/postgres"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )

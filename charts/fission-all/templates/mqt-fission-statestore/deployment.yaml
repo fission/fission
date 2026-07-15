@@ -1,0 +1,95 @@
+{{- if and .Values.statestore.enabled .Values.eventing.enabled }}
+# RFC-0027 built-in eventing head: the statestore MessageQueue provider.
+# messageQueueType: statestore triggers consume topics (EventLog streams written
+# by async destinations or other publishers) with zero external brokers. One
+# classic mqt deployment per MQ type, per the mqt-fission-kafka convention.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtrigger-statestore
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: statestore
+spec:
+  replicas: {{ dig "replicas" 1 (.Values.eventing | default dict) }}
+  selector:
+    matchLabels:
+      svc: mqtrigger
+      messagequeue: statestore
+  template:
+    metadata:
+      labels:
+        svc: mqtrigger
+        messagequeue: statestore
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+      - name: mqtrigger
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--mqt", "--routerUrl", "http://router.{{ .Release.Namespace }}"]
+        ports:
+          - containerPort: 8080
+            name: metrics
+        env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
+        {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.eventing | default dict))) | indent 8 }}
+        - name: MESSAGE_QUEUE_TYPE
+          value: statestore
+        # The provider opens the statestore exactly like the router's async path:
+        # embedded -> the capability service over HTTP, external -> Postgres.
+        {{- if eq .Values.statestore.mode "embedded" }}
+        - name: STATESTORE_DRIVER
+          value: "client"
+        - name: STATESTORE_DSN
+          value: "http://statestore.{{ .Release.Namespace }}:{{ include "fission.statestorePort" . }}"
+        {{- else if eq .Values.statestore.mode "external" }}
+        - name: STATESTORE_DRIVER
+          value: "postgres"
+        - name: STATESTORE_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.statestore.external.existingSecret | default "statestore-postgres" }}
+              key: dsn
+        {{- end }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # /fission-function/<ns>/<name> lives only on the router's internal
+        # listener (GHSA-3g33-6vg6-27m8). The consumer signs each invocation when
+        # FISSION_INTERNAL_AUTH_SECRET is set (mounted by internalAuth.envs).
+        - name: ROUTER_INTERNAL_URL
+          value: {{ include "fission.routerInternalURL" . | quote }}
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        {{- if .Values.coverage.enabled }}
+        volumeMounts:
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+      serviceAccountName: fission-statestore-mqt
+      {{- if .Values.coverage.enabled }}
+      volumes:
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}

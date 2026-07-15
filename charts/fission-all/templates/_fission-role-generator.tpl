@@ -26,6 +26,9 @@ metadata:
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}
 {{- end }}
+{{- if eq "statestore-mqt" .component }}
+{{- include "statestore-mqt-rules" . }}
+{{- end }}
 {{- if eq "keda" .component }}
 {{- include "keda-rules" . }}
 {{- end }}
@@ -108,6 +111,9 @@ metadata:
 {{- end }}
 {{- if eq "executor" .component }}
 {{- include "executor-rules" . }}
+{{- end }}
+{{- if eq "statestore-mqt" .component }}
+{{- include "statestore-mqt-rules" . }}
 {{- end }}
 # Read FissionTenant (cluster-scoped) so the component's resolver-sync keeps its
 # live tenant set current and a runtime-onboarded namespace reaches its
