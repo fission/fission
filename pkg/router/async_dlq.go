@@ -95,9 +95,9 @@ func (ts *HTTPTriggerSet) dlqQueue(w http.ResponseWriter) (statestore.Queue, boo
 }
 
 // dlqList returns a page of dead-lettered invocations, optionally filtered to one
-// namespace (a display convenience, not an authorization boundary — the JWT gate
-// is coarse in phase 3). ?limit bounds the page; ?token continues from a prior
-// page's nextToken.
+// namespace (a display convenience, not an authorization boundary — the internal
+// listener's HMAC gate is coarse in phase 3). ?limit bounds the page; ?token
+// continues from a prior page's nextToken.
 func (ts *HTTPTriggerSet) dlqList(w http.ResponseWriter, r *http.Request) {
 	q, ok := ts.dlqQueue(w)
 	if !ok {

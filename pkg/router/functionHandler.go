@@ -99,18 +99,23 @@ func (fh *functionHandler) roundTripperLogger() logr.Logger {
 // direct-function path (/fission-function/...), so a signed direct caller — e.g.
 // `fission function test --async` — can enqueue too.
 //
-// The one request that must NEVER re-enqueue is the dispatcher's own delivery: it
-// carries X-Fission-Invocation-Id, so it always proxies synchronously regardless of
-// any header (the header allowlist already strips X-Fission-* from a replay, so
-// this check is belt-and-suspenders against a future allowlist change).
+// The X-Fission-Invocation-Id guard applies ONLY on the internal direct-function
+// path (httpTrigger == nil): that is where the dispatcher delivers, and its own
+// delivery — which carries that header — must proxy synchronously so it can never
+// re-enqueue. On the public trigger path the dispatcher never delivers, so the
+// header is not a delivery signal there; it is also user-spoofable, so honoring it
+// would let a caller bypass spec.invocationMode=async and force a sync invocation.
+// Hence the public path decides purely on the header / trigger mode.
 func (fh functionHandler) asyncRequested(request *http.Request) bool {
+	headerAsync := strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync)
+	if fh.httpTrigger != nil {
+		return headerAsync || strings.EqualFold(fh.httpTrigger.Spec.InvocationMode, asyncinvoke.InvokeModeAsync)
+	}
+	// Internal direct-function path: never re-enqueue the dispatcher's own delivery.
 	if request.Header.Get(asyncinvoke.HeaderInvocationID) != "" {
-		return false // the dispatcher's own delivery — never re-enqueue
+		return false
 	}
-	if strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync) {
-		return true
-	}
-	return fh.httpTrigger != nil && strings.EqualFold(fh.httpTrigger.Spec.InvocationMode, asyncinvoke.InvokeModeAsync)
+	return headerAsync
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {

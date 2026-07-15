@@ -207,12 +207,14 @@ func (opts *TestSubCommand) invokeAsync(ctx context.Context, input cli.Input, m 
 	if err != nil {
 		return err
 	}
-	req.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
 	for _, h := range input.StringSlice(flagkey.FnTestHeader) {
 		if k, v, ok := strings.Cut(h, ":"); ok {
 			req.Header.Set(strings.TrimSpace(k), strings.TrimSpace(v))
 		}
 	}
+	// Set the async mode header LAST so --async is authoritative: a user --header
+	// (e.g. -H "X-Fission-Invoke-Mode: sync") cannot silently downgrade the request.
+	req.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
 
 	var transport http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
 	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {

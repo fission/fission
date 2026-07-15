@@ -139,8 +139,12 @@ func TestAsyncRequested(t *testing.T) {
 		{"public async header enqueues", publicTrigger, "async", "", true},
 		{"trigger invocationMode enqueues", triggerModeAsync, "", "", true},
 		{"no async signal proxies", nil, "", "", false},
-		{"dispatcher delivery never enqueues (header)", nil, "async", "inv-1", false},
-		{"dispatcher delivery never enqueues (trigger mode)", triggerModeAsync, "", "inv-1", false},
+		// Internal path: the dispatcher's own delivery (invocation-id set) proxies sync.
+		{"internal dispatcher delivery never enqueues", nil, "async", "inv-1", false},
+		// Public path: a user-spoofed invocation-id must NOT bypass async — the guard
+		// is internal-only (the dispatcher never delivers on the public path).
+		{"public spoofed invocation-id can't bypass trigger mode", triggerModeAsync, "", "inv-1", true},
+		{"public spoofed invocation-id can't bypass async header", publicTrigger, "async", "inv-1", true},
 		{"case-insensitive header", nil, "ASYNC", "", true},
 	}
 	for _, tc := range cases {
