@@ -62,3 +62,4 @@ examples
 .github/code-review-graph.instruction.md
 .claude/skills
 .claude/settings.json
+.mcp.json
