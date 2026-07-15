@@ -27,6 +27,8 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
+			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			// TODO retired pkg & trigger related flags from function cmd
@@ -85,6 +87,8 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
+			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -136,7 +140,7 @@ func Commands() *cobra.Command {
 	}, Test, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.HtMethod, flag.FnTestHeader, flag.FnTestBody,
-			flag.FnTestQuery, flag.FnTestTimeout,
+			flag.FnTestQuery, flag.FnTestTimeout, flag.FnTestAsync,
 			// for getting log from log database if we failed to get logs from function pod.
 			flag.FnLogDBType,
 			flag.FnSubPath,
@@ -244,7 +248,7 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd)
+		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, DLQCommands())
 
 	return command
 }

@@ -331,6 +331,7 @@ func (ts *HTTPTriggerSet) buildIncrementalMuxes(featureConfig *config.FeatureCon
 	}
 
 	ts.registerRouterOwnedRoutes(publicMux, featureConfig, m.HomeClaimed)
+	ts.registerAsyncDLQRoutes(internalMux)
 	return publicMux, internalMux
 }
 

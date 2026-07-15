@@ -69,8 +69,14 @@ type Queue interface {
 	// DeadLetters returns a page of dead-lettered messages for queue.
 	DeadLetters(ctx context.Context, queue string, page Page) ([]DeadMessage, error)
 	// Redrive re-enqueues dead-lettered messages by durable id with attempts
-	// reset.
-	Redrive(ctx context.Context, queue string, ids []string) error
+	// reset, returning the number actually re-enqueued — ids that are not currently
+	// dead-lettered are skipped, so the count can be less than len(ids).
+	Redrive(ctx context.Context, queue string, ids []string) (int64, error)
+	// Purge permanently deletes every dead-lettered message for queue and returns
+	// the number removed. It touches only the dead set (never queued/leased/acked
+	// work), so it drops the conservation Enqueued and Dead counts equally and the
+	// T1 drift invariant is preserved by construction.
+	Purge(ctx context.Context, queue string) (int64, error)
 	// Stats returns a point-in-time snapshot of queue's backlog (visible / leased
 	// / dead counts and the oldest visible message's age), for the RFC-0024 async
 	// depth/oldest-age metrics and DLQ dashboards. It does not reap expired leases.

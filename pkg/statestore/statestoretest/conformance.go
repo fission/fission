@@ -253,7 +253,13 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.Len(t, dead, 1)
 		require.Equal(t, id, dead[0].ID)
 
-		require.NoError(t, q.Redrive(ctx, "cq", []string{id}))
+		n, err := q.Redrive(ctx, "cq", []string{id})
+		require.NoError(t, err)
+		assert.EqualValues(t, 1, n, "Redrive reports the count actually re-enqueued")
+		// A second redrive of the same (now-requeued, not dead) id re-enqueues nothing.
+		n, err = q.Redrive(ctx, "cq", []string{id})
+		require.NoError(t, err)
+		assert.Zero(t, n, "an id that is not dead-lettered is not redriven")
 		dead, err = q.DeadLetters(ctx, "cq", statestore.Page{})
 		require.NoError(t, err)
 		require.Empty(t, dead)
@@ -261,6 +267,50 @@ func runQueue(t *testing.T, newCaps Factory) {
 		require.NoError(t, err)
 		require.Len(t, l, 1)
 		assert.Equal(t, 1, l[0].Attempts, "attempts reset on redrive")
+	})
+
+	t.Run("PurgeDeadLetters", func(t *testing.T) {
+		q := queueOrSkip(t, newCaps)
+		ctx := t.Context()
+		const pq = "purgeq"
+		// Kill two to the dead set, leave one visible (Purge must touch only the dead).
+		for range 2 {
+			_, err := q.Enqueue(ctx, pq, statestore.Message{Body: []byte("d")}, statestore.EnqueueOptions{})
+			require.NoError(t, err)
+			l, err := q.Lease(ctx, pq, 1, time.Minute)
+			require.NoError(t, err)
+			require.Len(t, l, 1)
+			require.NoError(t, q.Kill(ctx, l[0].Receipt, "permanent"))
+		}
+		liveID, err := q.Enqueue(ctx, pq, statestore.Message{Body: []byte("live")}, statestore.EnqueueOptions{})
+		require.NoError(t, err)
+
+		dead, err := q.DeadLetters(ctx, pq, statestore.Page{})
+		require.NoError(t, err)
+		require.Len(t, dead, 2)
+
+		n, err := q.Purge(ctx, pq)
+		require.NoError(t, err)
+		assert.EqualValues(t, 2, n, "Purge returns the count removed")
+
+		dead, err = q.DeadLetters(ctx, pq, statestore.Page{})
+		require.NoError(t, err)
+		assert.Empty(t, dead, "dead set is empty after Purge")
+		st, err := q.Stats(ctx, pq)
+		require.NoError(t, err)
+		assert.Zero(t, st.Dead)
+		assert.EqualValues(t, 1, st.Visible, "Purge leaves visible work untouched")
+
+		// The still-visible message is leasable — the purge did not disturb it.
+		l, err := q.Lease(ctx, pq, 1, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l, 1)
+		assert.Equal(t, liveID, l[0].ID)
+
+		// Purging an empty dead set is a no-op that removes nothing.
+		n, err = q.Purge(ctx, pq)
+		require.NoError(t, err)
+		assert.Zero(t, n)
 	})
 
 	t.Run("Stats", func(t *testing.T) {

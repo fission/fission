@@ -65,10 +65,11 @@ type functionHandler struct {
 	// canary path selects the backend per request, hence per-UID).
 	rtLogger    logr.Logger
 	policyByUID map[k8stypes.UID]proxyPolicy
-	// asyncInvoker enqueues RFC-0024 async invocations. Set only on public
-	// HTTPTrigger handlers (buildTriggerHandler); nil on internal function
-	// handlers so a dispatcher delivery is always a synchronous proxy and can
-	// never re-enqueue. May be nil (or hold a nil queue) when the feature is off.
+	// asyncInvoker enqueues RFC-0024 async invocations. Set on both the public
+	// HTTPTrigger handlers and the internal direct-function handlers, so a signed
+	// direct caller can go async; the dispatcher's own deliveries are excluded by
+	// the X-Fission-Invocation-Id guard in handler(), not by a nil invoker. May be
+	// nil (or hold a nil queue) when the feature is off.
 	asyncInvoker *asyncInvoker
 }
 
@@ -88,6 +89,33 @@ func (fh *functionHandler) roundTripperLogger() logr.Logger {
 		return fh.rtLogger
 	}
 	return fh.logger.WithName("roundtripper")
+}
+
+// asyncRequested reports whether request should be enqueued for RFC-0024 async
+// delivery rather than proxied. A request is async when it carries
+// X-Fission-Invoke-Mode: async, or a public trigger forces it via
+// spec.invocationMode=async (for callers that cannot set headers, e.g. third-party
+// webhooks). It fires on BOTH the public trigger path and the internal
+// direct-function path (/fission-function/...), so a signed direct caller — e.g.
+// `fission function test --async` — can enqueue too.
+//
+// The X-Fission-Invocation-Id guard applies ONLY on the internal direct-function
+// path (httpTrigger == nil): that is where the dispatcher delivers, and its own
+// delivery — which carries that header — must proxy synchronously so it can never
+// re-enqueue. On the public trigger path the dispatcher never delivers, so the
+// header is not a delivery signal there; it is also user-spoofable, so honoring it
+// would let a caller bypass spec.invocationMode=async and force a sync invocation.
+// Hence the public path decides purely on the header / trigger mode.
+func (fh functionHandler) asyncRequested(request *http.Request) bool {
+	headerAsync := strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync)
+	if fh.httpTrigger != nil {
+		return headerAsync || strings.EqualFold(fh.httpTrigger.Spec.InvocationMode, asyncinvoke.InvokeModeAsync)
+	}
+	// Internal direct-function path: never re-enqueue the dispatcher's own delivery.
+	if request.Header.Get(asyncinvoke.HeaderInvocationID) != "" {
+		return false
+	}
+	return headerAsync
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
@@ -111,17 +139,9 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	// system params
 	setFunctionMetadataToHeader(&fh.function.ObjectMeta, request)
 
-	// RFC-0024: async invocation. Only public HTTPTrigger handlers
-	// (httpTrigger != nil) honor async mode — the dispatcher's delivery lands on
-	// the internal function handler (httpTrigger == nil), which skips this branch
-	// and proxies synchronously, so a delivery never re-enqueues. A request is
-	// async when it carries X-Fission-Invoke-Mode: async OR the trigger forces it
-	// via spec.invocationMode=async (for callers, e.g. third-party webhooks, that
-	// cannot set headers). handle() writes 501 when the feature is off (nil
-	// invoker/queue), so an async-mode request is answered honestly.
-	if fh.httpTrigger != nil &&
-		(strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync) ||
-			strings.EqualFold(fh.httpTrigger.Spec.InvocationMode, asyncinvoke.InvokeModeAsync)) {
+	// RFC-0024: async invocation. handle() writes 501 when the feature is off (nil
+	// invoker/queue), answering an async-mode request honestly.
+	if fh.asyncRequested(request) {
 		fh.asyncInvoker.handle(responseWriter, request, fh.function)
 		return
 	}

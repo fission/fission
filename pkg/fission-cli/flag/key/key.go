@@ -90,8 +90,21 @@ const (
 	FnLogAllPods            = "all-pods"
 	FnRetainPods            = "retainpods"
 
+	DlqID    = "id"
+	DlqAll   = "all"
+	DlqLimit = "limit"
+
+	FnTestAsync = "async"
+
+	// RFC-0024 async invocation config (fn create/update).
+	FnAsyncMaxAttempts = "async-retry-max-attempts"
+	FnAsyncMaxAge      = "async-max-age"
+	FnAsyncOnSuccess   = "async-on-success"
+	FnAsyncOnFailure   = "async-on-failure"
+
 	HtName              = resourceName
 	HtMethod            = "method"
+	HtInvocationMode    = "invocation-mode"
 	HtUrl               = "url"
 	HtHost              = "host"
 	HtIngress           = "createingress"

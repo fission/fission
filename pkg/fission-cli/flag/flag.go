@@ -115,6 +115,7 @@ var (
 	FnTestTimeout           = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
 	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
+	FnTestAsync             = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "RFC-0024: invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
 	FnIdleTimeout           = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 	FnStreaming             = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
 	FnStreamingProtocol     = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
@@ -138,11 +139,23 @@ var (
 	FnRunBuilderImage       = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
 	FnLogAllPods            = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods            = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
+
+	// RFC-0024 async dead-letter-queue admin flags.
+	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}
+	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
+	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}
+
+	// RFC-0024 async invocation config (fn create/update).
+	FnAsyncMaxAttempts = Flag{Type: Int, Name: flagkey.FnAsyncMaxAttempts, Usage: "Async delivery attempt budget before dead-lettering (RFC-0024)"}
+	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered (RFC-0024)"}
+	FnAsyncOnSuccess   = Flag{Type: String, Name: flagkey.FnAsyncOnSuccess, Usage: "Same-namespace function to invoke with the result after a successful async delivery (RFC-0024); empty clears it"}
+	FnAsyncOnFailure   = Flag{Type: String, Name: flagkey.FnAsyncOnFailure, Usage: "Same-namespace function to invoke with the result after a permanent async failure (RFC-0024); empty clears it"}
 	// Termination Grace Period configurable at function creation/update only for container functions
 	FnTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.FnGracePeriod, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: StringSlice, Name: flagkey.HtMethod, Usage: "HTTP Methods: GET,POST,PUT,DELETE,HEAD. To mention single method: --method GET and for multiple methods --method GET --method POST. [DEPRECATED for 'fn create', use 'route create' instead]", DefaultValue: []string{http.MethodGet}}
+	HtInvocationMode    = Flag{Type: String, Name: flagkey.HtInvocationMode, Usage: "RFC-0024: 'async' makes every request through this trigger asynchronous (durable 202 + invocation id); empty is the default synchronous mode"}
 	HtUrl               = Flag{Type: String, Name: flagkey.HtUrl, Usage: "URL pattern (supports {var} and {var:regexp} path templates) [DEPRECATED for 'fn create', use 'route create' instead]"}
 	HtHost              = Flag{Type: String, Name: flagkey.HtHost, Usage: "Use --ingressrule instead", Deprecated: true, Substitute: flagkey.HtIngressRule}
 	HtIngress           = Flag{Type: Bool, Name: flagkey.HtIngress, Usage: "Creates ingress with same URL [DEPRECATED: the Kubernetes Ingress API is frozen, use --route-provider gateway instead]"}

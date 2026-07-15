@@ -121,6 +121,70 @@ func TestHandlerAsyncBranchPublicOnly(t *testing.T) {
 	require.Len(t, l, 1)
 }
 
+// TestAsyncRequested pins the async-vs-proxy decision across the public trigger
+// path, the internal direct-function path, and the dispatcher-delivery exclusion.
+func TestAsyncRequested(t *testing.T) {
+	t.Parallel()
+	publicTrigger := &fv1.HTTPTrigger{}
+	triggerModeAsync := &fv1.HTTPTrigger{Spec: fv1.HTTPTriggerSpec{InvocationMode: asyncinvoke.InvokeModeAsync}}
+
+	cases := []struct {
+		name    string
+		trigger *fv1.HTTPTrigger // nil = internal direct-function handler
+		mode    string           // X-Fission-Invoke-Mode header
+		invID   string           // X-Fission-Invocation-Id (set ⇒ dispatcher delivery)
+		want    bool
+	}{
+		{"direct async header enqueues", nil, "async", "", true},
+		{"public async header enqueues", publicTrigger, "async", "", true},
+		{"trigger invocationMode enqueues", triggerModeAsync, "", "", true},
+		{"no async signal proxies", nil, "", "", false},
+		// Internal path: the dispatcher's own delivery (invocation-id set) proxies sync.
+		{"internal dispatcher delivery never enqueues", nil, "async", "inv-1", false},
+		// Public path: a user-spoofed invocation-id must NOT bypass async — the guard
+		// is internal-only (the dispatcher never delivers on the public path).
+		{"public spoofed invocation-id can't bypass trigger mode", triggerModeAsync, "", "inv-1", true},
+		{"public spoofed invocation-id can't bypass async header", publicTrigger, "async", "inv-1", true},
+		{"case-insensitive header", nil, "ASYNC", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fh := functionHandler{httpTrigger: tc.trigger}
+			r := httptest.NewRequest("POST", "/x", nil)
+			if tc.mode != "" {
+				r.Header.Set(asyncinvoke.HeaderInvokeMode, tc.mode)
+			}
+			if tc.invID != "" {
+				r.Header.Set(asyncinvoke.HeaderInvocationID, tc.invID)
+			}
+			assert.Equal(t, tc.want, fh.asyncRequested(r))
+		})
+	}
+}
+
+// TestHandlerAsyncBranchDirectPath asserts the internal direct-function handler
+// (no httpTrigger) enqueues an async-header request — the `fission function test
+// --async` path — while a dispatcher delivery (X-Fission-Invocation-Id set) is NOT
+// enqueued.
+func TestHandlerAsyncBranchDirectPath(t *testing.T) {
+	t.Parallel()
+	q := routerMemQueue(t)
+	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+
+	// Direct path, async header, no invocation id → enqueues.
+	fh := functionHandler{logger: logr.Discard(), function: fn, asyncInvoker: inv} // httpTrigger nil
+	r := httptest.NewRequest("POST", "/fission-function/ns/fn", strings.NewReader("body"))
+	r.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
+	w := httptest.NewRecorder()
+	fh.handler(w, r)
+	assert.Equal(t, 202, w.Code, "direct caller enqueues async")
+
+	l, err := q.Lease(t.Context(), asyncinvoke.DefaultQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1, "exactly one message enqueued")
+}
+
 // TestHandlerAsyncBranchTriggerMode asserts a trigger with
 // spec.invocationMode=async enqueues even without the X-Fission-Invoke-Mode header
 // (for callers that cannot set headers).

@@ -89,6 +89,48 @@ func getToolConfig(input cli.Input, existing *fv1.ToolConfig) (*fv1.ToolConfig, 
 	return tc, nil
 }
 
+// getInvocationConfig builds the RFC-0024 async InvocationConfig from the
+// --async-* flags, merging onto existing (the function's current config, or nil on
+// create) so an `fn update` that sets only one field keeps the rest. It returns nil
+// when nothing is configured. An empty --async-on-success/--async-on-failure clears
+// that destination. Field bounds and the destination shape are validated server-side
+// by the Function admission webhook, so the CLI stays thin.
+func getInvocationConfig(input cli.Input, existing *fv1.InvocationConfig) *fv1.InvocationConfig {
+	set := input.IsSet(flagkey.FnAsyncMaxAttempts) || input.IsSet(flagkey.FnAsyncMaxAge) ||
+		input.IsSet(flagkey.FnAsyncOnSuccess) || input.IsSet(flagkey.FnAsyncOnFailure)
+	if !set {
+		return existing
+	}
+	ic := &fv1.InvocationConfig{}
+	if existing != nil {
+		ic = existing.DeepCopy()
+	}
+	if input.IsSet(flagkey.FnAsyncMaxAttempts) {
+		ic.Retry.MaxAttempts = new(input.Int(flagkey.FnAsyncMaxAttempts))
+	}
+	if input.IsSet(flagkey.FnAsyncMaxAge) {
+		ic.MaxAge = &metav1.Duration{Duration: input.Duration(flagkey.FnAsyncMaxAge)}
+	}
+	if input.IsSet(flagkey.FnAsyncOnSuccess) {
+		ic.OnSuccess = functionDestination(input.String(flagkey.FnAsyncOnSuccess))
+	}
+	if input.IsSet(flagkey.FnAsyncOnFailure) {
+		ic.OnFailure = functionDestination(input.String(flagkey.FnAsyncOnFailure))
+	}
+	return ic
+}
+
+// functionDestination builds a same-namespace function DestinationRef, or nil for
+// an empty name (clearing the destination).
+func functionDestination(name string) *fv1.DestinationRef {
+	if name == "" {
+		return nil
+	}
+	return &fv1.DestinationRef{
+		Function: &fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: name},
+	}
+}
+
 func (opts *CreateSubCommand) do(input cli.Input) error {
 	err := opts.complete(input)
 	if err != nil {
@@ -302,6 +344,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Streaming:       getStreamingConfig(input),
 			Tool:            toolConfig,
+			Invocation:      getInvocationConfig(input, nil),
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,
 			RetainPods:      retainPods,

@@ -61,8 +61,10 @@ Webhook validation: destination exclusivity, backoff bounds, a destination-chain
 
 ### Enqueue path (router)
 
-- Trigger: request header `X-Fission-Invoke-Mode: async` on either listener, or `httptrigger.spec.invocationMode: async` forcing it per trigger (webhooks from third parties cannot set headers).
-- The router handler (a thin branch where the proxy handoff happens today, after route/auth/admission resolution so async requests still respect trigger auth) serializes `{fnRef, method, path, headers-allowlist, body, enqueueTime, depth}` and calls `Queue.Enqueue("asyncinv/<ns>", msg, {DedupKey: X-Fission-Dedup-Key})`, returning `202 {"invocationId": id}` or `503` if the statestore is unreachable (fail loud, never fake-accept).
+- Trigger: request header `X-Fission-Invoke-Mode: async`, or `httptrigger.spec.invocationMode: async` forcing it per trigger (webhooks from third parties cannot set headers).
+- The trigger works on **both** the public HTTPTrigger path and the internal direct-function path (`/fission-function/<ns>/<name>`), so a signed direct caller — notably `fission function test --async` — can enqueue too (`functionHandler.asyncRequested`).
+  The one request that must never re-enqueue is the dispatcher's own delivery, which carries `X-Fission-Invocation-Id`; that header gates it back to a synchronous proxy regardless of any other header (the replay allowlist already strips `X-Fission-*`, so this is belt-and-suspenders).
+- The router handler (a thin branch where the proxy handoff happens today, after route/auth/admission resolution so async requests still respect trigger auth) serializes `{fnRef, method, path, headers-allowlist, body, enqueueTime, depth}` and calls `Queue.Enqueue("asyncinv", msg, {DedupKey: X-Fission-Dedup-Key})`, returning `202 {"invocationId": id}` or `503` if the statestore is unreachable (fail loud, never fake-accept).
 - Body cap enforced before buffering completes (wrap with `http.MaxBytesReader`), so oversized requests cannot balloon router memory — the same concern class the #3539/#3541 spill work handled for uploads, solved here by rejection instead of spilling.
 - Async on a non-existent function 404s at enqueue time (route resolution already happened).
 
@@ -90,15 +92,19 @@ Webhook validation: destination exclusivity, backoff bounds, a destination-chain
 
 Function destinations are themselves enqueued async (depth+1); topic destinations go through the existing `publisher.MakeWebhookPublisher`-family mqtrigger publishers (deterministic constructors, no env reads — the established contract).
 
-### DLQ and CLI
+### CLI
 
-- Default DLQ is the statestore dead-letter table (`Queue.DeadLetters`/`Redrive`), so the feature is complete with zero brokers.
-- `fission fn dlq list --name <fn>` (id, reason, attempts, age), `show <id>` (full envelope), `redrive <id>|--all` (re-enqueue with attempts reset, depth preserved), `purge`.
-  Served by a small authenticated admin endpoint on the dispatcher (operator JWT when `authentication.enabled`, internal-auth otherwise — fail closed).
+- **Invoke:** `fission function test --async` invokes asynchronously — it POSTs to the router internal listener with the async header, HMAC-signing the request (`ServiceRouterInternal`, from `FISSION_INTERNAL_AUTH_SECRET`) so the internal verifier accepts it, and prints the invocation id from the `202` instead of awaiting a response.
+- **Configure:** `fission function create|update` sets `FunctionSpec.Invocation` via `--async-retry-max-attempts`, `--async-max-age`, `--async-on-success <fn>`, `--async-on-failure <fn>` (update merges onto the existing config; an empty destination clears it).
+- **Trigger mode:** `fission route create|update --invocation-mode async` sets `httptrigger.spec.invocationMode`, forcing async for every request through that trigger (for callers that cannot set the header).
+- **DLQ:** default DLQ is the statestore dead-letter table (`Queue.DeadLetters`/`Redrive`/`Purge`), so the feature is complete with zero brokers.
+  `fission function dlq list [--namespace <ns>] [--limit N]` (id, namespace, function, reason, attempts, died; pages the API so a large DLQ is fully traversed), `show --id <id>` (full envelope), `redrive --id <id>|--all` (re-enqueue with attempts reset; reports the count actually re-enqueued), `purge`.
+  Served by the router admin endpoints `/v1/async/dlq/{list,show,redrive,purge}` on the **internal** listener (ClusterIP-only `svc/router-internal`), so every request is HMAC-verified (`ServiceRouterInternal`) and NetworkPolicy-gated — fail-closed by construction and independent of the public listener's optional JWT auth (which defaults off; putting the admin API on the public listener would have exposed an unauthenticated cross-namespace read/redrive/purge surface). The CLI signs with `FISSION_INTERNAL_AUTH_SECRET`, exactly as `test --async` does. Per-namespace scoping of access is a follow-up.
 
 ### Observability
 
-`fission_async_queue_depth`, `_oldest_age_seconds`, `_deliveries_total{condition}`, `_retries_total`, `_dlq_total{reason}` via RFC-0019 meters; queue depth is the KEDA `postgresql` scaler hook for router replicas later.
+`fission_async_queue_depth`, `_oldest_age_seconds`, `_deliveries_total{condition}`, `_retries_total`, `_dlq_total{reason}`, `_destinations_total{outcome}`, `_depth_cap_total` via RFC-0019 meters.
+Queue depth is the KEDA scaling hook: an opt-in `router.keda.enabled` ScaledObject scales the router Deployment on the visible backlog via the `postgresql` scaler (requires `statestore.mode=external`, mutually exclusive with `router.autoscaling`).
 Invocation id joins the RFC-0015 correlation story (one id from 202 through delivery attempts to destination).
 
 ## Invariants & verification
@@ -144,9 +150,10 @@ Render-gated on `statestore.enabled` (`asyncInvocation.enabled` Helm flag, off b
 ## Rollout phases (one PR each, bisectable)
 
 1. `InvocationConfig` CRD field + codegen + webhook validation; enqueue path in the router (202 + id, caps, dedup); dispatcher with retry/backoff and statestore DLQ; defaults-only (no destinations); metrics.
-2. Destinations (function + topic) with the result envelope and depth cap; `httptrigger.invocationMode`.
-3. CLI `fission fn dlq` suite + admin endpoint + auth.
-4. KEDA-scaled router replicas on queue depth; RFC-0020 bench scenario (enqueue overhead, drain throughput, DLQ under saturation — reusing the c500 saturation harness from wave 3).
+2. Destinations (function-only; topic declared but admission-rejected) with the result envelope and depth cap; `httptrigger.invocationMode` CEL enum.
+3. `Queue.Purge`; router DLQ admin endpoints `/v1/async/dlq/{list,show,redrive,purge}`; CLI `fission function dlq` suite.
+4. Opt-in KEDA `postgresql` ScaledObject scaling the router on queue depth; RFC-0020 async bench scenario (enqueue overhead, drain throughput, DLQ under saturation).
+5. CLI/test integration: direct-path async in the router (`functionHandler.asyncRequested`), `fission function test --async`, `fn create|update --async-*` config flags, `route --invocation-mode`.
 
 ## Verification / test plan
 

@@ -275,11 +275,11 @@ func (s *Store) DeadLetters(_ context.Context, queue string, page statestore.Pag
 
 // Redrive implements statestore.Queue: return dead-lettered messages to the
 // queue with attempts reset.
-func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
+func (s *Store) Redrive(_ context.Context, queue string, ids []string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return statestore.ErrClosed
+		return 0, statestore.ErrClosed
 	}
 	q := s.queue(queue)
 	want := make(map[string]bool, len(ids))
@@ -287,6 +287,7 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 		want[id] = true
 	}
 	now := time.Now()
+	var redriven int64
 	for _, m := range q.msgs {
 		if m.state == qDead && want[m.id] {
 			m.state = qQueued
@@ -294,9 +295,40 @@ func (s *Store) Redrive(_ context.Context, queue string, ids []string) error {
 			m.visibleAt = now
 			m.reason = ""
 			m.diedAt = time.Time{}
+			redriven++
 		}
 	}
-	return nil
+	return redriven, nil
+}
+
+// Purge implements statestore.Queue: permanently drop every dead-lettered message
+// for queue, returning the count removed. Removing the dead rows lowers both the
+// live-row total (Enqueued) and Dead by the same amount, so conservation drift
+// stays zero (invariant T1).
+func (s *Store) Purge(_ context.Context, queue string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return 0, statestore.ErrClosed
+	}
+	q := s.queue(queue)
+	kept := q.msgs[:0]
+	var removed int64
+	for _, m := range q.msgs {
+		if m.state == qDead {
+			removed++
+			continue
+		}
+		kept = append(kept, m)
+	}
+	// Clear the tail of the backing array so the removed *qmsg (and their body
+	// buffers) are unreferenced and can be GC'd, rather than lingering past
+	// len(kept) in the shared array.
+	for i := len(kept); i < len(q.msgs); i++ {
+		q.msgs[i] = nil
+	}
+	q.msgs = kept
+	return removed, nil
 }
 
 // Stats implements statestore.Queue: a read-only snapshot of the queue's backlog.

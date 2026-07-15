@@ -219,10 +219,16 @@ func (q *meteredQueue) DeadLetters(ctx context.Context, queue string, page Page)
 	return dl, err
 }
 
-func (q *meteredQueue) Redrive(ctx context.Context, queue string, ids []string) error {
-	err := q.inner.Redrive(ctx, queue, ids)
+func (q *meteredQueue) Redrive(ctx context.Context, queue string, ids []string) (int64, error) {
+	n, err := q.inner.Redrive(ctx, queue, ids)
 	observe(ctx, "queue", "redrive", err)
-	return err
+	return n, err
+}
+
+func (q *meteredQueue) Purge(ctx context.Context, queue string) (int64, error) {
+	n, err := q.inner.Purge(ctx, queue)
+	observe(ctx, "queue", "purge", err)
+	return n, err
 }
 
 func (q *meteredQueue) Stats(ctx context.Context, queue string) (QueueStats, error) {

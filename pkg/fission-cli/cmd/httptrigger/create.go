@@ -160,6 +160,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			RouteConfig:       routeConfig,
 			Prefix:            &prefix,
 			KeepPrefix:        input.Bool(flagkey.HtKeepPrefix),
+			InvocationMode:    input.String(flagkey.HtInvocationMode),
 		},
 	}
 
