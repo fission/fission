@@ -546,10 +546,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// cannot make loud. Unlisted types fail the publish with the unsupported
 		// sentinel instead. The publisher's sentinel is translated to the
 		// dispatcher's own so the dispatcher can classify without importing mqpub.
-		// Deduped: a repeated type in the env value (operator typo) must not
-		// register the same observable gauge twice.
+		// Lowercased and deduped: MQ types are lowercase tokens, and the value
+		// forms queue NAMES — a mis-cased "Kafka" would enqueue to
+		// mq-egress-Kafka while the kafka head drains mq-egress-kafka,
+		// recreating the exact consumer-less-queue hole this gate closes. A
+		// repeated type must also not register the same observable gauge twice.
 		egressTypes := slices.Compact(slices.Sorted(slices.Values(
-			strings.FieldsFunc(os.Getenv("EVENTING_EGRESS_TYPES"),
+			strings.FieldsFunc(strings.ToLower(os.Getenv("EVENTING_EGRESS_TYPES")),
 				func(r rune) bool { return r == ',' || r == ' ' }))))
 		topicPublisher := mqpub.NewMultiPublisher(
 			mqpub.NewStatestorePublisher(eventLog),

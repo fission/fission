@@ -105,10 +105,9 @@ func (ts *HTTPTriggerSet) dlqQueue(w http.ResponseWriter) (statestore.Queue, boo
 }
 
 // dlqEgressQueueRegexp bounds the ?queue= value to a well-formed egress queue
-// name: mq-egress- plus an MQ-type token. MQ types are lowercase alphanumeric
-// with hyphens (kafka, nats-jetstream, ...), so anything outside that charset
-// is a malformed request, not a queue.
-var dlqEgressQueueRegexp = regexp.MustCompile(`^mq-egress-[a-z0-9-]+$`)
+// name: mq-egress- plus an MQ-type token — lowercase alphanumerics with
+// interior hyphens (kafka, nats-jetstream, ...), never hyphens alone.
+var dlqEgressQueueRegexp = regexp.MustCompile(`^mq-egress-[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
 // dlqQueueName resolves the ?queue= parameter: empty means the async invocation
 // queue; otherwise it must be an RFC-0027 broker egress queue (mq-egress-<type>).

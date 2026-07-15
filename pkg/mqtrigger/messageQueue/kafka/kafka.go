@@ -202,7 +202,7 @@ func (kafka Kafka) NewEgressPublisher() (egress.PublishFunc, io.Closer, error) {
 }
 
 func (kafka Kafka) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
-	kafka.logger.V(1).Info("inside kakfa subscribe", "trigger", trigger)
+	kafka.logger.V(1).Info("inside kafka subscribe", "trigger", trigger)
 	kafka.logger.V(1).Info("brokers set", "brokers", kafka.brokers)
 
 	consumerConfig, err := kafka.consumerConfig()

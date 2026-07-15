@@ -128,8 +128,15 @@ func (ts *HTTPTriggerSet) topicPublish(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unsupported mqtype: no publish path for "+mqType+" on this install", http.StatusBadRequest)
 			return
 		}
+		// Detail stays in the router log (the DLQ API's posture) — the caller
+		// gets the one actionable distinction: the backlog cap versus a store
+		// fault.
 		ts.logger.Error(err, "topic admin publish", "namespace", namespace, "topic", topic, "mqType", mqType)
-		http.Error(w, "publish failed: "+err.Error(), http.StatusBadGateway)
+		if errors.Is(err, mqpub.ErrTopicBacklogCap) {
+			http.Error(w, "publish failed: topic backlog cap reached (no consumer is draining this topic)", http.StatusTooManyRequests)
+			return
+		}
+		http.Error(w, "publish failed (see router logs)", http.StatusBadGateway)
 		return
 	}
 	dlqWriteJSON(w, ts, topicPublishResp{Published: true})

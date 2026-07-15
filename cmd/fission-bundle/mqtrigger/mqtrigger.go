@@ -112,10 +112,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			}
 			queue, err := statestore.NewScoped(caps, nil).Queue()
 			if err != nil {
+				_ = caps.Close()
 				return fmt.Errorf("statestore queue capability for broker egress: %w", err)
 			}
 			publish, producerCloser, err := provider.NewEgressPublisher()
 			if err != nil {
+				_ = caps.Close()
 				return fmt.Errorf("creating broker egress publisher: %w", err)
 			}
 			consumer := egress.New(logger, queue, string(mqType), publish)
@@ -126,6 +128,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 				defer func() { _ = producerCloser.Close() }()
 				return consumer.Run(c)
 			})); err != nil {
+				_ = producerCloser.Close()
+				_ = caps.Close()
 				return err
 			}
 		} else {
