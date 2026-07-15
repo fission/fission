@@ -14,9 +14,12 @@ import (
 	storageclient "github.com/fission/fission/pkg/storagesvc/client"
 )
 
-// internalListenerPrefix is the router path served by the internal (signed)
-// listener; only these requests carry HMAC headers.
-const internalListenerPrefix = "/fission-function/"
+// internalListenerPrefix bounds which request paths the wrapper signs. "/"
+// signs everything: the wrapper is only ever applied to internal-listener
+// targets, and the verifier covers every internal path — function invocation
+// (/fission-function/), the DLQ admin API (/v1/async/dlq/) and the RFC-0027
+// topic admin API (/v1/eventing/).
+const internalListenerPrefix = "/"
 
 // InternalAuthSecret resolves the router-internal HMAC master secret: the
 // FISSION_INTERNAL_AUTH_SECRET env var wins, else the in-cluster
