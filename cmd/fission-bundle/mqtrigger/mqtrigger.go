@@ -18,10 +18,12 @@ import (
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/mqtrigger"
+	"github.com/fission/fission/pkg/mqtrigger/egress"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/statestore"
+	"github.com/fission/fission/pkg/statestore"
 
 	// Statestore drivers the statestore MQ provider opens via STATESTORE_DRIVER:
 	// the HTTP client (embedded mode → svc/statestore) and Postgres (external
@@ -92,6 +94,38 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return gm.Wait()
 	})); err != nil {
 		return err
+	}
+
+	// RFC-0027 broker egress: a broker provider (kafka) also runs the publisher
+	// loop over its per-type statestore queue mq-egress-<mqType> — the jobs the
+	// router's async dispatcher enqueues for broker-destined topic publishes.
+	// Requires the statestore wiring (chart sets STATESTORE_DRIVER/DSN on broker
+	// heads when statestore.enabled); without it the loop is skipped with a log,
+	// matching the admission story (broker topic destinations are usable only on
+	// statestore-enabled installs). Queue leases are SKIP LOCKED, so the loop
+	// runs on every replica (NonLeader), like the async dispatcher itself.
+	if provider, ok := mq.(egress.BrokerPublisherProvider); ok {
+		if driver := os.Getenv("STATESTORE_DRIVER"); driver != "" {
+			caps, err := statestore.Open(ctx, statestore.Config{Driver: driver, DSN: os.Getenv("STATESTORE_DSN")})
+			if err != nil {
+				return fmt.Errorf("opening statestore for broker egress: %w", err)
+			}
+			queue, err := statestore.NewScoped(caps, nil).Queue()
+			if err != nil {
+				return fmt.Errorf("statestore queue capability for broker egress: %w", err)
+			}
+			publish, err := provider.NewEgressPublisher()
+			if err != nil {
+				return fmt.Errorf("creating broker egress publisher: %w", err)
+			}
+			consumer := egress.New(logger, queue, string(mqType), publish)
+			if err := crMgr.Add(crmanager.NonLeaderRunnable(consumer.Run)); err != nil {
+				return err
+			}
+		} else {
+			logger.Info("statestore not configured; broker egress consumer disabled",
+				"mqType", mqType)
+		}
 	}
 
 	// The subscription manager (service() actor) is leader-only: only the leader
