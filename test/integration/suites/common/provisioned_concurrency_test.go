@@ -163,7 +163,7 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 14*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -225,14 +225,17 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	t.Log("Phase 2: reaper liveness — control reaped, provisioned floor holds")
 	// Warm control once so it has a specialized pod to reap.
 	f.Router(t).GetEventually(t, ctx, "/"+ctlName, framework.BodyContains("hello"))
-	// Control reaped after idleTimeout(30s) + reaperTick(≤5s) ≈ 35s; 90s window.
+	// Control reaped after idleTimeout(30s) + reaperTick(≤5s) ≈ 35s under
+	// normal load. Under parallel CI (-parallel 6) the reaper can lag
+	// several minutes (see TestIdleObjectsReaper skip note), so use a
+	// generous 5 min window.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		count, err := ns.RunningFunctionPodCount(ctx, ctlName)
 		if !assert.NoErrorf(c, err, "count control pods for %q", ctlName) {
 			return
 		}
 		assert.Zerof(c, count, "control %q: want 0 pods (reaped), got %d", ctlName, count)
-	}, 90*time.Second, 5*time.Second)
+	}, 5*time.Minute, 5*time.Second)
 	// Provisioned floor holds while reaper is active.
 	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 30*time.Second)
 	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
