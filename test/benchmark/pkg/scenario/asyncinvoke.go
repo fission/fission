@@ -69,7 +69,7 @@ func (a *asyncInvoke) Run(ctx context.Context, sc *harness.Scope) (report.Scenar
 	}
 
 	// Baseline the DLQ counter so dlq_total reflects only this run.
-	dlqBefore := asyncQueryFloat(ctx, env, asyncDLQTotalQuery)
+	dlqBefore, dlqBaselineOK := asyncQueryValue(ctx, env, asyncDLQTotalQuery)
 
 	target := loadgen.NewHTTPTarget(loadgen.HTTPTargetConfig{
 		URL:         env.RouterURL() + route,
@@ -99,7 +99,16 @@ func (a *asyncInvoke) Run(ctx context.Context, sc *harness.Scope) (report.Scenar
 				res.Add("drain_throughput", "rps", report.Higher, float64(accepted)/secs)
 			}
 		}
-		res.Add("dlq_total", "count", report.Lower, asyncQueryFloat(ctx, env, asyncDLQTotalQuery)-dlqBefore)
+		// dlq_total is recorded only when BOTH the baseline and post-run reads
+		// succeed, so a failed/absent post-run query can't fabricate a bogus (even
+		// negative) delta. The counter is monotonic, so clamp at zero defensively.
+		if dlqAfter, ok := asyncQueryValue(ctx, env, asyncDLQTotalQuery); ok && dlqBaselineOK {
+			delta := dlqAfter - dlqBefore
+			if delta < 0 {
+				delta = 0
+			}
+			res.Add("dlq_total", "count", report.Lower, delta)
+		}
 	}
 	return res, nil
 }
@@ -120,16 +129,19 @@ func probeStatus(ctx context.Context, url string, headers http.Header) (int, err
 	return resp.StatusCode, nil
 }
 
-// asyncQueryFloat reads an instant PromQL scalar, returning 0 when Prometheus is
-// disabled or the sample is absent (best-effort, never fails the scenario).
-func asyncQueryFloat(ctx context.Context, env *harness.Env, query string) float64 {
+// asyncQueryValue reads an instant PromQL scalar, returning (value, true) only on a
+// successful read of a present sample; (0, false) when Prometheus is disabled, the
+// query errors, or the sample is absent. The ok flag lets callers distinguish a
+// genuine 0 from a failed read, so a metric delta is never computed against a
+// fabricated baseline (best-effort — it never fails the scenario).
+func asyncQueryValue(ctx context.Context, env *harness.Env, query string) (float64, bool) {
 	if !env.Capturer.PrometheusEnabled() {
-		return 0
+		return 0, false
 	}
 	if v, found, err := env.Capturer.QueryInstant(ctx, query); err == nil && found {
-		return v
+		return v, true
 	}
-	return 0
+	return 0, false
 }
 
 // asyncDrainSeconds polls the async queue-depth gauge until it reaches zero,
