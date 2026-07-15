@@ -238,9 +238,11 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
 
 	// Phase 3: self-heal — delete one provisioned pod, provisioner replaces it.
+	// The provisioner may transiently overshoot the target (warm 3 when target
+	// is 2), so we assert >= 2, not exactly 2, and just delete one pod.
 	t.Log("Phase 3: self-heal after pod delete")
 	beforePods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
-	require.Len(t, beforePods, 2, "expected exactly 2 provisioned pods before delete")
+	require.GreaterOrEqual(t, len(beforePods), 2, "expected at least 2 provisioned pods before delete")
 	// Delete one pod.
 	victim := beforePods[0].Name
 	require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, victim, metav1.DeleteOptions{}),
@@ -248,7 +250,7 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	// Provisioner re-warms via periodic tick (10s reconcile). Generous timeout
 	// absorbs tick + specialization + pool refill (concern #8).
 	afterPods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
-	require.Len(t, afterPods, 2, "expected exactly 2 provisioned pods after self-heal")
+	require.GreaterOrEqual(t, len(afterPods), 2, "expected at least 2 provisioned pods after self-heal")
 	// Replacement name differs — proves new pod, not resurrected.
 	names := map[string]bool{}
 	for _, p := range beforePods {
