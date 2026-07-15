@@ -22,8 +22,10 @@ type streamState struct {
 // Append implements statestore.EventLog with optimistic concurrency on the head
 // sequence: it succeeds only when expectedSeq equals the current head, so
 // concurrent appenders get ErrVersionConflict instead of interleaving
-// (invariant E1). It assigns each event a sequential Seq and the current time as
-// At, and returns the new head.
+// (invariant E1). expectedSeq = AppendAny skips the check and appends
+// unconditionally at the current head (RFC-0027 topic publishers). It assigns
+// each event a sequential Seq and the current time as At, and returns the new
+// head.
 func (s *Store) Append(_ context.Context, stream string, expectedSeq int64, events []statestore.Event) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -35,7 +37,7 @@ func (s *Store) Append(_ context.Context, stream string, expectedSeq int64, even
 		st = &streamState{}
 		s.streams[stream] = st
 	}
-	if st.head != expectedSeq {
+	if expectedSeq != statestore.AppendAny && st.head != expectedSeq {
 		return st.head, statestore.ErrVersionConflict
 	}
 	now := time.Now()
@@ -77,6 +79,21 @@ func (s *Store) Read(_ context.Context, stream string, fromSeq int64, limit int)
 		}
 	}
 	return out, nil
+}
+
+// Head implements statestore.EventLog: the stream's current head sequence, 0 for
+// an absent stream, with no side effects (it does not create the stream).
+func (s *Store) Head(_ context.Context, stream string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return 0, statestore.ErrClosed
+	}
+	st := s.streams[stream]
+	if st == nil {
+		return 0, nil
+	}
+	return st.head, nil
 }
 
 // Trim implements statestore.EventLog: drop events with Seq < belowSeq. The head

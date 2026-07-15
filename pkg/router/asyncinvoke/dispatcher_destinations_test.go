@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -143,10 +145,11 @@ func TestBuildResultFlagsTruncationAndOmission(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
 
 	big := bytes.Repeat([]byte("a"), MaxPayloadBytes+1)
-	env := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: big}
+	env := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: big, Depth: 2}
 	_, msg := leaseOne(t, q, env)
 	re := d.buildResult(env, msg, ConditionSuccess, DeliveryResult{StatusCode: 200, Body: []byte("partial"), BodyTruncated: true})
 
+	assert.Equal(t, 2, re.RequestContext.Depth, "the chain depth is stamped for future async consumers (no wire migration)")
 	assert.True(t, re.RequestPayloadOmitted, "over-cap request body is omitted and flagged")
 	assert.Nil(t, re.RequestPayload, "omitted request payload is not embedded")
 	assert.True(t, re.ResponseContext.Truncated, "truncated response is flagged")
@@ -195,12 +198,99 @@ func TestFireDestinationResolverNotFound(t *testing.T) {
 	assert.Empty(t, l, "a destination to a missing function is dropped")
 }
 
+// publishRecorder is a scripted TopicPublishFunc capturing every publish.
+type publishRecorder struct {
+	mu    sync.Mutex
+	calls []publishCall
+	err   error
+}
+
+type publishCall struct {
+	namespace, mqType, topic, contentType string
+	payload                               []byte
+}
+
+func (p *publishRecorder) publish(_ context.Context, namespace, mqType, topic, contentType string, payload []byte) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, publishCall{namespace, mqType, topic, contentType, payload})
+	return p.err
+}
+
+func (p *publishRecorder) recorded() []publishCall {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]publishCall(nil), p.calls...)
+}
+
+// TestFireDestinationTopicPublishesStatestore: a statestore topic destination
+// publishes the result envelope to the namespaced topic — a LEAF (nothing is
+// enqueued, no chain continues).
+func TestFireDestinationTopicPublishesStatestore(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	rec := &publishRecorder{}
+	d := destDispatcher(q, scriptedDeliverer{}, time.Unix(1, 0), resolverFor(FunctionConfig{}))
+	d.publishFn = rec.publish
+
+	result := ResultEnvelope{
+		Version:         EnvelopeVersion,
+		RequestContext:  RequestContext{InvocationID: "id-1", FunctionRef: "ns/src", Condition: ConditionSuccess, Attempts: 1},
+		ResponseContext: ResponseContext{StatusCode: 200},
+	}
+	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "orders", MQType: MQTypeStatestore}, 0, result)
+
+	calls := rec.recorded()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "ns", calls[0].namespace)
+	assert.Equal(t, MQTypeStatestore, calls[0].mqType)
+	assert.Equal(t, "orders", calls[0].topic)
+	assert.Equal(t, "application/json", calls[0].contentType)
+	var decoded ResultEnvelope
+	require.NoError(t, json.Unmarshal(calls[0].payload, &decoded))
+	assert.Equal(t, "id-1", decoded.RequestContext.InvocationID, "the payload is the result envelope")
+
+	// A topic is a leaf: nothing was enqueued.
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	assert.Empty(t, l)
+}
+
+// TestFireDestinationTopicUnsupported: broker types (admission-rejected, so only
+// a forged/legacy envelope carries one) and a nil publisher both drop the
+// destination without publishing or enqueuing.
 func TestFireDestinationTopicUnsupported(t *testing.T) {
 	t.Parallel()
 	q := memQueue(t)
+	rec := &publishRecorder{}
 	d := destDispatcher(q, scriptedDeliverer{}, time.Unix(1, 0), resolverFor(FunctionConfig{}))
-	d.fireDestination(context.Background(), &Destination{Topic: "t", MQType: "kafka"}, 0, ResultEnvelope{})
+	d.publishFn = rec.publish
+
+	// Broker type → dropped, not published.
+	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: "kafka"}, 0, ResultEnvelope{})
+	assert.Empty(t, rec.recorded(), "broker topic types are unsupported until the egress phase")
+
+	// No publisher wired (feature off) → statestore topics drop too.
+	d.publishFn = nil
+	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: MQTypeStatestore}, 0, ResultEnvelope{})
+
 	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
 	require.NoError(t, err)
-	assert.Empty(t, l, "topic destinations are not enqueued (not yet supported)")
+	assert.Empty(t, l, "topic destinations never enqueue")
+}
+
+// TestFireDestinationTopicPublishError: a failing publish is dropped (best-effort
+// destination contract) without panicking or enqueuing.
+func TestFireDestinationTopicPublishError(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	rec := &publishRecorder{err: errors.New("store down")}
+	d := destDispatcher(q, scriptedDeliverer{}, time.Unix(1, 0), resolverFor(FunctionConfig{}))
+	d.publishFn = rec.publish
+
+	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: MQTypeStatestore}, 0, ResultEnvelope{})
+	require.Len(t, rec.recorded(), 1, "the publish was attempted")
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	assert.Empty(t, l)
 }

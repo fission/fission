@@ -101,6 +101,19 @@ type FunctionConfig struct {
 // destination pointing at a deleted function is dropped rather than looping.
 type FunctionConfigResolver func(ctx context.Context, namespace, name string) (FunctionConfig, bool)
 
+// TopicPublishFunc publishes a settled invocation's result envelope to a
+// namespaced topic (RFC-0027). The signature matches mqpub.TopicPublisher.Publish
+// — all strings, injected as a function so this package stays a pure library
+// (no fv1, no mqpub import). nil → topic destinations are dropped as
+// unsupported, the pre-eventing behavior.
+type TopicPublishFunc func(ctx context.Context, namespace, mqType, topic, contentType string, payload []byte) error
+
+// MQTypeStatestore mirrors fv1.MessageQueueTypeStatestore without importing the
+// CRD package: the RFC-0027 built-in provider, the only topic type the
+// dispatcher publishes in phase 1 (admission enforces it; this is the envelope-
+// level guard against a forged or legacy record).
+const MQTypeStatestore = "statestore"
+
 // Options configures a Dispatcher. Queue, Deliverer, and Logger are required; the
 // rest default. Now and Rand are injected so timing and backoff jitter are
 // deterministic under test.
@@ -117,6 +130,10 @@ type Options struct {
 	// ResolveFunctionConfig resolves a destination function's config when firing a
 	// function destination. nil → function destinations are dropped (logged).
 	ResolveFunctionConfig FunctionConfigResolver
+
+	// PublishTopic publishes a topic destination's result envelope (RFC-0027).
+	// nil → topic destinations are dropped as unsupported (logged + metered).
+	PublishTopic TopicPublishFunc
 
 	Now  func() time.Time // nil → time.Now
 	Rand func() float64   // nil → rand/v2 Float64; returns [0,1) for backoff jitter
@@ -137,6 +154,7 @@ type Dispatcher struct {
 	pollInterval  time.Duration
 	leaseDuration time.Duration
 	resolveFn     FunctionConfigResolver
+	publishFn     TopicPublishFunc
 	now           func() time.Time
 	rand          func() float64
 }
@@ -152,6 +170,7 @@ func New(opts Options) *Dispatcher {
 		pollInterval:  opts.PollInterval,
 		leaseDuration: opts.LeaseDuration,
 		resolveFn:     opts.ResolveFunctionConfig,
+		publishFn:     opts.PublishTopic,
 		now:           opts.Now,
 		rand:          opts.Rand,
 	}
@@ -340,11 +359,7 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 		return
 	}
 	if dest.IsTopic() {
-		// Topic destinations are rejected at admission (not yet supported); this
-		// guards a forged or pre-validation envelope.
-		recordDestination(ctx, "topic_unsupported")
-		d.logger.Info("async topic destination not yet supported; dropping",
-			"topic", dest.Topic, "mqType", dest.MQType)
+		d.publishTopicDestination(ctx, dest, result)
 		return
 	}
 	next := depth + 1
@@ -402,6 +417,50 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 	recordDestination(ctx, "enqueued")
 }
 
+// publishTopicDestination fires a topic destination: the result envelope is
+// published to the namespaced statestore topic (RFC-0027 phase 1). A topic is a
+// LEAF — it terminates the chain, so the MaxChainDepth accounting does not apply
+// (a function consuming the topic starts a fresh chain at depth 0: it is a new
+// invocation, not a continuation). Broker types stay unsupported until the
+// egress phase; admission enforces that, so a broker type here is a forged or
+// legacy envelope and is dropped, counted, and logged.
+func (d *Dispatcher) publishTopicDestination(ctx context.Context, dest *Destination, result ResultEnvelope) {
+	if dest.MQType != MQTypeStatestore {
+		// Admission enforces the type, so this is a forged or legacy envelope —
+		// expected-shaped noise, dropped at Info.
+		recordDestination(ctx, "topic_unsupported")
+		d.logger.Info("async topic destination unsupported; dropping",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic, "mqType", dest.MQType)
+		return
+	}
+	if d.publishFn == nil {
+		// Admission ACCEPTED this destination and the user was promised delivery:
+		// a nil publisher here is a wiring defect in the embedder, not a forged
+		// envelope — a distinct outcome and an Error, so a dashboard never reads
+		// it as expected topic_unsupported noise.
+		recordDestination(ctx, "publisher_unconfigured")
+		d.logger.Error(nil, "async topic destination dropped: no topic publisher wired (dispatcher misconfiguration)",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic)
+		return
+	}
+	body, err := result.Encode()
+	if err != nil {
+		recordDestination(ctx, "encode_error")
+		d.logger.Error(err, "encoding destination result envelope",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic)
+		return
+	}
+	// The result envelope is JSON by construction, so the delivery Content-Type a
+	// consuming trigger replays is application/json.
+	if err := d.publishFn(ctx, dest.FunctionNamespace, dest.MQType, dest.Topic, "application/json", body); err != nil {
+		recordDestination(ctx, "publish_error")
+		d.logger.Error(err, "publishing destination result to topic",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic)
+		return
+	}
+	recordDestination(ctx, "published")
+}
+
 // buildResult assembles the Lambda-shaped result envelope for a destination. The
 // request payload is included only when the original body fits MaxPayloadBytes
 // (RequestPayloadOmitted flags the elision); the response payload was captured and
@@ -414,6 +473,7 @@ func (d *Dispatcher) buildResult(env Envelope, msg statestore.LeasedMessage, con
 			FunctionRef:  env.Namespace + "/" + env.Function,
 			Condition:    condition,
 			Attempts:     msg.Attempts,
+			Depth:        env.Depth,
 		},
 		ResponseContext: ResponseContext{StatusCode: res.StatusCode, Truncated: res.BodyTruncated},
 		ResponsePayload: res.Body,

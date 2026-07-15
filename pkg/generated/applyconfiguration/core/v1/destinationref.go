@@ -12,8 +12,9 @@ package v1
 // DestinationRef routes an async invocation's result to exactly one target: a
 // Function (invoked async through the same machinery, depth-capped) or a Topic
 // (published to a message queue). Exactly one of Function/Topic must be set.
-// Topic destinations are declared but not yet implemented — the webhook rejects
-// them until the broker-producer path lands (a later RFC-0024 step).
+// Topic destinations on the built-in statestore provider are supported
+// (RFC-0027); broker types are rejected by the webhook until the egress phase
+// lands.
 type DestinationRefApplyConfiguration struct {
 	// Function is a same-namespace function destination, invoked asynchronously
 	// with the result envelope as its body (depth-capped to stop runaway chains).

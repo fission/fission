@@ -174,6 +174,14 @@ func (c *Client) Trim(ctx context.Context, stream string, belowSeq int64) error 
 	return c.post(ctx, httpapi.PathEventTrim, httpapi.EventTrimReq{Stream: stream, BelowSeq: belowSeq}, nil)
 }
 
+func (c *Client) Head(ctx context.Context, stream string) (int64, error) {
+	var resp httpapi.EventHeadResp
+	if err := c.post(ctx, httpapi.PathEventHead, httpapi.EventHeadReq{Stream: stream}, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Head, nil
+}
+
 // --- Queue ---
 
 func (c *Client) Enqueue(ctx context.Context, queue string, msg statestore.Message, o statestore.EnqueueOptions) (string, error) {

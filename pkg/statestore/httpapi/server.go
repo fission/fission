@@ -27,6 +27,7 @@ func NewHandler(caps statestore.Capabilities) http.Handler {
 	mux.HandleFunc("POST "+PathEventAppend, h.eventAppend)
 	mux.HandleFunc("POST "+PathEventRead, h.eventRead)
 	mux.HandleFunc("POST "+PathEventTrim, h.eventTrim)
+	mux.HandleFunc("POST "+PathEventHead, h.eventHead)
 	mux.HandleFunc("POST "+PathQueueEnqueue, h.queueEnqueue)
 	mux.HandleFunc("POST "+PathQueueLease, h.queueLease)
 	mux.HandleFunc("POST "+PathQueueAck, h.queueAck)
@@ -223,6 +224,23 @@ func (h *handler) eventTrim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *handler) eventHead(w http.ResponseWriter, r *http.Request) {
+	req, ok := decode[EventHeadReq](w, r)
+	if !ok {
+		return
+	}
+	el, ok := h.el(w)
+	if !ok {
+		return
+	}
+	head, err := el.Head(r.Context(), req.Stream)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, EventHeadResp{Head: head})
 }
 
 func (h *handler) queueEnqueue(w http.ResponseWriter, r *http.Request) {

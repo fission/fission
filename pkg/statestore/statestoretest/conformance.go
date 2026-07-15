@@ -201,6 +201,130 @@ func runEventLog(t *testing.T, newCaps Factory) {
 		wg.Wait()
 		require.EqualValues(t, 1, wins.Load())
 	})
+
+	t.Run("AppendAnyAndHead", func(t *testing.T) {
+		el := eventLogOrSkip(t, newCaps)
+		ctx := t.Context()
+		// Head on an absent stream is 0 and has no side effects: a CAS append at
+		// 0 still succeeds afterwards (the stream was not created by the read).
+		head, err := el.Head(ctx, "anyhead")
+		require.NoError(t, err)
+		require.Zero(t, head)
+		head, err = el.Append(ctx, "anyhead", 0, []statestore.Event{{Type: "a"}, {Type: "b"}})
+		require.NoError(t, err)
+		require.EqualValues(t, 2, head)
+		head, err = el.Head(ctx, "anyhead")
+		require.NoError(t, err)
+		require.EqualValues(t, 2, head, "Head reflects the CAS append")
+
+		// AppendAny appends at the current head with no CAS: no conflict even
+		// though the caller never read the head.
+		head, err = el.Append(ctx, "anyhead", statestore.AppendAny, []statestore.Event{{Type: "c"}})
+		require.NoError(t, err)
+		require.EqualValues(t, 3, head)
+
+		// The two modes interoperate: a CAS caller resynchronizes via Head and
+		// appends at the post-AppendAny head.
+		head, err = el.Head(ctx, "anyhead")
+		require.NoError(t, err)
+		require.EqualValues(t, 3, head)
+		head, err = el.Append(ctx, "anyhead", 3, []statestore.Event{{Type: "d"}})
+		require.NoError(t, err)
+		require.EqualValues(t, 4, head)
+
+		// The log is gapless and ordered across both modes.
+		evs, err := el.Read(ctx, "anyhead", 0, 0)
+		require.NoError(t, err)
+		require.Len(t, evs, 4)
+		for i, ev := range evs {
+			require.EqualValues(t, i+1, ev.Seq)
+		}
+		require.Equal(t, "c", evs[2].Type)
+
+		// AppendAny on an absent stream creates it at seq 1.
+		head, err = el.Append(ctx, "anyfresh", statestore.AppendAny, []statestore.Event{{Type: "x"}})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, head)
+	})
+
+	t.Run("CASVersusAppendAnyRace", func(t *testing.T) {
+		el := eventLogOrSkip(t, newCaps)
+		ctx := t.Context()
+		// CAS callers keep their interleave protection while AppendAny writers
+		// race them: every AppendAny lands; a CAS at a stale head conflicts. At
+		// most one stale-head CAS can win (only by executing first), and the
+		// final head accounts for exactly the successful writes — gapless.
+		const anyWriters = 8
+		const casWriters = 4
+		var casWins, anyFailures atomic.Int64
+		// Collected in the workers, asserted after Wait: testify must not run on
+		// non-test goroutines (require.FailNow would Goexit the wrong goroutine).
+		casErrs := make(chan error, casWriters)
+		var wg sync.WaitGroup
+		for range anyWriters {
+			wg.Go(func() {
+				if _, err := el.Append(ctx, "mixedrace", statestore.AppendAny, []statestore.Event{{Type: "any"}}); err != nil {
+					anyFailures.Add(1)
+				}
+			})
+		}
+		for range casWriters {
+			wg.Go(func() {
+				if _, err := el.Append(ctx, "mixedrace", 0, []statestore.Event{{Type: "cas"}}); err == nil {
+					casWins.Add(1)
+				} else {
+					casErrs <- err
+				}
+			})
+		}
+		wg.Wait()
+		close(casErrs)
+		for err := range casErrs {
+			require.ErrorIs(t, err, statestore.ErrVersionConflict, "a losing CAS gets the conflict sentinel, not a raw error")
+		}
+		require.Zero(t, anyFailures.Load(), "AppendAny never conflicts, even racing CAS writers")
+		require.LessOrEqual(t, casWins.Load(), int64(1), "at most one CAS-at-0 can win")
+
+		want := int64(anyWriters) + casWins.Load()
+		head, err := el.Head(ctx, "mixedrace")
+		require.NoError(t, err)
+		require.Equal(t, want, head)
+		evs, err := el.Read(ctx, "mixedrace", 0, 0)
+		require.NoError(t, err)
+		require.Len(t, evs, int(want), "the log holds exactly the successful writes, gapless")
+	})
+
+	t.Run("ConcurrentAppendAnyAllWin", func(t *testing.T) {
+		el := eventLogOrSkip(t, newCaps)
+		ctx := t.Context()
+		// Independent topic publishers must all land without a retry loop
+		// (RFC-0027): every AppendAny wins, seqs are unique and gapless.
+		const writers = 12
+		var failures atomic.Int64
+		var wg sync.WaitGroup
+		for range writers {
+			wg.Go(func() {
+				if _, err := el.Append(ctx, "anyrace", statestore.AppendAny, []statestore.Event{{Type: "e"}}); err != nil {
+					failures.Add(1)
+				}
+			})
+		}
+		wg.Wait()
+		require.Zero(t, failures.Load(), "AppendAny never conflicts")
+
+		head, err := el.Head(ctx, "anyrace")
+		require.NoError(t, err)
+		require.EqualValues(t, writers, head)
+		evs, err := el.Read(ctx, "anyrace", 0, 0)
+		require.NoError(t, err)
+		require.Len(t, evs, writers)
+		seen := map[int64]bool{}
+		for _, ev := range evs {
+			require.False(t, seen[ev.Seq], "duplicate seq %d", ev.Seq)
+			seen[ev.Seq] = true
+			require.True(t, ev.Seq >= 1 && ev.Seq <= writers, "seq %d out of the gapless range", ev.Seq)
+		}
+	})
 }
 
 func runQueue(t *testing.T, newCaps Factory) {

@@ -106,7 +106,10 @@ type Envelope struct {
 
 // Destination is a settled-invocation destination stamped into the envelope: a
 // same-namespace function (FunctionName set) or a message-queue topic (Topic set).
-// It is the envelope-side flat form of fv1.DestinationRef.
+// It is the envelope-side flat form of fv1.DestinationRef. FunctionNamespace is
+// the destination's namespace for BOTH kinds — topics are namespace-scoped too
+// (RFC-0027, mirroring the same-namespace rule R6), the field name predating the
+// topic kind.
 type Destination struct {
 	FunctionNamespace string `json:"fnNs,omitempty"`
 	FunctionName      string `json:"fn,omitempty"`
@@ -163,6 +166,13 @@ type RequestContext struct {
 	FunctionRef  string `json:"functionRef"` // "<namespace>/<name>"
 	Condition    string `json:"condition"`
 	Attempts     int    `json:"attempts"`
+	// Depth is the source invocation's destination-chain depth. Stamped now so a
+	// future consumer that resumes the chain asynchronously (an RFC-0027 P2+
+	// design choice) can enforce the A6 cap across the topic hop without a wire
+	// migration of already-persisted events. The P2 statestore MQ trigger
+	// delivers synchronously, which fires no destinations — so no loop exists
+	// today; this field is the insurance that keeps it that way if that changes.
+	Depth int `json:"depth"`
 }
 
 // ResponseContext carries the function's delivery response status.

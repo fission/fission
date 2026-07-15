@@ -135,6 +135,9 @@ const (
 
 const (
 	MessageQueueTypeKafka = "kafka"
+	// MessageQueueTypeStatestore is the RFC-0027 built-in provider: topics are
+	// EventLog streams on the RFC-0021 statestore — no external broker.
+	MessageQueueTypeStatestore = "statestore"
 )
 
 const (

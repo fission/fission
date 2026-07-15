@@ -218,7 +218,7 @@ func TestDestinationsFromSpec(t *testing.T) {
 
 	ic := &fv1.InvocationConfig{
 		OnSuccess: &fv1.DestinationRef{Function: &fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "next"}},
-		OnFailure: &fv1.DestinationRef{Topic: &fv1.TopicRef{MessageQueueType: "kafka", Topic: "errs"}},
+		OnFailure: &fv1.DestinationRef{Topic: &fv1.TopicRef{MessageQueueType: fv1.MessageQueueTypeStatestore, Topic: "errs"}},
 	}
 	onS, onF = destinationsFromSpec(ic, "ns")
 	require.NotNil(t, onS)
@@ -226,8 +226,9 @@ func TestDestinationsFromSpec(t *testing.T) {
 	assert.Equal(t, "next", onS.FunctionName)
 	assert.True(t, onS.IsFunction())
 	require.NotNil(t, onF)
+	assert.Equal(t, "ns", onF.FunctionNamespace, "topic destination inherits the source namespace too (RFC-0027)")
 	assert.Equal(t, "errs", onF.Topic)
-	assert.Equal(t, "kafka", onF.MQType)
+	assert.Equal(t, fv1.MessageQueueTypeStatestore, onF.MQType)
 	assert.True(t, onF.IsTopic())
 }
 

@@ -174,6 +174,12 @@ func (e *meteredEventLog) Read(ctx context.Context, stream string, fromSeq int64
 	return evs, err
 }
 
+func (e *meteredEventLog) Head(ctx context.Context, stream string) (int64, error) {
+	head, err := e.inner.Head(ctx, stream)
+	observe(ctx, "eventlog", "head", err)
+	return head, err
+}
+
 func (e *meteredEventLog) Trim(ctx context.Context, stream string, belowSeq int64) error {
 	err := e.inner.Trim(ctx, stream, belowSeq)
 	observe(ctx, "eventlog", "trim", err)

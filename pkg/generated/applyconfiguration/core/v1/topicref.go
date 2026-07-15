@@ -14,10 +14,15 @@ import (
 // with apply.
 //
 // TopicRef is a message-queue topic destination for an async invocation result.
+// Topics are namespace-scoped: the destination publishes to the source
+// function's namespace (RFC-0024 rule R6).
 type TopicRefApplyConfiguration struct {
-	// MessageQueueType selects the broker (e.g. kafka).
+	// MessageQueueType selects the provider: "statestore" (the RFC-0027
+	// built-in, no broker) now; broker types (e.g. kafka) with the egress phase.
 	MessageQueueType *corev1.MessageQueueType `json:"messageQueueType,omitempty"`
-	// Topic is the topic the result envelope is published to.
+	// Topic is the topic the result envelope is published to. The schema bounds
+	// mirror ValidateTopicName: a stream-safe charset excluding "/" so the
+	// topic/<namespace>/<topic> mapping cannot alias across namespaces.
 	Topic *string `json:"topic,omitempty"`
 }
 

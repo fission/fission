@@ -152,7 +152,9 @@ func destFromRef(ref *fv1.DestinationRef, fnNamespace string) *asyncinvoke.Desti
 	case ref.Function != nil:
 		return &asyncinvoke.Destination{FunctionNamespace: fnNamespace, FunctionName: ref.Function.Name}
 	case ref.Topic != nil:
-		return &asyncinvoke.Destination{Topic: ref.Topic.Topic, MQType: string(ref.Topic.MessageQueueType)}
+		// Topics are namespace-scoped (RFC-0027): the destination inherits the
+		// source function's namespace, exactly like function destinations (R6).
+		return &asyncinvoke.Destination{FunctionNamespace: fnNamespace, Topic: ref.Topic.Topic, MQType: string(ref.Topic.MessageQueueType)}
 	default:
 		return nil
 	}
