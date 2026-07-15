@@ -104,6 +104,26 @@ rules:
   - update
   - patch
 {{- end }}
+{{- define "statestore-mqt-rules" }}
+rules:
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - messagequeuetriggers/status
+  verbs:
+  - get
+  - update
+  - patch
+{{- end }}
+
 {{- define "kafka-rules" }}
 rules:
 - apiGroups:

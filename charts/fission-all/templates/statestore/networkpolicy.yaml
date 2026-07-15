@@ -22,6 +22,7 @@ spec:
         - podSelector: { matchLabels: { svc: workflow } }
         - podSelector: { matchLabels: { svc: statesvc } }
         - podSelector: { matchLabels: { svc: router } }
+        - podSelector: { matchLabels: { svc: mqtrigger } }
       ports:
         - port: {{ include "fission.statestorePort" . }}
           protocol: TCP

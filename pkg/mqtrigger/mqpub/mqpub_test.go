@@ -94,6 +94,11 @@ func TestStatestorePublisherBacklogCap(t *testing.T) {
 
 	// Other topics are unaffected (the cap is per-stream).
 	require.NoError(t, p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "other", "", []byte("x")))
+
+	// The cap is on the RETAINED backlog: retention trimming the stream lets
+	// publishes flow again (a consumed topic never bricks).
+	require.NoError(t, el.Trim(t.Context(), StreamForTopic("ns", "t"), 3))
+	require.NoError(t, p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "t", "", []byte("4")))
 }
 
 // erroringEventLog fails every Append, to prove E1: a failed publish surfaces as

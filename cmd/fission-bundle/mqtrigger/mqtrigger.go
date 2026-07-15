@@ -21,6 +21,7 @@ import (
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
 	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/kafka"
+	_ "github.com/fission/fission/pkg/mqtrigger/messageQueue/statestore"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/metrics"
 )

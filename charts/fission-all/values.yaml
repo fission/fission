@@ -764,6 +764,17 @@ statestore:
 asyncInvocation:
   enabled: false
 
+## RFC-0027 statestore-backed eventing: the built-in MessageQueue provider
+## (messageQueueType: statestore) — topics on the statestore EventLog, consumed
+## by the mqtrigger-statestore head with zero external brokers. Effective only
+## when statestore.enabled (the deployment gates on both); enabled by default so
+## a statestore-enabled install gets the full eventing loop out of the box.
+eventing:
+  enabled: true
+  replicas: 1
+  leaderElection:
+    enabled: false
+
 ## Multi-namespace tenancy (docs/multiple-namespace).
 ##
 tenancy:

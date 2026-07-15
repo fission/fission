@@ -248,6 +248,18 @@ rules:
   - list
   - watch
 {{- end }}
+{{- define "statestore-mqt-kuberules" }}
+rules:
+{{- include "leases-kuberules" . }}
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+{{- end }}
+
 {{- define "kafka-kuberules" }}
 rules:
 {{- include "leases-kuberules" . }}

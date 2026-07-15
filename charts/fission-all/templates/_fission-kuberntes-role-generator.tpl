@@ -26,6 +26,9 @@ metadata:
 {{- if eq "kafka" .component }}
 {{- include "kafka-kuberules" . }}
 {{- end }}
+{{- if eq "statestore-mqt" .component }}
+{{- include "statestore-mqt-kuberules" . }}
+{{- end }}
 {{- if eq "keda" .component }}
 {{- include "keda-kuberules" . }}
 {{- end }}

@@ -32,15 +32,17 @@ var ErrUnsupportedMQType = errors.New("mqpub: unsupported message-queue type")
 // backlog cap (see DefaultMaxTopicBacklog).
 var ErrTopicBacklogCap = errors.New("mqpub: topic backlog cap reached")
 
-// DefaultMaxTopicBacklog bounds a topic stream's head in phase 1. Nothing
-// consumes or trims topics until the P2 subscriber + retention reaper land, so
-// every append is permanent — an unbounded stream on the shared store is a
-// cluster-wide resource hazard (a full embedded PVC fails every tenant's
-// enqueue). A publish to a topic at the cap is rejected loudly and counted
-// ("capped"), never silently dropped. The check reads Head first, so the cap is
-// soft under concurrent publishers (bounded overshoot by in-flight appends) —
-// a resource guard, not an exact quota. P2's retention machinery supersedes it
-// with min-cursor trim + age/size backstops and a tunable knob.
+// DefaultMaxTopicBacklog bounds a topic stream's RETAINED BACKLOG (head minus
+// the trim floor). An unbounded stream on the shared store is a cluster-wide
+// resource hazard (a full embedded PVC fails every tenant's enqueue), so a
+// publish to a topic at the cap is rejected loudly and counted ("capped"),
+// never silently dropped. The cap composes with retention: the reaper's
+// min-cursor/age/size trims raise the floor of consumed topics so their
+// publishes keep flowing, while a topic nobody consumes is never trimmed —
+// backlog equals lifetime head — and the cap bounds it exactly. The check is
+// two reads (Head + first retained event) before the append, so it is soft
+// under concurrent publishers (bounded overshoot) — a resource guard, not an
+// exact quota.
 const DefaultMaxTopicBacklog = 10000
 
 // TopicPublisher durably publishes a payload to a namespaced topic on a
@@ -105,16 +107,30 @@ func (p *statestorePublisher) Publish(ctx context.Context, namespace, mqType, to
 		return fmt.Errorf("mqpub: invalid topic name: %w", err)
 	}
 	stream := StreamForTopic(namespace, topic)
-	// Phase-1 backlog cap (soft — see DefaultMaxTopicBacklog): reject loudly
-	// rather than grow the shared store unboundedly with no consumer to trim it.
+	// Backlog cap (soft — see DefaultMaxTopicBacklog): reject loudly rather than
+	// grow the shared store unboundedly. backlog = head − trim floor, where the
+	// floor is one below the first retained event (== head when fully trimmed).
 	head, err := p.el.Head(ctx, stream)
 	if err != nil {
 		recordPublish(ctx, mqType, "error")
 		return fmt.Errorf("mqpub: reading topic head %s/%s: %w", namespace, topic, err)
 	}
 	if head >= p.maxBacklog {
-		recordPublish(ctx, mqType, "capped")
-		return fmt.Errorf("%w: topic %s/%s at %d events", ErrTopicBacklogCap, namespace, topic, head)
+		// Only pay the floor read once the lifetime head could possibly exceed
+		// the cap; below that, backlog <= head < cap always.
+		first, rerr := p.el.Read(ctx, stream, 0, 1)
+		if rerr != nil {
+			recordPublish(ctx, mqType, "error")
+			return fmt.Errorf("mqpub: reading topic floor %s/%s: %w", namespace, topic, rerr)
+		}
+		floor := head
+		if len(first) == 1 {
+			floor = first[0].Seq - 1
+		}
+		if head-floor >= p.maxBacklog {
+			recordPublish(ctx, mqType, "capped")
+			return fmt.Errorf("%w: topic %s/%s backlog %d", ErrTopicBacklogCap, namespace, topic, head-floor)
+		}
 	}
 	if _, err := p.el.Append(ctx, stream, statestore.AppendAny,
 		[]statestore.Event{{Type: contentType, Payload: payload}}); err != nil {

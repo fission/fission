@@ -26,6 +26,9 @@ metadata:
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}
 {{- end }}
+{{- if eq "statestore-mqt" .component }}
+{{- include "statestore-mqt-rules" . }}
+{{- end }}
 {{- if eq "keda" .component }}
 {{- include "keda-rules" . }}
 {{- end }}
