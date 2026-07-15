@@ -5,6 +5,7 @@
 package v1
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +116,13 @@ func TestDestinationRefValidate(t *testing.T) {
 		{"function ok", DestinationRef{Function: fnRef("next")}, false},
 		{"neither set", DestinationRef{}, true},
 		{"both set", DestinationRef{Function: fnRef("next"), Topic: &TopicRef{MessageQueueType: "kafka", Topic: "t"}}, true},
-		{"topic not yet supported", DestinationRef{Topic: &TopicRef{MessageQueueType: "kafka", Topic: "t"}}, true},
+		{"broker topic not yet supported", DestinationRef{Topic: &TopicRef{MessageQueueType: "kafka", Topic: "t"}}, true},
+		{"statestore topic ok", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: "orders"}}, false},
+		{"statestore topic dotted ok", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: "orders.v2_batch-1"}}, false},
+		{"statestore topic empty name", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: ""}}, true},
+		{"statestore topic slash rejected", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: "a/b"}}, true},
+		{"statestore topic space rejected", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: "a b"}}, true},
+		{"statestore topic overlong rejected", DestinationRef{Topic: &TopicRef{MessageQueueType: MessageQueueTypeStatestore, Topic: strings.Repeat("a", 250)}}, true},
 		{"function weights rejected", DestinationRef{Function: &FunctionReference{Type: FunctionReferenceTypeFunctionWeights, Name: "w"}}, true},
 		{"empty function name", DestinationRef{Function: fnRef("  ")}, true},
 	}

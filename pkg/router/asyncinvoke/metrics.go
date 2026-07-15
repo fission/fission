@@ -25,7 +25,7 @@ var (
 	asyncDLQ = metrics.Int64Counter("fission_async_dlq_total",
 		"Count of async invocations dead-lettered, labeled by reason")
 	asyncDestinations = metrics.Int64Counter("fission_async_destinations_total",
-		"Count of async destination fires, labeled by outcome (enqueued/dropped/depth_capped/topic_unsupported/encode_error/enqueue_error)")
+		"Count of async destination fires, labeled by outcome (enqueued/dropped/depth_capped/published/publish_error/topic_unsupported/encode_error/enqueue_error)")
 	asyncDepthCap = metrics.Int64Counter("fission_async_depth_cap_total",
 		"Count of async destination invocations dropped for exceeding the chain depth cap (A6)")
 )

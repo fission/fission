@@ -60,6 +60,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/mqtrigger/mqpub"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/statestore"
@@ -526,6 +527,15 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		}
 		triggers.asyncInvoker = &asyncInvoker{queue: queue, logger: logger.WithName("async_invoker")}
 
+		// Topic destinations publish onto the same store's EventLog (RFC-0027): all
+		// current drivers expose every capability, so an EventLog failure here is a
+		// store misconfiguration and fails startup exactly like the Queue above.
+		eventLog, elerr := caps.EventLog()
+		if elerr != nil {
+			return fmt.Errorf("async invocation: statestore eventlog capability: %w", elerr)
+		}
+		topicPublisher := mqpub.NewStatestorePublisher(eventLog)
+
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
 		// The dispatcher resolves each destination-chain hop's config from the
@@ -535,6 +545,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			Deliverer:             deliverer,
 			Logger:                logger.WithName("async_dispatcher"),
 			ResolveFunctionConfig: newFunctionConfigResolver(crMgr.GetClient(), logger),
+			PublishTopic:          topicPublisher.Publish,
 		})
 		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
 			_ = dispatcher.Run(rctx) // returns only on ctx cancellation

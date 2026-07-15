@@ -106,7 +106,10 @@ type Envelope struct {
 
 // Destination is a settled-invocation destination stamped into the envelope: a
 // same-namespace function (FunctionName set) or a message-queue topic (Topic set).
-// It is the envelope-side flat form of fv1.DestinationRef.
+// It is the envelope-side flat form of fv1.DestinationRef. FunctionNamespace is
+// the destination's namespace for BOTH kinds — topics are namespace-scoped too
+// (RFC-0027, mirroring the same-namespace rule R6), the field name predating the
+// topic kind.
 type Destination struct {
 	FunctionNamespace string `json:"fnNs,omitempty"`
 	FunctionName      string `json:"fn,omitempty"`

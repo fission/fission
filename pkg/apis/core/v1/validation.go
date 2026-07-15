@@ -448,8 +448,9 @@ func (ic *InvocationConfig) Validate() error {
 
 // Validate checks a destination reference: exactly one of Function/Topic, a
 // function destination that references a single named function (weights make no
-// sense for a destination), and — for now — rejects Topic destinations, which are
-// declared but not yet implemented (the broker-producer path is a later step).
+// sense for a destination), and a topic destination on a supported provider —
+// the built-in statestore (RFC-0027); broker types are rejected honestly until
+// the egress phase lands rather than accepted and dropped.
 func (d *DestinationRef) Validate(field string) error {
 	switch {
 	case d.Function == nil && d.Topic == nil:
@@ -457,13 +458,38 @@ func (d *DestinationRef) Validate(field string) error {
 	case d.Function != nil && d.Topic != nil:
 		return MakeValidationErr(ErrorInvalidObject, field, "", "only one of function or topic may be set")
 	case d.Topic != nil:
-		return MakeValidationErr(ErrorInvalidObject, field+".topic", "", "topic destinations are not yet supported")
+		return d.Topic.Validate(field + ".topic")
 	}
 	if d.Function.Type != FunctionReferenceTypeFunctionName {
 		return MakeValidationErr(ErrorInvalidValue, field+".function.type", d.Function.Type, fmt.Sprintf("must be %q", FunctionReferenceTypeFunctionName))
 	}
 	if strings.TrimSpace(d.Function.Name) == "" {
 		return MakeValidationErr(ErrorInvalidValue, field+".function.name", d.Function.Name, "must not be empty")
+	}
+	return nil
+}
+
+// topicNameRegexp bounds statestore topic names to a stream-safe charset.
+var topicNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// Validate checks a topic destination: only the built-in statestore provider is
+// supported until the RFC-0027 egress phase lands, and the topic name must be
+// safe in the namespaced stream mapping topic/<ns>/<topic>.
+func (tr *TopicRef) Validate(field string) error {
+	if tr.MessageQueueType != MessageQueueTypeStatestore {
+		return MakeValidationErr(ErrorInvalidValue, field+".messageQueueType", tr.MessageQueueType,
+			fmt.Sprintf("only %q topic destinations are supported (broker topics arrive with the RFC-0027 egress phase)", MessageQueueTypeStatestore))
+	}
+	return ValidateTopicName(field+".topic", tr.Topic)
+}
+
+// ValidateTopicName bounds a statestore topic name: non-empty, at most 249
+// characters (kafka parity), and [a-zA-Z0-9._-] only — critically excluding "/"
+// so the topic/<ns>/<topic> stream mapping cannot alias across namespaces.
+// Exported for the mqtrigger statestore provider's trigger validation.
+func ValidateTopicName(field, topic string) error {
+	if topic == "" || len(topic) > 249 || !topicNameRegexp.MatchString(topic) {
+		return MakeValidationErr(ErrorInvalidValue, field, topic, "must be 1-249 characters of [a-zA-Z0-9._-]")
 	}
 	return nil
 }
