@@ -437,7 +437,35 @@ func (ic *InvocationConfig) Validate() error {
 	if ic.MaxAge != nil && ic.MaxAge.Duration > MaxAsyncMaxAge {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, fmt.Sprintf("must be <= %s", MaxAsyncMaxAge)))
 	}
+	if ic.OnSuccess != nil {
+		errs = errors.Join(errs, ic.OnSuccess.Validate("FunctionSpec.Invocation.OnSuccess"))
+	}
+	if ic.OnFailure != nil {
+		errs = errors.Join(errs, ic.OnFailure.Validate("FunctionSpec.Invocation.OnFailure"))
+	}
 	return errs
+}
+
+// Validate checks a destination reference: exactly one of Function/Topic, a
+// function destination that references a single named function (weights make no
+// sense for a destination), and — for now — rejects Topic destinations, which are
+// declared but not yet implemented (the broker-producer path is a later step).
+func (d *DestinationRef) Validate(field string) error {
+	switch {
+	case d.Function == nil && d.Topic == nil:
+		return MakeValidationErr(ErrorInvalidObject, field, "", "exactly one of function or topic must be set")
+	case d.Function != nil && d.Topic != nil:
+		return MakeValidationErr(ErrorInvalidObject, field, "", "only one of function or topic may be set")
+	case d.Topic != nil:
+		return MakeValidationErr(ErrorInvalidObject, field+".topic", "", "topic destinations are not yet supported")
+	}
+	if d.Function.Type != FunctionReferenceTypeFunctionName {
+		return MakeValidationErr(ErrorInvalidValue, field+".function.type", d.Function.Type, fmt.Sprintf("must be %q", FunctionReferenceTypeFunctionName))
+	}
+	if strings.TrimSpace(d.Function.Name) == "" {
+		return MakeValidationErr(ErrorInvalidValue, field+".function.name", d.Function.Name, "must not be empty")
+	}
+	return nil
 }
 
 // Validate checks the streaming config: a known protocol, non-negative timeouts,

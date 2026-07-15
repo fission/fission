@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,68 @@ func TestHTTPDelivererDelivers(t *testing.T) {
 	assert.Equal(t, "inv-123", gotHeaders.Get(HeaderInvocationID), "invocation id replayed")
 	assert.Equal(t, "4", gotHeaders.Get(HeaderInvocationAttempt), "attempt replayed")
 	assert.Equal(t, "2", gotHeaders.Get(HeaderInvocationDepth), "depth replayed")
+}
+
+func TestHTTPDelivererCapturesAndTruncatesBody(t *testing.T) {
+	t.Parallel()
+	big := strings.Repeat("a", MaxPayloadBytes+100)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, big)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	// A destination is declared, so the response body is captured for the result
+	// envelope — and flagged truncated when it exceeds the cap.
+	env := Envelope{Namespace: "ns", Function: "fn", OnSuccess: &Destination{FunctionName: "next"}}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Len(t, res.Body, MaxPayloadBytes, "response body captured and truncated at MaxPayloadBytes")
+	assert.True(t, res.BodyTruncated, "over-cap body is flagged truncated")
+}
+
+// TestHTTPDelivererSkipsBodyWithoutDestination proves the no-destination fast-path:
+// with neither OnSuccess nor OnFailure set the response body is drained, not
+// captured, so a destination-less invocation never allocates up to 64KiB.
+func TestHTTPDelivererSkipsBodyWithoutDestination(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "response-body")
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Nil(t, res.Body, "no destination → body not captured")
+	assert.False(t, res.BodyTruncated)
+}
+
+// TestHTTPDelivererCapturesOnlyFiringDestinationBody proves the capture is
+// status-aware: the body is read only for the destination this outcome fires (2xx
+// → OnSuccess, non-2xx → OnFailure), so the non-firing destination's presence does
+// not trigger a wasted read.
+func TestHTTPDelivererCapturesOnlyFiringDestinationBody(t *testing.T) {
+	t.Parallel()
+	body := func(status int, env Envelope) []byte {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, "resp")
+		}))
+		defer srv.Close()
+		env.Namespace, env.Function = "ns", "fn"
+		return NewHTTPDeliverer(srv.URL, nil, nil).Deliver(context.Background(), env, "id", 1).Body
+	}
+	onSuccess := Envelope{OnSuccess: &Destination{FunctionName: "s"}}
+	onFailure := Envelope{OnFailure: &Destination{FunctionName: "f"}}
+
+	assert.Equal(t, []byte("resp"), body(http.StatusOK, onSuccess), "2xx + OnSuccess → captured")
+	assert.Nil(t, body(http.StatusOK, onFailure), "2xx + only OnFailure → not captured (OnFailure won't fire)")
+	assert.Equal(t, []byte("resp"), body(http.StatusForbidden, onFailure), "4xx + OnFailure → captured")
+	assert.Nil(t, body(http.StatusForbidden, onSuccess), "4xx + only OnSuccess → not captured (OnSuccess won't fire)")
 }
 
 func TestHTTPDelivererDefaultNamespaceFold(t *testing.T) {

@@ -30,6 +30,12 @@ type Deliverer interface {
 type DeliveryResult struct {
 	StatusCode int
 	Err        error
+	// Body is the function's response body, captured up to MaxPayloadBytes for a
+	// destination result envelope (empty on a transport error, or when the function
+	// declares no destination). BodyTruncated is true when the body was cut at the
+	// cap or a mid-stream read left it incomplete.
+	Body          []byte
+	BodyTruncated bool
 }
 
 // httpDeliverer POSTs to the router internal listener, byte-identical to the
@@ -88,6 +94,26 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 		return DeliveryResult{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body) // drain so the connection can be reused
-	return DeliveryResult{StatusCode: resp.StatusCode}
+	// Capture the body only for the destination this outcome can actually fire: a
+	// 2xx settles to OnSuccess, any other status settles (now or on exhaustion) to
+	// OnFailure. So skip the up-to-64KiB read when the relevant destination is unset
+	// — a 2xx with only OnFailure, or a non-2xx with only OnSuccess, feeds nothing.
+	// This only ever skips a body no destination would consume (it never drops one a
+	// fire needs), and drains for keep-alive either way.
+	is2xx := resp.StatusCode >= 200 && resp.StatusCode < 300
+	needBody := (is2xx && env.OnSuccess != nil) || (!is2xx && env.OnFailure != nil)
+	if !needBody {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return DeliveryResult{StatusCode: resp.StatusCode}
+	}
+	// Capture up to MaxPayloadBytes for a destination result envelope, flagging any
+	// truncation (over the cap, or a mid-stream read error that leaves the body
+	// incomplete), then drain the remainder so keep-alive can reuse the connection.
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxPayloadBytes+1))
+	truncated := readErr != nil || len(body) > MaxPayloadBytes
+	if len(body) > MaxPayloadBytes {
+		body = body[:MaxPayloadBytes]
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return DeliveryResult{StatusCode: resp.StatusCode, Body: body, BodyTruncated: truncated}
 }

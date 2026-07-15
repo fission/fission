@@ -789,6 +789,131 @@ spec:
                       measured from its enqueue time; once exceeded it is dead-lettered with
                       reason "expired". nil means the platform default. Must be > 0 when set.
                     type: string
+                  onFailure:
+                    description: |-
+                      OnFailure, when set, invokes a destination with the result envelope after
+                      the invocation permanently fails (a non-retryable 4xx, the retry budget
+                      spent, or MaxAge exceeded).
+                    properties:
+                      function:
+                        description: |-
+                          Function is a same-namespace function destination, invoked asynchronously
+                          with the result envelope as its body (depth-capped to stop runaway chains).
+                        properties:
+                          functionweights:
+                            additionalProperties:
+                              type: integer
+                            description: |-
+                              Function Reference by weight. this map contains function name as key and its weight
+                              as the value. This is for canary upgrade purpose.
+                            nullable: true
+                            type: object
+                          name:
+                            description: Name of the function.
+                            type: string
+                          type:
+                            description: |-
+                              Type indicates whether this function reference is by name or selector. For now,
+                              the only supported reference type is by "name".  Future reference types:
+                                * Function by label or annotation
+                                * Branch or tag of a versioned function
+                                * A "rolling upgrade" from one version of a function to another
+                              Available value:
+                              - name
+                              - function-weights
+                            enum:
+                            - name
+                            - function-weights
+                            type: string
+                        required:
+                        - name
+                        - type
+                        type: object
+                        x-kubernetes-validations:
+                        - message: functionref.name must be a valid DNS1123 label
+                            (lowercase alphanumeric or '-', start/end alphanumeric,
+                            max 63 chars) when type is 'name'
+                          rule: self.type != 'name' || (self.name.size() <= 63 &&
+                            self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                      topic:
+                        description: Topic publishes the result envelope to a message-queue
+                          topic.
+                        properties:
+                          messageQueueType:
+                            description: MessageQueueType selects the broker (e.g.
+                              kafka).
+                            type: string
+                          topic:
+                            description: Topic is the topic the result envelope is
+                              published to.
+                            type: string
+                        required:
+                        - messageQueueType
+                        - topic
+                        type: object
+                    type: object
+                  onSuccess:
+                    description: |-
+                      OnSuccess, when set, invokes a destination with a Lambda-shaped result
+                      envelope after the invocation is delivered successfully (2xx).
+                    properties:
+                      function:
+                        description: |-
+                          Function is a same-namespace function destination, invoked asynchronously
+                          with the result envelope as its body (depth-capped to stop runaway chains).
+                        properties:
+                          functionweights:
+                            additionalProperties:
+                              type: integer
+                            description: |-
+                              Function Reference by weight. this map contains function name as key and its weight
+                              as the value. This is for canary upgrade purpose.
+                            nullable: true
+                            type: object
+                          name:
+                            description: Name of the function.
+                            type: string
+                          type:
+                            description: |-
+                              Type indicates whether this function reference is by name or selector. For now,
+                              the only supported reference type is by "name".  Future reference types:
+                                * Function by label or annotation
+                                * Branch or tag of a versioned function
+                                * A "rolling upgrade" from one version of a function to another
+                              Available value:
+                              - name
+                              - function-weights
+                            enum:
+                            - name
+                            - function-weights
+                            type: string
+                        required:
+                        - name
+                        - type
+                        type: object
+                        x-kubernetes-validations:
+                        - message: functionref.name must be a valid DNS1123 label
+                            (lowercase alphanumeric or '-', start/end alphanumeric,
+                            max 63 chars) when type is 'name'
+                          rule: self.type != 'name' || (self.name.size() <= 63 &&
+                            self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                      topic:
+                        description: Topic publishes the result envelope to a message-queue
+                          topic.
+                        properties:
+                          messageQueueType:
+                            description: MessageQueueType selects the broker (e.g.
+                              kafka).
+                            type: string
+                          topic:
+                            description: Topic is the topic the result envelope is
+                              published to.
+                            type: string
+                        required:
+                        - messageQueueType
+                        - topic
+                        type: object
+                    type: object
                   retry:
                     description: |-
                       Retry is the durable delivery retry policy. The zero value means platform

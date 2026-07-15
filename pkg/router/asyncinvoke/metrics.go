@@ -24,6 +24,10 @@ var (
 		"Count of async invocation deliveries requeued for a retry")
 	asyncDLQ = metrics.Int64Counter("fission_async_dlq_total",
 		"Count of async invocations dead-lettered, labeled by reason")
+	asyncDestinations = metrics.Int64Counter("fission_async_destinations_total",
+		"Count of async destination fires, labeled by outcome (enqueued/dropped/depth_capped/topic_unsupported/encode_error/enqueue_error)")
+	asyncDepthCap = metrics.Int64Counter("fission_async_depth_cap_total",
+		"Count of async destination invocations dropped for exceeding the chain depth cap (A6)")
 )
 
 func recordDelivery(ctx context.Context, condition string) {
@@ -36,6 +40,14 @@ func recordRetry(ctx context.Context) {
 
 func recordDLQ(ctx context.Context, reason string) {
 	asyncDLQ.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
+}
+
+func recordDestination(ctx context.Context, outcome string) {
+	asyncDestinations.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+func recordDepthCap(ctx context.Context) {
+	asyncDepthCap.Add(ctx, 1)
 }
 
 // deliveryCondition classifies a DeliveryResult for the deliveries_total label:

@@ -112,12 +112,16 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	setFunctionMetadataToHeader(&fh.function.ObjectMeta, request)
 
 	// RFC-0024: async invocation. Only public HTTPTrigger handlers
-	// (httpTrigger != nil) honor X-Fission-Invoke-Mode: async — the dispatcher's
-	// delivery lands on the internal function handler (httpTrigger == nil), which
-	// skips this branch and proxies synchronously, so a delivery never
-	// re-enqueues. handle() writes 501 when the feature is off (nil invoker/queue),
-	// so an async-mode request is answered honestly rather than run synchronously.
-	if fh.httpTrigger != nil && strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync) {
+	// (httpTrigger != nil) honor async mode — the dispatcher's delivery lands on
+	// the internal function handler (httpTrigger == nil), which skips this branch
+	// and proxies synchronously, so a delivery never re-enqueues. A request is
+	// async when it carries X-Fission-Invoke-Mode: async OR the trigger forces it
+	// via spec.invocationMode=async (for callers, e.g. third-party webhooks, that
+	// cannot set headers). handle() writes 501 when the feature is off (nil
+	// invoker/queue), so an async-mode request is answered honestly.
+	if fh.httpTrigger != nil &&
+		(strings.EqualFold(request.Header.Get(asyncinvoke.HeaderInvokeMode), asyncinvoke.InvokeModeAsync) ||
+			strings.EqualFold(fh.httpTrigger.Spec.InvocationMode, asyncinvoke.InvokeModeAsync)) {
 		fh.asyncInvoker.handle(responseWriter, request, fh.function)
 		return
 	}

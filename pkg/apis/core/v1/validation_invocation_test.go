@@ -80,4 +80,55 @@ func TestFunctionSpecValidateInvocation(t *testing.T) {
 			t.Fatalf("expected error for zero MaxAttempts")
 		}
 	})
+
+	t.Run("valid onSuccess function destination ok", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Invocation = &InvocationConfig{
+			OnSuccess: &DestinationRef{Function: &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "next"}},
+		}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("invalid onFailure destination surfaced", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Invocation = &InvocationConfig{OnFailure: &DestinationRef{}} // neither function nor topic
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("expected error for empty destination")
+		}
+	})
+}
+
+func TestDestinationRefValidate(t *testing.T) {
+	t.Parallel()
+	fnRef := func(name string) *FunctionReference {
+		return &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: name}
+	}
+	tests := []struct {
+		name    string
+		dest    DestinationRef
+		wantErr bool
+	}{
+		{"function ok", DestinationRef{Function: fnRef("next")}, false},
+		{"neither set", DestinationRef{}, true},
+		{"both set", DestinationRef{Function: fnRef("next"), Topic: &TopicRef{MessageQueueType: "kafka", Topic: "t"}}, true},
+		{"topic not yet supported", DestinationRef{Topic: &TopicRef{MessageQueueType: "kafka", Topic: "t"}}, true},
+		{"function weights rejected", DestinationRef{Function: &FunctionReference{Type: FunctionReferenceTypeFunctionWeights, Name: "w"}}, true},
+		{"empty function name", DestinationRef{Function: fnRef("  ")}, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.dest.Validate("test")
+			if tc.wantErr && err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

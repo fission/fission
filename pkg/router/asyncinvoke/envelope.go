@@ -98,7 +98,27 @@ type Envelope struct {
 	// the function's InvocationConfig at enqueue. Zero fields take dispatcher
 	// defaults.
 	Policy Policy `json:"policy,omitzero"`
+	// OnSuccess/OnFailure are the destinations fired after this invocation settles,
+	// stamped from the function's InvocationConfig at enqueue. nil = no destination.
+	OnSuccess *Destination `json:"onSuccess,omitempty"`
+	OnFailure *Destination `json:"onFailure,omitempty"`
 }
+
+// Destination is a settled-invocation destination stamped into the envelope: a
+// same-namespace function (FunctionName set) or a message-queue topic (Topic set).
+// It is the envelope-side flat form of fv1.DestinationRef.
+type Destination struct {
+	FunctionNamespace string `json:"fnNs,omitempty"`
+	FunctionName      string `json:"fn,omitempty"`
+	Topic             string `json:"topic,omitempty"`
+	MQType            string `json:"mqType,omitempty"`
+}
+
+// IsFunction reports whether the destination targets a function.
+func (d Destination) IsFunction() bool { return d.FunctionName != "" }
+
+// IsTopic reports whether the destination targets a topic.
+func (d Destination) IsTopic() bool { return d.Topic != "" }
 
 // Encode marshals the envelope for a statestore Queue message body.
 func (e Envelope) Encode() ([]byte, error) { return json.Marshal(e) }
@@ -109,6 +129,53 @@ func Decode(data []byte) (Envelope, error) {
 	err := json.Unmarshal(data, &e)
 	return e, err
 }
+
+// Destination result conditions — the requestContext.condition values.
+const (
+	ConditionSuccess          = "Success"
+	ConditionRetriesExhausted = "RetriesExhausted"
+	ConditionEventAgeExceeded = "EventAgeExceeded"
+	ConditionHTTP4xx          = "Http4xx"
+)
+
+// MaxPayloadBytes caps the payloads embedded in the result envelope (Lambda-parity
+// 64KiB): the request body is omitted when larger, the response body truncated.
+const MaxPayloadBytes = 64 << 10
+
+// ResultEnvelope is the Lambda-shaped record delivered to a destination after an
+// async invocation settles. The payloads are opaque bytes (base64 on the wire) —
+// the original request body (omitted when >MaxPayloadBytes) and the function's
+// response body (truncated at MaxPayloadBytes) — not guaranteed to be JSON.
+type ResultEnvelope struct {
+	Version        string         `json:"version"`
+	RequestContext RequestContext `json:"requestContext"`
+	RequestPayload []byte         `json:"requestPayload,omitempty"`
+	// RequestPayloadOmitted is true when the original request body was dropped for
+	// exceeding MaxPayloadBytes, so a destination can tell "elided" from "empty".
+	RequestPayloadOmitted bool            `json:"requestPayloadOmitted,omitempty"`
+	ResponseContext       ResponseContext `json:"responseContext"`
+	ResponsePayload       []byte          `json:"responsePayload,omitempty"`
+}
+
+// RequestContext identifies the settled invocation the result envelope describes.
+type RequestContext struct {
+	InvocationID string `json:"invocationId"`
+	FunctionRef  string `json:"functionRef"` // "<namespace>/<name>"
+	Condition    string `json:"condition"`
+	Attempts     int    `json:"attempts"`
+}
+
+// ResponseContext carries the function's delivery response status.
+type ResponseContext struct {
+	StatusCode int `json:"statusCode"`
+	// Truncated is true when the response body was cut at MaxPayloadBytes or a
+	// mid-stream read left it incomplete, so a destination knows responsePayload
+	// may be partial.
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+// Encode marshals the result envelope for a destination invocation body.
+func (r ResultEnvelope) Encode() ([]byte, error) { return json.Marshal(r) }
 
 // allowedHeaders returns the subset of request headers to replay on async
 // delivery. It is an allowlist, not a denylist: Content-Type and Accept (so the

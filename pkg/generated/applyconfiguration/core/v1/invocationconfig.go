@@ -19,8 +19,7 @@ import (
 // platform defaults; this struct only tunes them. Field bounds are validated in
 // Go (InvocationConfig.Validate, run at admission via validateForAdmission),
 // not CEL, because metav1.Duration CEL rules are unproven in this CRD.
-// Destinations (onSuccess/onFailure) and an external dead-letter target are a
-// later RFC-0024 phase.
+// An external dead-letter target is a later RFC-0024 phase.
 type InvocationConfigApplyConfiguration struct {
 	// Retry is the durable delivery retry policy. The zero value means platform
 	// defaults (a bounded exponential backoff over DefaultMaxAttempts attempts).
@@ -29,6 +28,13 @@ type InvocationConfigApplyConfiguration struct {
 	// measured from its enqueue time; once exceeded it is dead-lettered with
 	// reason "expired". nil means the platform default. Must be > 0 when set.
 	MaxAge *metav1.Duration `json:"maxAge,omitempty"`
+	// OnSuccess, when set, invokes a destination with a Lambda-shaped result
+	// envelope after the invocation is delivered successfully (2xx).
+	OnSuccess *DestinationRefApplyConfiguration `json:"onSuccess,omitempty"`
+	// OnFailure, when set, invokes a destination with the result envelope after
+	// the invocation permanently fails (a non-retryable 4xx, the retry budget
+	// spent, or MaxAge exceeded).
+	OnFailure *DestinationRefApplyConfiguration `json:"onFailure,omitempty"`
 }
 
 // InvocationConfigApplyConfiguration constructs a declarative configuration of the InvocationConfig type for use with
@@ -50,5 +56,21 @@ func (b *InvocationConfigApplyConfiguration) WithRetry(value *RetryPolicyApplyCo
 // If called multiple times, the MaxAge field is set to the value of the last call.
 func (b *InvocationConfigApplyConfiguration) WithMaxAge(value metav1.Duration) *InvocationConfigApplyConfiguration {
 	b.MaxAge = &value
+	return b
+}
+
+// WithOnSuccess sets the OnSuccess field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the OnSuccess field is set to the value of the last call.
+func (b *InvocationConfigApplyConfiguration) WithOnSuccess(value *DestinationRefApplyConfiguration) *InvocationConfigApplyConfiguration {
+	b.OnSuccess = value
+	return b
+}
+
+// WithOnFailure sets the OnFailure field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the OnFailure field is set to the value of the last call.
+func (b *InvocationConfigApplyConfiguration) WithOnFailure(value *DestinationRefApplyConfiguration) *InvocationConfigApplyConfiguration {
+	b.OnFailure = value
 	return b
 }

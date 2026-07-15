@@ -689,8 +689,7 @@ type (
 	// platform defaults; this struct only tunes them. Field bounds are validated in
 	// Go (InvocationConfig.Validate, run at admission via validateForAdmission),
 	// not CEL, because metav1.Duration CEL rules are unproven in this CRD.
-	// Destinations (onSuccess/onFailure) and an external dead-letter target are a
-	// later RFC-0024 phase.
+	// An external dead-letter target is a later RFC-0024 phase.
 	InvocationConfig struct {
 		// Retry is the durable delivery retry policy. The zero value means platform
 		// defaults (a bounded exponential backoff over DefaultMaxAttempts attempts).
@@ -702,6 +701,42 @@ type (
 		// reason "expired". nil means the platform default. Must be > 0 when set.
 		// +optional
 		MaxAge *metav1.Duration `json:"maxAge,omitempty"`
+
+		// OnSuccess, when set, invokes a destination with a Lambda-shaped result
+		// envelope after the invocation is delivered successfully (2xx).
+		// +optional
+		OnSuccess *DestinationRef `json:"onSuccess,omitempty"`
+
+		// OnFailure, when set, invokes a destination with the result envelope after
+		// the invocation permanently fails (a non-retryable 4xx, the retry budget
+		// spent, or MaxAge exceeded).
+		// +optional
+		OnFailure *DestinationRef `json:"onFailure,omitempty"`
+	}
+
+	// DestinationRef routes an async invocation's result to exactly one target: a
+	// Function (invoked async through the same machinery, depth-capped) or a Topic
+	// (published to a message queue). Exactly one of Function/Topic must be set.
+	// Topic destinations are declared but not yet implemented — the webhook rejects
+	// them until the broker-producer path lands (a later RFC-0024 step).
+	DestinationRef struct {
+		// Function is a same-namespace function destination, invoked asynchronously
+		// with the result envelope as its body (depth-capped to stop runaway chains).
+		// +optional
+		Function *FunctionReference `json:"function,omitempty"`
+
+		// Topic publishes the result envelope to a message-queue topic.
+		// +optional
+		Topic *TopicRef `json:"topic,omitempty"`
+	}
+
+	// TopicRef is a message-queue topic destination for an async invocation result.
+	TopicRef struct {
+		// MessageQueueType selects the broker (e.g. kafka).
+		MessageQueueType MessageQueueType `json:"messageQueueType"`
+
+		// Topic is the topic the result envelope is published to.
+		Topic string `json:"topic"`
 	}
 
 	// RetryPolicy is the async delivery retry policy: the attempt budget and the
@@ -1042,6 +1077,14 @@ type (
 		// +listType=set
 		// +kubebuilder:validation:items:Enum=GET;HEAD;POST;PUT;PATCH;DELETE;CONNECT;OPTIONS;TRACE
 		Methods []string `json:"methods,omitempty"`
+
+		// InvocationMode, when "async", forces every request to this trigger into
+		// RFC-0024 asynchronous invocation even without the X-Fission-Invoke-Mode
+		// header (webhooks from third parties cannot set headers). "" (the default)
+		// leaves the per-request header in control.
+		// +optional
+		// +kubebuilder:validation:Enum="";async
+		InvocationMode string `json:"invocationMode,omitempty"`
 
 		// FunctionReference is a reference to the target function.
 		FunctionReference FunctionReference `json:"functionref"`

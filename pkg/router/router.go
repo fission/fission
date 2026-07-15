@@ -528,10 +528,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
+		// The dispatcher resolves each destination-chain hop's config from the
+		// Manager's Function cache (the fv1↔asyncinvoke mapping lives in async.go).
 		dispatcher := asyncinvoke.New(asyncinvoke.Options{
-			Queue:     queue,
-			Deliverer: deliverer,
-			Logger:    logger.WithName("async_dispatcher"),
+			Queue:                 queue,
+			Deliverer:             deliverer,
+			Logger:                logger.WithName("async_dispatcher"),
+			ResolveFunctionConfig: newFunctionConfigResolver(crMgr.GetClient(), logger),
 		})
 		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
 			_ = dispatcher.Run(rctx) // returns only on ctx cancellation

@@ -31,6 +31,11 @@ type HTTPTriggerSpecApplyConfiguration struct {
 	Method *string `json:"method,omitempty"`
 	// HTTP methods to access a function
 	Methods []string `json:"methods,omitempty"`
+	// InvocationMode, when "async", forces every request to this trigger into
+	// RFC-0024 asynchronous invocation even without the X-Fission-Invoke-Mode
+	// header (webhooks from third parties cannot set headers). "" (the default)
+	// leaves the per-request header in control.
+	InvocationMode *string `json:"invocationMode,omitempty"`
 	// FunctionReference is a reference to the target function.
 	FunctionReference *FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
 	// If CreateIngress is true, router will create an ingress definition.
@@ -112,6 +117,14 @@ func (b *HTTPTriggerSpecApplyConfiguration) WithMethods(values ...string) *HTTPT
 	for i := range values {
 		b.Methods = append(b.Methods, values[i])
 	}
+	return b
+}
+
+// WithInvocationMode sets the InvocationMode field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the InvocationMode field is set to the value of the last call.
+func (b *HTTPTriggerSpecApplyConfiguration) WithInvocationMode(value string) *HTTPTriggerSpecApplyConfiguration {
+	b.InvocationMode = &value
 	return b
 }
 

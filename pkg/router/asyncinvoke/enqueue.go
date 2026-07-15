@@ -33,6 +33,10 @@ type Params struct {
 	// Policy is the resolved retry/age policy stamped into the envelope (zero
 	// fields take dispatcher defaults).
 	Policy Policy
+	// OnSuccess/OnFailure are the resolved destinations stamped into the envelope
+	// (nil = none), so the dispatcher fires them without re-reading the Function.
+	OnSuccess *Destination
+	OnFailure *Destination
 	// QueueName defaults to DefaultQueue when empty. MaxBodyBytes defaults to
 	// DefaultMaxBodyBytes when <= 0.
 	QueueName    string
@@ -65,16 +69,27 @@ func Enqueue(ctx context.Context, q statestore.Queue, w http.ResponseWriter, r *
 		Depth:           p.Depth,
 		FunctionTimeout: p.FunctionTimeout,
 		Policy:          p.Policy,
-	}
-	data, err := env.Encode()
-	if err != nil {
-		return "", fmt.Errorf("asyncinvoke: encoding envelope: %w", err)
+		OnSuccess:       p.OnSuccess,
+		OnFailure:       p.OnFailure,
 	}
 	queue := p.QueueName
 	if queue == "" {
 		queue = DefaultQueue
 	}
-	id, err := q.Enqueue(ctx, queue, statestore.Message{Body: data}, statestore.EnqueueOptions{DedupKey: p.DedupKey})
+	return encodeAndEnqueue(ctx, q, queue, env, statestore.EnqueueOptions{DedupKey: p.DedupKey})
+}
+
+// encodeAndEnqueue is the single write path for the durable envelope wire-shape:
+// it encodes env and enqueues it on queueName, returning the durable message id.
+// Both the initial enqueue and the dispatcher's destination fire go through it so
+// the persist step lives in one place. The wrapped error distinguishes an encode
+// failure from an enqueue failure for the caller's log/metric.
+func encodeAndEnqueue(ctx context.Context, q statestore.Queue, queueName string, env Envelope, opts statestore.EnqueueOptions) (string, error) {
+	data, err := env.Encode()
+	if err != nil {
+		return "", fmt.Errorf("asyncinvoke: encoding envelope: %w", err)
+	}
+	id, err := q.Enqueue(ctx, queueName, statestore.Message{Body: data}, opts)
 	if err != nil {
 		return "", fmt.Errorf("asyncinvoke: enqueue: %w", err)
 	}

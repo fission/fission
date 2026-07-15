@@ -34,6 +34,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.ChecksumApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("ConfigMapReference"):
 		return &corev1.ConfigMapReferenceApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("DestinationRef"):
+		return &corev1.DestinationRefApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Environment"):
 		return &corev1.EnvironmentApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("EnvironmentReference"):
@@ -118,6 +120,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.TimeTriggerStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("ToolConfig"):
 		return &corev1.ToolConfigApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("TopicRef"):
+		return &corev1.TopicRefApplyConfiguration{}
 
 	}
 	return nil

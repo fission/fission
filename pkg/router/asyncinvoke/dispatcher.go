@@ -53,6 +53,11 @@ const (
 	// context, so a settle during graceful drain persists the outcome of finished
 	// work without hanging shutdown.
 	settleTimeout = 15 * time.Second
+
+	// MaxChainDepth bounds the destination chain (invariant A6): a function
+	// destination that would enqueue at a depth above it is dropped. Depth 0 is the
+	// direct caller, so a self-looping onSuccess stops after MaxChainDepth hops.
+	MaxChainDepth = 3
 )
 
 // action is the settle decision for one delivery attempt.
@@ -82,6 +87,20 @@ func classify(res DeliveryResult) action {
 	}
 }
 
+// FunctionConfig is a destination function's resolved async config, used by the
+// dispatcher to build a fired destination invocation's self-contained envelope.
+type FunctionConfig struct {
+	Policy          Policy
+	OnSuccess       *Destination
+	OnFailure       *Destination
+	FunctionTimeout int
+}
+
+// FunctionConfigResolver resolves a function's async config at destination-fire
+// time (a Function-cache read). found is false when the function is absent, so a
+// destination pointing at a deleted function is dropped rather than looping.
+type FunctionConfigResolver func(ctx context.Context, namespace, name string) (FunctionConfig, bool)
+
 // Options configures a Dispatcher. Queue, Deliverer, and Logger are required; the
 // rest default. Now and Rand are injected so timing and backoff jitter are
 // deterministic under test.
@@ -94,6 +113,10 @@ type Options struct {
 	BatchSize     int           // 0 → DefaultBatchSize
 	PollInterval  time.Duration // 0 → DefaultPollInterval
 	LeaseDuration time.Duration // 0 → DefaultLeaseDuration
+
+	// ResolveFunctionConfig resolves a destination function's config when firing a
+	// function destination. nil → function destinations are dropped (logged).
+	ResolveFunctionConfig FunctionConfigResolver
 
 	Now  func() time.Time // nil → time.Now
 	Rand func() float64   // nil → rand/v2 Float64; returns [0,1) for backoff jitter
@@ -113,6 +136,7 @@ type Dispatcher struct {
 	batchSize     int
 	pollInterval  time.Duration
 	leaseDuration time.Duration
+	resolveFn     FunctionConfigResolver
 	now           func() time.Time
 	rand          func() float64
 }
@@ -127,6 +151,7 @@ func New(opts Options) *Dispatcher {
 		batchSize:     opts.BatchSize,
 		pollInterval:  opts.PollInterval,
 		leaseDuration: opts.LeaseDuration,
+		resolveFn:     opts.ResolveFunctionConfig,
 		now:           opts.Now,
 		rand:          opts.Rand,
 	}
@@ -198,14 +223,15 @@ func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) 
 	env, err := Decode(msg.Body)
 	if err != nil {
 		d.logger.Error(err, "async envelope will not decode; dead-lettering", "id", msg.ID)
-		d.kill(sctx, msg, ReasonUndecodable)
+		d.killReason(sctx, msg, ReasonUndecodable) // no envelope → no destination
 		return
 	}
 	policy := resolvePolicy(env.Policy)
 
-	// Dead-letter an invocation that waited past its MaxAge before delivering it.
+	// Dead-letter an invocation that waited past its MaxAge before delivering it —
+	// no delivery happened, so the result envelope carries a zero response.
 	if d.now().Sub(env.EnqueueTime) > policy.MaxAge {
-		d.kill(sctx, msg, ReasonExpired)
+		d.settleFail(sctx, msg, env, DeliveryResult{}, ReasonExpired, ConditionEventAgeExceeded)
 		return
 	}
 
@@ -226,26 +252,38 @@ func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) 
 
 	switch action {
 	case actionAck:
-		d.logSettle("ack", msg.ID, d.q.Ack(sctx, msg.Receipt))
+		d.settleSuccess(sctx, msg, env, res)
 	case actionKill:
-		d.kill(sctx, msg, ReasonHTTP4xx)
+		d.settleFail(sctx, msg, env, res, ReasonHTTP4xx, ConditionHTTP4xx)
 	case actionRetry:
-		d.retry(sctx, msg, env, policy)
+		d.retry(sctx, msg, env, policy, res)
 	}
 }
 
+// settleSuccess acks the delivered message and, only when the Ack actually landed
+// (not a stale receipt — A3), fires the OnSuccess destination. It mirrors
+// settleFail so every settle arm of process is a single settle-then-fire call.
+func (d *Dispatcher) settleSuccess(ctx context.Context, msg statestore.LeasedMessage, env Envelope, res DeliveryResult) {
+	if err := d.q.Ack(ctx, msg.Receipt); err != nil {
+		d.logSettle("ack", msg.ID, err)
+		return // a stale/failed ack must not fire the OnSuccess destination (A3)
+	}
+	d.fireDestination(ctx, env.OnSuccess, env.Depth, d.buildResult(env, msg, ConditionSuccess, res))
+}
+
 // retry either requeues with backoff or dead-letters when the attempt budget is
-// spent or the next attempt would exceed MaxAge. policy is the resolved policy.
-func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, env Envelope, policy Policy) {
+// spent or the next attempt would exceed MaxAge. policy is resolved; res is the
+// last delivery result (for the OnFailure result envelope).
+func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, env Envelope, policy Policy, res DeliveryResult) {
 	if msg.Attempts >= policy.MaxAttempts {
-		d.kill(ctx, msg, statestore.ReasonRetriesExhausted)
+		d.settleFail(ctx, msg, env, res, statestore.ReasonRetriesExhausted, ConditionRetriesExhausted)
 		return
 	}
 	backoff := d.backoff(policy, msg.Attempts)
 	// If the retry would land after MaxAge, dead-letter now rather than requeue
 	// work that can only expire (invariant A4: the reason is the true one).
 	if d.now().Add(backoff).Sub(env.EnqueueTime) > policy.MaxAge {
-		d.kill(ctx, msg, ReasonExpired)
+		d.settleFail(ctx, msg, env, res, ReasonExpired, ConditionEventAgeExceeded)
 		return
 	}
 	if err := d.q.Nack(ctx, msg.Receipt, backoff); err != nil {
@@ -255,15 +293,26 @@ func (d *Dispatcher) retry(ctx context.Context, msg statestore.LeasedMessage, en
 	recordRetry(ctx)
 }
 
-// kill dead-letters the message and, only on a successful settle, records the DLQ
-// counter — a stale-receipt Kill (a newer lease already settled) must not be
-// counted as a dead-letter this delivery caused.
-func (d *Dispatcher) kill(ctx context.Context, msg statestore.LeasedMessage, reason string) {
-	if err := d.q.Kill(ctx, msg.Receipt, reason); err != nil {
-		d.logSettle("kill", msg.ID, err)
+// settleFail dead-letters the message and, only when the Kill actually settled
+// (not a stale receipt — A3), fires the OnFailure destination with the reason's
+// condition.
+func (d *Dispatcher) settleFail(ctx context.Context, msg statestore.LeasedMessage, env Envelope, res DeliveryResult, reason, condition string) {
+	if !d.killReason(ctx, msg, reason) {
 		return
 	}
+	d.fireDestination(ctx, env.OnFailure, env.Depth, d.buildResult(env, msg, condition, res))
+}
+
+// killReason dead-letters the message and, only on a successful settle, records
+// the DLQ counter and returns true — a stale-receipt Kill (a newer lease already
+// settled) must not be counted as a dead-letter or trigger a destination.
+func (d *Dispatcher) killReason(ctx context.Context, msg statestore.LeasedMessage, reason string) bool {
+	if err := d.q.Kill(ctx, msg.Receipt, reason); err != nil {
+		d.logSettle("kill", msg.ID, err)
+		return false
+	}
 	recordDLQ(ctx, reason)
+	return true
 }
 
 // logSettle logs a settle error, quieting the expected stale-receipt case — a
@@ -279,6 +328,102 @@ func (d *Dispatcher) logSettle(op, id string, err error) {
 		return
 	}
 	d.logger.Error(err, op+" failed", "id", id)
+}
+
+// fireDestination invokes a settled invocation's destination. It is best-effort —
+// the primary is already settled, so a failure here cannot un-settle it — but
+// always observable via the destinations metric. depth is the SOURCE invocation's
+// depth; a function destination enqueues at depth+1 and is dropped once the chain
+// would exceed MaxChainDepth (invariant A6).
+func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, depth int, result ResultEnvelope) {
+	if dest == nil {
+		return
+	}
+	if dest.IsTopic() {
+		// Topic destinations are rejected at admission (not yet supported); this
+		// guards a forged or pre-validation envelope.
+		recordDestination(ctx, "topic_unsupported")
+		d.logger.Info("async topic destination not yet supported; dropping",
+			"topic", dest.Topic, "mqType", dest.MQType)
+		return
+	}
+	next := depth + 1
+	// Drop once the chain would exceed MaxChainDepth; the negative/zero guard also
+	// rejects a forged envelope with a corrupt (negative or overflowed) depth, so the
+	// cap holds regardless of provenance (invariant A6).
+	if next <= 0 || next > MaxChainDepth {
+		recordDepthCap(ctx)
+		recordDestination(ctx, "depth_capped")
+		d.logger.Info("async destination chain hit the depth cap; dropping",
+			"function", dest.FunctionName, "depth", next, "cap", MaxChainDepth)
+		return
+	}
+	var (
+		cfg   FunctionConfig
+		found bool
+	)
+	if d.resolveFn != nil {
+		cfg, found = d.resolveFn(ctx, dest.FunctionNamespace, dest.FunctionName)
+	}
+	if !found {
+		// The resolver reports absent OR unresolvable (it logs a real lookup error at
+		// Error itself); either way the destination cannot be fired.
+		recordDestination(ctx, "dropped")
+		d.logger.Info("async destination function unavailable; dropping",
+			"namespace", dest.FunctionNamespace, "function", dest.FunctionName)
+		return
+	}
+	body, err := result.Encode()
+	if err != nil {
+		recordDestination(ctx, "encode_error")
+		d.logger.Error(err, "encoding destination result envelope", "function", dest.FunctionName)
+		return
+	}
+	env := Envelope{
+		Version:         EnvelopeVersion,
+		Namespace:       dest.FunctionNamespace,
+		Function:        dest.FunctionName,
+		Method:          http.MethodPost,
+		Headers:         map[string]string{"Content-Type": "application/json"},
+		Body:            body,
+		EnqueueTime:     d.now(),
+		Depth:           next,
+		FunctionTimeout: cfg.FunctionTimeout,
+		Policy:          cfg.Policy,
+		OnSuccess:       cfg.OnSuccess,
+		OnFailure:       cfg.OnFailure,
+	}
+	if _, err := encodeAndEnqueue(ctx, d.q, d.queueName, env, statestore.EnqueueOptions{}); err != nil {
+		// The wrapped error already says encode-vs-enqueue; the function names the hop.
+		recordDestination(ctx, "enqueue_error")
+		d.logger.Error(err, "enqueuing destination invocation", "function", dest.FunctionName)
+		return
+	}
+	recordDestination(ctx, "enqueued")
+}
+
+// buildResult assembles the Lambda-shaped result envelope for a destination. The
+// request payload is included only when the original body fits MaxPayloadBytes
+// (RequestPayloadOmitted flags the elision); the response payload was captured and
+// truncation-flagged by the deliverer, so a destination can tell partial from whole.
+func (d *Dispatcher) buildResult(env Envelope, msg statestore.LeasedMessage, condition string, res DeliveryResult) ResultEnvelope {
+	re := ResultEnvelope{
+		Version: EnvelopeVersion,
+		RequestContext: RequestContext{
+			InvocationID: msg.ID,
+			FunctionRef:  env.Namespace + "/" + env.Function,
+			Condition:    condition,
+			Attempts:     msg.Attempts,
+		},
+		ResponseContext: ResponseContext{StatusCode: res.StatusCode, Truncated: res.BodyTruncated},
+		ResponsePayload: res.Body,
+	}
+	if len(env.Body) <= MaxPayloadBytes {
+		re.RequestPayload = env.Body
+	} else {
+		re.RequestPayloadOmitted = true
+	}
+	return re
 }
 
 // deliveryTimeout bounds one delivery attempt: the function timeout plus a buffer,
