@@ -29,6 +29,8 @@ var (
 		"Count of best-effort response-topic publishes after successful deliveries, labeled by outcome (published/error)")
 	eventingGaps = metrics.Int64Counter("fission_eventing_gap_events_total",
 		"Count of topic events a subscription found already trimmed when it resumed — retention loss observed at the subscriber that suffered it")
+	eventingLag = metrics.Int64Gauge("fission_eventing_lag",
+		"Per-trigger consumer lag (stream head minus committed cursor) — the scaling and alerting signal; refreshed each reaper tick")
 )
 
 func recordDelivery(ctx context.Context, condition string) {
@@ -53,4 +55,10 @@ func recordResponseTopic(ctx context.Context, outcome string) {
 
 func recordGap(ctx context.Context, n int64) {
 	eventingGaps.Add(ctx, n)
+}
+
+func recordLag(ctx context.Context, namespace, trigger string, lag int64) {
+	eventingLag.Record(ctx, lag, metric.WithAttributes(
+		attribute.String("namespace", namespace),
+		attribute.String("trigger", trigger)))
 }
