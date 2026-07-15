@@ -65,6 +65,37 @@ func TestStatestorePublisherUnsupportedType(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUnsupportedMQType)
 }
 
+func TestStatestorePublisherRejectsInvalidInputs(t *testing.T) {
+	t.Parallel()
+	p := NewStatestorePublisher(memEventLog(t))
+	// Sink-side defense in depth: inputs that would break the stream-name
+	// injectivity are rejected even though admission already validates them.
+	for name, call := range map[string]func() error{
+		"empty namespace": func() error { return p.Publish(t.Context(), "", fv1.MessageQueueTypeStatestore, "t", "", nil) },
+		"slash namespace": func() error { return p.Publish(t.Context(), "a/b", fv1.MessageQueueTypeStatestore, "t", "", nil) },
+		"empty topic":     func() error { return p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "", "", nil) },
+		"slash topic":     func() error { return p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "a/b", "", nil) },
+		"space topic":     func() error { return p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "a b", "", nil) },
+	} {
+		assert.Errorf(t, call(), "%s must be rejected at the sink", name)
+	}
+}
+
+func TestStatestorePublisherBacklogCap(t *testing.T) {
+	t.Parallel()
+	el := memEventLog(t)
+	p := &statestorePublisher{el: el, maxBacklog: 2}
+
+	require.NoError(t, p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "t", "", []byte("1")))
+	require.NoError(t, p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "t", "", []byte("2")))
+	err := p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "t", "", []byte("3"))
+	require.Error(t, err, "a topic at the backlog cap rejects loudly, never grows silently")
+	assert.ErrorIs(t, err, ErrTopicBacklogCap)
+
+	// Other topics are unaffected (the cap is per-stream).
+	require.NoError(t, p.Publish(t.Context(), "ns", fv1.MessageQueueTypeStatestore, "other", "", []byte("x")))
+}
+
 // erroringEventLog fails every Append, to prove E1: a failed publish surfaces as
 // an error, never a silent accept.
 type erroringEventLog struct{ statestore.EventLog }
@@ -72,6 +103,8 @@ type erroringEventLog struct{ statestore.EventLog }
 func (erroringEventLog) Append(context.Context, string, int64, []statestore.Event) (int64, error) {
 	return 0, errors.New("store down")
 }
+
+func (erroringEventLog) Head(context.Context, string) (int64, error) { return 0, nil }
 
 func TestStatestorePublisherE1FailsLoud(t *testing.T) {
 	t.Parallel()

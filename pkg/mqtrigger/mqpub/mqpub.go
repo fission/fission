@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
@@ -26,6 +27,21 @@ import (
 // does not implement. Until the RFC-0027 egress phase lands, only the statestore
 // provider exists, so broker types map to this error.
 var ErrUnsupportedMQType = errors.New("mqpub: unsupported message-queue type")
+
+// ErrTopicBacklogCap is returned when a topic stream has reached the phase-1
+// backlog cap (see DefaultMaxTopicBacklog).
+var ErrTopicBacklogCap = errors.New("mqpub: topic backlog cap reached")
+
+// DefaultMaxTopicBacklog bounds a topic stream's head in phase 1. Nothing
+// consumes or trims topics until the P2 subscriber + retention reaper land, so
+// every append is permanent — an unbounded stream on the shared store is a
+// cluster-wide resource hazard (a full embedded PVC fails every tenant's
+// enqueue). A publish to a topic at the cap is rejected loudly and counted
+// ("capped"), never silently dropped. The check reads Head first, so the cap is
+// soft under concurrent publishers (bounded overshoot by in-flight appends) —
+// a resource guard, not an exact quota. P2's retention machinery supersedes it
+// with min-cursor trim + age/size backstops and a tunable knob.
+const DefaultMaxTopicBacklog = 10000
 
 // TopicPublisher durably publishes a payload to a namespaced topic on a
 // message-queue provider.
@@ -55,26 +71,53 @@ func StreamForTopic(namespace, topic string) string {
 
 // statestorePublisher publishes topics onto the RFC-0021 EventLog.
 type statestorePublisher struct {
-	el statestore.EventLog
+	el         statestore.EventLog
+	maxBacklog int64
 }
 
 // NewStatestorePublisher builds the built-in, broker-free TopicPublisher over an
-// EventLog capability.
+// EventLog capability, with the phase-1 DefaultMaxTopicBacklog cap.
 func NewStatestorePublisher(el statestore.EventLog) TopicPublisher {
-	return &statestorePublisher{el: el}
+	return &statestorePublisher{el: el, maxBacklog: DefaultMaxTopicBacklog}
 }
 
 // Publish implements TopicPublisher: one AppendAny of one event. AppendAny is a
 // single atomic round-trip (no client CAS loop), and Append returns only after
 // the write is durable, so a nil error IS the durability guarantee (E1).
+//
+// Inputs are re-validated at this sink (defense in depth — admission is the
+// authoritative gate, but the stream-name injectivity that namespace isolation
+// rests on must not depend on a single distant layer).
 func (p *statestorePublisher) Publish(ctx context.Context, namespace, mqType, topic, contentType string, payload []byte) error {
 	if mqType != fv1.MessageQueueTypeStatestore {
-		recordPublish(ctx, mqType, "unsupported")
+		// Fixed label value: mqType is caller-supplied, and raw strings in a
+		// metric label would mint unbounded time series (the error carries the
+		// exact type).
+		recordPublish(ctx, "unknown", "unsupported")
 		return fmt.Errorf("%w: %q (statestore only until the egress phase)", ErrUnsupportedMQType, mqType)
 	}
-	_, err := p.el.Append(ctx, StreamForTopic(namespace, topic), statestore.AppendAny,
-		[]statestore.Event{{Type: contentType, Payload: payload}})
+	if namespace == "" || strings.Contains(namespace, "/") {
+		recordPublish(ctx, mqType, "invalid")
+		return fmt.Errorf("mqpub: invalid namespace %q", namespace)
+	}
+	if err := fv1.ValidateTopicName("topic", topic); err != nil {
+		recordPublish(ctx, mqType, "invalid")
+		return fmt.Errorf("mqpub: invalid topic name: %w", err)
+	}
+	stream := StreamForTopic(namespace, topic)
+	// Phase-1 backlog cap (soft — see DefaultMaxTopicBacklog): reject loudly
+	// rather than grow the shared store unboundedly with no consumer to trim it.
+	head, err := p.el.Head(ctx, stream)
 	if err != nil {
+		recordPublish(ctx, mqType, "error")
+		return fmt.Errorf("mqpub: reading topic head %s/%s: %w", namespace, topic, err)
+	}
+	if head >= p.maxBacklog {
+		recordPublish(ctx, mqType, "capped")
+		return fmt.Errorf("%w: topic %s/%s at %d events", ErrTopicBacklogCap, namespace, topic, head)
+	}
+	if _, err := p.el.Append(ctx, stream, statestore.AppendAny,
+		[]statestore.Event{{Type: contentType, Payload: payload}}); err != nil {
 		recordPublish(ctx, mqType, "error")
 		return fmt.Errorf("mqpub: publishing to topic %s/%s: %w", namespace, topic, err)
 	}

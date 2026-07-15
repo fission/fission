@@ -87,6 +87,12 @@ func (e *eventLog) Append(ctx context.Context, stream string, expectedSeq int64,
 		}
 		return nil
 	})
+	if err != nil && !errors.Is(err, statestore.ErrVersionConflict) {
+		// The tx rolled back: a head captured before a failed insert/commit names
+		// a sequence that never existed. The contract defines the returned head
+		// only for nil or ErrVersionConflict.
+		head = 0
+	}
 	return head, err
 }
 

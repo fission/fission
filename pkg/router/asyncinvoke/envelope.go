@@ -166,6 +166,13 @@ type RequestContext struct {
 	FunctionRef  string `json:"functionRef"` // "<namespace>/<name>"
 	Condition    string `json:"condition"`
 	Attempts     int    `json:"attempts"`
+	// Depth is the source invocation's destination-chain depth. Stamped now so a
+	// future consumer that resumes the chain asynchronously (an RFC-0027 P2+
+	// design choice) can enforce the A6 cap across the topic hop without a wire
+	// migration of already-persisted events. The P2 statestore MQ trigger
+	// delivers synchronously, which fires no destinations — so no loop exists
+	// today; this field is the insurance that keeps it that way if that changes.
+	Depth int `json:"depth"`
 }
 
 // ResponseContext carries the function's delivery response status.

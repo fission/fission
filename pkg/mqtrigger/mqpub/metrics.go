@@ -17,7 +17,7 @@ import (
 // meters): every outcome is labeled, so a dropped publish is countable, never
 // silent.
 var eventingPublished = metrics.Int64Counter("fission_eventing_published_total",
-	"Count of topic publishes, labeled by provider and outcome (published/error/unsupported)")
+	"Count of topic publishes, labeled by provider and outcome (published/error/invalid/capped/unsupported)")
 
 func recordPublish(ctx context.Context, provider, outcome string) {
 	eventingPublished.Add(ctx, 1, metric.WithAttributes(

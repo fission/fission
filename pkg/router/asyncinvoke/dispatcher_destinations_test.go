@@ -145,10 +145,11 @@ func TestBuildResultFlagsTruncationAndOmission(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
 
 	big := bytes.Repeat([]byte("a"), MaxPayloadBytes+1)
-	env := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: big}
+	env := Envelope{Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: big, Depth: 2}
 	_, msg := leaseOne(t, q, env)
 	re := d.buildResult(env, msg, ConditionSuccess, DeliveryResult{StatusCode: 200, Body: []byte("partial"), BodyTruncated: true})
 
+	assert.Equal(t, 2, re.RequestContext.Depth, "the chain depth is stamped for future async consumers (no wire migration)")
 	assert.True(t, re.RequestPayloadOmitted, "over-cap request body is omitted and flagged")
 	assert.Nil(t, re.RequestPayload, "omitted request payload is not embedded")
 	assert.True(t, re.ResponseContext.Truncated, "truncated response is flagged")

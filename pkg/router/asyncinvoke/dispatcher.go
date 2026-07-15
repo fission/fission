@@ -425,16 +425,29 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 // egress phase; admission enforces that, so a broker type here is a forged or
 // legacy envelope and is dropped, counted, and logged.
 func (d *Dispatcher) publishTopicDestination(ctx context.Context, dest *Destination, result ResultEnvelope) {
-	if d.publishFn == nil || dest.MQType != MQTypeStatestore {
+	if dest.MQType != MQTypeStatestore {
+		// Admission enforces the type, so this is a forged or legacy envelope —
+		// expected-shaped noise, dropped at Info.
 		recordDestination(ctx, "topic_unsupported")
 		d.logger.Info("async topic destination unsupported; dropping",
 			"namespace", dest.FunctionNamespace, "topic", dest.Topic, "mqType", dest.MQType)
 		return
 	}
+	if d.publishFn == nil {
+		// Admission ACCEPTED this destination and the user was promised delivery:
+		// a nil publisher here is a wiring defect in the embedder, not a forged
+		// envelope — a distinct outcome and an Error, so a dashboard never reads
+		// it as expected topic_unsupported noise.
+		recordDestination(ctx, "publisher_unconfigured")
+		d.logger.Error(nil, "async topic destination dropped: no topic publisher wired (dispatcher misconfiguration)",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic)
+		return
+	}
 	body, err := result.Encode()
 	if err != nil {
 		recordDestination(ctx, "encode_error")
-		d.logger.Error(err, "encoding destination result envelope", "topic", dest.Topic)
+		d.logger.Error(err, "encoding destination result envelope",
+			"namespace", dest.FunctionNamespace, "topic", dest.Topic)
 		return
 	}
 	// The result envelope is JSON by construction, so the delivery Content-Type a
@@ -460,6 +473,7 @@ func (d *Dispatcher) buildResult(env Envelope, msg statestore.LeasedMessage, con
 			FunctionRef:  env.Namespace + "/" + env.Function,
 			Condition:    condition,
 			Attempts:     msg.Attempts,
+			Depth:        env.Depth,
 		},
 		ResponseContext: ResponseContext{StatusCode: res.StatusCode, Truncated: res.BodyTruncated},
 		ResponsePayload: res.Body,

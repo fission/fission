@@ -29,7 +29,10 @@ type KVStore interface {
 // events are independent, so serializing publishers through client-side CAS
 // retries would self-inflict contention under fan-in (the eventlogsub.tla
 // model's premise). CAS callers (the RFC-0022 fold, where interleave prevention
-// is the point) keep passing a real head.
+// is the point) keep passing a real head — and their streams' consumers rely on
+// it: AppendAny on a CAS-disciplined stream silently defeats its interleave
+// protection (the wire cannot tell stream kinds apart), so it belongs ONLY on
+// independent-event streams such as topic/*.
 const AppendAny int64 = -1
 
 // EventLog is an append-only, ordered, replayable stream with optimistic
@@ -41,7 +44,8 @@ type EventLog interface {
 	// sequence, returning the new head sequence. A mismatch returns
 	// ErrVersionConflict and appends nothing (use Head to resynchronize).
 	// expectedSeq = AppendAny skips the head check and appends unconditionally
-	// at the current head.
+	// at the current head. The returned head is meaningful only when err is nil
+	// or ErrVersionConflict; on any other error it is 0.
 	Append(ctx context.Context, stream string, expectedSeq int64, events []Event) (int64, error)
 	// Read returns up to limit events with Seq > fromSeq, in order.
 	Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]Event, error)

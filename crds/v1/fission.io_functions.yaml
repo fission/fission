@@ -840,12 +840,17 @@ spec:
                           topic.
                         properties:
                           messageQueueType:
-                            description: MessageQueueType selects the broker (e.g.
-                              kafka).
+                            description: |-
+                              MessageQueueType selects the provider: "statestore" (the RFC-0027
+                              built-in, no broker) now; broker types (e.g. kafka) with the egress phase.
                             type: string
                           topic:
-                            description: Topic is the topic the result envelope is
-                              published to.
+                            description: |-
+                              Topic is the topic the result envelope is published to. The schema bounds
+                              mirror ValidateTopicName: a stream-safe charset excluding "/" so the
+                              topic/<namespace>/<topic> mapping cannot alias across namespaces.
+                            maxLength: 249
+                            pattern: ^[a-zA-Z0-9._-]+$
                             type: string
                         required:
                         - messageQueueType
@@ -902,12 +907,17 @@ spec:
                           topic.
                         properties:
                           messageQueueType:
-                            description: MessageQueueType selects the broker (e.g.
-                              kafka).
+                            description: |-
+                              MessageQueueType selects the provider: "statestore" (the RFC-0027
+                              built-in, no broker) now; broker types (e.g. kafka) with the egress phase.
                             type: string
                           topic:
-                            description: Topic is the topic the result envelope is
-                              published to.
+                            description: |-
+                              Topic is the topic the result envelope is published to. The schema bounds
+                              mirror ValidateTopicName: a stream-safe charset excluding "/" so the
+                              topic/<namespace>/<topic> mapping cannot alias across namespaces.
+                            maxLength: 249
+                            pattern: ^[a-zA-Z0-9._-]+$
                             type: string
                         required:
                         - messageQueueType

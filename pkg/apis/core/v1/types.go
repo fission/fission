@@ -717,8 +717,9 @@ type (
 	// DestinationRef routes an async invocation's result to exactly one target: a
 	// Function (invoked async through the same machinery, depth-capped) or a Topic
 	// (published to a message queue). Exactly one of Function/Topic must be set.
-	// Topic destinations are declared but not yet implemented — the webhook rejects
-	// them until the broker-producer path lands (a later RFC-0024 step).
+	// Topic destinations on the built-in statestore provider are supported
+	// (RFC-0027); broker types are rejected by the webhook until the egress phase
+	// lands.
 	DestinationRef struct {
 		// Function is a same-namespace function destination, invoked asynchronously
 		// with the result envelope as its body (depth-capped to stop runaway chains).
@@ -731,11 +732,18 @@ type (
 	}
 
 	// TopicRef is a message-queue topic destination for an async invocation result.
+	// Topics are namespace-scoped: the destination publishes to the source
+	// function's namespace (RFC-0024 rule R6).
 	TopicRef struct {
-		// MessageQueueType selects the broker (e.g. kafka).
+		// MessageQueueType selects the provider: "statestore" (the RFC-0027
+		// built-in, no broker) now; broker types (e.g. kafka) with the egress phase.
 		MessageQueueType MessageQueueType `json:"messageQueueType"`
 
-		// Topic is the topic the result envelope is published to.
+		// Topic is the topic the result envelope is published to. The schema bounds
+		// mirror ValidateTopicName: a stream-safe charset excluding "/" so the
+		// topic/<namespace>/<topic> mapping cannot alias across namespaces.
+		// +kubebuilder:validation:MaxLength=249
+		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._-]+$`
 		Topic string `json:"topic"`
 	}
 

@@ -247,6 +247,46 @@ func runEventLog(t *testing.T, newCaps Factory) {
 		require.EqualValues(t, 1, head)
 	})
 
+	t.Run("CASVersusAppendAnyRace", func(t *testing.T) {
+		el := eventLogOrSkip(t, newCaps)
+		ctx := t.Context()
+		// CAS callers keep their interleave protection while AppendAny writers
+		// race them: every AppendAny lands; a CAS at a stale head conflicts. At
+		// most one stale-head CAS can win (only by executing first), and the
+		// final head accounts for exactly the successful writes — gapless.
+		const anyWriters = 8
+		const casWriters = 4
+		var casWins, anyFailures atomic.Int64
+		var wg sync.WaitGroup
+		for range anyWriters {
+			wg.Go(func() {
+				if _, err := el.Append(ctx, "mixedrace", statestore.AppendAny, []statestore.Event{{Type: "any"}}); err != nil {
+					anyFailures.Add(1)
+				}
+			})
+		}
+		for range casWriters {
+			wg.Go(func() {
+				if _, err := el.Append(ctx, "mixedrace", 0, []statestore.Event{{Type: "cas"}}); err == nil {
+					casWins.Add(1)
+				} else {
+					require.ErrorIs(t, err, statestore.ErrVersionConflict, "a losing CAS gets the conflict sentinel, not a raw error")
+				}
+			})
+		}
+		wg.Wait()
+		require.Zero(t, anyFailures.Load(), "AppendAny never conflicts, even racing CAS writers")
+		require.LessOrEqual(t, casWins.Load(), int64(1), "at most one CAS-at-0 can win")
+
+		want := int64(anyWriters) + casWins.Load()
+		head, err := el.Head(ctx, "mixedrace")
+		require.NoError(t, err)
+		require.Equal(t, want, head)
+		evs, err := el.Read(ctx, "mixedrace", 0, 0)
+		require.NoError(t, err)
+		require.Len(t, evs, int(want), "the log holds exactly the successful writes, gapless")
+	})
+
 	t.Run("ConcurrentAppendAnyAllWin", func(t *testing.T) {
 		el := eventLogOrSkip(t, newCaps)
 		ctx := t.Context()
