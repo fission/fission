@@ -7,6 +7,7 @@ package sqlstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/fission/fission/pkg/statestore"
 )
@@ -23,36 +24,60 @@ type eventLog struct{ s *Store }
 // reserves the [expectedSeq+1, expectedSeq+N] slots (the events then insert with
 // no primary-key contention) and the loser gets ErrVersionConflict — never a raw
 // unique-violation a consumer wouldn't recognize.
+//
+// expectedSeq = AppendAny drops the WHERE head = ? re-check (RFC-0027 topic
+// publishers): the UPDATE is then an unconditional atomic increment, racing
+// appenders serialize on the same row lock, and EVERY writer reserves its own
+// disjoint slot range — no conflict, no client retry loop. The reserved base is
+// read back inside the transaction (own-write visibility), so the insert seqs
+// are exact under concurrency.
 func (e *eventLog) Append(ctx context.Context, stream string, expectedSeq int64, events []statestore.Event) (int64, error) {
 	var head int64
 	err := e.s.inTx(ctx, func(tx *sql.Tx) error {
-		// Ensure the stream row exists (idempotent), then CAS its head.
+		// Ensure the stream row exists (idempotent), then advance its head.
 		if _, ierr := tx.ExecContext(ctx, e.s.rebind(
 			`INSERT INTO state_streams (stream, head) VALUES (?, 0) ON CONFLICT (stream) DO NOTHING`),
 			stream,
 		); ierr != nil {
 			return ierr
 		}
-		res, uerr := tx.ExecContext(ctx, e.s.rebind(
-			`UPDATE state_streams SET head = head + ? WHERE stream = ? AND head = ?`),
-			int64(len(events)), stream, expectedSeq,
-		)
-		if uerr != nil {
-			return uerr
-		}
-		n, aerr := res.RowsAffected()
-		if aerr != nil {
-			return aerr
-		}
-		if n == 0 {
-			// CAS lost: report the current head so the caller can re-read.
-			if serr := tx.QueryRowContext(ctx, e.s.rebind(`SELECT head FROM state_streams WHERE stream = ?`), stream).Scan(&head); serr != nil {
+		var base int64
+		if expectedSeq == statestore.AppendAny {
+			if _, uerr := tx.ExecContext(ctx, e.s.rebind(
+				`UPDATE state_streams SET head = head + ? WHERE stream = ?`),
+				int64(len(events)), stream,
+			); uerr != nil {
+				return uerr
+			}
+			if serr := tx.QueryRowContext(ctx, e.s.rebind(
+				`SELECT head FROM state_streams WHERE stream = ?`), stream).Scan(&head); serr != nil {
 				return serr
 			}
-			return statestore.ErrVersionConflict
+			base = head - int64(len(events))
+		} else {
+			res, uerr := tx.ExecContext(ctx, e.s.rebind(
+				`UPDATE state_streams SET head = head + ? WHERE stream = ? AND head = ?`),
+				int64(len(events)), stream, expectedSeq,
+			)
+			if uerr != nil {
+				return uerr
+			}
+			n, aerr := res.RowsAffected()
+			if aerr != nil {
+				return aerr
+			}
+			if n == 0 {
+				// CAS lost: report the current head so the caller can re-read.
+				if serr := tx.QueryRowContext(ctx, e.s.rebind(`SELECT head FROM state_streams WHERE stream = ?`), stream).Scan(&head); serr != nil {
+					return serr
+				}
+				return statestore.ErrVersionConflict
+			}
+			base = expectedSeq
+			head = expectedSeq + int64(len(events))
 		}
 		now := nowNanos()
-		seq := expectedSeq
+		seq := base
 		insertSQL := e.s.rebind(`INSERT INTO state_events (stream, seq, type, payload, at) VALUES (?, ?, ?, ?, ?)`)
 		for _, ev := range events {
 			seq++
@@ -60,10 +85,23 @@ func (e *eventLog) Append(ctx context.Context, stream string, expectedSeq int64,
 				return ierr
 			}
 		}
-		head = expectedSeq + int64(len(events))
 		return nil
 	})
 	return head, err
+}
+
+// Head implements statestore.EventLog: the stream's current head sequence, 0 for
+// an absent stream, with no side effects (it does not create the stream row).
+func (e *eventLog) Head(ctx context.Context, stream string) (int64, error) {
+	var head int64
+	err := e.s.queryRow(ctx, `SELECT head FROM state_streams WHERE stream = ?`, stream).Scan(&head)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return head, nil
 }
 
 // Read implements statestore.EventLog: up to limit events with seq > fromSeq, in

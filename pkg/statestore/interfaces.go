@@ -23,16 +23,33 @@ type KVStore interface {
 	List(ctx context.Context, s Scope, prefix string, page Page) (KeyPage, error)
 }
 
+// AppendAny is the sentinel expectedSeq for EventLog.Append that appends
+// unconditionally at the stream's current head — an atomic server-side
+// increment, not a compare-and-swap. Topic publishers use it (RFC-0027): topic
+// events are independent, so serializing publishers through client-side CAS
+// retries would self-inflict contention under fan-in (the eventlogsub.tla
+// model's premise). CAS callers (the RFC-0022 fold, where interleave prevention
+// is the point) keep passing a real head.
+const AppendAny int64 = -1
+
 // EventLog is an append-only, ordered, replayable stream with optimistic
 // concurrency: Append succeeds only when expectedSeq equals the stream head, so
-// concurrent appenders get ErrVersionConflict instead of interleaving.
+// concurrent appenders get ErrVersionConflict instead of interleaving —
+// unless the caller opts out of the CAS with AppendAny.
 type EventLog interface {
 	// Append atomically appends events when expectedSeq equals the current head
 	// sequence, returning the new head sequence. A mismatch returns
-	// ErrVersionConflict and appends nothing.
+	// ErrVersionConflict and appends nothing (use Head to resynchronize).
+	// expectedSeq = AppendAny skips the head check and appends unconditionally
+	// at the current head.
 	Append(ctx context.Context, stream string, expectedSeq int64, events []Event) (int64, error)
 	// Read returns up to limit events with Seq > fromSeq, in order.
 	Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]Event, error)
+	// Head returns the stream's current head sequence (0 for an absent stream),
+	// with no side effects. It backs start-at-head topic subscription and the
+	// consumer-lag gauge (RFC-0027), and lets a CAS caller resynchronize after
+	// ErrVersionConflict without walking the log.
+	Head(ctx context.Context, stream string) (int64, error)
 	// Trim drops events with Seq < belowSeq (history GC).
 	Trim(ctx context.Context, stream string, belowSeq int64) error
 }

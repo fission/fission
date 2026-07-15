@@ -33,6 +33,7 @@ const (
 	PathEventAppend     = "/v1/eventlog/append"
 	PathEventRead       = "/v1/eventlog/read"
 	PathEventTrim       = "/v1/eventlog/trim"
+	PathEventHead       = "/v1/eventlog/head"
 	PathQueueEnqueue    = "/v1/queue/enqueue"
 	PathQueueLease      = "/v1/queue/lease"
 	PathQueueAck        = "/v1/queue/ack"
@@ -160,6 +161,12 @@ type EventReadResp struct {
 type EventTrimReq struct {
 	Stream   string `json:"stream"`
 	BelowSeq int64  `json:"belowSeq"`
+}
+type EventHeadReq struct {
+	Stream string `json:"stream"`
+}
+type EventHeadResp struct {
+	Head int64 `json:"head"`
 }
 
 // --- Queue ---
