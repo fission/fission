@@ -534,7 +534,22 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		if elerr != nil {
 			return fmt.Errorf("async invocation: statestore eventlog capability: %w", elerr)
 		}
-		topicPublisher := mqpub.NewStatestorePublisher(eventLog)
+		// statestore topics append directly; broker topics (kafka) become durable
+		// egress jobs on mq-egress-<type>, executed by that broker head's egress
+		// loop — SDKs and credentials never enter the router. The publisher's
+		// unsupported-type sentinel is translated to the dispatcher's own so the
+		// dispatcher can classify without importing mqpub.
+		topicPublisher := mqpub.NewMultiPublisher(
+			mqpub.NewStatestorePublisher(eventLog),
+			mqpub.NewEgressPublisher(queue, fv1.MessageQueueTypeKafka),
+		)
+		publishTopic := func(pctx context.Context, ns, mqType, topic, contentType string, payload []byte) error {
+			err := topicPublisher.Publish(pctx, ns, mqType, topic, contentType, payload)
+			if errors.Is(err, mqpub.ErrUnsupportedMQType) {
+				return fmt.Errorf("%w: %w", asyncinvoke.ErrTopicUnsupported, err)
+			}
+			return err
+		}
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
@@ -545,7 +560,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			Deliverer:             deliverer,
 			Logger:                logger.WithName("async_dispatcher"),
 			ResolveFunctionConfig: newFunctionConfigResolver(crMgr.GetClient(), logger),
-			PublishTopic:          topicPublisher.Publish,
+			PublishTopic:          publishTopic,
 		})
 		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
 			_ = dispatcher.Run(rctx) // returns only on ctx cancellation

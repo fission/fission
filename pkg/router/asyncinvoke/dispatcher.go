@@ -109,10 +109,17 @@ type FunctionConfigResolver func(ctx context.Context, namespace, name string) (F
 type TopicPublishFunc func(ctx context.Context, namespace, mqType, topic, contentType string, payload []byte) error
 
 // MQTypeStatestore mirrors fv1.MessageQueueTypeStatestore without importing the
-// CRD package: the RFC-0027 built-in provider, the only topic type the
-// dispatcher publishes in phase 1 (admission enforces it; this is the envelope-
-// level guard against a forged or legacy record).
+// CRD package: the RFC-0027 built-in provider.
 const MQTypeStatestore = "statestore"
+
+// ErrTopicUnsupported is the sentinel a TopicPublishFunc wraps when handed an
+// MQ type it has no publish path for. The dispatcher counts it as
+// topic_unsupported (a forged or legacy envelope — admission enforces the
+// supported set) instead of publish_error, so operational-failure dashboards
+// don't ingest expected-shaped noise. The embedder translates its publisher's
+// own sentinel (mqpub.ErrUnsupportedMQType) to this one at wiring time — this
+// package stays free of mqpub, as above.
+var ErrTopicUnsupported = errors.New("asyncinvoke: unsupported topic mq type")
 
 // Options configures a Dispatcher. Queue, Deliverer, and Logger are required; the
 // rest default. Now and Rand are injected so timing and backoff jitter are
@@ -418,21 +425,13 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 }
 
 // publishTopicDestination fires a topic destination: the result envelope is
-// published to the namespaced statestore topic (RFC-0027 phase 1). A topic is a
-// LEAF — it terminates the chain, so the MaxChainDepth accounting does not apply
-// (a function consuming the topic starts a fresh chain at depth 0: it is a new
-// invocation, not a continuation). Broker types stay unsupported until the
-// egress phase; admission enforces that, so a broker type here is a forged or
-// legacy envelope and is dropped, counted, and logged.
+// published to the namespaced topic — a direct statestore append for the
+// built-in type, a durable egress-queue enqueue for broker types (RFC-0027
+// egress; which types exist is the publisher's knowledge, not this loop's). A
+// topic is a LEAF — it terminates the chain, so the MaxChainDepth accounting
+// does not apply (a function consuming the topic starts a fresh chain at depth
+// 0: it is a new invocation, not a continuation).
 func (d *Dispatcher) publishTopicDestination(ctx context.Context, dest *Destination, result ResultEnvelope) {
-	if dest.MQType != MQTypeStatestore {
-		// Admission enforces the type, so this is a forged or legacy envelope —
-		// expected-shaped noise, dropped at Info.
-		recordDestination(ctx, "topic_unsupported")
-		d.logger.Info("async topic destination unsupported; dropping",
-			"namespace", dest.FunctionNamespace, "topic", dest.Topic, "mqType", dest.MQType)
-		return
-	}
 	if d.publishFn == nil {
 		// Admission ACCEPTED this destination and the user was promised delivery:
 		// a nil publisher here is a wiring defect in the embedder, not a forged
@@ -453,6 +452,15 @@ func (d *Dispatcher) publishTopicDestination(ctx context.Context, dest *Destinat
 	// The result envelope is JSON by construction, so the delivery Content-Type a
 	// consuming trigger replays is application/json.
 	if err := d.publishFn(ctx, dest.FunctionNamespace, dest.MQType, dest.Topic, "application/json", body); err != nil {
+		if errors.Is(err, ErrTopicUnsupported) {
+			// Admission enforces the supported set, so this is a forged or legacy
+			// envelope — expected-shaped noise, dropped at Info (distinct from an
+			// operational publish failure below).
+			recordDestination(ctx, "topic_unsupported")
+			d.logger.Info("async topic destination unsupported; dropping",
+				"namespace", dest.FunctionNamespace, "topic", dest.Topic, "mqType", dest.MQType)
+			return
+		}
 		recordDestination(ctx, "publish_error")
 		d.logger.Error(err, "publishing destination result to topic",
 			"namespace", dest.FunctionNamespace, "topic", dest.Topic)

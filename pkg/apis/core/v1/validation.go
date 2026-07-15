@@ -472,13 +472,23 @@ func (d *DestinationRef) Validate(field string) error {
 // topicNameRegexp bounds statestore topic names to a stream-safe charset.
 var topicNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
-// Validate checks a topic destination: only the built-in statestore provider is
-// supported until the RFC-0027 egress phase lands, and the topic name must be
-// safe in the namespaced stream mapping topic/<ns>/<topic>.
+// topicDestinationTypes are the MQ types a topic destination may target: the
+// built-in statestore provider (direct EventLog publish) and the broker types
+// whose classic heads run an RFC-0027 egress consumer. KEDA-only types (e.g.
+// aws-sqs-queue) have no classic head and therefore no egress loop — rejected.
+var topicDestinationTypes = map[MessageQueueType]struct{}{
+	MessageQueueTypeStatestore: {},
+	MessageQueueTypeKafka:      {},
+}
+
+// Validate checks a topic destination: the MQ type must have a publish path
+// (statestore direct, or a broker egress consumer), and the topic name must be
+// safe in the namespaced stream mapping topic/<ns>/<topic> (the same grammar is
+// kept for broker topics — it is a subset of kafka's own).
 func (tr *TopicRef) Validate(field string) error {
-	if tr.MessageQueueType != MessageQueueTypeStatestore {
+	if _, ok := topicDestinationTypes[tr.MessageQueueType]; !ok {
 		return MakeValidationErr(ErrorInvalidValue, field+".messageQueueType", tr.MessageQueueType,
-			fmt.Sprintf("only %q topic destinations are supported (broker topics arrive with the RFC-0027 egress phase)", MessageQueueTypeStatestore))
+			fmt.Sprintf("topic destinations support %q (built-in) and %q (broker egress)", MessageQueueTypeStatestore, MessageQueueTypeKafka))
 	}
 	return ValidateTopicName(field+".topic", tr.Topic)
 }

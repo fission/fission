@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -256,27 +257,29 @@ func TestFireDestinationTopicPublishesStatestore(t *testing.T) {
 	assert.Empty(t, l)
 }
 
-// TestFireDestinationTopicUnsupported: broker types (admission-rejected, so only
-// a forged/legacy envelope carries one) and a nil publisher both drop the
-// destination without publishing or enqueuing.
+// TestFireDestinationTopicUnsupported: the dispatcher forwards EVERY topic type
+// to the publisher (which types have a publish path is the publisher's
+// knowledge — egress phase); an ErrTopicUnsupported-wrapped failure and a nil
+// publisher both drop the destination without enqueuing.
 func TestFireDestinationTopicUnsupported(t *testing.T) {
 	t.Parallel()
 	q := memQueue(t)
-	rec := &publishRecorder{}
+	rec := &publishRecorder{err: fmt.Errorf("%w: no head for it", ErrTopicUnsupported)}
 	d := destDispatcher(q, scriptedDeliverer{}, time.Unix(1, 0), resolverFor(FunctionConfig{}))
 	d.publishFn = rec.publish
 
-	// Broker type → dropped, not published.
-	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: "kafka"}, 0, ResultEnvelope{})
-	assert.Empty(t, rec.recorded(), "broker topic types are unsupported until the egress phase")
+	// A type without a publish path reaches the publisher and is dropped on its
+	// sentinel (classification is error-driven, not a dispatcher-local list).
+	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: "nats-jetstream"}, 0, ResultEnvelope{})
+	require.Len(t, rec.recorded(), 1, "the publisher decides supportedness — the dispatcher must forward")
 
-	// No publisher wired (feature off) → statestore topics drop too.
+	// No publisher wired (feature off) → topics drop without a call.
 	d.publishFn = nil
 	d.fireDestination(context.Background(), &Destination{FunctionNamespace: "ns", Topic: "t", MQType: MQTypeStatestore}, 0, ResultEnvelope{})
 
 	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
 	require.NoError(t, err)
-	assert.Empty(t, l, "topic destinations never enqueue")
+	assert.Empty(t, l, "topic destinations never enqueue on the async queue")
 }
 
 // TestFireDestinationTopicPublishError: a failing publish is dropped (best-effort
