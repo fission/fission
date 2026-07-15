@@ -66,10 +66,10 @@ func (p *egressPublisher) Publish(ctx context.Context, namespace, mqType, topic,
 		recordPublish(ctx, mqType, "invalid")
 		return fmt.Errorf("mqpub: invalid namespace %q", namespace)
 	}
-	// Broker topic grammars are the broker's own; the shared CRD-side rule is
-	// re-applied here for the same defense-in-depth as the statestore sink (it
-	// is also what admission enforced on the TopicRef).
-	if err := fv1.ValidateTopicName("topic", topic); err != nil {
+	// Re-apply the type-aware grammar admission enforced on the TopicRef
+	// (defense in depth, like the statestore sink): a broker-invalid name that
+	// slipped in would churn attempts against a broker that refuses it forever.
+	if err := fv1.ValidateTopicNameForMQType("topic", mqType, topic); err != nil {
 		recordPublish(ctx, mqType, "invalid")
 		return fmt.Errorf("mqpub: invalid topic name: %w", err)
 	}

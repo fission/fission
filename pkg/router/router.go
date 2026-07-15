@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -545,8 +546,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// cannot make loud. Unlisted types fail the publish with the unsupported
 		// sentinel instead. The publisher's sentinel is translated to the
 		// dispatcher's own so the dispatcher can classify without importing mqpub.
-		egressTypes := strings.FieldsFunc(os.Getenv("EVENTING_EGRESS_TYPES"),
-			func(r rune) bool { return r == ',' || r == ' ' })
+		// Deduped: a repeated type in the env value (operator typo) must not
+		// register the same observable gauge twice.
+		egressTypes := slices.Compact(slices.Sorted(slices.Values(
+			strings.FieldsFunc(os.Getenv("EVENTING_EGRESS_TYPES"),
+				func(r rune) bool { return r == ',' || r == ' ' }))))
 		topicPublisher := mqpub.NewMultiPublisher(
 			mqpub.NewStatestorePublisher(eventLog),
 			mqpub.NewEgressPublisher(queue, egressTypes...),

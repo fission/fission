@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/fission/fission/pkg/mqtrigger/mqpub"
@@ -104,6 +104,12 @@ func (ts *HTTPTriggerSet) dlqQueue(w http.ResponseWriter) (statestore.Queue, boo
 	return ts.asyncInvoker.queue, true
 }
 
+// dlqEgressQueueRegexp bounds the ?queue= value to a well-formed egress queue
+// name: mq-egress- plus an MQ-type token. MQ types are lowercase alphanumeric
+// with hyphens (kafka, nats-jetstream, ...), so anything outside that charset
+// is a malformed request, not a queue.
+var dlqEgressQueueRegexp = regexp.MustCompile(`^mq-egress-[a-z0-9-]+$`)
+
 // dlqQueueName resolves the ?queue= parameter: empty means the async invocation
 // queue; otherwise it must be an RFC-0027 broker egress queue (mq-egress-<type>).
 // Allowlisted by shape, not free-form — the DLQ surface must not become a
@@ -113,7 +119,7 @@ func dlqQueueName(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if name == "" || name == asyncinvoke.DefaultQueue {
 		return asyncinvoke.DefaultQueue, true
 	}
-	if strings.HasPrefix(name, "mq-egress-") && len(name) > len("mq-egress-") {
+	if dlqEgressQueueRegexp.MatchString(name) {
 		return name, true
 	}
 	http.Error(w, "queue must be empty (async invocations) or an mq-egress-<type> egress queue", http.StatusBadRequest)

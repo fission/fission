@@ -503,11 +503,21 @@ func (tr *TopicRef) Validate(field string) error {
 		return MakeValidationErr(ErrorInvalidValue, field+".messageQueueType", tr.MessageQueueType,
 			fmt.Sprintf("topic destinations support %q (built-in) and %q (broker egress)", MessageQueueTypeStatestore, MessageQueueTypeKafka))
 	}
-	if err := ValidateTopicName(field+".topic", tr.Topic); err != nil {
+	return ValidateTopicNameForMQType(field+".topic", string(tr.MessageQueueType), tr.Topic)
+}
+
+// ValidateTopicNameForMQType applies the base topic grammar plus the target
+// type's own restrictions (kafka's stricter rule for kafka). Exported so every
+// layer that handles a typed topic — admission, the mqpub publishers, the
+// egress consumer sink, the topic admin API — applies the SAME rule and a name
+// the broker refuses forever is rejected up front instead of churning retries
+// into the DLQ.
+func ValidateTopicNameForMQType(field, mqType, topic string) error {
+	if err := ValidateTopicName(field, topic); err != nil {
 		return err
 	}
-	if tr.MessageQueueType == MessageQueueTypeKafka && !kafkaDestinationTopicRegexp.MatchString(tr.Topic) {
-		return MakeValidationErr(ErrorInvalidValue, field+".topic", tr.Topic,
+	if mqType == MessageQueueTypeKafka && !kafkaDestinationTopicRegexp.MatchString(topic) {
+		return MakeValidationErr(ErrorInvalidValue, field, topic,
 			"kafka topics must start and end with an alphanumeric character")
 	}
 	return nil

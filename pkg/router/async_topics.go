@@ -59,9 +59,11 @@ func (ts *HTTPTriggerSet) registerTopicRoutes(internal *httpmux.Mux) {
 }
 
 // topicStore returns the topic surface handles, or writes 501 when the router
-// runs without the statestore (async invocation off).
+// runs without the statestore (async invocation off). Both handles are checked
+// — they are wired together, but a 501 beats a panic if that ever drifts.
 func (ts *HTTPTriggerSet) topicStore(w http.ResponseWriter) bool {
-	if ts.asyncInvoker == nil || !ts.asyncInvoker.enabled() || ts.asyncInvoker.eventLog == nil {
+	if ts.asyncInvoker == nil || !ts.asyncInvoker.enabled() ||
+		ts.asyncInvoker.eventLog == nil || ts.asyncInvoker.publishTopic == nil {
 		http.Error(w, "eventing is not enabled on this cluster (requires the statestore)", http.StatusNotImplemented)
 		return false
 	}
@@ -99,6 +101,13 @@ func (ts *HTTPTriggerSet) topicPublish(w http.ResponseWriter, r *http.Request) {
 	mqType := r.URL.Query().Get("mqtype")
 	if mqType == "" {
 		mqType = fv1.MessageQueueTypeStatestore
+	}
+	// Type-aware grammar up front (the rule admission applies to TopicRefs): a
+	// kafka name the broker refuses forever is the caller's mistake — 400, not
+	// an enqueued job that churns retries into the DLQ.
+	if err := fv1.ValidateTopicNameForMQType("topic", mqType, topic); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, topicPublishMaxBody))
 	if err != nil {

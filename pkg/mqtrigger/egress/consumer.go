@@ -65,6 +65,7 @@ type Consumer struct {
 	logger  logr.Logger
 	q       statestore.Queue
 	queue   string
+	mqType  string
 	publish PublishFunc
 	// poll and backoff are pollInterval/retryBackoff unless a test tightens
 	// them.
@@ -78,6 +79,7 @@ func New(logger logr.Logger, q statestore.Queue, mqType string, publish PublishF
 		logger:  logger.WithName("egress").WithValues("mqType", mqType),
 		q:       q,
 		queue:   mqpub.EgressQueueForType(mqType),
+		mqType:  mqType,
 		publish: publish,
 		poll:    pollInterval,
 		backoff: retryBackoff,
@@ -142,10 +144,12 @@ func (c *Consumer) process(ctx context.Context, msg statestore.LeasedMessage) {
 		c.settle(settleCtx, "kill", func() error { return c.q.Kill(settleCtx, msg.Receipt, "malformed egress job") })
 		return
 	}
-	// Re-validate the topic at this sink (defense in depth, like the mqpub
-	// publishers): a job forged directly onto the queue must not reach the
-	// broker with an arbitrary topic string.
-	if err := fv1.ValidateTopicName("topic", job.Topic); err != nil {
+	// Re-validate the topic at this sink with the TYPE-AWARE grammar (defense
+	// in depth, like the mqpub publishers): a job forged directly onto the
+	// queue must not reach the broker with an arbitrary topic string, and a
+	// broker-invalid name is permanent — Kill, don't burn the retry budget on
+	// a broker that refuses it forever.
+	if err := fv1.ValidateTopicNameForMQType("topic", c.mqType, job.Topic); err != nil {
 		c.logger.Error(err, "egress job with invalid topic; dead-lettering", "id", msg.ID)
 		recordEgress(ctx, "malformed")
 		c.settle(settleCtx, "kill", func() error { return c.q.Kill(settleCtx, msg.Receipt, "invalid egress topic") })
