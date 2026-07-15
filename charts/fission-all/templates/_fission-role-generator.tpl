@@ -112,6 +112,9 @@ metadata:
 {{- if eq "executor" .component }}
 {{- include "executor-rules" . }}
 {{- end }}
+{{- if eq "statestore-mqt" .component }}
+{{- include "statestore-mqt-rules" . }}
+{{- end }}
 # Read FissionTenant (cluster-scoped) so the component's resolver-sync keeps its
 # live tenant set current and a runtime-onboarded namespace reaches its
 # membership predicate without a restart. Appended to the same rules list above.
