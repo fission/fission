@@ -140,6 +140,22 @@ func TestDLQRedriveEmptyIDs(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
+// TestDLQRedriveBodyStatuses pins the decode error mapping: an over-limit body is
+// 413 (the explicit dlqMaxBodyBytes bound), malformed JSON is 400.
+func TestDLQRedriveBodyStatuses(t *testing.T) {
+	t.Parallel()
+	ts, _, _ := dlqTestSet(t, [2]string{"ns1", "fn-a"})
+
+	big := `{"ids":["` + strings.Repeat("a", dlqMaxBodyBytes+1) + `"]}`
+	rr := httptest.NewRecorder()
+	ts.dlqRedrive(rr, httptest.NewRequest(http.MethodPost, dlqPathRedrive, strings.NewReader(big)))
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code, "over-limit body → 413")
+
+	rrBad := httptest.NewRecorder()
+	ts.dlqRedrive(rrBad, httptest.NewRequest(http.MethodPost, dlqPathRedrive, strings.NewReader(`not json`)))
+	assert.Equal(t, http.StatusBadRequest, rrBad.Code, "malformed JSON → 400")
+}
+
 func TestDLQPurge(t *testing.T) {
 	t.Parallel()
 	ts, q, _ := dlqTestSet(t, [2]string{"ns1", "fn-a"}, [2]string{"ns2", "fn-b"})

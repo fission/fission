@@ -6,6 +6,7 @@ package router
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -258,6 +259,12 @@ func dlqParseLimit(raw string) int {
 func dlqDecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, dlqMaxBodyBytes))
 	if err := dec.Decode(v); err != nil {
+		// Distinguish an over-limit body (the explicit dlqMaxBodyBytes bound → 413)
+		// from malformed JSON (400), mirroring the async enqueue path's mapping.
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			http.Error(w, "request body exceeds the DLQ API limit", http.StatusRequestEntityTooLarge)
+			return false
+		}
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return false
 	}
