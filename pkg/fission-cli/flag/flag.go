@@ -141,6 +141,7 @@ var (
 	FnRetainPods            = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 
 	// RFC-0024 async dead-letter-queue admin flags.
+	DlqQueue = Flag{Type: String, Name: flagkey.DlqQueue, Usage: "Dead-letter queue to operate on: empty for async invocations, or an RFC-0027 broker egress queue (mq-egress-<type>, e.g. mq-egress-kafka)"}
 	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}
 	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
 	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}

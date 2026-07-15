@@ -9,8 +9,10 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/fission/fission/pkg/mqtrigger/mqpub"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils/httpmux"
@@ -47,9 +49,12 @@ const (
 // message whose envelope will not decode still lists (with them empty) so a
 // corrupt record is visible, not hidden.
 type dlqMessage struct {
-	ID         string    `json:"id"`
-	Namespace  string    `json:"namespace,omitempty"`
-	Function   string    `json:"function,omitempty"`
+	ID        string `json:"id"`
+	Namespace string `json:"namespace,omitempty"`
+	Function  string `json:"function,omitempty"`
+	// Topic is set for dead-lettered broker egress jobs (?queue=mq-egress-<type>)
+	// instead of Function.
+	Topic      string    `json:"topic,omitempty"`
 	Reason     string    `json:"reason,omitempty"`
 	Attempts   int       `json:"attempts"`
 	EnqueuedAt time.Time `json:"enqueuedAt"`
@@ -95,6 +100,22 @@ func (ts *HTTPTriggerSet) dlqQueue(w http.ResponseWriter) (statestore.Queue, boo
 	return ts.asyncInvoker.queue, true
 }
 
+// dlqQueueName resolves the ?queue= parameter: empty means the async invocation
+// queue; otherwise it must be an RFC-0027 broker egress queue (mq-egress-<type>).
+// Allowlisted by shape, not free-form — the DLQ surface must not become a
+// read/redrive/purge primitive over arbitrary statestore queues.
+func dlqQueueName(w http.ResponseWriter, r *http.Request) (string, bool) {
+	name := r.URL.Query().Get("queue")
+	if name == "" || name == asyncinvoke.DefaultQueue {
+		return asyncinvoke.DefaultQueue, true
+	}
+	if strings.HasPrefix(name, "mq-egress-") && len(name) > len("mq-egress-") {
+		return name, true
+	}
+	http.Error(w, "queue must be empty (async invocations) or an mq-egress-<type> egress queue", http.StatusBadRequest)
+	return "", false
+}
+
 // dlqList returns a page of dead-lettered invocations, optionally filtered to one
 // namespace (a display convenience, not an authorization boundary — the internal
 // listener's HMAC gate is coarse in phase 3). ?limit bounds the page; ?token
@@ -104,9 +125,13 @@ func (ts *HTTPTriggerSet) dlqList(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	queueName, ok := dlqQueueName(w, r)
+	if !ok {
+		return
+	}
 	limit := dlqParseLimit(r.URL.Query().Get("limit"))
 	nsFilter := r.URL.Query().Get("namespace")
-	dead, err := q.DeadLetters(r.Context(), asyncinvoke.DefaultQueue, statestore.Page{
+	dead, err := q.DeadLetters(r.Context(), queueName, statestore.Page{
 		Token: r.URL.Query().Get("token"),
 		Limit: limit,
 	})
@@ -139,6 +164,10 @@ func (ts *HTTPTriggerSet) dlqShow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	queueName, ok := dlqQueueName(w, r)
+	if !ok {
+		return
+	}
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "id query parameter is required", http.StatusBadRequest)
@@ -147,7 +176,7 @@ func (ts *HTTPTriggerSet) dlqShow(w http.ResponseWriter, r *http.Request) {
 	token := ""
 	scanned := 0
 	for scanned < dlqShowScanCap {
-		dead, err := q.DeadLetters(r.Context(), asyncinvoke.DefaultQueue, statestore.Page{Token: token, Limit: dlqDefaultLimit})
+		dead, err := q.DeadLetters(r.Context(), queueName, statestore.Page{Token: token, Limit: dlqDefaultLimit})
 		if err != nil {
 			ts.logger.Error(err, "reading async dead letters")
 			http.Error(w, "reading dead letters", http.StatusInternalServerError)
@@ -185,6 +214,10 @@ func (ts *HTTPTriggerSet) dlqRedrive(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	queueName, ok := dlqQueueName(w, r)
+	if !ok {
+		return
+	}
 	var req dlqRedriveReq
 	if !dlqDecodeJSON(w, r, &req) {
 		return
@@ -193,7 +226,7 @@ func (ts *HTTPTriggerSet) dlqRedrive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ids must not be empty", http.StatusBadRequest)
 		return
 	}
-	n, err := q.Redrive(r.Context(), asyncinvoke.DefaultQueue, req.IDs)
+	n, err := q.Redrive(r.Context(), queueName, req.IDs)
 	if err != nil {
 		ts.logger.Error(err, "redriving async dead letters")
 		http.Error(w, "redriving dead letters", http.StatusInternalServerError)
@@ -209,7 +242,11 @@ func (ts *HTTPTriggerSet) dlqPurge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	n, err := q.Purge(r.Context(), asyncinvoke.DefaultQueue)
+	queueName, ok := dlqQueueName(w, r)
+	if !ok {
+		return
+	}
+	n, err := q.Purge(r.Context(), queueName)
 	if err != nil {
 		ts.logger.Error(err, "purging async dead letters")
 		http.Error(w, "purging dead letters", http.StatusInternalServerError)
@@ -218,8 +255,10 @@ func (ts *HTTPTriggerSet) dlqPurge(w http.ResponseWriter, r *http.Request) {
 	dlqWriteJSON(w, ts, dlqMutateResp{Count: n})
 }
 
-// dlqSummary maps a DeadMessage to the list summary, decoding the envelope for the
-// namespace/function (best-effort — a corrupt record still lists).
+// dlqSummary maps a DeadMessage to the list summary, decoding the body for
+// display fields (best-effort — a corrupt record still lists): an async
+// invocation envelope yields namespace/function, a broker egress job yields
+// namespace/topic.
 func dlqSummary(d statestore.DeadMessage) dlqMessage {
 	m := dlqMessage{
 		ID:         d.ID,
@@ -228,8 +267,13 @@ func dlqSummary(d statestore.DeadMessage) dlqMessage {
 		EnqueuedAt: d.EnqueuedAt,
 		DiedAt:     d.DiedAt,
 	}
-	if env, err := asyncinvoke.Decode(d.Body); err == nil {
+	if env, err := asyncinvoke.Decode(d.Body); err == nil && env.Function != "" {
 		m.Namespace, m.Function = env.Namespace, env.Function
+		return m
+	}
+	var job mqpub.EgressJob
+	if err := json.Unmarshal(d.Body, &job); err == nil && job.Topic != "" {
+		m.Namespace, m.Topic = job.Namespace, job.Topic
 	}
 	return m
 }
