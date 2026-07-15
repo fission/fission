@@ -161,8 +161,22 @@ Every drop path (publish failure, MaxRetries → ErrorTopic, backstop trim, egre
 - **E4 (egress honesty)**: a broker-destined publish retries per the queue budget and dead-letters visibly; the egress queue inherits the RFC-0021 conservation invariant (T1) unchanged.
 - **E5 (poison isolation)**: a message that exhausts `MaxRetries` moves to `ErrorTopic` and the cursor advances — one event cannot stall a topic.
 
-Verification: cross-driver conformance for the Phase-1 EventLog extension (`AppendAny` durability + concurrent-publisher safety, `Head` correctness incl. over the HTTP wire); memory-driver unit tests for the subscriber loop (scripted delivery endpoint, `testing/synctest` for retry/backoff timing); property test (rapid) that random interleavings of publish/consume/crash/redeliver never violate E2/E3 on the memory driver; integration (kind): destination→topic→trigger→function pipeline e2e, poison-pill→ErrorTopic, cursor survival across an mqt-head restart.
-The cursor protocol is single-writer CAS and needs no new TLA+ model; the egress path reuses the already-checked `queue.tla` lease/settle protocol.
+**Design-time model checking.** The topic-subscription protocol is [`specs/eventlogsub.tla`](specs/eventlogsub.tla), TLC-checked by the same CI `tlc` job as the RFC-0021/0022 specs (`hack/run-tlc.sh`): AppendAny publishers, overlapping consumer instances (mqt leadership transitions), the version-CAS KV cursor, crash/redeliver, poison→ErrorTopic ordering, and the min-cursor reaper.
+The green config verifies E2/E3/E5 in checkable form (`NoLostHandling`, `NoTrimBeyondHandled`, `PoisonToErrorTopic`) plus `CursorMonotonic`; the negative model (`eventlogsub-blindwrite.cfg`, `CasGuard = FALSE`) **must fail** — TLC finds the leadership-overlap trace where a blind cursor write regresses the cursor — proving the cursor commit must be a KV version-CAS (`SetOptions.IfVersion`), the same spec-proves-the-guard pattern as `queue-unguarded.cfg` and the lease-epoch column.
+The egress path re-uses the already-checked `queue.tla` lease/settle protocol unchanged (E4 = its I1/I2/I3), and the retention backstop is deliberately outside the green model — it is documented loss, not a safety property.
+
+Each invariant's verification vehicle, per the house convention:
+
+| Invariant | Design-time (TLC) | Test-time |
+|---|---|---|
+| E1 durable publish | — (single store op) | driver conformance for `AppendAny` durability + concurrent publishers; crash-point tests |
+| E2 at-least-once per subscriber | `NoLostHandling` | rapid property test over publish/consume/crash/redeliver interleavings; kind e2e pipeline |
+| E3 no premature trim | `NoTrimBeyondHandled` | reaper unit tests (min-cursor, subscriber-less age trim, backstop metric) |
+| E4 egress honesty | `queue.tla` I1/I2/I3 (existing) | egress-loop unit tests against the memory queue; T1 conservation (existing) |
+| E5 poison isolation | `PoisonToErrorTopic` | subscriber-loop unit test: MaxRetries → ErrorTopic before advance, `synctest` for backoff timing |
+| cursor safety | `CursorMonotonic` (+ blind-write negative) | KV conformance already covers `IfVersion` CAS |
+
+Test-time verification also includes: cross-driver conformance for the Phase-1 EventLog extension (`AppendAny`, `Head`, incl. over the HTTP wire); `testing/synctest` for all retry/backoff timing (no sleeps); and kind integration — destination→topic→trigger→function pipeline e2e, poison-pill→ErrorTopic, cursor survival across an mqt-head restart.
 
 ## Security
 
@@ -190,4 +204,5 @@ Clusters without `statestore.enabled` see no behavior change — the provider va
 
 ## Verification / test plan
 
-Unit (memory driver, synctest, rapid) per the invariants above; conformance additions only if the EventLog contract needs sharpening (head-CAS retry behavior); kind integration: the full A→topic→B pipeline, poison isolation, restart-survival, retention (subscriber-less age trim + min-cursor safety); benchmark scenario in phase 4 with distinct metric prefixes per the RFC-0020 conventions.
+Design-time: `specs/eventlogsub.tla` ships with this RFC (green config + the blind-write negative), CI-checked by the existing `tlc` job — the spec is the protocol's source of truth per the specs README, so protocol changes during implementation must update it first.
+Test-time, per the invariant→vehicle table above: cross-driver conformance for the Phase-1 `AppendAny`/`Head` extension; unit (memory driver, `synctest`, rapid) for the subscriber loop and reaper; kind integration: the full A→topic→B pipeline, poison isolation, restart-survival, retention (subscriber-less age trim + min-cursor safety); benchmark scenario in phase 4 with distinct metric prefixes per the RFC-0020 conventions.
