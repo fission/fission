@@ -20,7 +20,7 @@ TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
 # re-verify the jar is genuine tla2tools (manifest Main-class tlc2.TLC, Microsoft
 # vendor) and bump this pin. The pin stays so an UNEXPECTED artifact still fails
 # loudly rather than silently running arbitrary downloaded code.
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-150b0294c3d407c15f0c971351ccd4ae8c6d885397546dff87871a14be2b4ee4}"
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-58d44845a37a8d776deaf8cf3a623213b59d311bc0ec287bcdfbe148dd11bb3d}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"
@@ -55,10 +55,8 @@ tlc() {
 
 fail=0
 
-for cfg in queue.cfg workflowfold.cfg; do
+for cfg in queue.cfg workflowfold.cfg eventlogsub.cfg; do
   spec="$(basename "${cfg}" .cfg).tla"
-  # queue-unguarded and queue share queue.tla; the loop only runs the base specs.
-  [[ "${cfg}" == "queue.cfg" ]] && spec="queue.tla"
   echo "=== TLC (must pass): ${cfg} ==="
   if tlc "${cfg}" "${spec}"; then
     echo "PASS: ${cfg}"
@@ -68,23 +66,31 @@ for cfg in queue.cfg workflowfold.cfg; do
   fi
 done
 
-echo "=== TLC (must FAIL): queue-unguarded.cfg ==="
-neg_out="${WORK_DIR}/neg.out"
-if tlc queue-unguarded.cfg queue.tla >"${neg_out}" 2>&1; then
-  echo "FAIL: queue-unguarded.cfg passed but MUST fail (the epoch guard is not being exercised)" >&2
-  cat "${neg_out}" >&2
-  fail=1
-elif grep -q "is violated" "${neg_out}"; then
-  echo "PASS: queue-unguarded.cfg failed as expected:"
-  grep -E "Invariant .* is violated" "${neg_out}" || true
-else
-  echo "FAIL: queue-unguarded.cfg errored for a non-invariant reason (parse/tooling), not the expected violation" >&2
-  cat "${neg_out}" >&2
-  fail=1
-fi
+# Negative models MUST fail with an invariant violation: each documents why a
+# guard exists (queue-unguarded → the lease-epoch settle guard;
+# eventlogsub-blindwrite → the version-CAS cursor commit). "cfg:spec" pairs
+# because a negative config shares its base spec's .tla.
+for pair in "queue-unguarded.cfg:queue.tla" "eventlogsub-blindwrite.cfg:eventlogsub.tla"; do
+  cfg="${pair%%:*}"
+  spec="${pair##*:}"
+  echo "=== TLC (must FAIL): ${cfg} ==="
+  neg_out="${WORK_DIR}/${cfg}.out"
+  if tlc "${cfg}" "${spec}" >"${neg_out}" 2>&1; then
+    echo "FAIL: ${cfg} passed but MUST fail (its guard is not being exercised)" >&2
+    cat "${neg_out}" >&2
+    fail=1
+  elif grep -q "is violated" "${neg_out}"; then
+    echo "PASS: ${cfg} failed as expected:"
+    grep -E "Invariant .* is violated" "${neg_out}" || true
+  else
+    echo "FAIL: ${cfg} errored for a non-invariant reason (parse/tooling), not the expected violation" >&2
+    cat "${neg_out}" >&2
+    fail=1
+  fi
+done
 
 if [[ "${fail}" -ne 0 ]]; then
   echo "TLC model check FAILED" >&2
   exit 1
 fi
-echo "TLC model check OK: both green configs pass, the negative config fails as designed."
+echo "TLC model check OK: all green configs pass, the negative configs fail as designed."
