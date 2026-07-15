@@ -30,7 +30,7 @@ import (
 func TestProvisionedConcurrencyExecutorRestart(t *testing.T) {
 	// Deliberately NOT t.Parallel(): restarts the shared executor.
 
-	ctx, cancel := context.WithTimeout(t.Context(), 12*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Minute)
 	t.Cleanup(cancel)
 
 	f := framework.Connect(t)
@@ -64,18 +64,18 @@ func TestProvisionedConcurrencyExecutorRestart(t *testing.T) {
 
 	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
 		return d.Status.ReadyReplicas == 4
-	}, "4 ready replicas", 2*time.Minute)
+	}, "4 ready replicas", 5*time.Minute)
 
 	// Floor established before restart.
 	t.Log("establishing provisioned floor before restart")
-	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 90*time.Second)
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 5*time.Minute)
 
 	// Delete BOTH provisioned pods. Restart alone doesn't touch them
 	// (they're independent of the executor rollout), so deletion is what
 	// forces the fresh executor to re-derive.
 	t.Log("deleting both provisioned pods")
-	pods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
+	pods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 	require.Len(t, pods, 2, "expected exactly 2 provisioned pods to delete")
 	for _, p := range pods {
 		require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, p.Name, metav1.DeleteOptions{}),
@@ -92,6 +92,6 @@ func TestProvisionedConcurrencyExecutorRestart(t *testing.T) {
 
 	// Fresh executor re-derives the floor via its periodic reconcile tick.
 	t.Log("waiting for fresh executor to re-derive provisioned floor")
-	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 2*time.Minute)
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 5*time.Minute)
 }

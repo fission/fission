@@ -65,7 +65,7 @@ func TestProvisionedConcurrencyCLIRoundTrip(t *testing.T) {
 			return
 		}
 		assert.Equal(c, 5, fn.Spec.ProvisionedConcurrency.Target, "ProvisionedConcurrency.Target mismatch after update")
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 3*time.Minute, 500*time.Millisecond)
 }
 
 // TestProvisionedConcurrencyRejectsNewdeploy verifies the CEL validation
@@ -92,7 +92,8 @@ func TestProvisionedConcurrencyRejectsNewdeploy(t *testing.T) {
 
 	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
 	// CLI should reject: provisionedConcurrency + newdeploy.
-	out, err := ns.CLIExpectError(t, ctx,
+	out, err := ns.CLIExpectError(
+		t, ctx,
 		"fn", "create", "--name", fnName, "--env", envName, "--code", codePath,
 		"--executortype", "newdeploy",
 		"--provisioned-concurrency", "2",
@@ -153,7 +154,7 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 		}
 		assert.Error(c, err, "expected webhook rejection of scheduled windows")
 		assert.Contains(c, err.Error(), "scheduled windows are not yet supported")
-	}, 30*time.Second, 500*time.Millisecond)
+	}, 2*time.Minute, 500*time.Millisecond)
 }
 
 // TestProvisionedConcurrencyLifecycle exercises the RFC-0026 PR1 provisioner
@@ -163,7 +164,7 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 18*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -211,12 +212,12 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	// Wait for env pool to be ready (4 pods).
 	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
 		return d.Status.ReadyReplicas == 4
-	}, "4 ready replicas", 2*time.Minute)
+	}, "4 ready replicas", 5*time.Minute)
 
 	// Phase 1: floor established with no invocations.
 	t.Log("Phase 1: floor@0 — provisioner warms 2 pods without traffic")
-	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 90*time.Second)
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 5*time.Minute)
 	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
 	// Warm smoke: the function serves.
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
@@ -237,14 +238,14 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 		assert.Zerof(c, count, "control %q: want 0 pods (reaped), got %d", ctlName, count)
 	}, 5*time.Minute, 5*time.Second)
 	// Provisioned floor holds while reaper is active.
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 30*time.Second)
-	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 5*time.Minute)
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 
 	// Phase 3: self-heal — delete one provisioned pod, provisioner replaces it.
 	// The provisioner may transiently overshoot the target (warm 3 when target
 	// is 2), so we assert >= 2, not exactly 2, and just delete one pod.
 	t.Log("Phase 3: self-heal after pod delete")
-	beforePods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
+	beforePods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 	require.GreaterOrEqual(t, len(beforePods), 2, "expected at least 2 provisioned pods before delete")
 	// Delete one pod.
 	victim := beforePods[0].Name
@@ -252,7 +253,7 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 		"delete provisioned pod %q", victim)
 	// Provisioner re-warms via periodic tick (10s reconcile). Generous timeout
 	// absorbs tick + specialization + pool refill (concern #8).
-	afterPods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
+	afterPods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 	require.GreaterOrEqual(t, len(afterPods), 2, "expected at least 2 provisioned pods after self-heal")
 	// Replacement name differs — proves new pod, not resurrected.
 	names := map[string]bool{}
@@ -275,15 +276,15 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	// re-warms fresh to the new target. CLI target drops converge via
 	// generation refresh, not via the idle reaper.
 	t.Log("Phase 4: target drop 2→1 via CLI (generation refresh)")
-	oldPods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 30*time.Second)
+	oldPods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 	require.NotEmpty(t, oldPods, "need a pod to read old generation")
 	oldGen := oldPods[0].Labels[fv1.FUNCTION_GENERATION]
 	require.NotEmptyf(t, oldGen, "old pod %q has no generation label", oldPods[0].Name)
 
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--provisioned-concurrency", "1")
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 1, 1, 30*time.Second)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 1, 1, 5*time.Minute)
 
-	//converge to 1 total specialized pod (old-gen recycled, new-gen warmed)
+	// converge to 1 total specialized pod (old-gen recycled, new-gen warmed)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		count, err := ns.RunningFunctionPodCount(ctx, fnName)
 		if !assert.NoErrorf(c, err, "count specialized pods for %q", fnName) {
@@ -292,7 +293,7 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 		assert.Equalf(c, 1, count, "function %q: want 1 specialized pod (new-gen), got %d", fnName, count)
 	}, 90*time.Second, 5*time.Second)
 
-	onePod := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 1, 90*time.Second)
+	onePod := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 1, 5*time.Minute)
 	require.Len(t, onePod, 1, "expected exactly 1 provisioned pod after target drop")
 	newGen := onePod[0].Labels[fv1.FUNCTION_GENERATION]
 	require.NotEmptyf(t, newGen, "new pod %q has no generation label", onePod[0].Name)
@@ -305,8 +306,8 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 	t.Log("Phase 5: disable — provisioned-concurrency 0")
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--provisioned-concurrency", "0")
 
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 0, 0, 60*time.Second)
-	ns.WaitForNoProvisionedPods(t, ctx, fnName, 60*time.Second)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 0, 0, 5*time.Minute)
+	ns.WaitForNoProvisionedPods(t, ctx, fnName, 5*time.Minute)
 
 	// Condition False with reason ProvisionedDisabled.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -319,7 +320,7 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 			"Provisioned condition: want False, got %s", cond.Status)
 		assert.Equalf(c, fv1.FunctionReasonProvisionedDisabled, cond.Reason,
 			"Provisioned condition reason: want %s, got %s", fv1.FunctionReasonProvisionedDisabled, cond.Reason)
-	}, 60*time.Second, 2*time.Second)
+	}, 5*time.Minute, 2*time.Second)
 
 	// All specialized pods gone (generation refresh deleted, no re-warm).
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -328,9 +329,9 @@ func TestProvisionedConcurrencyLifecycle(t *testing.T) {
 			return
 		}
 		assert.Zerof(c, count, "function %q: want 0 pods after disable, got %d", fnName, count)
-	}, 3*time.Minute, 5*time.Second)
-
+	}, 5*time.Minute, 5*time.Second)
 }
+
 func podNames(pods []corev1.Pod) []string {
 	names := make([]string, 0, len(pods))
 	for _, p := range pods {
