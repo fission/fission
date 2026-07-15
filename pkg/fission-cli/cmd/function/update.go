@@ -123,8 +123,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	// The --async-* flags merge onto the existing InvocationConfig (only set fields
-	// change); an empty --async-on-success/--async-on-failure clears that destination.
-	function.Spec.Invocation = getInvocationConfig(input, function.Spec.Invocation)
+	// change); an empty --async-on-success/--async-on-failure (or -topic variant)
+	// clears that destination.
+	function.Spec.Invocation, err = getInvocationConfig(input, function.Spec.Invocation)
+	if err != nil {
+		return err
+	}
 
 	err = checkExecutorPoolManager(input, function.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
 	if err != nil {

@@ -101,6 +101,9 @@ const (
 	FnAsyncMaxAge      = "async-max-age"
 	FnAsyncOnSuccess   = "async-on-success"
 	FnAsyncOnFailure   = "async-on-failure"
+	// RFC-0027 topic destinations (statestore built-in eventing).
+	FnAsyncOnSuccessTopic = "async-on-success-topic"
+	FnAsyncOnFailureTopic = "async-on-failure-topic"
 
 	HtName              = resourceName
 	HtMethod            = "method"

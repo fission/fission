@@ -150,6 +150,10 @@ var (
 	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered (RFC-0024)"}
 	FnAsyncOnSuccess   = Flag{Type: String, Name: flagkey.FnAsyncOnSuccess, Usage: "Same-namespace function to invoke with the result after a successful async delivery (RFC-0024); empty clears it"}
 	FnAsyncOnFailure   = Flag{Type: String, Name: flagkey.FnAsyncOnFailure, Usage: "Same-namespace function to invoke with the result after a permanent async failure (RFC-0024); empty clears it"}
+	// RFC-0027 statestore topic destinations. Mutually exclusive per condition
+	// with the function-destination flag above.
+	FnAsyncOnSuccessTopic = Flag{Type: String, Name: flagkey.FnAsyncOnSuccessTopic, Usage: "Statestore topic to publish the result envelope to after a successful async delivery (RFC-0027); empty clears it"}
+	FnAsyncOnFailureTopic = Flag{Type: String, Name: flagkey.FnAsyncOnFailureTopic, Usage: "Statestore topic to publish the result envelope to after a permanent async failure (RFC-0027); empty clears it"}
 	// Termination Grace Period configurable at function creation/update only for container functions
 	FnTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.FnGracePeriod, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}
 
@@ -186,7 +190,7 @@ var (
 
 	MqtName            = Flag{Type: String, Name: flagkey.MqtName, Usage: "Message queue trigger name"}
 	MqtFnName          = Flag{Type: String, Name: flagkey.MqtFnName, Usage: "Function name"}
-	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtype \"fission\" => kafka\n\t\t\t\t\t For mqtype \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, nats-jetstream, rabbitmq, redis", DefaultValue: "kafka"}
+	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtkind \"fission\" => kafka, statestore (the RFC-0027 built-in, no broker)\n\t\t\t\t\t For mqtkind \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, nats-jetstream, rabbitmq, redis", DefaultValue: "kafka"}
 	MqtTopic           = Flag{Type: String, Name: flagkey.MqtTopic, Usage: "Message queue Topic the trigger listens on"}
 	MqtRespTopic       = Flag{Type: String, Name: flagkey.MqtRespTopic, Usage: "Topic that the function response is sent on (response discarded if unspecified)"}
 	MqtErrorTopic      = Flag{Type: String, Name: flagkey.MqtErrorTopic, Usage: "Topic that the function error messages are sent to (errors discarded if unspecified"}

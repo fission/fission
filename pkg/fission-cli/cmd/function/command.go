@@ -29,6 +29,7 @@ func Commands() *cobra.Command {
 			flag.FnToolInputSchema, flag.FnToolName,
 			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
+			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			// TODO retired pkg & trigger related flags from function cmd
@@ -89,6 +90,7 @@ func Commands() *cobra.Command {
 			flag.FnToolInputSchema, flag.FnToolName,
 			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
+			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
