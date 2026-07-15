@@ -61,3 +61,4 @@ examples
 .nvim.json
 .github/code-review-graph.instruction.md
 .claude/skills
+.claude/settings.json
