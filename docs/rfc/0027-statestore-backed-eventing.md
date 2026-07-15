@@ -4,7 +4,7 @@
 - Tracking issue: TBD
 - Supersedes: — (completes the topic-destination step RFC-0024 deferred as design decision D1)
 - Targets: Fission v1.N+2
-- Requires: RFC-0021 statestore (`Queue`, `EventLog`, `KVStore`) with a small Phase-1 EventLog extension (see Design); RFC-0024 async invocation — Phases 1-2 are on `main`, and the DLQ admin API/CLI + `Queue.Purge` that Phase 3 of this RFC extends are in-flight in PR #3580 (this RFC's broker-egress phase sequences after it).
+- Requires: RFC-0021 statestore (`Queue`, `EventLog`, `KVStore`) with a small Phase-1 EventLog extension (see Design); RFC-0024 async invocation — fully merged (#3578, #3579, #3580), including the DLQ admin API/CLI + `Queue.Purge` that Phase 3 of this RFC extends.
   Composes with RFC-0022 workflows (steps can publish/consume topics) and the RFC-0002/0013 data plane (unchanged).
 
 ## Summary
@@ -125,7 +125,7 @@ Hardening both destination kinds into a pre-settle durable write is a possible f
 For broker-type topic destinations the dispatcher must not speak to brokers: that would pull SDKs and credentials into the cluster-scoped router hot path.
 Instead it enqueues a small egress job — `{topic, contentType, payload}` — onto a **per-broker-type** statestore `Queue`, `mq-egress-<mqType>`, and a publisher loop in that broker type's classic mqt head (where its connectivity and credentials already live) leases → `Publish`es → settles.
 Per-type queues matter because `Queue.Lease` has no type filter: heterogeneous broker heads competing on one shared queue would lease each other's jobs and burn attempts; one queue per type keeps each head leasing only work it can publish.
-This is a second consumer of the exact lease/settle/retry/backoff/DLQ machinery RFC-0024 built: the shared consumer core is extracted from `pkg/router/asyncinvoke` into a reusable package, and a broker outage simply retries per the queue budget, then dead-letters visibly (E4) — inspectable through the DLQ admin API and `fission function dlq` with a queue parameter (a small, additive extension of the surface landing in PR #3580, which this phase sequences after).
+This is a second consumer of the exact lease/settle/retry/backoff/DLQ machinery RFC-0024 built: the shared consumer core is extracted from `pkg/router/asyncinvoke` into a reusable package, and a broker outage simply retries per the queue budget, then dead-letters visibly (E4) — inspectable through the DLQ admin API and `fission function dlq` with a queue parameter (a small, additive extension of the surface #3580 shipped).
 
 ### Retention
 
@@ -185,7 +185,7 @@ Clusters without `statestore.enabled` see no behavior change — the provider va
 
 1. **EventLog extension + `TopicPublisher` + statestore destinations**: `AppendAny` + `Head` across the interface, all drivers, the HTTP wire, and conformance; extract `pkg/mqtrigger/mqpub` with the statestore implementation; stream naming + namespace scoping; RFC-0024 `fireDestination` topic arm for the statestore type; admission relaxation; metrics.
 2. **`messageQueueType: statestore` provider**: the `mqt-fission-statestore` chart deployment; subscriber loop (KV cursor, MaxRetries→ErrorTopic, ResponseTopic), retention reaper + backstop, statestore NetworkPolicy allowlist entry, CLI validator + `--mqtype statestore`; e2e integration pipeline test.
-3. **Broker egress** (sequences after PR #3580's DLQ surface): extract the shared queue-consumer core from `pkg/router/asyncinvoke`; per-type `mq-egress-<mqType>` queues + publisher loop in each broker head; kafka `TopicPublisher` extraction; un-reject broker topic destinations; DLQ admin/CLI queue parameter.
+3. **Broker egress**: extract the shared queue-consumer core from `pkg/router/asyncinvoke`; per-type `mq-egress-<mqType>` queues + publisher loop in each broker head; kafka `TopicPublisher` extraction; un-reject broker topic destinations; DLQ admin/CLI queue parameter (extending #3580's surface).
 4. **Scale & polish**: KEDA postgresql-scaler variant for external mode (lag-based), `fission topic publish|peek` dev commands, eventing benchmark scenario (publish→consume latency, fan-out, lag under load).
 
 ## Verification / test plan
