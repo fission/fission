@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -153,30 +154,51 @@ func (kafka Kafka) producerConfig() (*sarama.Config, error) {
 
 // NewEgressPublisher implements egress.BrokerPublisherProvider: it opens one
 // shared SyncProducer and returns the publish function the egress consumer
-// loop executes jobs with. RequiredAcks=WaitForAll means a nil error is a
-// broker ack (E4 — the settle that follows is honest).
-func (kafka Kafka) NewEgressPublisher() (egress.PublishFunc, error) {
+// loop executes jobs with, plus a closer for the head's shutdown path.
+// RequiredAcks=WaitForAll means a nil error is a broker ack (E4 — the settle
+// that follows is honest).
+func (kafka Kafka) NewEgressPublisher() (egress.PublishFunc, io.Closer, error) {
 	cfg, err := kafka.producerConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	producer, err := sarama.NewSyncProducer(kafka.brokers, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("kafka egress: creating producer: %w", err)
+		return nil, nil, fmt.Errorf("kafka egress: creating producer: %w", err)
 	}
-	return func(_ context.Context, job mqpub.EgressJob) error {
-		// Kafka topics are flat: the fission topic name is used as-is; the
-		// source namespace travels as a header for provenance.
-		_, _, err := producer.SendMessage(&sarama.ProducerMessage{
-			Topic: job.Topic,
-			Value: sarama.ByteEncoder(job.Payload),
-			Headers: []sarama.RecordHeader{
-				{Key: []byte("content-type"), Value: []byte(job.ContentType)},
-				{Key: []byte("fission-namespace"), Value: []byte(job.Namespace)},
-			},
-		})
-		return err
-	}, nil
+	publish := func(ctx context.Context, job mqpub.EgressJob) error {
+		// sarama's SyncProducer has no context plumbing, but the consumer's
+		// publishTimeout < lease coupling (A7 shape) must hold — a SendMessage
+		// stuck on a flapping broker (Retry.Max=10 × dial/read timeouts) would
+		// otherwise outlive the lease and turn healthy-but-slow publishes into
+		// redeliveries and false dead-letters. Run it in a goroutine and abandon
+		// it on ctx expiry: the orphaned send may still complete (counted as a
+		// failed attempt here → possible duplicate), which at-least-once already
+		// tolerates and settle_failed/retry meters make visible.
+		errCh := make(chan error, 1)
+		go func() {
+			// Kafka topics are flat: the fission topic name is used as-is. The
+			// headers are provenance/metadata only — fission-namespace is caller-
+			// supplied and NOT an authenticated tenant identity; a downstream
+			// consumer must not authorize on it.
+			_, _, err := producer.SendMessage(&sarama.ProducerMessage{
+				Topic: job.Topic,
+				Value: sarama.ByteEncoder(job.Payload),
+				Headers: []sarama.RecordHeader{
+					{Key: []byte("content-type"), Value: []byte(job.ContentType)},
+					{Key: []byte("fission-namespace"), Value: []byte(job.Namespace)},
+				},
+			})
+			errCh <- err
+		}()
+		select {
+		case err := <-errCh:
+			return err
+		case <-ctx.Done():
+			return fmt.Errorf("kafka egress: publish abandoned: %w", ctx.Err())
+		}
+	}
+	return publish, producer, nil
 }
 
 func (kafka Kafka) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {

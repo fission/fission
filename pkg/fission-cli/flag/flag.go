@@ -144,7 +144,7 @@ var (
 	TopicName        = Flag{Type: String, Name: flagkey.TopicName, Usage: "Topic name"}
 	TopicData        = Flag{Type: String, Name: flagkey.TopicData, Usage: "Event payload to publish"}
 	TopicContentType = Flag{Type: String, Name: flagkey.TopicContentType, Usage: "Content type the payload travels with (consuming triggers replay it)", DefaultValue: "application/json"}
-	TopicMQType      = Flag{Type: String, Name: flagkey.TopicMQType, Usage: "Message queue provider: statestore (built-in), or a broker type with an egress head (kafka)", DefaultValue: "statestore"}
+	TopicMQType      = Flag{Type: String, Name: flagkey.TopicMQType, Usage: "Message queue provider: statestore (built-in, namespace-scoped), or a broker type with an egress head (kafka — broker topics are cluster-flat, like kafka mqtriggers)", DefaultValue: "statestore"}
 	TopicLimit       = Flag{Type: Int, Name: flagkey.TopicLimit, Usage: "Maximum events to peek", DefaultValue: 10}
 
 	// RFC-0024 async dead-letter-queue admin flags.

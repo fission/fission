@@ -131,6 +131,9 @@ func (opts *topicSubCommand) peek(input cli.Input) error {
 		return fmt.Errorf("decoding router topic response: %w", err)
 	}
 	fmt.Printf("head: %d\n", peek.Head)
+	if peek.Head == 0 {
+		fmt.Println("(statestore topic is empty — events published with a broker --mqtype are not visible here; inspect the broker)")
+	}
 	headers := []string{"SEQ", "TYPE", "AGE", "PAYLOAD"}
 	row := func(e topicEvent) []string {
 		return []string{strconv.FormatInt(e.Seq, 10), e.Type, util.AgeOf(metav1.NewTime(e.At)), renderPayload(e.Payload)}

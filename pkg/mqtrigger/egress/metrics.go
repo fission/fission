@@ -17,8 +17,12 @@ import (
 // (fission_eventing_published_total{outcome=enqueued}); this counts what the
 // broker heads did with the jobs. The dead-letter tail is covered by the
 // queue's own DLQ metrics and admin surface (E4: every drop is countable).
+// settle_failed counts settles that failed AFTER the outcome was decided — for
+// an ack that is the direct precondition of a duplicate broker publish (the
+// broker took the message, the queue will redeliver it), so duplicates are
+// directly countable rather than inferable from published-vs-enqueued deltas.
 var eventingEgress = metrics.Int64Counter("fission_eventing_egress_total",
-	"Count of broker egress job outcomes (published/retry/malformed)")
+	"Count of broker egress job outcomes (published/retry/malformed/settle_failed)")
 
 func recordEgress(ctx context.Context, outcome string) {
 	eventingEgress.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))

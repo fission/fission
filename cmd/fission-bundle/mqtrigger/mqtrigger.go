@@ -114,12 +114,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			if err != nil {
 				return fmt.Errorf("statestore queue capability for broker egress: %w", err)
 			}
-			publish, err := provider.NewEgressPublisher()
+			publish, producerCloser, err := provider.NewEgressPublisher()
 			if err != nil {
 				return fmt.Errorf("creating broker egress publisher: %w", err)
 			}
 			consumer := egress.New(logger, queue, string(mqType), publish)
-			if err := crMgr.Add(crmanager.NonLeaderRunnable(consumer.Run)); err != nil {
+			if err := crMgr.Add(crmanager.NonLeaderRunnable(func(c context.Context) error {
+				// Producer and store handles are released on shutdown; opened
+				// here rather than process-lifetime so a flush happens.
+				defer func() { _ = caps.Close() }()
+				defer func() { _ = producerCloser.Close() }()
+				return consumer.Run(c)
+			})); err != nil {
 				return err
 			}
 		} else {

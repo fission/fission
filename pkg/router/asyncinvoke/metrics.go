@@ -82,6 +82,35 @@ func RegisterQueueGauges(q statestore.Queue, queueName string) {
 		}))
 }
 
+// RegisterEgressQueueGauges registers depth and oldest-age gauges for one
+// RFC-0027 broker egress queue, labeled by mqType. A rising oldest-age with a
+// flat delivered rate is THE signal for "jobs are enqueued but nothing drains
+// them" (broker head down or missing) — attempts only burn on Lease, so a
+// consumer-less queue never dead-letters and is otherwise invisible.
+func RegisterEgressQueueGauges(q statestore.Queue, mqType, queueName string) {
+	attrs := metric.WithAttributes(attribute.String("mqType", mqType))
+	metrics.Int64ObservableGauge("fission_eventing_egress_queue_depth",
+		"Broker egress queue depth: visible jobs awaiting publish, labeled by mqType",
+		func(ctx context.Context, o metric.Int64Observer) error {
+			st, err := q.Stats(ctx, queueName)
+			if err != nil {
+				return err
+			}
+			o.Observe(st.Visible, attrs)
+			return nil
+		})
+	metrics.Int64ObservableGauge("fission_eventing_egress_oldest_age_seconds",
+		"Age in seconds of the oldest visible broker egress job (0 when none), labeled by mqType",
+		func(ctx context.Context, o metric.Int64Observer) error {
+			st, err := q.Stats(ctx, queueName)
+			if err != nil {
+				return err
+			}
+			o.Observe(int64(st.OldestVisibleAge.Seconds()), attrs)
+			return nil
+		})
+}
+
 // observeStat builds an observable-gauge callback that reads q.Stats(queueName)
 // and observes one field. A Stats read failure is RETURNED (routed to
 // otel.Handle) rather than swallowed: the OTel SDK skips only this instrument's

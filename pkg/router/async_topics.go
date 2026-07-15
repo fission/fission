@@ -5,13 +5,16 @@
 package router
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/mqpub"
+	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
@@ -65,12 +68,14 @@ func (ts *HTTPTriggerSet) topicStore(w http.ResponseWriter) bool {
 	return true
 }
 
-// topicParams validates the namespace/topic pair shared by both handlers.
+// topicParams validates the namespace/topic pair shared by both handlers. The
+// namespace check mirrors the mqpub sinks (no "/" — stream-name injectivity)
+// so peek cannot address stream names the publish path would reject.
 func topicParams(w http.ResponseWriter, r *http.Request) (namespace, topic string, ok bool) {
 	namespace = r.URL.Query().Get("namespace")
 	topic = r.URL.Query().Get("topic")
-	if namespace == "" {
-		http.Error(w, "namespace query parameter is required", http.StatusBadRequest)
+	if namespace == "" || strings.Contains(namespace, "/") || len(namespace) > 253 {
+		http.Error(w, "namespace query parameter is required and must be a plain namespace name", http.StatusBadRequest)
 		return "", "", false
 	}
 	if err := fv1.ValidateTopicName("topic", topic); err != nil {
@@ -97,10 +102,23 @@ func (ts *HTTPTriggerSet) topicPublish(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, topicPublishMaxBody))
 	if err != nil {
-		http.Error(w, "request body exceeds the topic publish limit", http.StatusRequestEntityTooLarge)
+		// Distinguish the explicit size cap (413) from a failed body read (400),
+		// mirroring the DLQ API's mapping.
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			http.Error(w, "request body exceeds the topic publish limit", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "reading request body", http.StatusBadRequest)
 		return
 	}
 	if err := ts.asyncInvoker.publishTopic(r.Context(), namespace, mqType, topic, r.Header.Get("Content-Type"), payload); err != nil {
+		// Caller mistakes (a typo'd ?mqtype, an invalid input the sink rejects)
+		// are 400s, not operational failures — a user typo must not land in the
+		// router's Error log or read as a gateway fault.
+		if errors.Is(err, asyncinvoke.ErrTopicUnsupported) {
+			http.Error(w, "unsupported mqtype: no publish path for "+mqType+" on this install", http.StatusBadRequest)
+			return
+		}
 		ts.logger.Error(err, "topic admin publish", "namespace", namespace, "topic", topic, "mqType", mqType)
 		http.Error(w, "publish failed: "+err.Error(), http.StatusBadGateway)
 		return
@@ -110,13 +128,18 @@ func (ts *HTTPTriggerSet) topicPublish(w http.ResponseWriter, r *http.Request) {
 
 // topicPeek returns the last ?limit events of a statestore topic (bounded tail
 // read: head, then Read from max(floor, head-limit)). Broker topics cannot be
-// peeked — the events live in the broker.
+// peeked — the events live in the broker — and asking for one is a 400, not a
+// silently-empty read of a statestore stream that never existed.
 func (ts *HTTPTriggerSet) topicPeek(w http.ResponseWriter, r *http.Request) {
 	if !ts.topicStore(w) {
 		return
 	}
 	namespace, topic, ok := topicParams(w, r)
 	if !ok {
+		return
+	}
+	if mqType := r.URL.Query().Get("mqtype"); mqType != "" && mqType != fv1.MessageQueueTypeStatestore {
+		http.Error(w, "broker topics cannot be peeked (the events live in the broker); peek supports statestore only", http.StatusBadRequest)
 		return
 	}
 	limit := topicPeekDefault

@@ -481,16 +481,36 @@ var topicDestinationTypes = map[MessageQueueType]struct{}{
 	MessageQueueTypeKafka:      {},
 }
 
+// kafkaDestinationTopicRegexp mirrors the kafka provider's trigger-side topic
+// grammar (alphanumeric first/last character), which is stricter than the
+// statestore grammar: kafka rejects "." and ".." outright, and leading "_"
+// names collide with broker-internal topics — admitting them would create
+// destinations the broker refuses forever (retry churn straight to the DLQ).
+var kafkaDestinationTopicRegexp = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$`)
+
 // Validate checks a topic destination: the MQ type must have a publish path
 // (statestore direct, or a broker egress consumer), and the topic name must be
-// safe in the namespaced stream mapping topic/<ns>/<topic> (the same grammar is
-// kept for broker topics — it is a subset of kafka's own).
+// safe in the namespaced stream mapping topic/<ns>/<topic>.
+//
+// Broker topics, like kafka MessageQueueTriggers, are CLUSTER-FLAT: a topic
+// destination writes to the named broker topic as-is, with no per-namespace
+// prefixing — isolation between tenants on the broker side is the broker's
+// ACLs on the egress producer's principal. Whether a broker type's egress head
+// is actually deployed is an install property admission cannot see; the router
+// rejects publishes for undeployed types (EVENTING_EGRESS_TYPES).
 func (tr *TopicRef) Validate(field string) error {
 	if _, ok := topicDestinationTypes[tr.MessageQueueType]; !ok {
 		return MakeValidationErr(ErrorInvalidValue, field+".messageQueueType", tr.MessageQueueType,
 			fmt.Sprintf("topic destinations support %q (built-in) and %q (broker egress)", MessageQueueTypeStatestore, MessageQueueTypeKafka))
 	}
-	return ValidateTopicName(field+".topic", tr.Topic)
+	if err := ValidateTopicName(field+".topic", tr.Topic); err != nil {
+		return err
+	}
+	if tr.MessageQueueType == MessageQueueTypeKafka && !kafkaDestinationTopicRegexp.MatchString(tr.Topic) {
+		return MakeValidationErr(ErrorInvalidValue, field+".topic", tr.Topic,
+			"kafka topics must start and end with an alphanumeric character")
+	}
+	return nil
 }
 
 // ValidateTopicName bounds a statestore topic name: non-empty, at most 249

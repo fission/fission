@@ -21,10 +21,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/mqpub"
 	"github.com/fission/fission/pkg/statestore"
 )
@@ -51,9 +54,10 @@ type PublishFunc func(ctx context.Context, job mqpub.EgressJob) error
 // BrokerPublisherProvider is the optional interface a broker MessageQueue
 // provider implements to opt its classic head into the egress loop. The bundle
 // head type-asserts it after factory.Create and, when the statestore is
-// configured, runs a Consumer over mq-egress-<mqType>.
+// configured, runs a Consumer over mq-egress-<mqType>. The returned closer
+// releases the broker producer on head shutdown.
 type BrokerPublisherProvider interface {
-	NewEgressPublisher() (PublishFunc, error)
+	NewEgressPublisher() (PublishFunc, io.Closer, error)
 }
 
 // Consumer is the egress loop for one broker type's queue.
@@ -108,9 +112,17 @@ func (c *Consumer) pollOnce(ctx context.Context) int {
 		}
 		return 0
 	}
+	// Process the batch CONCURRENTLY (the asyncinvoke shape): all leased jobs
+	// share one leaseFor window, so sequential processing would put every job
+	// past the first under an already-expired lease whenever the broker is slow
+	// — redelivery and false dead-letters for jobs that actually published.
+	// Concurrent processing keeps the per-job publishTimeout < leaseFor
+	// coupling real for the whole batch.
+	var wg sync.WaitGroup
 	for _, msg := range msgs {
-		c.process(ctx, msg)
+		wg.Go(func() { c.process(ctx, msg) })
 	}
+	wg.Wait()
 	return len(msgs)
 }
 
@@ -128,6 +140,15 @@ func (c *Consumer) process(ctx context.Context, msg statestore.LeasedMessage) {
 		c.logger.Error(err, "malformed egress job; dead-lettering", "id", msg.ID)
 		recordEgress(ctx, "malformed")
 		c.settle(settleCtx, "kill", func() error { return c.q.Kill(settleCtx, msg.Receipt, "malformed egress job") })
+		return
+	}
+	// Re-validate the topic at this sink (defense in depth, like the mqpub
+	// publishers): a job forged directly onto the queue must not reach the
+	// broker with an arbitrary topic string.
+	if err := fv1.ValidateTopicName("topic", job.Topic); err != nil {
+		c.logger.Error(err, "egress job with invalid topic; dead-lettering", "id", msg.ID)
+		recordEgress(ctx, "malformed")
+		c.settle(settleCtx, "kill", func() error { return c.q.Kill(settleCtx, msg.Receipt, "invalid egress topic") })
 		return
 	}
 
@@ -150,14 +171,19 @@ func (c *Consumer) process(ctx context.Context, msg statestore.LeasedMessage) {
 	c.settle(settleCtx, "ack", func() error { return c.q.Ack(settleCtx, msg.Receipt) })
 }
 
-// settle runs one settle call, quieting the stale-receipt race (an expired
-// lease already redelivered — the other delivery owns the outcome).
+// settle runs one settle call, quieting only the stale-receipt race (an
+// expired lease already redelivered — the other delivery owns the outcome).
+// Every other failure logs and meters: settleCtx is detached from shutdown, so
+// the only cancellation is the settle timeout itself — a statestore brownout at
+// ack time, i.e. the exact precondition for a duplicate broker publish, which
+// must never be the one silent settle failure.
 func (c *Consumer) settle(ctx context.Context, op string, fn func() error) {
-	if err := fn(); err != nil && ctx.Err() == nil {
+	if err := fn(); err != nil {
 		if errors.Is(err, statestore.ErrInvalidReceipt) {
 			c.logger.V(1).Info("egress settle raced lease expiry", "op", op)
 			return
 		}
-		c.logger.Error(err, "settling egress job", "op", op)
+		recordEgress(ctx, "settle_failed")
+		c.logger.Error(err, "settling egress job (job will redeliver — possible duplicate publish)", "op", op)
 	}
 }

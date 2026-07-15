@@ -69,6 +69,10 @@ type dlqListResp struct {
 type dlqShowResp struct {
 	dlqMessage
 	Envelope *asyncinvoke.Envelope `json:"envelope,omitempty"`
+	// EgressJob is set instead of Envelope for a dead-lettered broker egress
+	// job (?queue=mq-egress-<type>) — payload included, so the operator can
+	// inspect the event that failed to publish.
+	EgressJob *mqpub.EgressJob `json:"egressJob,omitempty"`
 }
 
 type dlqRedriveReq struct {
@@ -280,8 +284,13 @@ func dlqSummary(d statestore.DeadMessage) dlqMessage {
 
 func dlqWriteShow(w http.ResponseWriter, ts *HTTPTriggerSet, d statestore.DeadMessage) {
 	resp := dlqShowResp{dlqMessage: dlqSummary(d)}
-	if env, err := asyncinvoke.Decode(d.Body); err == nil {
+	// The gates mirror dlqSummary's classification: a lenient json.Unmarshal
+	// happily decodes an EgressJob body into a half-empty Envelope, so decode
+	// success alone must not pick the shape.
+	if env, err := asyncinvoke.Decode(d.Body); err == nil && env.Function != "" {
 		resp.Envelope = &env
+	} else if job := new(mqpub.EgressJob); json.Unmarshal(d.Body, job) == nil && job.Topic != "" {
+		resp.EgressJob = job
 	}
 	dlqWriteJSON(w, ts, resp)
 }

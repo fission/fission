@@ -95,7 +95,13 @@ func (e *eventingTopic) Run(ctx context.Context, sc *harness.Scope) (report.Scen
 		return res, err
 	}
 
-	// Baseline the delivered counter so consume_* reflects only this run.
+	// Baseline the delivered counter so consume_* reflects only this run. The
+	// counter is a CLUSTER-GLOBAL sum (no trigger label), so require it stable
+	// across two reads first — a prior scenario's backlog still draining would
+	// otherwise inflate the delta and understate consume_seconds. Residual
+	// assumption: no OTHER statestore trigger delivers during the run itself
+	// (true for the dedicated bench cluster this suite targets).
+	waitCounterStable(ctx, env, eventingDeliveredQuery, 30*time.Second)
 	deliveredBefore, deliveredBaselineOK := asyncQueryValue(ctx, env, eventingDeliveredQuery)
 
 	q := url.Values{"namespace": {env.Namespace}, "topic": {topic}, "mqtype": {fv1.MessageQueueTypeStatestore}}
@@ -143,6 +149,25 @@ func waitMQTriggerBound(ctx context.Context, env *harness.Env, name string, time
 			return ctx.Err()
 		case <-time.After(2 * time.Second):
 		}
+	}
+}
+
+// waitCounterStable polls until two consecutive reads of query are equal (a
+// prior workload has drained) or the timeout elapses; best-effort.
+func waitCounterStable(ctx context.Context, env *harness.Env, query string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	prev, ok := asyncQueryValue(ctx, env, query)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(3 * time.Second):
+		}
+		cur, ok2 := asyncQueryValue(ctx, env, query)
+		if ok && ok2 && cur == prev {
+			return
+		}
+		prev, ok = cur, ok2
 	}
 }
 
