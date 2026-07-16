@@ -33,6 +33,10 @@ const (
 	// that also keeps the reachability walk trivially cheap. Mirrored by the
 	// maxProperties marker on WorkflowSpec.States.
 	MaxWorkflowStates = 100
+	// MaxWorkflowBranchStates bounds each branch graph (mirrored by the
+	// maxProperties marker; tighter than top-level so doubly-nested CEL
+	// rules stay under the apiserver's cost budget).
+	MaxWorkflowBranchStates = 20
 	// DefaultWorkflowTimeout is the run bound the engine applies when
 	// spec.timeout is nil — a mis-authored graph or endlessly
 	// caught-and-retried loop must not hold an active run forever.
@@ -204,6 +208,29 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 			}
 		}
 
+	case WorkflowStateParallel, WorkflowStateMap:
+		hasNext := st.Next != ""
+		if hasNext == st.End {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
+				fmt.Sprintf("a %s state sets exactly one of Next or End", st.Type)))
+		}
+		if st.Type == WorkflowStateMap {
+			if st.ItemsPath == "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".ItemsPath", "",
+					"required on a Map state"))
+			}
+			if len(st.Branches) != 1 {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".Branches", len(st.Branches),
+					"a Map state carries exactly one branch (the iterator template)"))
+			}
+		} else if len(st.Branches) == 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".Branches", "",
+				"a Parallel state needs at least one branch"))
+		}
+		for i, b := range st.Branches {
+			errs = errors.Join(errs, b.validate(fmt.Sprintf("%s.Branches[%d]", field, i)))
+		}
+
 	case WorkflowStateSucceed, WorkflowStateFail:
 		// Terminal shape enforced entirely by the exclusivity table.
 
@@ -225,29 +252,32 @@ type stateField struct {
 	allowedOn map[WorkflowStateType]bool
 }
 
+var (
+	onTask       = map[WorkflowStateType]bool{WorkflowStateTask: true}
+	onChoice     = map[WorkflowStateType]bool{WorkflowStateChoice: true}
+	onFanOut     = map[WorkflowStateType]bool{WorkflowStateParallel: true, WorkflowStateMap: true}
+	onTaskFanOut = map[WorkflowStateType]bool{WorkflowStateTask: true, WorkflowStateParallel: true, WorkflowStateMap: true}
+)
+
 var stateFields = []stateField{
-	{"Function", func(s WorkflowState) bool { return s.Function != nil },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"Timeout", func(s WorkflowState) bool { return s.Timeout != nil },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"Retry", func(s WorkflowState) bool { return s.Retry != nil },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"Catch", func(s WorkflowState) bool { return len(s.Catch) > 0 },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"Choices", func(s WorkflowState) bool { return len(s.Choices) > 0 },
-		map[WorkflowStateType]bool{WorkflowStateChoice: true}},
-	{"Default", func(s WorkflowState) bool { return s.Default != "" },
-		map[WorkflowStateType]bool{WorkflowStateChoice: true}},
-	{"InputPath", func(s WorkflowState) bool { return s.InputPath != "" },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"ResultPath", func(s WorkflowState) bool { return s.ResultPath != "" },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"OutputPath", func(s WorkflowState) bool { return s.OutputPath != "" },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"Next", func(s WorkflowState) bool { return s.Next != "" },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
-	{"End", func(s WorkflowState) bool { return s.End },
-		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Function", func(s WorkflowState) bool { return s.Function != nil }, onTask},
+	{"Timeout", func(s WorkflowState) bool { return s.Timeout != nil }, onTask},
+	// Retry stays Task-only: no region-retry in v1 — re-running a whole
+	// Parallel/Map fan-out on failure re-executes every branch's side
+	// effects; a Catch route is the failure surface instead.
+	{"Retry", func(s WorkflowState) bool { return s.Retry != nil }, onTask},
+	{"Catch", func(s WorkflowState) bool { return len(s.Catch) > 0 }, onTaskFanOut},
+	{"Choices", func(s WorkflowState) bool { return len(s.Choices) > 0 }, onChoice},
+	{"Default", func(s WorkflowState) bool { return s.Default != "" }, onChoice},
+	{"Branches", func(s WorkflowState) bool { return len(s.Branches) > 0 }, onFanOut},
+	{"ItemsPath", func(s WorkflowState) bool { return s.ItemsPath != "" },
+		map[WorkflowStateType]bool{WorkflowStateMap: true}},
+	{"MaxConcurrency", func(s WorkflowState) bool { return s.MaxConcurrency != 0 }, onFanOut},
+	{"InputPath", func(s WorkflowState) bool { return s.InputPath != "" }, onTaskFanOut},
+	{"ResultPath", func(s WorkflowState) bool { return s.ResultPath != "" }, onTaskFanOut},
+	{"OutputPath", func(s WorkflowState) bool { return s.OutputPath != "" }, onTaskFanOut},
+	{"Next", func(s WorkflowState) bool { return s.Next != "" }, onTaskFanOut},
+	{"End", func(s WorkflowState) bool { return s.End }, onTaskFanOut},
 }
 
 // validateFieldExclusivity rejects fields set on a state type that does not
@@ -354,11 +384,75 @@ func validateWorkflowRetry(field string, r *RetryPolicy) error {
 	return errors.Join(errs, r.validateBackoffBounds(field))
 }
 
+// ToState widens a branch state for the engine and validators; the fan-out
+// fields stay zero (impossible by type).
+func (b WorkflowBranchState) ToState() WorkflowState {
+	return WorkflowState{
+		Type: b.Type, Function: b.Function, Timeout: b.Timeout,
+		Retry: b.Retry, Catch: b.Catch, Choices: b.Choices, Default: b.Default,
+		InputPath: b.InputPath, ResultPath: b.ResultPath, OutputPath: b.OutputPath,
+		Next: b.Next, End: b.End,
+	}
+}
+
+// StatesAsWorkflow widens the branch's state map for validator/engine reuse.
+func (b WorkflowBranch) StatesAsWorkflow() map[string]WorkflowState {
+	out := make(map[string]WorkflowState, len(b.States))
+	for name, bs := range b.States {
+		out[name] = bs.ToState()
+	}
+	return out
+}
+
+// validate checks one branch: its states are validated with the same rules
+// as top-level states (widened via ToState — nested fan-out is impossible by
+// type, and the widened Type would fail the enum check anyway), then the
+// same reachability walk.
+func (b WorkflowBranch) validate(field string) error {
+	var errs error
+	states := b.StatesAsWorkflow()
+	if len(states) > MaxWorkflowBranchStates {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".States", len(states),
+			fmt.Sprintf("at most %d states per branch", MaxWorkflowBranchStates)))
+	}
+	if b.StartAt == "" {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".StartAt", "", "required"))
+	} else if _, ok := states[b.StartAt]; !ok {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".StartAt", b.StartAt,
+			"does not name a declared state"))
+	}
+	for name, st := range states {
+		sf := fmt.Sprintf("%s.States[%s]", field, name)
+		if !wfStateNameRegexp.MatchString(name) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, sf, name,
+				"state names must match ^[A-Za-z0-9_-]{1,64}$ (they become durable identifiers in run history)"))
+		}
+		// The bounded branch type cannot CARRY fan-out fields, but the Type
+		// enum string is shared — reject the type explicitly with a message
+		// that says why, not a confusing "needs at least one branch".
+		if st.Type == WorkflowStateParallel || st.Type == WorkflowStateMap {
+			errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, sf+".Type", st.Type,
+				"nested fan-out is not supported: a branch state cannot be Parallel or Map"))
+			continue
+		}
+		errs = errors.Join(errs, st.validate(sf, states))
+	}
+	if errs == nil {
+		errs = validateGraph(field, b.StartAt, states)
+	}
+	return errs
+}
+
 // validateWorkflowGraph walks the (individually well-formed) graph from
 // StartAt and reports unreachable states and terminal unreachability. Cycles
 // are legal — the run Timeout bounds them.
 func validateWorkflowGraph(spec WorkflowSpec) error {
-	if _, ok := spec.States[spec.StartAt]; !ok {
+	return validateGraph("WorkflowSpec", spec.StartAt, spec.States)
+}
+
+// validateGraph is the shared walk for the top-level machine and each branch.
+func validateGraph(field, startAt string, states map[string]WorkflowState) error {
+	if _, ok := states[startAt]; !ok {
 		return nil // already reported by the field check
 	}
 
@@ -382,13 +476,13 @@ func validateWorkflowGraph(spec WorkflowSpec) error {
 		}
 		return out
 	}
-	reached := map[string]bool{spec.StartAt: true}
-	queue := []string{spec.StartAt}
+	reached := map[string]bool{startAt: true}
+	queue := []string{startAt}
 	terminalReached := false
 	for len(queue) > 0 {
 		name := queue[0]
 		queue = queue[1:]
-		st := spec.States[name]
+		st := states[name]
 		if st.IsTerminal() {
 			terminalReached = true
 		}
@@ -402,18 +496,18 @@ func validateWorkflowGraph(spec WorkflowSpec) error {
 
 	var errs error
 	if !terminalReached {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "WorkflowSpec.States", "",
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".States", "",
 			"no terminal state (End, Succeed, or Fail) is reachable from StartAt"))
 	}
 	var unreachable []string
-	for name := range spec.States {
+	for name := range states {
 		if !reached[name] {
 			unreachable = append(unreachable, name)
 		}
 	}
 	if len(unreachable) > 0 {
 		slices.Sort(unreachable)
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "WorkflowSpec.States",
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".States",
 			strings.Join(unreachable, ", "), "unreachable from StartAt"))
 	}
 	return errs

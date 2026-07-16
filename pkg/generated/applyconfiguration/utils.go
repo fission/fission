@@ -124,6 +124,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.TopicRefApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Workflow"):
 		return &corev1.WorkflowApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowBranch"):
+		return &corev1.WorkflowBranchApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowBranchState"):
+		return &corev1.WorkflowBranchStateApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("WorkflowCatchRoute"):
 		return &corev1.WorkflowCatchRouteApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("WorkflowChoiceCondition"):

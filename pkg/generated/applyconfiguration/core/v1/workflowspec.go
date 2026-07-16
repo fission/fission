@@ -18,7 +18,9 @@ import (
 type WorkflowSpecApplyConfiguration struct {
 	// StartAt names the state execution begins at.
 	StartAt *string `json:"startAt,omitempty"`
-	// States is the state machine graph, keyed by state name.
+	// States is the state machine graph, keyed by state name. The size
+	// bound mirrors validation.MaxWorkflowStates and lets the apiserver's
+	// CEL cost estimator bound rules on nested types.
 	States map[string]WorkflowStateApplyConfiguration `json:"states,omitempty"`
 	// DefaultRetry applies to Task states that do not set their own Retry.
 	DefaultRetry *RetryPolicyApplyConfiguration `json:"defaultRetry,omitempty"`

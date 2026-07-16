@@ -34,10 +34,12 @@ const (
 // list exactly these values; both grow together as later phases add
 // Parallel/Map/Wait.
 const (
-	WorkflowStateTask    WorkflowStateType = "Task"
-	WorkflowStateChoice  WorkflowStateType = "Choice"
-	WorkflowStateSucceed WorkflowStateType = "Succeed"
-	WorkflowStateFail    WorkflowStateType = "Fail"
+	WorkflowStateTask     WorkflowStateType = "Task"
+	WorkflowStateChoice   WorkflowStateType = "Choice"
+	WorkflowStateParallel WorkflowStateType = "Parallel"
+	WorkflowStateMap      WorkflowStateType = "Map"
+	WorkflowStateSucceed  WorkflowStateType = "Succeed"
+	WorkflowStateFail     WorkflowStateType = "Fail"
 )
 
 // WorkflowRun lifecycle phases.
@@ -63,6 +65,10 @@ const (
 	WorkflowErrNoChoiceMatched = "Fission.NoChoiceMatched"
 	// WorkflowErrFailed is the class a bare Fail state fails the run with.
 	WorkflowErrFailed = "Fission.Failed"
+	// WorkflowErrBranchFailed is the class a Parallel/Map state fails with
+	// when a branch fails terminally (fail-fast); a Catch on the state may
+	// route it.
+	WorkflowErrBranchFailed = "Fission.BranchFailed"
 )
 
 //
@@ -384,9 +390,9 @@ type (
 	}
 
 	// WorkflowStateType enumerates the state kinds the engine executes.
-	// Parallel/Map (phase 3) and Wait (phase 4) are added with their engine
-	// support so admission never accepts a state the engine cannot run.
-	// +kubebuilder:validation:Enum=Task;Choice;Succeed;Fail
+	// Wait (phase 4) is added with its engine support so admission never
+	// accepts a state the engine cannot run.
+	// +kubebuilder:validation:Enum=Task;Choice;Parallel;Map;Succeed;Fail
 	WorkflowStateType string
 
 	// WorkflowSpec is a state machine: states are data, logic lives in
@@ -448,6 +454,27 @@ type (
 		// +optional
 		Default string `json:"default,omitempty"`
 
+		// Branches are the Parallel state's concurrent sub-machines (or the
+		// Map state's single iterator template). Branch states cannot nest
+		// further fan-out — enforced by the bounded WorkflowBranchState type.
+		// +optional
+		// +kubebuilder:validation:MaxItems=10
+		Branches []WorkflowBranch `json:"branches,omitempty"`
+
+		// ItemsPath selects the array a Map state iterates (one branch per
+		// element, input = the element).
+		// +optional
+		ItemsPath string `json:"itemsPath,omitempty"`
+
+		// MaxConcurrency throttles how many branches execute at once. Zero
+		// means the engine default (10) — NOT unbounded: an unthrottled
+		// large Map against poolmgr is a self-inflicted cold-start burst.
+		// The default is applied by the engine, not the schema: a schema
+		// default would stamp the field onto every state type.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxConcurrency int32 `json:"maxConcurrency,omitempty"`
+
 		// InputPath/ResultPath/OutputPath shape step I/O with JSONPath
 		// (Step Functions semantics; dialect pinned in pkg/workflow/expr).
 		// +optional
@@ -459,6 +486,46 @@ type (
 
 		// Next names the state to run after this one; exactly one of Next/End
 		// is set on Task states (Succeed/Fail are implicitly terminal).
+		// +optional
+		Next string `json:"next,omitempty"`
+		// +optional
+		End bool `json:"end,omitempty"`
+	}
+
+	// WorkflowBranch is one concurrent sub-machine of a Parallel state (or
+	// the iterator template of a Map state).
+	WorkflowBranch struct {
+		StartAt string `json:"startAt"`
+		// MaxProperties=20 (vs 100 top-level) keeps the apiserver's CEL cost
+		// estimate for doubly-nested rules under budget — the phase-1 lesson.
+		// +kubebuilder:validation:MinProperties=1
+		// +kubebuilder:validation:MaxProperties=20
+		States map[string]WorkflowBranchState `json:"states"`
+	}
+
+	// WorkflowBranchState is WorkflowState minus the fan-out fields: nested
+	// Parallel/Map is impossible BY TYPE, which is what keeps the CRD schema
+	// non-recursive (controller-gen cannot render a self-referential type).
+	WorkflowBranchState struct {
+		Type WorkflowStateType `json:"type"`
+		// +optional
+		Function *FunctionReference `json:"function,omitempty"`
+		// +optional
+		Timeout *metav1.Duration `json:"timeout,omitempty"`
+		// +optional
+		Retry *RetryPolicy `json:"retry,omitempty"`
+		// +optional
+		Catch []WorkflowCatchRoute `json:"catch,omitempty"`
+		// +optional
+		Choices []WorkflowChoiceRule `json:"choices,omitempty"`
+		// +optional
+		Default string `json:"default,omitempty"`
+		// +optional
+		InputPath string `json:"inputPath,omitempty"`
+		// +optional
+		ResultPath string `json:"resultPath,omitempty"`
+		// +optional
+		OutputPath string `json:"outputPath,omitempty"`
 		// +optional
 		Next string `json:"next,omitempty"`
 		// +optional

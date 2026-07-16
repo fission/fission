@@ -228,16 +228,19 @@ Both enqueue a delayed message on statestore Queue `wf-timers` (`EnqueueOptions.
 
 `Parallel` appends one `BranchScheduled` per branch; branches execute as independent sub-folds inside the same stream (events carry a `branchPath` discriminator), with `MaxConcurrency` throttling Map fan-out (default 10 — see the field comment).
 A `BranchesJoined` event fires when all branch terminal events are present; join output is the ordered array of branch outputs.
-**Branch-failure semantics are fail-fast at the fold level**: when one branch fails terminally (retries exhausted, no catch), the run fails; there is no function kill signal, so sibling in-flight invocations drain, and their late completion appends lose the CAS against the terminal event and are discarded — W4 holds, nothing lands after a terminal event.
-`ToleratedFailurePercentage`-style partial-failure Maps are deferred.
-The `workflowfold.tla` spec is extended with branch events **before** phase-3 code, per the spec-first rule below.
+**Branch-failure semantics are fail-fast at the fold level**: when one branch fails terminally (retries exhausted, no catch), the region fails with error class `Fission.BranchFailed` — a `Catch` on the Parallel/Map state may route it (the error object carries the branch and its inner error); without a catch the run fails.
+There is no function kill signal, so sibling in-flight invocations drain, and their late completion appends lose the CAS against the terminal event and are discarded — W4 holds, nothing lands after a terminal event.
+`Retry` on a Parallel/Map state is rejected in v1 (region-retry would re-execute every branch's side effects; the Catch route is the failure surface), and `ToleratedFailurePercentage`-style partial-failure Maps are deferred.
+Nested fan-out (a Parallel/Map state inside a branch) is rejected in v1 — branches carry a bounded state type, which is also what keeps the CRD schema non-recursive.
+The parallel-region protocol is modeled in [`specs/workflowbranch.tla`](specs/workflowbranch.tla) (join uniqueness W7, nothing-after-join W8, fail-fast) **before** phase-3 code, per the spec-first rule below.
 
 ### Cancellation and history
 
 - `fission workflow cancel <run>` sets the metadata annotation `fission.io/cancel-requested` on the run → controller appends `RunCancelled`, stops scheduling, and lets in-flight invocations finish (no function kill signal exists; documented).
 - History GC: a retention sweeper trims streams for finished runs past `HistoryRetention` via `EventLog.Trim`, and a `WorkflowRun` TTL (like Job `ttlSecondsAfterFinished`) deletes old run CRs.
 - **A finalizer on `WorkflowRun` trims the run's stream and deletes its KV scopes (io, checkpoint) before the CR is deleted** — whether by TTL, `kubectl delete`, or namespace deletion.
-  This guarantees zero orphaned streams by construction; RFC-0027 had to defer exactly this problem (a published-but-never-consumed topic has no CR to hang cleanup on, and `EventLog` has no stream listing) — workflows have the CR, so the hole never opens.
+  This guarantees no orphaned run history by construction; RFC-0027 had to defer exactly this problem (a published-but-never-consumed topic has no CR to hang cleanup on, and `EventLog` has no stream listing) — workflows have the CR, so the hole never opens.
+  Precisely: `EventLog.Trim` reclaims every event payload, but the stream-head marker (one tiny row per deleted run) remains — an `EventLog.DeleteStream` capability is an RFC-0021 follow-up, not a growing leak.
 
 ### CLI
 

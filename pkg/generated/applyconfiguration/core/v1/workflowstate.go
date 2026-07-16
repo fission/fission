@@ -32,6 +32,19 @@ type WorkflowStateApplyConfiguration struct {
 	// Default names the state a Choice falls through to when no rule
 	// matches; without it, no-match fails the run (Fission.NoChoiceMatched).
 	Default *string `json:"default,omitempty"`
+	// Branches are the Parallel state's concurrent sub-machines (or the
+	// Map state's single iterator template). Branch states cannot nest
+	// further fan-out — enforced by the bounded WorkflowBranchState type.
+	Branches []WorkflowBranchApplyConfiguration `json:"branches,omitempty"`
+	// ItemsPath selects the array a Map state iterates (one branch per
+	// element, input = the element).
+	ItemsPath *string `json:"itemsPath,omitempty"`
+	// MaxConcurrency throttles how many branches execute at once. Zero
+	// means the engine default (10) — NOT unbounded: an unthrottled
+	// large Map against poolmgr is a self-inflicted cold-start burst.
+	// The default is applied by the engine, not the schema: a schema
+	// default would stamp the field onto every state type.
+	MaxConcurrency *int32 `json:"maxConcurrency,omitempty"`
 	// InputPath/ResultPath/OutputPath shape step I/O with JSONPath
 	// (Step Functions semantics; dialect pinned in pkg/workflow/expr).
 	InputPath  *string `json:"inputPath,omitempty"`
@@ -112,6 +125,35 @@ func (b *WorkflowStateApplyConfiguration) WithChoices(values ...*WorkflowChoiceR
 // If called multiple times, the Default field is set to the value of the last call.
 func (b *WorkflowStateApplyConfiguration) WithDefault(value string) *WorkflowStateApplyConfiguration {
 	b.Default = &value
+	return b
+}
+
+// WithBranches adds the given value to the Branches field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Branches field.
+func (b *WorkflowStateApplyConfiguration) WithBranches(values ...*WorkflowBranchApplyConfiguration) *WorkflowStateApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithBranches")
+		}
+		b.Branches = append(b.Branches, *values[i])
+	}
+	return b
+}
+
+// WithItemsPath sets the ItemsPath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ItemsPath field is set to the value of the last call.
+func (b *WorkflowStateApplyConfiguration) WithItemsPath(value string) *WorkflowStateApplyConfiguration {
+	b.ItemsPath = &value
+	return b
+}
+
+// WithMaxConcurrency sets the MaxConcurrency field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the MaxConcurrency field is set to the value of the last call.
+func (b *WorkflowStateApplyConfiguration) WithMaxConcurrency(value int32) *WorkflowStateApplyConfiguration {
+	b.MaxConcurrency = &value
 	return b
 }
 

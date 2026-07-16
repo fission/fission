@@ -309,6 +309,106 @@ func TestWorkflowSpecValidate(t *testing.T) {
 			}
 			s.States["a"] = st
 		}, "by name"},
+		{"valid parallel", func(s *WorkflowSpec) {
+			s.States["fan"] = WorkflowState{
+				Type: WorkflowStateParallel,
+				Branches: []WorkflowBranch{
+					{StartAt: "x", States: map[string]WorkflowBranchState{
+						"x": {Type: WorkflowStateTask, Function: &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn"}, End: true},
+					}},
+					{StartAt: "y", States: map[string]WorkflowBranchState{
+						"y": {Type: WorkflowStateSucceed},
+					}},
+				},
+				Catch: []WorkflowCatchRoute{{ErrorType: WorkflowErrBranchFailed, Next: "done"}},
+				Next:  "done",
+			}
+			st := s.States["a"]
+			st.Next = "fan"
+			s.States["a"] = st
+		}, ""},
+		{"valid map", func(s *WorkflowSpec) {
+			s.States["each"] = WorkflowState{
+				Type:      WorkflowStateMap,
+				ItemsPath: "$.items",
+				Branches: []WorkflowBranch{
+					{StartAt: "x", States: map[string]WorkflowBranchState{
+						"x": {Type: WorkflowStateTask, Function: &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn"}, End: true},
+					}},
+				},
+				MaxConcurrency: 3,
+				Next:           "done",
+			}
+			st := s.States["a"]
+			st.Next = "each"
+			s.States["a"] = st
+		}, ""},
+		{"parallel without branches", func(s *WorkflowSpec) {
+			s.States["fan"] = WorkflowState{Type: WorkflowStateParallel, Next: "done"}
+			st := s.States["a"]
+			st.Next = "fan"
+			s.States["a"] = st
+		}, "at least one branch"},
+		{"parallel with retry", func(s *WorkflowSpec) {
+			s.States["fan"] = WorkflowState{
+				Type:  WorkflowStateParallel,
+				Retry: &RetryPolicy{MaxAttempts: new(2)},
+				Branches: []WorkflowBranch{{StartAt: "x", States: map[string]WorkflowBranchState{
+					"x": {Type: WorkflowStateSucceed},
+				}}},
+				Next: "done",
+			}
+			st := s.States["a"]
+			st.Next = "fan"
+			s.States["a"] = st
+		}, "must not set Retry"},
+		{"map without itemsPath", func(s *WorkflowSpec) {
+			s.States["each"] = WorkflowState{
+				Type: WorkflowStateMap,
+				Branches: []WorkflowBranch{{StartAt: "x", States: map[string]WorkflowBranchState{
+					"x": {Type: WorkflowStateSucceed},
+				}}},
+				End: true,
+			}
+			st := s.States["a"]
+			st.Next = "each"
+			s.States["a"] = st
+		}, "ItemsPath"},
+		{"map with two branches", func(s *WorkflowSpec) {
+			br := WorkflowBranch{StartAt: "x", States: map[string]WorkflowBranchState{"x": {Type: WorkflowStateSucceed}}}
+			s.States["each"] = WorkflowState{
+				Type: WorkflowStateMap, ItemsPath: "$.items",
+				Branches: []WorkflowBranch{br, br}, End: true,
+			}
+			st := s.States["a"]
+			st.Next = "each"
+			s.States["a"] = st
+		}, "exactly one branch"},
+		{"branch graph with unreachable state", func(s *WorkflowSpec) {
+			s.States["fan"] = WorkflowState{
+				Type: WorkflowStateParallel,
+				Branches: []WorkflowBranch{{StartAt: "x", States: map[string]WorkflowBranchState{
+					"x":      {Type: WorkflowStateSucceed},
+					"orphan": {Type: WorkflowStateSucceed},
+				}}},
+				Next: "done",
+			}
+			st := s.States["a"]
+			st.Next = "fan"
+			s.States["a"] = st
+		}, "unreachable"},
+		{"branch state cannot be parallel", func(s *WorkflowSpec) {
+			s.States["fan"] = WorkflowState{
+				Type: WorkflowStateParallel,
+				Branches: []WorkflowBranch{{StartAt: "x", States: map[string]WorkflowBranchState{
+					"x": {Type: WorkflowStateParallel, Next: "x"},
+				}}},
+				Next: "done",
+			}
+			st := s.States["a"]
+			st.Next = "fan"
+			s.States["a"] = st
+		}, "nested fan-out"},
 		{"state name with illegal characters", func(s *WorkflowSpec) {
 			// Names become durable identifiers (event stream, activeStates,
 			// mermaid output) — the grammar is pinned before phase 2.
