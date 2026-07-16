@@ -293,11 +293,33 @@ func TestWorkflowSpecValidate(t *testing.T) {
 			}
 		}, "states"},
 		{"unknown state type", func(s *WorkflowSpec) {
-			s.States["w"] = WorkflowState{Type: "Wait", Next: "done"}
+			s.States["w"] = WorkflowState{Type: "Teleport", Next: "done"}
 			st := s.States["a"]
 			st.Next = "w"
 			s.States["a"] = st
 		}, "Type"},
+		{"valid wait", func(s *WorkflowSpec) {
+			s.States["w"] = WorkflowState{Type: WorkflowStateWait, Duration: &metav1.Duration{Duration: time.Minute}, Next: "done"}
+			st := s.States["a"]
+			st.Next = "w"
+			s.States["a"] = st
+		}, ""},
+		{"wait without duration", func(s *WorkflowSpec) {
+			s.States["w"] = WorkflowState{Type: WorkflowStateWait, Next: "done"}
+			st := s.States["a"]
+			st.Next = "w"
+			s.States["a"] = st
+		}, "Duration"},
+		{"wait with function", func(s *WorkflowSpec) {
+			s.States["w"] = WorkflowState{
+				Type: WorkflowStateWait, Duration: &metav1.Duration{Duration: time.Minute},
+				Function: &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn"},
+				Next:     "done",
+			}
+			st := s.States["a"]
+			st.Next = "w"
+			s.States["a"] = st
+		}, "must not set Function"},
 		{"task with function-weights reference", func(s *WorkflowSpec) {
 			// Legal on HTTPTriggers, unexecutable by the workflow engine —
 			// must be rejected at admission, not discovered at run time.
