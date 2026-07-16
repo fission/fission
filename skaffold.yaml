@@ -195,6 +195,12 @@ profiles:
       # one workflow leg pins the router back to mode=off post-deploy so the
       # legacy RPC path stays covered.
 
+      # Enable executor debug logging (DEBUG_ENV=true) in CI so flaky-test
+      # root-causing can inspect SetSvcValue/UnTapService/MarkAvailable traces.
+      - op: replace
+        path: /manifests/helm/releases/0/setValues/debugEnv
+        value: true
+
       # Enable the RFC-0026 provisioned-concurrency provisioner (keep N pods
       # warm) and shorten its periodic reconcile tick from the 30s chart
       # default to 10s so self-heal-after-pod-delete integration tests

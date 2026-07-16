@@ -63,3 +63,6 @@ examples
 .claude/skills
 .claude/settings.json
 .mcp.json
+.envrc
+common.log
+kind-132.yaml
