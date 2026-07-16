@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -20,6 +21,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statestore/httpapi"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 func init() {
@@ -39,14 +41,27 @@ func init() {
 // here at the driver-open boundary (not in New) so the deterministic New(dsn, hc)
 // constructor stays env-free for tests.
 func signedClient() *http.Client {
+	// A pooled transport, not http.DefaultTransport: its MaxIdleConnsPerHost
+	// of 2 forces every statestore call beyond two-way concurrency onto a
+	// fresh connection, piling client-side TIME_WAIT until dials fail with
+	// EADDRNOTAVAIL under parallel-join bursts.
+	base := httpx.PooledTransport(64)
 	master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET")
 	if master == "" {
-		return &http.Client{Timeout: 30 * time.Second} // nil Transport → http.DefaultTransport (unsigned)
+		return &http.Client{Transport: base, Timeout: 30 * time.Second} // unsigned (pass-through mode)
 	}
 	return &http.Client{
-		Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceStatestore, http.DefaultTransport, time.Now),
+		Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceStatestore, base, time.Now),
 		Timeout:   30 * time.Second,
 	}
+}
+
+// drainClose reads the response to EOF (bounded) before closing so the
+// connection returns to the pool — json.Decoder stops at the end of the
+// value and the trailing newline alone defeats keep-alive reuse.
+func drainClose(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	_ = resp.Body.Close()
 }
 
 // Client is an HTTP-backed Capabilities. It implements all three capability
@@ -81,7 +96,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainClose(resp)
 	if resp.StatusCode/100 != 2 {
 		return decodeErr(resp)
 	}
@@ -105,7 +120,7 @@ func (c *Client) post(ctx context.Context, path string, req, out any) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainClose(resp)
 	if resp.StatusCode/100 != 2 {
 		return decodeErr(resp)
 	}
