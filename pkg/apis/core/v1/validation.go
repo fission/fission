@@ -1263,6 +1263,21 @@ const (
 	DefaultWorkflowTimeout = 24 * time.Hour
 )
 
+// ApplyDefaults fills the spec-level defaults the RFC's worked example
+// relies on: a Task's function reference type defaults to "name" (the only
+// other type, function-weights, is a canary concern that never applies to a
+// workflow task). Called by the mutating webhook and the CLI manifest
+// loader; the run-level Timeout default (DefaultWorkflowTimeout) is applied
+// by the engine, not materialized into etcd.
+func (spec *WorkflowSpec) ApplyDefaults() {
+	for name, st := range spec.States {
+		if st.Function != nil && st.Function.Name != "" && st.Function.Type == "" {
+			st.Function.Type = FunctionReferenceTypeFunctionName
+			spec.States[name] = st
+		}
+	}
+}
+
 func (spec WorkflowSpec) Validate() error {
 	if len(spec.States) == 0 {
 		return MakeValidationErr(ErrorInvalidValue, "WorkflowSpec.States", "", "at least one state is required")

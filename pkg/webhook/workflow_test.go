@@ -47,6 +47,23 @@ func TestWorkflowWebhookValidate(t *testing.T) {
 	assert.Contains(t, err.Error(), "ghost")
 }
 
+// TestWorkflowWebhookApplyDefaults pins the "function type defaults to name"
+// contract the RFC's worked example relies on: a kubectl-applied manifest
+// without function.type must default, then validate.
+func TestWorkflowWebhookApplyDefaults(t *testing.T) {
+	r := &Workflow{}
+
+	wf := makeValidWorkflow()
+	st := wf.Spec.States["a"]
+	st.Function = &v1.FunctionReference{Name: "fn"} // no Type
+	wf.Spec.States["a"] = st
+
+	require.Error(t, r.Validate(wf), "un-defaulted reference must fail validation")
+	require.NoError(t, r.ApplyDefaults(wf))
+	assert.EqualValues(t, v1.FunctionReferenceTypeFunctionName, wf.Spec.States["a"].Function.Type)
+	assert.NoError(t, r.Validate(wf))
+}
+
 func TestWorkflowRunWebhookValidate(t *testing.T) {
 	r := &WorkflowRun{}
 

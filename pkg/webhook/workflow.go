@@ -19,7 +19,19 @@ type Workflow struct {
 func (r *Workflow) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = loggerfactory.GetLogger().WithName("workflow-resource")
 	r.Validator = r
+	r.Defaulter = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Workflow{})
+}
+
+//+kubebuilder:webhook:path=/mutate-fission-io-v1-workflow,mutating=true,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=workflows,verbs=create;update,versions=v1,name=mworkflow.fission.io,admissionReviewVersions=v1
+
+var _ admission.Defaulter[*v1.Workflow] = &Workflow{}
+
+// ApplyDefaults fills the function-reference type on Task states ("type
+// defaults to name" — the RFC's worked example applies verbatim via kubectl).
+func (r *Workflow) ApplyDefaults(new *v1.Workflow) error {
+	new.Spec.ApplyDefaults()
+	return nil
 }
 
 //+kubebuilder:webhook:path=/validate-fission-io-v1-workflow,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=workflows,verbs=create;update,versions=v1,name=vworkflow.fission.io,admissionReviewVersions=v1
