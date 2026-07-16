@@ -190,6 +190,10 @@ var (
 	TokPassword = Flag{Type: String, Name: flagkey.TokPassword, Usage: "Password to generate token for function invocation"}
 	TokAuthURI  = Flag{Type: String, Name: flagkey.TokAuthURI, Usage: "Relative URI path to generate token"}
 
+	WfName    = Flag{Type: String, Name: flagkey.WfName, Usage: "Workflow name (overrides the manifest's metadata.name)"}
+	WfFile    = Flag{Type: String, Name: flagkey.WfFile, Short: "f", Usage: "Path to a Workflow manifest (kind: Workflow) or a bare WorkflowSpec YAML"}
+	WfOffline = Flag{Type: Bool, Name: flagkey.WfOffline, Usage: "Skip cluster checks (e.g. referenced-function existence)"}
+
 	TtName   = Flag{Type: String, Name: flagkey.TtName, Usage: "Time Trigger name"}
 	TtCron   = Flag{Type: String, Name: flagkey.TtCron, Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}
 	TtFnName = Flag{Type: String, Name: flagkey.TtFnName, Usage: "Function name"}

@@ -143,6 +143,10 @@ const (
 	TtRound  = "round"
 	TtMethod = "method"
 
+	WfName    = resourceName
+	WfFile    = "file"
+	WfOffline = "offline"
+
 	MqtName            = resourceName
 	MqtFnName          = "function"
 	MqtMQType          = "mqtype"
