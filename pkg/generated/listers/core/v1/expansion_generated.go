@@ -73,3 +73,19 @@ type TimeTriggerListerExpansion interface{}
 // TimeTriggerNamespaceListerExpansion allows custom methods to be added to
 // TimeTriggerNamespaceLister.
 type TimeTriggerNamespaceListerExpansion interface{}
+
+// WorkflowListerExpansion allows custom methods to be added to
+// WorkflowLister.
+type WorkflowListerExpansion interface{}
+
+// WorkflowNamespaceListerExpansion allows custom methods to be added to
+// WorkflowNamespaceLister.
+type WorkflowNamespaceListerExpansion interface{}
+
+// WorkflowRunListerExpansion allows custom methods to be added to
+// WorkflowRunLister.
+type WorkflowRunListerExpansion interface{}
+
+// WorkflowRunNamespaceListerExpansion allows custom methods to be added to
+// WorkflowRunNamespaceLister.
+type WorkflowRunNamespaceListerExpansion interface{}

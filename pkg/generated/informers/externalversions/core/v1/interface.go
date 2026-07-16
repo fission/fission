@@ -30,6 +30,10 @@ type Interface interface {
 	Packages() PackageInformer
 	// TimeTriggers returns a TimeTriggerInformer.
 	TimeTriggers() TimeTriggerInformer
+	// Workflows returns a WorkflowInformer.
+	Workflows() WorkflowInformer
+	// WorkflowRuns returns a WorkflowRunInformer.
+	WorkflowRuns() WorkflowRunInformer
 }
 
 type version struct {
@@ -86,4 +90,14 @@ func (v *version) Packages() PackageInformer {
 // TimeTriggers returns a TimeTriggerInformer.
 func (v *version) TimeTriggers() TimeTriggerInformer {
 	return &timeTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// Workflows returns a WorkflowInformer.
+func (v *version) Workflows() WorkflowInformer {
+	return &workflowInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// WorkflowRuns returns a WorkflowRunInformer.
+func (v *version) WorkflowRuns() WorkflowRunInformer {
+	return &workflowRunInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

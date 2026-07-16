@@ -65,6 +65,18 @@ const (
 	FissionTenantConditionAuthKeyProvisioned   = "AuthKeyProvisioned"
 	FissionTenantConditionWatchActive          = "WatchActive"
 	FissionTenantConditionReady                = "Ready"
+
+	// Workflow conditions (RFC-0022). The workflow head's Workflow reconciler
+	// writes Validated (graph validation result, mirroring admission so GitOps
+	// bypasses still surface); constants ship with the types in phase 1, the
+	// writer lands with the head in phase 2.
+	WorkflowConditionValidated = "Validated"
+
+	// WorkflowRun conditions. Accepted reports that a running workflow
+	// controller has picked the run up — CRDs install regardless of
+	// workflows.enabled, so a run created with the head disabled must be
+	// distinguishable from one that is merely queued.
+	WorkflowRunConditionAccepted = "Accepted"
 )
 
 // Standard Reason values written alongside each condition. PascalCase per
@@ -129,4 +141,12 @@ const (
 	CanaryConfigReasonFailed     = "Failed"
 	CanaryConfigReasonAborted    = "Aborted"
 	CanaryConfigReasonUnknown    = "Unknown"
+
+	// Workflow condition reasons
+	WorkflowReasonGraphValid   = "GraphValid"
+	WorkflowReasonGraphInvalid = "GraphInvalid"
+
+	// WorkflowRun condition reasons
+	WorkflowRunReasonAccepted     = "AcceptedByController"
+	WorkflowRunReasonNoController = "NoWorkflowController"
 )
