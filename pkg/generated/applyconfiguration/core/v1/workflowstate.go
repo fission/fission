@@ -39,6 +39,11 @@ type WorkflowStateApplyConfiguration struct {
 	// ItemsPath selects the array a Map state iterates (one branch per
 	// element, input = the element).
 	ItemsPath *string `json:"itemsPath,omitempty"`
+	// Duration is how long a Wait state pauses the run — durably: the
+	// delay is a statestore Queue message, so a controller restart never
+	// loses it (robfig/cron-style absolute schedules stay with the timer
+	// subsystem; only durations here).
+	Duration *metav1.Duration `json:"duration,omitempty"`
 	// MaxConcurrency throttles how many branches execute at once. Zero
 	// means the engine default (10) — NOT unbounded: an unthrottled
 	// large Map against poolmgr is a self-inflicted cold-start burst.
@@ -146,6 +151,14 @@ func (b *WorkflowStateApplyConfiguration) WithBranches(values ...*WorkflowBranch
 // If called multiple times, the ItemsPath field is set to the value of the last call.
 func (b *WorkflowStateApplyConfiguration) WithItemsPath(value string) *WorkflowStateApplyConfiguration {
 	b.ItemsPath = &value
+	return b
+}
+
+// WithDuration sets the Duration field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Duration field is set to the value of the last call.
+func (b *WorkflowStateApplyConfiguration) WithDuration(value metav1.Duration) *WorkflowStateApplyConfiguration {
+	b.Duration = &value
 	return b
 }
 

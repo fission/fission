@@ -57,6 +57,10 @@ type action struct {
 // schema deliberately does not default it — see the field comment).
 const defaultMaxConcurrency = 10
 
+// waitAttempt is the attempt number Wait-state timers use (a wait has no
+// retries; the constant keys the timer dedup and the TimersFired record).
+const waitAttempt = 1
+
 // decide is the models' NextOptions in Go (workflowfold.tla for the linear
 // flow, workflowbranch.tla for a live parallel region): a pure function of
 // the fold (and the cancel annotation + clock, which the models treat as
@@ -112,6 +116,17 @@ func decide(s *RunState, cancelRequested bool, now time.Time, rand func() float6
 // terminal actions — those are run-level (a mini-run has no RunStarted, so
 // its zero StartedAt would misfire a raw decide's deadline check).
 func decideStep(s *RunState, branch, current string, rand func() float64) action {
+	// A Wait state holds until its durable timer fires (the fold advances on
+	// TimerFired); the only action is (re-)arming — DedupKey collapses
+	// double-arms, and a DLQ-lost timer heals via the resync re-arm.
+	if st, ok := s.Spec.States[current]; ok && st.Type == fv1.WorkflowStateWait {
+		delay := time.Duration(0)
+		if st.Duration != nil {
+			delay = st.Duration.Duration
+		}
+		return action{kind: actArmTimer, branch: branch, state: current, attempt: waitAttempt, delay: delay}
+	}
+
 	attempt := s.Attempts[current]
 	if attempt == 0 {
 		return action{kind: actScheduleStep, branch: branch, state: current, attempt: 1}

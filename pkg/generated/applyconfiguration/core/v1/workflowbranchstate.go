@@ -20,6 +20,7 @@ import (
 type WorkflowBranchStateApplyConfiguration struct {
 	Type       *corev1.WorkflowStateType              `json:"type,omitempty"`
 	Function   *FunctionReferenceApplyConfiguration   `json:"function,omitempty"`
+	Duration   *metav1.Duration                       `json:"duration,omitempty"`
 	Timeout    *metav1.Duration                       `json:"timeout,omitempty"`
 	Retry      *RetryPolicyApplyConfiguration         `json:"retry,omitempty"`
 	Catch      []WorkflowCatchRouteApplyConfiguration `json:"catch,omitempty"`
@@ -51,6 +52,14 @@ func (b *WorkflowBranchStateApplyConfiguration) WithType(value corev1.WorkflowSt
 // If called multiple times, the Function field is set to the value of the last call.
 func (b *WorkflowBranchStateApplyConfiguration) WithFunction(value *FunctionReferenceApplyConfiguration) *WorkflowBranchStateApplyConfiguration {
 	b.Function = value
+	return b
+}
+
+// WithDuration sets the Duration field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Duration field is set to the value of the last call.
+func (b *WorkflowBranchStateApplyConfiguration) WithDuration(value metav1.Duration) *WorkflowBranchStateApplyConfiguration {
+	b.Duration = &value
 	return b
 }
 

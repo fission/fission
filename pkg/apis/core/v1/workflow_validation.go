@@ -231,6 +231,17 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 			errs = errors.Join(errs, b.validate(fmt.Sprintf("%s.Branches[%d]", field, i)))
 		}
 
+	case WorkflowStateWait:
+		if st.Duration == nil || st.Duration.Duration <= 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".Duration", st.Duration,
+				"a Wait state needs a positive duration"))
+		}
+		hasNext := st.Next != ""
+		if hasNext == st.End {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
+				"a Wait state sets exactly one of Next or End"))
+		}
+
 	case WorkflowStateSucceed, WorkflowStateFail:
 		// Terminal shape enforced entirely by the exclusivity table.
 
@@ -254,9 +265,11 @@ type stateField struct {
 
 var (
 	onTask       = map[WorkflowStateType]bool{WorkflowStateTask: true}
+	onWait       = map[WorkflowStateType]bool{WorkflowStateWait: true}
 	onChoice     = map[WorkflowStateType]bool{WorkflowStateChoice: true}
 	onFanOut     = map[WorkflowStateType]bool{WorkflowStateParallel: true, WorkflowStateMap: true}
 	onTaskFanOut = map[WorkflowStateType]bool{WorkflowStateTask: true, WorkflowStateParallel: true, WorkflowStateMap: true}
+	onNexting    = map[WorkflowStateType]bool{WorkflowStateTask: true, WorkflowStateParallel: true, WorkflowStateMap: true, WorkflowStateWait: true}
 )
 
 var stateFields = []stateField{
@@ -276,8 +289,9 @@ var stateFields = []stateField{
 	{"InputPath", func(s WorkflowState) bool { return s.InputPath != "" }, onTaskFanOut},
 	{"ResultPath", func(s WorkflowState) bool { return s.ResultPath != "" }, onTaskFanOut},
 	{"OutputPath", func(s WorkflowState) bool { return s.OutputPath != "" }, onTaskFanOut},
-	{"Next", func(s WorkflowState) bool { return s.Next != "" }, onTaskFanOut},
-	{"End", func(s WorkflowState) bool { return s.End }, onTaskFanOut},
+	{"Duration", func(s WorkflowState) bool { return s.Duration != nil }, onWait},
+	{"Next", func(s WorkflowState) bool { return s.Next != "" }, onNexting},
+	{"End", func(s WorkflowState) bool { return s.End }, onNexting},
 }
 
 // validateFieldExclusivity rejects fields set on a state type that does not
@@ -388,7 +402,7 @@ func validateWorkflowRetry(field string, r *RetryPolicy) error {
 // fields stay zero (impossible by type).
 func (b WorkflowBranchState) ToState() WorkflowState {
 	return WorkflowState{
-		Type: b.Type, Function: b.Function, Timeout: b.Timeout,
+		Type: b.Type, Function: b.Function, Duration: b.Duration, Timeout: b.Timeout,
 		Retry: b.Retry, Catch: b.Catch, Choices: b.Choices, Default: b.Default,
 		InputPath: b.InputPath, ResultPath: b.ResultPath, OutputPath: b.OutputPath,
 		Next: b.Next, End: b.End,

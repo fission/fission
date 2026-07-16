@@ -109,6 +109,7 @@ func (r *WorkflowRunReconciler) writeStatus(ctx context.Context, run *fv1.Workfl
 		if run.Status.FinishedAt == nil {
 			now := metav1.Now()
 			run.Status.FinishedAt = &now
+			recordRunTerminal(ctx, run.Spec.WorkflowRef, string(s.Terminal))
 		}
 		run.Status.ActiveStates = nil
 		// The final output rides inline up to the spill threshold; larger
@@ -131,6 +132,7 @@ func (r *WorkflowRunReconciler) writeStatus(ctx context.Context, run *fv1.Workfl
 		run.Status.Phase = fv1.WorkflowRunRunning
 		if run.Status.StartedAt == nil {
 			run.Status.StartedAt = &metav1.Time{Time: s.StartedAt}
+			recordRunStarted(ctx)
 		}
 		if s.Current != "" {
 			run.Status.ActiveStates = []string{s.Current}

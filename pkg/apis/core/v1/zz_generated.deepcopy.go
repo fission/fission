@@ -1609,6 +1609,11 @@ func (in *WorkflowBranchState) DeepCopyInto(out *WorkflowBranchState) {
 		*out = new(FunctionReference)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Duration != nil {
+		in, out := &in.Duration, &out.Duration
+		*out = new(metav1.Duration)
+		**out = **in
+	}
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
 		*out = new(metav1.Duration)
@@ -2015,6 +2020,11 @@ func (in *WorkflowState) DeepCopyInto(out *WorkflowState) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.Duration != nil {
+		in, out := &in.Duration, &out.Duration
+		*out = new(metav1.Duration)
+		**out = **in
 	}
 }
 

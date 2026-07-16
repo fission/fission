@@ -246,6 +246,18 @@ func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
 
 	case EvTimerFired:
 		s.TimersFired[stepKey(e.State, e.Attempt)] = true
+		// A Wait state's pause ends with its timer: advance through Next/End
+		// with the document unchanged (a wait is a pure pass-through).
+		if s.Current == e.State {
+			if st, ok := s.Spec.States[e.State]; ok && st.Type == fv1.WorkflowStateWait {
+				if st.End {
+					s.Current = ""
+					s.PendingCompletion = true
+					return nil
+				}
+				return s.advance(st.Next, deref)
+			}
+		}
 		return nil
 
 	case EvRunSucceeded:
@@ -506,7 +518,7 @@ func (s *RunState) advance(to string, deref derefFn) error {
 			return fmt.Errorf("advance: state %q not in snapshot", to)
 		}
 		switch st.Type {
-		case fv1.WorkflowStateTask:
+		case fv1.WorkflowStateTask, fv1.WorkflowStateWait:
 			s.Current = to
 			return nil
 		case fv1.WorkflowStateParallel, fv1.WorkflowStateMap:

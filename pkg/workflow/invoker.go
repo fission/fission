@@ -135,7 +135,16 @@ func (inv *Invoker) Dispatch(iv invocation) {
 }
 
 func (inv *Invoker) run(iv invocation) {
+	begin := time.Now()
 	result := inv.execute(iv)
+	outcome := "success"
+	switch {
+	case result.skip:
+		outcome = "aborted"
+	case !result.succeeded:
+		outcome = "failure"
+	}
+	recordStepDuration(inv.baseCtx, iv.state, outcome, time.Since(begin))
 	if result.skip {
 		// Process shutdown mid-invocation: append nothing — a restart must
 		// never consume an attempt. The replay re-invokes.

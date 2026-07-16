@@ -38,6 +38,7 @@ const (
 	WorkflowStateChoice   WorkflowStateType = "Choice"
 	WorkflowStateParallel WorkflowStateType = "Parallel"
 	WorkflowStateMap      WorkflowStateType = "Map"
+	WorkflowStateWait     WorkflowStateType = "Wait"
 	WorkflowStateSucceed  WorkflowStateType = "Succeed"
 	WorkflowStateFail     WorkflowStateType = "Fail"
 )
@@ -390,9 +391,7 @@ type (
 	}
 
 	// WorkflowStateType enumerates the state kinds the engine executes.
-	// Wait (phase 4) is added with its engine support so admission never
-	// accepts a state the engine cannot run.
-	// +kubebuilder:validation:Enum=Task;Choice;Parallel;Map;Succeed;Fail
+	// +kubebuilder:validation:Enum=Task;Choice;Parallel;Map;Wait;Succeed;Fail
 	WorkflowStateType string
 
 	// WorkflowSpec is a state machine: states are data, logic lives in
@@ -466,6 +465,13 @@ type (
 		// +optional
 		ItemsPath string `json:"itemsPath,omitempty"`
 
+		// Duration is how long a Wait state pauses the run — durably: the
+		// delay is a statestore Queue message, so a controller restart never
+		// loses it (robfig/cron-style absolute schedules stay with the timer
+		// subsystem; only durations here).
+		// +optional
+		Duration *metav1.Duration `json:"duration,omitempty"`
+
 		// MaxConcurrency throttles how many branches execute at once. Zero
 		// means the engine default (10) — NOT unbounded: an unthrottled
 		// large Map against poolmgr is a self-inflicted cold-start burst.
@@ -510,6 +516,8 @@ type (
 		Type WorkflowStateType `json:"type"`
 		// +optional
 		Function *FunctionReference `json:"function,omitempty"`
+		// +optional
+		Duration *metav1.Duration `json:"duration,omitempty"`
 		// +optional
 		Timeout *metav1.Duration `json:"timeout,omitempty"`
 		// +optional

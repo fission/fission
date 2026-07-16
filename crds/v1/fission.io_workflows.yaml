@@ -317,6 +317,8 @@ spec:
                                   type: array
                                 default:
                                   type: string
+                                duration:
+                                  type: string
                                 end:
                                   type: boolean
                                 function:
@@ -401,15 +403,14 @@ spec:
                                 timeout:
                                   type: string
                                 type:
-                                  description: |-
-                                    WorkflowStateType enumerates the state kinds the engine executes.
-                                    Wait (phase 4) is added with its engine support so admission never
-                                    accepts a state the engine cannot run.
+                                  description: WorkflowStateType enumerates the state
+                                    kinds the engine executes.
                                   enum:
                                   - Task
                                   - Choice
                                   - Parallel
                                   - Map
+                                  - Wait
                                   - Succeed
                                   - Fail
                                   type: string
@@ -632,6 +633,13 @@ spec:
                         Default names the state a Choice falls through to when no rule
                         matches; without it, no-match fails the run (Fission.NoChoiceMatched).
                       type: string
+                    duration:
+                      description: |-
+                        Duration is how long a Wait state pauses the run — durably: the
+                        delay is a statestore Queue message, so a controller restart never
+                        loses it (robfig/cron-style absolute schedules stay with the timer
+                        subsystem; only durations here).
+                      type: string
                     end:
                       type: boolean
                     function:
@@ -735,15 +743,14 @@ spec:
                       description: Timeout bounds one attempt of a Task invocation.
                       type: string
                     type:
-                      description: |-
-                        WorkflowStateType enumerates the state kinds the engine executes.
-                        Wait (phase 4) is added with its engine support so admission never
-                        accepts a state the engine cannot run.
+                      description: WorkflowStateType enumerates the state kinds the
+                        engine executes.
                       enum:
                       - Task
                       - Choice
                       - Parallel
                       - Map
+                      - Wait
                       - Succeed
                       - Fail
                       type: string
