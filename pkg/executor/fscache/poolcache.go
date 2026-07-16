@@ -273,7 +273,17 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyUG, ad
 	if _, ok := c.cache[function]; !ok {
 		c.cache[function] = NewFuncSvcGroup()
 	}
-	if _, ok := c.cache[function].svcs[address]; !ok {
+	if existing, ok := c.cache[function].svcs[address]; ok {
+		// Same {UID, Gen, address} — this is a re-specialization or
+		// concurrent specialization of the same pod. Log it so we can
+		// verify the RV race fix is merging entries correctly.
+		if c.logger.V(1).Enabled() {
+			otelUtils.LoggerWithTraceID(ctx, c.logger).V(1).Info("SetSvcValue: updating existing entry",
+				"function", function.String(),
+				"address", address,
+				"previousActiveRequests", existing.activeRequests)
+		}
+	} else {
 		c.cache[function].svcs[address] = &funcSvcInfo{}
 	}
 	c.cache[function].svcRetain = svcsRetain
@@ -314,7 +324,6 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyUG, ad
 			"function", function.String(),
 			"address", address,
 			"uid", function.UID,
-			"resourceVersion", function.ResourceVersion,
 			"generation", function.Generation,
 			"activeRequests", c.cache[function].svcs[address].activeRequests)
 	}
@@ -346,7 +355,6 @@ func (c *PoolCache) MarkAvailable(function crd.CacheKeyUG, address string) {
 				"function", function.String(),
 				"address", address,
 				"uid", function.UID,
-				"resourceVersion", function.ResourceVersion,
 				"generation", function.Generation)
 		}
 		return
@@ -354,22 +362,30 @@ func (c *PoolCache) MarkAvailable(function crd.CacheKeyUG, address string) {
 	svcInfo, ok := funcSvcGroup.svcs[address]
 	if !ok {
 		if c.logger.V(1).Enabled() {
+			knownAddresses := make([]string, 0, len(funcSvcGroup.svcs))
+			for a := range funcSvcGroup.svcs {
+				knownAddresses = append(knownAddresses, a)
+			}
 			otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("MarkAvailable address miss",
 				"function", function.String(),
 				"address", address,
 				"uid", function.UID,
-				"resourceVersion", function.ResourceVersion,
-				"generation", function.Generation)
+				"generation", function.Generation,
+				"knownAddresses", knownAddresses)
 		}
 		return
 	}
 	if svcInfo.activeRequests > 0 {
 		svcInfo.activeRequests--
 		if c.logger.V(1).Enabled() {
-			otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("Decrease active requests", "function", function.String(), "address", address, "activeRequests", svcInfo.activeRequests)
+			otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("MarkAvailable: decreased active requests",
+				"function", function.String(),
+				"address", address,
+				"activeRequests", svcInfo.activeRequests)
 		}
 	} else {
-		otelUtils.LoggerWithTraceID(context.Background(), c.logger).Error(nil, "Invalid request to decrease active requests", "function", function.String(), "address", address, "activeRequests", svcInfo.activeRequests)
+		otelUtils.LoggerWithTraceID(context.Background(), c.logger).Error(nil, "MarkAvailable: invalid request to decrease active requests (already 0)",
+			"function", function.String(), "address", address)
 	}
 }
 

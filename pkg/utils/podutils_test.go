@@ -48,7 +48,7 @@ func TestIsReadyPod(t *testing.T) {
 	}{
 		{"nil pod", nil, false},
 		{"running, ip, all containers ready", mkPod(corev1.PodRunning, "10.0.0.1", false, readyCs("a")), true},
-		{"running, ip, no containers", mkPod(corev1.PodRunning, "10.0.0.1", false), true},
+		{"running, ip, no containers (statuses not yet reported)", mkPod(corev1.PodRunning, "10.0.0.1", false), false},
 		{"running, no ip", mkPod(corev1.PodRunning, "", false, readyCs("a")), false},
 		{"running, ip, one container not ready", mkPod(corev1.PodRunning, "10.0.0.1", false, readyCs("a"), notReadyCs("b")), false},
 		{"running, ip, all containers not ready", mkPod(corev1.PodRunning, "10.0.0.1", false, notReadyCs("a")), false},

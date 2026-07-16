@@ -20,12 +20,12 @@ func (ck CacheKeyUR) String() string {
 	return fmt.Sprintf("%v_%v", ck.UID, ck.ResourceVersion)
 }
 
-type CacheKeyUG struct {
+type CacheKeyURG struct {
 	UID        types.UID
 	Generation int64
 }
 
-func (ck CacheKeyUG) String() string {
+func (ck CacheKeyURG) String() string {
 	return fmt.Sprintf("%v_%v", ck.UID, ck.Generation)
 }
 
@@ -56,15 +56,15 @@ func CacheKeyURFromObject(obj metav1.Object) CacheKeyUR {
 	}
 }
 
-// CacheKeyUGFromMeta creates a cache key that uniquely identifies the
+// CacheKeyURGFromMeta creates a cache key that uniquely identifies the
 // function's content version. UID is stable for the function's
 // lifetime; Generation increments on spec changes. ResourceVersion is
 // intentionally excluded: it changes on status updates (not just spec
 // changes), and the router's informer cache may lag the executor's
 // view, causing UnTapService to miss the cache entry and leak
-// activeRequests.
-func CacheKeyUGFromMeta(metadata *metav1.ObjectMeta) CacheKeyUG {
-	return CacheKeyUG{
+// activeRequests. See ci-29472717703 v1.36.1 analysis.
+func CacheKeyURGFromMeta(metadata *metav1.ObjectMeta) CacheKeyURG {
+	return CacheKeyURG{
 		UID:        metadata.UID,
 		Generation: metadata.Generation,
 	}

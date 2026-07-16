@@ -27,6 +27,16 @@ func IsReadyPod(pod *v1.Pod) bool {
 		return false
 	}
 
+	// kubelet populates containerStatuses asynchronously after setting
+	// phase=Running. An empty slice means the status report has not
+	// arrived yet — the pod is NOT ready (the fetcher HTTP server may
+	// not be listening). Returning true here causes the executor to
+	// dial a port that is not bound yet, resulting in a 30s i/o
+	// timeout and pod cleanup. See ci-29472717703 v1.32.11 analysis.
+	if len(pod.Status.ContainerStatuses) == 0 {
+		return false
+	}
+
 	for _, cStatus := range pod.Status.ContainerStatuses {
 		if !cStatus.Ready {
 			return false

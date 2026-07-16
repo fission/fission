@@ -317,6 +317,12 @@ func (p *Provisioner) countProvisionedPods(ctx context.Context, fn *fv1.Function
 		return 0, err
 	}
 	readyAndRunningPods := utils.ReadyAndRunningPodsFilter(&podList)
+	if len(readyAndRunningPods) < len(podList.Items) {
+		p.logger.V(1).Info("provisioned pod count: some pods not ready+running",
+			"totalPods", len(podList.Items),
+			"readyAndRunning", len(readyAndRunningPods),
+			"function", fn.Name)
+	}
 	return len(readyAndRunningPods), nil
 }
 
