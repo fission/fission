@@ -316,6 +316,23 @@ func TestEngineConcurrentReconcilers(t *testing.T) {
 	assertInvariants(t, h.log(t), 1)
 }
 
+// TestEnginePlainTextFunction pins the lenient success contract: a function
+// returning non-JSON (plain text) folds as a JSON string instead of wedging
+// the run in a decode-retry loop.
+func TestEnginePlainTextFunction(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, pipelineSpec())
+	h.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("hello, world!\n"))
+	})
+
+	s := h.drive(t, h.engine, 10*time.Second)
+	assert.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
+	assert.JSONEq(t, `"hello, world!\n"`, string(s.Output))
+}
+
 // TestEngineSpillsLargeOutputs pins the 64KiB spill path end to end.
 func TestEngineSpillsLargeOutputs(t *testing.T) {
 	t.Parallel()

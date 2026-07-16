@@ -229,6 +229,9 @@ func (inv *Invoker) shapeSuccess(iv invocation, body json.RawMessage) (json.RawM
 			return nil, fmt.Errorf("decoding step input: %w", err)
 		}
 	}
+	// normalizeJSON already ran on the body (non-JSON success responses —
+	// plain-text functions — become JSON strings), so this cannot fail on
+	// function output; a failure here means engine corruption.
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decoding step result: %w", err)
 	}
