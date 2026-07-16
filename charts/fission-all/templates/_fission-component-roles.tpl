@@ -200,6 +200,8 @@ rules:
   - messagequeuetriggers
   - packages
   - timetriggers
+  - workflows
+  - workflowruns
   verbs:
   - list
 {{- end }}

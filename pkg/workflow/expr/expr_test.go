@@ -37,8 +37,8 @@ func TestParse(t *testing.T) {
 
 	invalid := []string{
 		"",
-		"a.b",       // relative: every documented example is $-rooted
-		"@.a",       // filter-local root outside a filter
+		"a.b", // relative: every documented example is $-rooted
+		"@.a", // filter-local root outside a filter
 		"$.a[?(@.b >]",
 		"$[",
 	}
