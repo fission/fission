@@ -62,7 +62,9 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 		if err := json.Unmarshal(msg.Body, &tm); err != nil {
 			// Undecodable = never processable: settle it away.
 			e.logger.Error(err, "dropping undecodable timer message", "id", msg.ID)
-			_ = e.q.Kill(ctx, msg.Receipt, "undecodable timer message")
+			if killErr := e.q.Kill(ctx, msg.Receipt, "undecodable timer message"); killErr != nil {
+				e.logger.Error(killErr, "killing undecodable timer message (it will re-lease)", "id", msg.ID)
+			}
 			continue
 		}
 
@@ -74,7 +76,10 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 		stream := "wfrun/" + tm.UID
 		head, err := e.el.Head(ctx, stream)
 		if err != nil {
-			_ = e.q.Nack(ctx, msg.Receipt, timerRetryOnErr)
+			e.logger.Error(err, "reading stream head for timer; will retry", "run", tm.Name, "state", tm.State)
+			if nackErr := e.q.Nack(ctx, msg.Receipt, timerRetryOnErr); nackErr != nil {
+				e.logger.V(1).Info("timer nack raced a newer lease (expected)", "id", msg.ID, "error", nackErr)
+			}
 			continue
 		}
 		err = appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
@@ -88,7 +93,10 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 			}
 		})
 		if err != nil {
-			_ = e.q.Nack(ctx, msg.Receipt, timerRetryOnErr)
+			e.logger.Error(err, "appending TimerFired; will retry", "run", tm.Name, "state", tm.State, "attempt", tm.Attempt)
+			if nackErr := e.q.Nack(ctx, msg.Receipt, timerRetryOnErr); nackErr != nil {
+				e.logger.V(1).Info("timer nack raced a newer lease (expected)", "id", msg.ID, "error", nackErr)
+			}
 			continue
 		}
 		if err := e.q.Ack(ctx, msg.Receipt); err != nil {

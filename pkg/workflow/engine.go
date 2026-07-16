@@ -150,8 +150,16 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			return nil, fmt.Errorf("unhandled action %d", act.kind)
 		}
 
-		if err := e.appendAt(ctx, stream, s.LastSeq, ev); err != nil {
+		head, err := e.appendAt(ctx, stream, s.LastSeq, ev)
+		if err != nil {
 			if errors.Is(err, statestore.ErrVersionConflict) {
+				if head < s.LastSeq {
+					// The stream is BEHIND the fold: a stale checkpoint or a
+					// trimmed stream. Re-reading can never converge — fail
+					// loud (surfaces as an EngineError condition) instead of
+					// spinning the reconcile worker forever.
+					return nil, fmt.Errorf("stream %s head %d is behind folded seq %d (stale checkpoint or trimmed stream)", stream, head, s.LastSeq)
+				}
 				continue // someone else advanced the log; re-read and replan
 			}
 			return nil, err
@@ -175,13 +183,32 @@ func (e *Engine) foldTail(ctx context.Context, stream string, s *RunState, deref
 	}
 }
 
-func (e *Engine) appendAt(ctx context.Context, stream string, expectedSeq int64, ev Event) error {
+func (e *Engine) appendAt(ctx context.Context, stream string, expectedSeq int64, ev Event) (int64, error) {
 	se, err := encodeEvent(ev)
+	if err != nil {
+		return 0, err
+	}
+	return e.el.Append(ctx, stream, expectedSeq, []statestore.Event{se})
+}
+
+// FailUnstartable terminally fails a run that can never start (e.g. its
+// Workflow does not exist past the GitOps-ordering grace). Guarded like
+// every other append: an existing terminal wins.
+func (e *Engine) FailUnstartable(ctx context.Context, run *fv1.WorkflowRun, cause string) error {
+	stream := streamName(run)
+	head, err := e.el.Head(ctx, stream)
 	if err != nil {
 		return err
 	}
-	_, err = e.el.Append(ctx, stream, expectedSeq, []statestore.Event{se})
-	return err
+	ev := Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrPermanentError, Cause: causeOf(fmt.Errorf("%s", cause))}
+	return appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
+		switch raced.Type {
+		case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
+			return true
+		default:
+			return false
+		}
+	})
 }
 
 // armTimer enqueues the backoff delay. DedupKey collapses double-arms while

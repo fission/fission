@@ -80,6 +80,10 @@ func registerHistoryAPI(mux *http.ServeMux, logger logr.Logger, el statestore.Ev
 				if withIO && e.OutputRef != "" {
 					if v, err := kv.Get(r.Context(), ioScope(namespace, name), e.OutputRef); err == nil {
 						e.Output, e.OutputRef = v.Data, ""
+					} else {
+						// Keep the ref so the reader sees "spilled but
+						// unavailable" rather than "no output".
+						logger.V(1).Info("spilled output unavailable for history", "run", name, "ref", e.OutputRef, "error", err)
 					}
 				}
 				out = append(out, HistoryEvent{Seq: se.Seq, At: se.At.UTC().Format("2006-01-02T15:04:05.000Z07:00"), Event: e})

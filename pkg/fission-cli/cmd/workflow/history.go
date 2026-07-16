@@ -21,6 +21,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
@@ -140,10 +141,15 @@ func workflowBaseURL(input cli.Input, opts *cmd.CommandActioner) (string, error)
 
 // workflowTransport signs requests with the ServiceWorkflow key when the
 // cluster runs internal auth (empty secret = pass-through, matching the
-// verifier).
+// verifier). A FAILED secret read is not the same as "auth not configured":
+// say so, or the resulting 401 is undebuggable.
 func workflowTransport(input cli.Input, opts *cmd.CommandActioner) http.RoundTripper {
 	master, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
-	if err != nil || len(master) == 0 {
+	if err != nil {
+		console.Warn(fmt.Sprintf("could not read the internal auth secret (%v); sending unsigned requests — a 401 below means your kubeconfig lacks access to it, not that auth is off", err))
+		return http.DefaultTransport
+	}
+	if len(master) == 0 {
 		return http.DefaultTransport
 	}
 	return hmacauth.ServiceSigner(master, hmacauth.ServiceWorkflow, http.DefaultTransport, time.Now)

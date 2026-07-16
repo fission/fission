@@ -99,6 +99,15 @@ func (s *RunState) fold(events []statestore.Event, deref derefFn) error {
 			return err
 		}
 		if s.Terminal != "" {
+			// One benign exception to strict W4: a timer message that fired
+			// after the run went terminal appends TimerFired without a CAS
+			// conflict (fresh Head == post-terminal head). The fold ignores
+			// it — TimersFired is consulted only for non-terminal runs — and
+			// stays strict for every event the TLA invariants cover.
+			if e.Type == EvTimerFired {
+				s.LastSeq = se.Seq
+				continue
+			}
 			return fmt.Errorf("fold: %s at seq %d after terminal %s (W4 violated — corrupt stream)", e.Type, se.Seq, s.Terminal)
 		}
 		if err := s.apply(e, se, deref); err != nil {

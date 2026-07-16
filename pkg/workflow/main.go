@@ -189,11 +189,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if cacheSynced.Load() && caps.Ping(r.Context()) == nil {
-			w.WriteHeader(http.StatusOK)
+		if !cacheSynced.Load() {
+			http.Error(w, "caches not yet synced", http.StatusServiceUnavailable)
 			return
 		}
-		w.WriteHeader(http.StatusServiceUnavailable)
+		if err := caps.Ping(r.Context()); err != nil {
+			// The body says WHY: an opaque 503 turns into a rollout-timeout
+			// mystery in CI.
+			http.Error(w, "statestore unreachable: "+err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 	lookupUID := func(lctx context.Context, namespace, name string) (string, error) {
 		run, err := fissionClient.CoreV1().WorkflowRuns(namespace).Get(lctx, name, metav1.GetOptions{})

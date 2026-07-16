@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -62,6 +63,12 @@ type Invoker struct {
 	wake      func(types.NamespacedName)
 	sem       chan struct{}
 	baseCtx   context.Context
+
+	// inflight dedups dispatches: the 60s resync recomputes actInvoke for
+	// attempts that are still executing, and re-running a long step's side
+	// effects (or filling the pool with duplicates) must not happen.
+	mu       sync.Mutex
+	inflight map[string]bool // "uid/state/attempt"
 }
 
 type InvokerOptions struct {
@@ -86,31 +93,67 @@ func NewInvoker(o InvokerOptions) *Invoker {
 		logger: o.Logger, client: o.Client, routerURL: o.RouterURL,
 		el: o.EventLog, kv: o.KV, wake: o.Wake,
 		sem: make(chan struct{}, o.Workers), baseCtx: o.BaseCtx,
+		inflight: map[string]bool{},
 	}
 }
 
-// Dispatch runs the invocation on the pool. It never blocks the reconciler
-// beyond pool admission.
+// Dispatch runs the invocation on the pool WITHOUT ever blocking the
+// reconciler: a duplicate of an in-flight attempt is a no-op (the resync
+// recomputes actInvoke for attempts that are still executing), and a full
+// pool skips the dispatch — the wake on completion or the next resync
+// retries. Blocking here would freeze the whole run control plane behind
+// long steps (the head-of-line class the executor's specialization
+// semaphore documents).
 func (inv *Invoker) Dispatch(iv invocation) {
-	inv.sem <- struct{}{}
+	key := iv.runUID + "/" + stepKey(iv.state, iv.attempt)
+	inv.mu.Lock()
+	if inv.inflight[key] {
+		inv.mu.Unlock()
+		return
+	}
+	select {
+	case inv.sem <- struct{}{}:
+	default:
+		inv.mu.Unlock()
+		inv.logger.V(1).Info("invoker pool saturated; deferring to resync", "run", iv.runKey, "state", iv.state)
+		return
+	}
+	inv.inflight[key] = true
+	inv.mu.Unlock()
+
 	go func() {
-		defer func() { <-inv.sem }()
+		defer func() {
+			inv.mu.Lock()
+			delete(inv.inflight, key)
+			inv.mu.Unlock()
+			<-inv.sem
+		}()
 		inv.run(iv)
-		inv.wake(iv.runKey)
 	}()
 }
 
 func (inv *Invoker) run(iv invocation) {
 	result := inv.execute(iv)
-	if err := inv.appendResult(iv, result); err != nil {
-		// The next resync re-invokes (at-least-once); nothing to do here.
-		inv.logger.Error(err, "recording step result", "run", iv.runKey, "state", iv.state, "attempt", iv.attempt)
+	if result.skip {
+		// Process shutdown mid-invocation: append nothing — a restart must
+		// never consume an attempt. The replay re-invokes.
+		return
 	}
+	if err := inv.appendResult(iv, result); err != nil {
+		// Deliberately NO wake here: waking on a failed append would hot-loop
+		// re-invocations of the same attempt (side effects included) as fast
+		// as the function responds. The 60s resync is the retry cadence.
+		inv.logger.Error(err, "recording step result (the resync will re-drive)", "run", iv.runKey, "state", iv.state, "attempt", iv.attempt)
+		return
+	}
+	inv.wake(iv.runKey)
 }
 
-// outcome is a classified invocation result per the RFC error model.
+// outcome is a classified invocation result per the RFC error model. skip
+// means "append nothing" (process shutdown mid-flight).
 type outcome struct {
 	succeeded bool
+	skip      bool
 	body      json.RawMessage
 	errorType string
 	cause     json.RawMessage
@@ -151,6 +194,11 @@ func (inv *Invoker) execute(iv invocation) outcome {
 
 	resp, err := inv.client.Do(req)
 	if err != nil {
+		if inv.baseCtx.Err() != nil {
+			// Process shutdown, not a step timeout: a pod restart must never
+			// consume an attempt.
+			return outcome{skip: true}
+		}
 		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
 			return outcome{errorType: fv1.WorkflowErrTimeout, cause: causeOf(err)}
 		}

@@ -41,9 +41,13 @@ func shapeInput(st fv1.WorkflowState, input any) (any, error) {
 func shapeOutput(st fv1.WorkflowState, input, result any) (any, error) {
 	merged := result
 	if st.ResultPath != "" {
+		// Parse failures wrap errInvalidPath too: they are exactly as
+		// permanent as an unwritable path, and anything else would loop a
+		// SUCCEEDED function's side effects through endless re-invocation
+		// (admission validates paths, but webhook-bypassed writes exist).
 		p, err := expr.Parse(st.ResultPath)
 		if err != nil {
-			return nil, fmt.Errorf("resultPath %q: %w", st.ResultPath, err)
+			return nil, fmt.Errorf("%w: resultPath %q: %w", errInvalidPath, st.ResultPath, err)
 		}
 		merged, err = p.SetResult(input, result)
 		if err != nil {
@@ -55,7 +59,7 @@ func shapeOutput(st fv1.WorkflowState, input, result any) (any, error) {
 	}
 	p, err := expr.Parse(st.OutputPath)
 	if err != nil {
-		return nil, fmt.Errorf("outputPath %q: %w", st.OutputPath, err)
+		return nil, fmt.Errorf("%w: outputPath %q: %w", errInvalidPath, st.OutputPath, err)
 	}
 	v, _ := p.Get(merged) // no-match -> nil (JSON null)
 	return v, nil

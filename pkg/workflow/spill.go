@@ -56,8 +56,18 @@ func (e *Engine) derefFor(run *fv1.WorkflowRun) derefFn {
 	}
 }
 
-// loadCheckpoint restores the fold checkpoint; absence (or a decode failure,
-// e.g. across an incompatible upgrade) just means folding from the start.
+// checkpointDoc binds a checkpoint to the run's UID: the checkpoint scope is
+// keyed by name, so a delete-and-recreate under the same name would
+// otherwise resurrect the OLD run's fold and livelock the engine (its
+// LastSeq sits past the new, empty stream's head forever).
+type checkpointDoc struct {
+	UID   string    `json:"uid"`
+	State *RunState `json:"state"`
+}
+
+// loadCheckpoint restores the fold checkpoint; absence, a decode failure
+// (incompatible upgrade), or a UID mismatch (recreated run) all just mean
+// folding from the start.
 func (e *Engine) loadCheckpoint(ctx context.Context, run *fv1.WorkflowRun) (*RunState, error) {
 	v, err := e.kv.Get(ctx, checkpointScope(run.Namespace, run.Name), "state")
 	if err != nil {
@@ -66,12 +76,16 @@ func (e *Engine) loadCheckpoint(ctx context.Context, run *fv1.WorkflowRun) (*Run
 		}
 		return nil, fmt.Errorf("loading checkpoint: %w", err)
 	}
-	s := newRunState()
-	if jsonErr := json.Unmarshal(v.Data, s); jsonErr != nil {
+	var doc checkpointDoc
+	if jsonErr := json.Unmarshal(v.Data, &doc); jsonErr != nil || doc.State == nil {
 		e.logger.V(1).Info("discarding undecodable checkpoint (re-folding from scratch)", "run", run.Name, "error", jsonErr)
 		return newRunState(), nil
 	}
-	return s, nil
+	if doc.UID != string(run.UID) {
+		e.logger.Info("discarding checkpoint from a previous run with the same name", "run", run.Name)
+		return newRunState(), nil
+	}
+	return doc.State, nil
 }
 
 // saveCheckpoint is opportunistic: only every checkpointEvery events, and a
@@ -81,7 +95,7 @@ func (e *Engine) saveCheckpoint(ctx context.Context, run *fv1.WorkflowRun, s *Ru
 	if s.LastSeq == 0 || s.LastSeq%checkpointEvery != 0 {
 		return
 	}
-	data, err := json.Marshal(s)
+	data, err := json.Marshal(checkpointDoc{UID: string(run.UID), State: s})
 	if err != nil {
 		e.logger.Error(err, "encoding checkpoint", "run", run.Name)
 		return
