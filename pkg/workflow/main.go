@@ -145,6 +145,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to set up workflow manager: %w", err)
 	}
 
+	// The retention sweeper lists runs by workflowRef; a cached-client List
+	// by field errors without this index.
+	err = crMgr.GetFieldIndexer().IndexField(ctx, &fv1.WorkflowRun{}, WorkflowRefIndex,
+		func(obj client.Object) []string {
+			return []string{obj.(*fv1.WorkflowRun).Spec.WorkflowRef}
+		})
+	if err != nil {
+		return fmt.Errorf("indexing workflowruns by workflowRef: %w", err)
+	}
+
 	runReconciler := &WorkflowRunReconciler{
 		logger: logger.WithName("workflowrun_reconciler"),
 		client: crMgr.GetClient(),
@@ -172,6 +182,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// and stops with the manager.
 	if err := crMgr.Add(manager.RunnableFunc(engine.TimerLoop)); err != nil {
 		return fmt.Errorf("adding timer loop: %w", err)
+	}
+	if err := crMgr.Add(&RetentionSweeper{client: crMgr.GetClient(), engine: engine}); err != nil {
+		return fmt.Errorf("adding retention sweeper: %w", err)
 	}
 
 	// Readiness = cache synced AND the statestore answers: a replica that

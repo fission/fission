@@ -130,6 +130,9 @@ rules:
   - watch
   - update
   - patch
+  # delete: the retention sweeper reclaims finished runs past
+  # HistoryRetention (the finalizer then cleans the stream/KV).
+  - delete
 - apiGroups:
   - fission.io
   resources:

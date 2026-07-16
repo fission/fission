@@ -41,8 +41,13 @@ func (r *WorkflowRunReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	run := &fv1.WorkflowRun{}
 	if err := r.client.Get(ctx, req.NamespacedName, run); err != nil {
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil // stream GC is the phase-3 finalizer's job
+			return ctrl.Result{}, nil // the finalizer already reclaimed the stream/KV
 		}
+		return ctrl.Result{}, err
+	}
+	// The deletion/finalizer protocol sits ABOVE the terminal fast-exit:
+	// terminal runs are exactly the ones the retention sweeper deletes.
+	if done, err := r.handleDeletion(ctx, run); done {
 		return ctrl.Result{}, err
 	}
 	if run.Status.Phase.Terminal() {

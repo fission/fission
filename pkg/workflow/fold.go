@@ -120,10 +120,18 @@ func (s *RunState) fold(events []statestore.Event, deref derefFn) error {
 			}
 			return fmt.Errorf("fold: %s at seq %d after terminal %s (W4 violated — corrupt stream)", e.Type, se.Seq, s.Terminal)
 		}
-		if e.Branch != "" && s.BranchRuns == nil && e.Type == EvTimerFired {
-			// The same benign redelivery after the region already joined
-			// (workflowbranch.tla W8 covers step events; timers are outside
-			// the model's vocabulary, exactly like the terminal case above).
+		if e.Branch != "" && s.BranchRuns == nil &&
+			(e.Type == EvStepSucceeded || e.Type == EvStepFailed || e.Type == EvTimerFired) {
+			// A draining sibling's result (or timer) landing after the region
+			// closed (join, fail-fast, or catch routing). This is a
+			// DOCUMENTED deviation from the model's strict W8: the TLA
+			// reconcilers replan from a fresh read after a lost CAS, so no
+			// branch event can ever follow the join there — but our
+			// appendGuarded retries at the new head, and a sibling in flight
+			// when fail-fast dissolved the region can append before the
+			// terminal lands. The event changes nothing (the region's
+			// outcome was decided by an earlier event, identically for every
+			// replayer); schedules after closure remain corruption.
 			s.LastSeq = se.Seq
 			continue
 		}

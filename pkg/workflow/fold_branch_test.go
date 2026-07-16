@@ -177,4 +177,21 @@ func TestFoldBranchCorruption(t *testing.T) {
 		require.NoError(t, s.fold(wfLog(t, log...), nil))
 		assert.True(t, s.PendingCompletion)
 	})
+
+	t.Run("draining sibling result after fail-fast is ignored", func(t *testing.T) {
+		t.Parallel()
+		// Branch 0 fails terminally (region dissolves, fail-fast); branch 1
+		// was in flight and its result lands before the terminal — the
+		// documented deviation from strict W8 (appendGuarded retries at head
+		// where the model replans). The straggler must not poison the fold.
+		s := newRunState()
+		require.NoError(t, s.fold(wfLog(t, base,
+			Event{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
+			Event{Type: EvStepScheduled, Branch: "1", State: "y", Attempt: 1},
+			Event{Type: EvStepFailed, Branch: "0", State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
+			Event{Type: EvStepSucceeded, Branch: "1", State: "y", Attempt: 1, Output: json.RawMessage(`2`)},
+			Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrBranchFailed},
+		), nil))
+		assert.Equal(t, fv1.WorkflowRunFailed, s.Terminal)
+	})
 }
