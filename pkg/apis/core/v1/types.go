@@ -665,6 +665,15 @@ type (
 		// +optional
 		OutputRef string `json:"outputRef,omitempty"`
 
+		// ErrorType and Cause carry the terminal failure classification so
+		// kubectl answers "why did it fail" without the history endpoint.
+		// Cause is bounded; the full detail lives in the run history.
+		// +optional
+		ErrorType string `json:"errorType,omitempty"`
+		// +optional
+		// +kubebuilder:validation:MaxLength=1024
+		Cause string `json:"cause,omitempty"`
+
 		// RecentEvents is a bounded (<=20) tail; full history is in the
 		// EventLog.
 		// +optional

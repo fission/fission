@@ -44,10 +44,11 @@ func TestFoldParallelJoin(t *testing.T) {
 	s := newRunState()
 	log := wfLog(t,
 		Event{Type: EvRunStarted, Spec: fanSpec(), Input: json.RawMessage(`{"n":1}`)},
-		Event{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
-		Event{Type: EvStepScheduled, Branch: "1", State: "y", Attempt: 1},
-		Event{Type: EvStepSucceeded, Branch: "1", State: "y", Attempt: 1, Output: json.RawMessage(`"y-out"`)},
-		Event{Type: EvStepSucceeded, Branch: "0", State: "x", Attempt: 1, Output: json.RawMessage(`"x-out"`)},
+		// Region "fan@0" is deterministic: RunStarted is seq 1, entered at LastSeq 0.
+		Event{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 1},
+		Event{Type: EvStepScheduled, Branch: "1", Region: "fan@0", State: "y", Attempt: 1},
+		Event{Type: EvStepSucceeded, Branch: "1", Region: "fan@0", State: "y", Attempt: 1, Output: json.RawMessage(`"y-out"`)},
+		Event{Type: EvStepSucceeded, Branch: "0", Region: "fan@0", State: "x", Attempt: 1, Output: json.RawMessage(`"x-out"`)},
 	)
 	require.NoError(t, s.fold(log, nil))
 
@@ -73,8 +74,8 @@ func TestFoldParallelFailFast(t *testing.T) {
 		s := newRunState()
 		require.NoError(t, s.fold(wfLog(t,
 			Event{Type: EvRunStarted, Spec: fanSpec(), Input: json.RawMessage(`{}`)},
-			Event{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
-			Event{Type: EvStepFailed, Branch: "0", State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
+			Event{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 1},
+			Event{Type: EvStepFailed, Branch: "0", Region: "fan@0", State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
 		), nil))
 		assert.Equal(t, fv1.WorkflowErrBranchFailed, s.PendingError)
 		assert.Nil(t, s.BranchRuns, "fail-fast dissolved the region")
@@ -95,8 +96,8 @@ func TestFoldParallelFailFast(t *testing.T) {
 		s := newRunState()
 		require.NoError(t, s.fold(wfLog(t,
 			Event{Type: EvRunStarted, Spec: spec, Input: json.RawMessage(`{}`)},
-			Event{Type: EvStepScheduled, Branch: "1", State: "y", Attempt: 1},
-			Event{Type: EvStepFailed, Branch: "1", State: "y", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
+			Event{Type: EvStepScheduled, Branch: "1", Region: "fan@0", State: "y", Attempt: 1},
+			Event{Type: EvStepFailed, Branch: "1", Region: "fan@0", State: "y", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
 		), nil))
 		assert.Empty(t, s.PendingError)
 		assert.True(t, s.PendingCompletion, "catch routed to done")
@@ -138,10 +139,10 @@ func TestFoldBranchCorruption(t *testing.T) {
 
 	base := Event{Type: EvRunStarted, Spec: fanSpec(), Input: json.RawMessage(`{}`)}
 	okBoth := []Event{base,
-		{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
-		{Type: EvStepSucceeded, Branch: "0", State: "x", Attempt: 1, Output: json.RawMessage(`1`)},
-		{Type: EvStepScheduled, Branch: "1", State: "y", Attempt: 1},
-		{Type: EvStepSucceeded, Branch: "1", State: "y", Attempt: 1, Output: json.RawMessage(`2`)},
+		{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 1},
+		{Type: EvStepSucceeded, Branch: "0", Region: "fan@0", State: "x", Attempt: 1, Output: json.RawMessage(`1`)},
+		{Type: EvStepScheduled, Branch: "1", Region: "fan@0", State: "y", Attempt: 1},
+		{Type: EvStepSucceeded, Branch: "1", Region: "fan@0", State: "y", Attempt: 1, Output: json.RawMessage(`2`)},
 	}
 
 	cases := []struct {
@@ -149,13 +150,13 @@ func TestFoldBranchCorruption(t *testing.T) {
 		log  []Event
 	}{
 		{"join before all branches ok (W7)", []Event{base,
-			{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
+			{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 1},
 			{Type: EvBranchesJoined, Output: json.RawMessage(`[]`)}}},
 		{"branch step event after join (W8)", append(append([]Event{}, okBoth...),
 			Event{Type: EvBranchesJoined, Output: json.RawMessage(`[1,2]`)},
-			Event{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 2})},
+			Event{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 2})},
 		{"event for undeclared branch", []Event{base,
-			{Type: EvStepScheduled, Branch: "7", State: "x", Attempt: 1}}},
+			{Type: EvStepScheduled, Branch: "7", Region: "fan@0", State: "x", Attempt: 1}}},
 		{"join without a region", []Event{
 			{Type: EvRunStarted, Spec: pipelineSpec(), Input: json.RawMessage(`{}`)},
 			{Type: EvBranchesJoined, Output: json.RawMessage(`[]`)}}},
@@ -173,9 +174,92 @@ func TestFoldBranchCorruption(t *testing.T) {
 		s := newRunState()
 		log := append(append([]Event{}, okBoth...),
 			Event{Type: EvBranchesJoined, Output: json.RawMessage(`[1,2]`)},
-			Event{Type: EvTimerFired, Branch: "0", State: "x", Attempt: 1})
+			Event{Type: EvTimerFired, Branch: "0", Region: "fan@0", State: "x", Attempt: 1})
 		require.NoError(t, s.fold(wfLog(t, log...), nil))
 		assert.True(t, s.PendingCompletion)
+	})
+
+	t.Run("checkpoint roundtrip mid-region does not panic on nil maps", func(t *testing.T) {
+		t.Parallel()
+		// Empty maps vanish through omitempty; folding into a restored nil
+		// map panicked and crash-looped the head on the same checkpoint.
+		s := newRunState()
+		require.NoError(t, s.fold(wfLog(t, base), nil))
+		require.NotNil(t, s.BranchRuns)
+
+		data, err := json.Marshal(s)
+		require.NoError(t, err)
+		restored := &RunState{}
+		require.NoError(t, json.Unmarshal(data, restored))
+		restored.normalize()
+
+		region := restored.RegionID
+		next := wfLog(t, Event{Type: EvStepScheduled, Branch: "0", Region: region, State: "x", Attempt: 1})
+		next[0].Seq = 2
+		require.NoError(t, restored.fold(next, nil), "must fold, not panic")
+	})
+
+	t.Run("branch failing at seed time routes fail-fast immediately", func(t *testing.T) {
+		t.Parallel()
+		// A branch whose StartAt resolves straight to a Fail state produces
+		// NO events; without seed-time routing, decide would join a failed
+		// region and append an event the fold itself rejects (W7).
+		spec := fanSpec()
+		fanState := spec.States["fan"]
+		fanState.Branches = append(fanState.Branches, fv1.WorkflowBranch{
+			StartAt: "nope", States: map[string]fv1.WorkflowBranchState{
+				"nope": {Type: fv1.WorkflowStateFail},
+			}})
+		spec.States["fan"] = fanState
+
+		s := newRunState()
+		require.NoError(t, s.fold(wfLog(t,
+			Event{Type: EvRunStarted, Spec: spec, Input: json.RawMessage(`{}`)},
+		), nil))
+		assert.Equal(t, fv1.WorkflowErrBranchFailed, s.PendingError)
+		assert.Nil(t, s.BranchRuns)
+	})
+
+	t.Run("drained sibling cannot contaminate a successor region", func(t *testing.T) {
+		t.Parallel()
+		// P1 fail-fasts into P2 via catch; P2 reuses branch key "0". The old
+		// region's straggler must be ignored by REGION IDENTITY, not just
+		// region liveness — routing it into P2 would poison or, worse,
+		// fabricate P2's progress.
+		spec := fanSpec()
+		fanState := spec.States["fan"]
+		fanState.Catch = []fv1.WorkflowCatchRoute{{ErrorType: fv1.WorkflowErrBranchFailed, Next: "fan2"}}
+		spec.States["fan"] = fanState
+		spec.States["fan2"] = fv1.WorkflowState{
+			Type:     fv1.WorkflowStateParallel,
+			Branches: fanSpec().States["fan"].Branches,
+			Next:     "done",
+		}
+
+		s := newRunState()
+		require.NoError(t, s.fold(wfLog(t,
+			Event{Type: EvRunStarted, Spec: spec, Input: json.RawMessage(`{}`)},
+		), nil))
+		region1 := s.RegionID
+
+		log := wfLog(t,
+			Event{Type: EvStepScheduled, Branch: "0", Region: region1, State: "x", Attempt: 1},
+			Event{Type: EvStepScheduled, Branch: "1", Region: region1, State: "y", Attempt: 1},
+			// Branch 0 fails permanently -> catch routes into fan2 (region 2).
+			Event{Type: EvStepFailed, Branch: "0", Region: region1, State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
+			// Branch 1's drain lands afterwards, still tagged region 1.
+			Event{Type: EvStepSucceeded, Branch: "1", Region: region1, State: "y", Attempt: 1, Output: json.RawMessage(`"stale"`)},
+		)
+		for i := range log {
+			log[i].Seq = int64(i + 2)
+		}
+		require.NoError(t, s.fold(log, nil))
+
+		require.NotNil(t, s.BranchRuns, "in region 2 via catch")
+		assert.NotEqual(t, region1, s.RegionID)
+		for key, mini := range s.BranchRuns {
+			assert.Empty(t, mini.Attempts, "region 2 branch %s untouched by the region-1 straggler", key)
+		}
 	})
 
 	t.Run("draining sibling result after fail-fast is ignored", func(t *testing.T) {
@@ -186,10 +270,10 @@ func TestFoldBranchCorruption(t *testing.T) {
 		// where the model replans). The straggler must not poison the fold.
 		s := newRunState()
 		require.NoError(t, s.fold(wfLog(t, base,
-			Event{Type: EvStepScheduled, Branch: "0", State: "x", Attempt: 1},
-			Event{Type: EvStepScheduled, Branch: "1", State: "y", Attempt: 1},
-			Event{Type: EvStepFailed, Branch: "0", State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
-			Event{Type: EvStepSucceeded, Branch: "1", State: "y", Attempt: 1, Output: json.RawMessage(`2`)},
+			Event{Type: EvStepScheduled, Branch: "0", Region: "fan@0", State: "x", Attempt: 1},
+			Event{Type: EvStepScheduled, Branch: "1", Region: "fan@0", State: "y", Attempt: 1},
+			Event{Type: EvStepFailed, Branch: "0", Region: "fan@0", State: "x", Attempt: 1, ErrorType: fv1.WorkflowErrPermanentError},
+			Event{Type: EvStepSucceeded, Branch: "1", Region: "fan@0", State: "y", Attempt: 1, Output: json.RawMessage(`2`)},
 			Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrBranchFailed},
 		), nil))
 		assert.Equal(t, fv1.WorkflowRunFailed, s.Terminal)

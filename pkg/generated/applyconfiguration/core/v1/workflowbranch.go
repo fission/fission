@@ -12,8 +12,10 @@ package v1
 // WorkflowBranch is one concurrent sub-machine of a Parallel state (or
 // the iterator template of a Map state).
 type WorkflowBranchApplyConfiguration struct {
-	StartAt *string                                          `json:"startAt,omitempty"`
-	States  map[string]WorkflowBranchStateApplyConfiguration `json:"states,omitempty"`
+	StartAt *string `json:"startAt,omitempty"`
+	// MaxProperties=20 (vs 100 top-level) keeps the apiserver's CEL cost
+	// estimate for doubly-nested rules under budget — the phase-1 lesson.
+	States map[string]WorkflowBranchStateApplyConfiguration `json:"states,omitempty"`
 }
 
 // WorkflowBranchApplyConfiguration constructs a declarative configuration of the WorkflowBranch type for use with

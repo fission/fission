@@ -48,6 +48,7 @@ type action struct {
 	kind    actionKind
 	state   string
 	branch  string // parallel-region actions; "" = main flow
+	region  string // the region instance the branch action belongs to
 	attempt int32
 	delay   time.Duration // actArmTimer
 }
@@ -159,18 +160,23 @@ func decideRegion(s *RunState, rand func() float64) []action {
 	branchDone := func(m *RunState) bool { return m.PendingCompletion || m.PendingError != "" }
 	branchStarted := func(m *RunState) bool { return len(m.Attempts) > 0 || branchDone(m) }
 
-	allDone := true
+	// Join requires every branch to have SUCCEEDED — a failed branch is
+	// routed by the fold (fail-fast) the moment it fails, so decide should
+	// never see one; if it somehow does (impossible-by-construction), a
+	// join here would append an event the fold rejects (W7) and wedge the
+	// log, so stall instead.
+	allOk := true
 	running := 0
 	for _, k := range keys {
 		m := s.BranchRuns[k]
-		if !branchDone(m) {
-			allDone = false
+		if !m.PendingCompletion {
+			allOk = false
 		}
 		if branchStarted(m) && !branchDone(m) {
 			running++
 		}
 	}
-	if allDone {
+	if allOk {
 		return []action{{kind: actJoin, state: s.Current}}
 	}
 
@@ -189,6 +195,7 @@ func decideRegion(s *RunState, rand func() float64) []action {
 			running++
 		}
 		a := decideStep(m, k, m.Current, rand)
+		a.region = s.RegionID
 		if a.kind == actScheduleStep {
 			appends = append(appends, a)
 		} else {

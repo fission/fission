@@ -28,6 +28,11 @@ type WorkflowRunStatusApplyConfiguration struct {
 	// points there (the CLI dereferences).
 	Output    *runtime.RawExtension `json:"output,omitempty"`
 	OutputRef *string               `json:"outputRef,omitempty"`
+	// ErrorType and Cause carry the terminal failure classification so
+	// kubectl answers "why did it fail" without the history endpoint.
+	// Cause is bounded; the full detail lives in the run history.
+	ErrorType *string `json:"errorType,omitempty"`
+	Cause     *string `json:"cause,omitempty"`
 	// RecentEvents is a bounded (<=20) tail; full history is in the
 	// EventLog.
 	RecentEvents       []WorkflowRunEventSummaryApplyConfiguration             `json:"recentEvents,omitempty"`
@@ -88,6 +93,22 @@ func (b *WorkflowRunStatusApplyConfiguration) WithOutput(value runtime.RawExtens
 // If called multiple times, the OutputRef field is set to the value of the last call.
 func (b *WorkflowRunStatusApplyConfiguration) WithOutputRef(value string) *WorkflowRunStatusApplyConfiguration {
 	b.OutputRef = &value
+	return b
+}
+
+// WithErrorType sets the ErrorType field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ErrorType field is set to the value of the last call.
+func (b *WorkflowRunStatusApplyConfiguration) WithErrorType(value string) *WorkflowRunStatusApplyConfiguration {
+	b.ErrorType = &value
+	return b
+}
+
+// WithCause sets the Cause field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Cause field is set to the value of the last call.
+func (b *WorkflowRunStatusApplyConfiguration) WithCause(value string) *WorkflowRunStatusApplyConfiguration {
+	b.Cause = &value
 	return b
 }
 

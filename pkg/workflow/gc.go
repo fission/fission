@@ -140,7 +140,9 @@ func (rs *RetentionSweeper) sweep(ctx context.Context) {
 					continue // retry next sweep rather than leak
 				}
 			}
-			if err := rs.client.Delete(ctx, &run); err != nil && !apierrors.IsNotFound(err) {
+			// The UID precondition stops a stale cached listing from deleting
+			// a RECREATED (possibly Running) run under the same name.
+			if err := rs.client.Delete(ctx, &run, client.Preconditions{UID: &run.UID}); err != nil && !apierrors.IsNotFound(err) && !apierrors.IsConflict(err) {
 				logger.Error(err, "deleting expired run", "run", run.Name)
 				continue
 			}

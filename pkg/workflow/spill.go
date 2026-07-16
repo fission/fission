@@ -85,6 +85,10 @@ func (e *Engine) loadCheckpoint(ctx context.Context, run *fv1.WorkflowRun) (*Run
 		e.logger.Info("discarding checkpoint from a previous run with the same name", "run", run.Name)
 		return newRunState(), nil
 	}
+	// The JSON round trip nils out empty maps (omitempty); folding into a
+	// nil map panics, and an unrecovered panic here crash-loops the head on
+	// the same checkpoint forever.
+	doc.State.normalize()
 	return doc.State, nil
 }
 

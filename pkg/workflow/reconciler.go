@@ -118,6 +118,15 @@ func (r *WorkflowRunReconciler) writeStatus(ctx context.Context, run *fv1.Workfl
 			run.Status.Output = &runtime.RawExtension{Raw: s.Output}
 		}
 		run.Status.OutputRef = s.OutputRef
+		// Failure classification so kubectl answers "why" (bounded; full
+		// detail in the history).
+		run.Status.ErrorType = s.ErrorType
+		if cause := string(s.Cause); len(cause) > 0 {
+			if len(cause) > 1024 {
+				cause = cause[:1021] + "..."
+			}
+			run.Status.Cause = cause
+		}
 	case s.Spec != nil:
 		run.Status.Phase = fv1.WorkflowRunRunning
 		if run.Status.StartedAt == nil {

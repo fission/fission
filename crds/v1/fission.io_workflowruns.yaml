@@ -88,6 +88,9 @@ spec:
                 items:
                   type: string
                 type: array
+              cause:
+                maxLength: 1024
+                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -147,6 +150,12 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              errorType:
+                description: |-
+                  ErrorType and Cause carry the terminal failure classification so
+                  kubectl answers "why did it fail" without the history endpoint.
+                  Cause is bounded; the full detail lives in the run history.
+                type: string
               finishedAt:
                 format: date-time
                 type: string

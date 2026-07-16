@@ -46,8 +46,13 @@ type Event struct {
 	State   string    `json:"state,omitempty"`
 	Attempt int32     `json:"attempt,omitempty"`
 	// Branch discriminates parallel-region step events (workflowbranch.tla);
-	// empty = the main flow.
+	// empty = the main flow. Region identifies WHICH region instance the
+	// event belongs to ("state@entrySeq") — without it, a sibling draining
+	// out of a fail-fasted region could be routed into a successor region
+	// that reuses the same branch keys (loops can even re-enter the same
+	// fan-out state, so the state name alone is not enough).
 	Branch string `json:"branch,omitempty"`
+	Region string `json:"region,omitempty"`
 
 	// RunStarted only: the spec snapshot this run executes, forever, plus the
 	// initial input. A Workflow edit or deletion mid-run can neither fork nor

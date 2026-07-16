@@ -62,7 +62,11 @@ type RunState struct {
 	// (checkpointed as-is — at <=10 branches / <=100 items with bounded
 	// branch specs, correctness-simple beats a custom spec-stripping
 	// marshal). Non-nil exactly while Current is a Parallel/Map state.
+	// RegionID names this region instance ("state@entrySeq"); branch events
+	// carry it so a drained straggler from a CLOSED region can never be
+	// mistaken for the live one.
 	BranchRuns map[string]*RunState `json:"branchRuns,omitempty"`
+	RegionID   string               `json:"regionID,omitempty"`
 
 	// PendingCompletion is set when advancement reached the end (End=true or
 	// a Succeed state): decide appends the terminal event.
@@ -89,6 +93,25 @@ func newRunState() *RunState {
 		Attempts:    map[string]int32{},
 		Results:     map[string]stepResult{},
 		TimersFired: map[string]bool{},
+	}
+}
+
+// normalize re-initializes the maps a JSON round trip nils out (all map
+// fields are omitempty, so a checkpoint of a fresh mini-run — or of a run
+// that never retried — restores nil maps, and the next fold would panic on
+// assignment). Walks BranchRuns.
+func (s *RunState) normalize() {
+	if s.Attempts == nil {
+		s.Attempts = map[string]int32{}
+	}
+	if s.Results == nil {
+		s.Results = map[string]stepResult{}
+	}
+	if s.TimersFired == nil {
+		s.TimersFired = map[string]bool{}
+	}
+	for _, mini := range s.BranchRuns {
+		mini.normalize()
 	}
 }
 
@@ -120,18 +143,21 @@ func (s *RunState) fold(events []statestore.Event, deref derefFn) error {
 			}
 			return fmt.Errorf("fold: %s at seq %d after terminal %s (W4 violated — corrupt stream)", e.Type, se.Seq, s.Terminal)
 		}
-		if e.Branch != "" && s.BranchRuns == nil &&
+		if e.Branch != "" && e.Region != s.RegionID &&
 			(e.Type == EvStepSucceeded || e.Type == EvStepFailed || e.Type == EvTimerFired) {
-			// A draining sibling's result (or timer) landing after the region
-			// closed (join, fail-fast, or catch routing). This is a
-			// DOCUMENTED deviation from the model's strict W8: the TLA
+			// A draining sibling's result (or timer) from a CLOSED region —
+			// after a join, fail-fast, or catch routing (even one that
+			// entered ANOTHER region reusing the same branch keys, which is
+			// why the match is on RegionID, not just region liveness). This
+			// is a DOCUMENTED deviation from the model's strict W8: the TLA
 			// reconcilers replan from a fresh read after a lost CAS, so no
 			// branch event can ever follow the join there — but our
 			// appendGuarded retries at the new head, and a sibling in flight
-			// when fail-fast dissolved the region can append before the
-			// terminal lands. The event changes nothing (the region's
-			// outcome was decided by an earlier event, identically for every
-			// replayer); schedules after closure remain corruption.
+			// when the region closed can append before the terminal lands.
+			// The event changes nothing (the region's outcome was decided by
+			// an earlier event, identically for every replayer); schedules
+			// with a stale region remain corruption (they only come from
+			// CAS-fenced decide appends and cannot go stale).
 			s.LastSeq = se.Seq
 			continue
 		}
@@ -161,7 +187,7 @@ func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
 		// The event carries the shaped post-join document, like a step result.
 		s.Doc, s.DocRef = e.Output, e.OutputRef
 		st := s.Spec.States[s.Current]
-		s.BranchRuns = nil
+		s.BranchRuns, s.RegionID = nil, ""
 		if st.End {
 			s.Current = ""
 			s.PendingCompletion = true
@@ -260,52 +286,80 @@ func (s *RunState) applyBranchEvent(e Event, se statestore.Event, deref derefFn)
 
 	// The mini-run applies the event with the SAME machinery (its own
 	// current-state assertions, attempts, results, catch routing within the
-	// branch); strip the branch tag so its bookkeeping is branch-local.
+	// branch); strip the branch/region tags so its bookkeeping is
+	// branch-local.
 	inner := e
-	inner.Branch = ""
+	inner.Branch, inner.Region = "", ""
 	if err := mini.apply(inner, se, deref); err != nil {
 		return fmt.Errorf("branch %s: %w", e.Branch, err)
 	}
 
 	if mini.PendingError != "" {
-		// Fail-fast: the branch is terminally failed. The region fails with
-		// Fission.BranchFailed, routable by a Catch on the fan-out state.
-		cause, err := json.Marshal(map[string]any{
-			"branch":    e.Branch,
-			"errorType": mini.PendingError,
-			"cause":     nonEmpty(mini.Cause),
-		})
-		if err != nil {
-			return fmt.Errorf("encoding branch error object: %w", err)
-		}
-		st := s.Spec.States[s.Current]
-		s.BranchRuns = nil
-		if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != "" {
-			errObj, err := json.Marshal(map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)})
-			if err != nil {
-				return fmt.Errorf("encoding error object: %w", err)
-			}
-			s.Doc, s.DocRef = errObj, ""
-			return s.advance(route, deref)
-		}
-		s.Current = ""
-		s.PendingError = fv1.WorkflowErrBranchFailed
-		s.Cause = cause
+		return s.failRegion(e.Branch, mini, deref)
 	}
+	return nil
+}
+
+// failRegion dissolves the live region because branch failed terminally:
+// the region fails with Fission.BranchFailed, routable by a Catch on the
+// fan-out state. Shared by event-driven fail-fast and seed-time failures (a
+// branch whose StartAt resolves straight to a Fail state or an unmatched
+// Choice never produces an event, and MUST still route — otherwise decide
+// would join a failed region and poison the log against its own fold).
+func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) error {
+	cause, err := json.Marshal(map[string]any{
+		"branch":    branch,
+		"errorType": mini.PendingError,
+		"cause":     nonEmpty(mini.Cause),
+	})
+	if err != nil {
+		return fmt.Errorf("encoding branch error object: %w", err)
+	}
+	st := s.Spec.States[s.Current]
+	s.BranchRuns, s.RegionID = nil, ""
+	if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != "" {
+		errObj, err := json.Marshal(map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)})
+		if err != nil {
+			return fmt.Errorf("encoding error object: %w", err)
+		}
+		s.Doc, s.DocRef = errObj, ""
+		return s.advance(route, deref)
+	}
+	s.Current = ""
+	s.PendingError = fv1.WorkflowErrBranchFailed
+	s.Cause = cause
 	return nil
 }
 
 // enterRegion initializes the parallel region's mini-runs when advancement
 // reaches a Parallel/Map state. Deterministic from the log: branch inputs
-// derive from the flowing document (deref'd spill refs are immutable).
+// derive from the flowing document (deref'd spill refs are immutable), and
+// the region ID from the fold position. Deterministic entry-time failures
+// (unshapeable input, non-array items, a branch failing at seed) become
+// PendingError/failRegion — NEVER a fold error, which would livelock the
+// run with no terminal path (decide would never run again).
 func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn) error {
+	failEntry := func(cause string) {
+		s.Current = ""
+		s.PendingError = fv1.WorkflowErrPermanentError
+		s.Cause, _ = json.Marshal(cause)
+	}
+
 	doc, err := s.currentDoc(deref)
 	if err != nil {
-		return err
+		return err // non-deterministic (KV read): retry via reconcile, not terminal
 	}
 	regionInput, err := shapeInput(st, doc)
 	if err != nil {
-		return err
+		failEntry(fmt.Sprintf("shaping region input: %v", err))
+		return nil
+	}
+	if len(st.Branches) == 0 {
+		// Admission-impossible, but snapshots outlive dialects and
+		// webhook-bypassed writes exist — a panic here would crash-loop the
+		// whole head on every re-fold.
+		failEntry(fmt.Sprintf("state %s has no branches", name))
+		return nil
 	}
 
 	type branchSeed struct {
@@ -319,18 +373,19 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 			seeds = append(seeds, branchSeed{branch: b, input: regionInput})
 		}
 	case fv1.WorkflowStateMap:
-		items, matched := mustParsePath(st.ItemsPath).Get(regionInput)
+		itemsPath, err := expr.Parse(st.ItemsPath)
+		if err != nil {
+			failEntry(fmt.Sprintf("itemsPath %s does not parse under this dialect: %v", st.ItemsPath, err))
+			return nil
+		}
+		items, matched := itemsPath.Get(regionInput)
 		arr, ok := items.([]any)
 		if !matched || !ok {
-			s.Current = ""
-			s.PendingError = fv1.WorkflowErrPermanentError
-			s.Cause, _ = json.Marshal(fmt.Sprintf("itemsPath %s did not select an array", st.ItemsPath))
+			failEntry(fmt.Sprintf("itemsPath %s did not select an array", st.ItemsPath))
 			return nil
 		}
 		if len(arr) > maxMapItems {
-			s.Current = ""
-			s.PendingError = fv1.WorkflowErrPermanentError
-			s.Cause, _ = json.Marshal(fmt.Sprintf("map has %d items; at most %d in v1", len(arr), maxMapItems))
+			failEntry(fmt.Sprintf("map has %d items; at most %d in v1", len(arr), maxMapItems))
 			return nil
 		}
 		for _, item := range arr {
@@ -339,6 +394,9 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 	}
 
 	s.Current = name
+	// The region ID must be deterministic across replays: LastSeq is the seq
+	// of the previous applied event at this exact fold position.
+	s.RegionID = fmt.Sprintf("%s@%d", name, s.LastSeq)
 	s.BranchRuns = make(map[string]*RunState, len(seeds))
 	for i, seed := range seeds {
 		mini := newRunState()
@@ -351,7 +409,8 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 		}
 		raw, err := json.Marshal(seed.input)
 		if err != nil {
-			return fmt.Errorf("encoding branch %d input: %w", i, err)
+			failEntry(fmt.Sprintf("encoding branch %d input: %v", i, err))
+			return nil
 		}
 		mini.Doc = raw
 		if err := mini.advance(seed.branch.StartAt, deref); err != nil {
@@ -359,18 +418,18 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 		}
 		s.BranchRuns[strconv.Itoa(i)] = mini
 	}
-	return nil
-}
 
-// mustParsePath is for admission-validated paths (a parse failure here means
-// a snapshot from a dialect this binary no longer accepts — the ItemsPath
-// no-array error path handles the nil).
-func mustParsePath(path string) expr.Path {
-	p, err := expr.Parse(path)
-	if err != nil {
-		return expr.Path{}
+	// A branch can fail terminally AT SEED (StartAt resolving to a Fail
+	// state, or an unmatched Choice for this item — data-dependent and
+	// admission-valid). No event will ever arrive for it, so route the
+	// fail-fast NOW; decide joining over a failed branch would append an
+	// event the fold itself rejects (W7), wedging the log forever.
+	for key, mini := range s.BranchRuns {
+		if mini.PendingError != "" {
+			return s.failRegion(key, mini, deref)
+		}
 	}
-	return p
+	return nil
 }
 
 // applyStepFailure routes a recorded failure — all deterministic from the

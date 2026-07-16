@@ -44,6 +44,7 @@ type invocation struct {
 	stream      string
 	namespace   string
 	branch      string // parallel-region invocations; "" = main flow
+	region      string // the region instance (rides into result events)
 	state       string
 	attempt     int32
 	stateSpec   fv1.WorkflowState
@@ -287,12 +288,12 @@ func causeOf(err error) json.RawMessage {
 func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 	var ev Event
 	if !res.succeeded {
-		ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
+		ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
 	} else {
 		nextDoc, err := inv.shapeSuccess(iv, res.body)
 		if err != nil {
 			if errors.Is(err, errInvalidPath) {
-				ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Attempt: iv.attempt,
+				ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt,
 					ErrorType: fv1.WorkflowErrInvalidPath, Cause: causeOf(err)}
 			} else {
 				return err
@@ -302,12 +303,12 @@ func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 			if err != nil {
 				return err
 			}
-			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, OutputRef: ref}
+			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, OutputRef: ref}
 		} else {
-			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, Output: nextDoc}
+			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, Output: nextDoc}
 		}
 	}
-	return appendGuarded(inv.baseCtx, inv.el, iv.stream, iv.expectedSeq, ev, resultGuard(iv.branch, iv.state, iv.attempt))
+	return appendGuarded(inv.baseCtx, inv.el, iv.stream, iv.expectedSeq, ev, resultGuard(iv.region, iv.branch, iv.state, iv.attempt))
 }
 
 // shapeSuccess merges the function result into the state's input per
@@ -338,11 +339,11 @@ func (inv *Invoker) shapeSuccess(iv invocation, body json.RawMessage) (json.RawM
 
 // resultGuard drops an append when the log already resolved this attempt or
 // went terminal.
-func resultGuard(branch, state string, attempt int32) func(Event) bool {
+func resultGuard(region, branch, state string, attempt int32) func(Event) bool {
 	return func(e Event) bool {
 		switch e.Type {
 		case EvStepSucceeded, EvStepFailed:
-			return e.Branch == branch && e.State == state && e.Attempt == attempt
+			return e.Region == region && e.Branch == branch && e.State == state && e.Attempt == attempt
 		case EvBranchesJoined:
 			// The region closed (W8): any late branch result is discarded.
 			return branch != ""
@@ -381,6 +382,7 @@ func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, e
 			return err
 		}
 		// Walk the events we lost to; drop if the race is already decided.
+		sawAny := false
 		for seq := expectedSeq; seq < head; {
 			events, err := el.Read(ctx, stream, seq, readBatch)
 			if err != nil {
@@ -389,6 +391,7 @@ func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, e
 			if len(events) == 0 {
 				break
 			}
+			sawAny = true
 			for _, raced := range events {
 				decoded, err := decodeEvent(raced)
 				if err != nil {
@@ -399,6 +402,13 @@ func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, e
 				}
 				seq = raced.Seq
 			}
+		}
+		if !sawAny && head > 0 {
+			// head > 0 with an empty walk means the stream was TRIMMED —
+			// the run is deleted and cleanup already ran. Appending would
+			// recreate rows in a reclaimed stream with no CR to ever clean
+			// them; drop instead.
+			return nil
 		}
 		expectedSeq = head
 	}

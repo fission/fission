@@ -132,7 +132,7 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			ev = Event{Type: EvRunStarted, Spec: spec, Input: input}
 
 		case actScheduleStep:
-			ev = Event{Type: EvStepScheduled, State: act.state, Branch: act.branch, Attempt: act.attempt}
+			ev = Event{Type: EvStepScheduled, State: act.state, Branch: act.branch, Region: act.region, Attempt: act.attempt}
 
 		case actJoin:
 			joined, err := e.assembleJoin(ctx, run, s, deref)
@@ -191,7 +191,8 @@ func (e *Engine) dispatchInvoke(run *fv1.WorkflowRun, stream string, s *RunState
 	e.invoker.Dispatch(invocation{
 		runKey: types.NamespacedName{Namespace: run.Namespace, Name: run.Name},
 		runUID: string(run.UID), stream: stream, namespace: run.Namespace,
-		branch: a.branch, state: a.state, attempt: a.attempt, stateSpec: st, input: doc,
+		branch: a.branch, region: a.region, state: a.state, attempt: a.attempt,
+		stateSpec: st, input: doc,
 		expectedSeq: s.LastSeq,
 	})
 	return nil
@@ -294,7 +295,7 @@ func (e *Engine) FailUnstartable(ctx context.Context, run *fv1.WorkflowRun, caus
 func (e *Engine) armTimer(ctx context.Context, run *fv1.WorkflowRun, act action) error {
 	body, err := json.Marshal(timerMsg{
 		Namespace: run.Namespace, Name: run.Name, UID: string(run.UID),
-		Branch: act.branch, State: act.state, Attempt: act.attempt,
+		Branch: act.branch, Region: act.region, State: act.state, Attempt: act.attempt,
 	})
 	if err != nil {
 		return err

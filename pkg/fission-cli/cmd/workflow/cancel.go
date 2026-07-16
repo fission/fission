@@ -39,6 +39,17 @@ func (opts *CancelSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error resolving namespace: %w", err)
 	}
 
+	// A terminal run cannot be cancelled — say so instead of claiming a
+	// cancellation the engine will ignore forever.
+	run, err := opts.Client().FissionClientSet.CoreV1().WorkflowRuns(namespace).Get(input.Context(), runName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("error getting workflow run: %w", err)
+	}
+	if run.Status.Phase.Terminal() {
+		fmt.Printf("workflow run '%v' already finished (%s) — nothing to cancel\n", runName, run.Status.Phase)
+		return nil
+	}
+
 	patch := fmt.Sprintf(`{"metadata":{"annotations":{%q:"true"}}}`, workflow.CancelAnnotation)
 	_, err = opts.Client().FissionClientSet.CoreV1().WorkflowRuns(namespace).
 		Patch(input.Context(), runName, types.MergePatchType, []byte(patch), metav1.PatchOptions{})
