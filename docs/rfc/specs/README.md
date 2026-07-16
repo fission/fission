@@ -7,6 +7,7 @@ The specs are the design source of truth for these protocols: change the protoco
 |------|--------|-----|
 | `queue.tla` | Queue lease/settle lifecycle: visibility timeout, re-lease, epoch-guarded ack/nack/kill | RFC-0021 `Queue`, RFC-0024 dispatcher |
 | `workflowfold.tla` | CAS-append event-log fold: racing reconcilers, crash/replan, retries, cancel, terminal stability | RFC-0021 `EventLog`, RFC-0022 engine |
+| `workflowbranch.tla` | Parallel-region protocol: concurrent branches over one CAS log, join discipline (unique, all-branches-ok), fail-fast, nothing-after-join | RFC-0022 phase 3 Parallel/Map |
 | `eventlogsub.tla` | Topic subscription: AppendAny publishers, overlapping consumers with a version-CAS KV cursor, poison→ErrorTopic, min-cursor retention | RFC-0027 statestore MQ provider |
 
 ## RFC-0024 async dispatcher

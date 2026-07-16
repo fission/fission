@@ -55,7 +55,7 @@ tlc() {
 
 fail=0
 
-for cfg in queue.cfg workflowfold.cfg eventlogsub.cfg; do
+for cfg in queue.cfg workflowfold.cfg workflowbranch.cfg eventlogsub.cfg; do
   spec="$(basename "${cfg}" .cfg).tla"
   echo "=== TLC (must pass): ${cfg} ==="
   if tlc "${cfg}" "${spec}"; then
