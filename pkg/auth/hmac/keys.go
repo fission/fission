@@ -44,6 +44,10 @@ const (
 	// ServiceStatestore gates the embedded statestore's capability API
 	// (pkg/statestore/httpapi) served by the --statestorePort head (RFC-0021).
 	ServiceStatestore Service = "statestore"
+	// ServiceWorkflow gates the workflow head's read-only history endpoint
+	// (RFC-0022): run I/O may contain user data, so reads are signed like
+	// every other internal channel.
+	ServiceWorkflow Service = "workflow"
 )
 
 // derivedKeyLength is the size of every per-service signing key. 32

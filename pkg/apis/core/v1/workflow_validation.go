@@ -51,6 +51,16 @@ func (st WorkflowState) IsTerminal() bool {
 	return st.End || st.Type == WorkflowStateSucceed || st.Type == WorkflowStateFail
 }
 
+// Terminal reports whether the run phase is final.
+func (p WorkflowRunPhase) Terminal() bool {
+	switch p {
+	case WorkflowRunSucceeded, WorkflowRunFailed, WorkflowRunCancelled, WorkflowRunTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 // ApplyDefaults fills the spec-level defaults the RFC's worked example
 // relies on: a Task's function reference type defaults to "name" (the only
 // other type, function-weights, is a canary concern that never applies to a

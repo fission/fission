@@ -28,6 +28,7 @@ import (
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/statestore/statestoresvc"
+	"github.com/fission/fission/pkg/workflow"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -61,6 +62,7 @@ type CommandLineArgs struct {
 	storageServicePort int
 	mcpPort            int
 	statestorePort     int
+	workflowPort       int
 
 	// URL values — empty means "not set": the resolver derives the
 	// in-cluster default from POD_NAMESPACE (see svcinfo.AddressResolver)
@@ -205,6 +207,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.storageServicePort, "storageServicePort", 0, "Port that the storage service should listen on")
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
 	flag.IntVar(&args.statestorePort, "statestorePort", 0, "Port that the embedded statestore should listen on (RFC-0021 embedded mode)")
+	flag.IntVar(&args.workflowPort, "workflowPort", 0, "Port that the workflow engine should listen on (RFC-0022)")
 
 	// URL flags
 	flag.StringVar(&args.executorUrl, "executorUrl", "", "Executor URL (default http://executor.<POD_NAMESPACE>)")
@@ -335,6 +338,16 @@ func bundleServices() []bundleService {
 			selected: func(a *CommandLineArgs) bool { return a.mcpPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
 				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, mcp.Options{Port: d.args.mcpPort, RouterInternalURL: d.resolver.RouterInternalURL()})
+			},
+		},
+		{
+			// The workflow engine (RFC-0022) invokes functions on the router
+			// internal listener like the other publishers; its statestore
+			// config arrives via env (STATESTORE_DRIVER/DSN).
+			name:     "Fission-Workflow",
+			selected: func(a *CommandLineArgs) bool { return a.workflowPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return workflow.Start(ctx, d.clientGen, d.logger, d.mgr, workflow.Options{Port: d.args.workflowPort, RouterInternalURL: d.resolver.RouterInternalURL()})
 			},
 		},
 		{

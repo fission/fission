@@ -64,6 +64,25 @@ func TestWorkflowWebhookApplyDefaults(t *testing.T) {
 	assert.NoError(t, r.Validate(wf))
 }
 
+func TestWorkflowRunSpecImmutable(t *testing.T) {
+	r := &WorkflowRun{}
+
+	old := &v1.WorkflowRun{
+		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default"},
+		Spec:       v1.WorkflowRunSpec{WorkflowRef: "wf-1"},
+	}
+
+	same := old.DeepCopy()
+	same.Annotations = map[string]string{"fission.io/cancel-requested": "true"}
+	assert.NoError(t, r.ValidateTransition(old, same), "annotations (cancel) stay mutable")
+
+	changed := old.DeepCopy()
+	changed.Spec.WorkflowRef = "wf-2"
+	err := r.ValidateTransition(old, changed)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "immutable")
+}
+
 func TestWorkflowRunWebhookValidate(t *testing.T) {
 	r := &WorkflowRun{}
 
