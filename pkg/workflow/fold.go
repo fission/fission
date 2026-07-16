@@ -49,8 +49,8 @@ type RunState struct {
 
 	// Attempts is each state's highest scheduled attempt (TLA AttemptsOf);
 	// Results records outcomes keyed "state/attempt" (TLA HasResult).
-	Attempts map[string]int32       `json:"attempts,omitempty"`
-	Results  map[string]stepResult  `json:"results,omitempty"`
+	Attempts map[string]int32      `json:"attempts,omitempty"`
+	Results  map[string]stepResult `json:"results,omitempty"`
 	// TimerFired records consumed backoff timers keyed "state/attempt".
 	TimersFired map[string]bool `json:"timersFired,omitempty"`
 
@@ -196,7 +196,7 @@ func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
 	}
 	st := s.Spec.States[e.State]
 	if route := matchCatch(st.Catch, e.ErrorType); route != "" {
-		errObj, err := json.Marshal(map[string]any{"errorType": e.ErrorType, "cause": json.RawMessage(nonEmpty(e.Cause))})
+		errObj, err := json.Marshal(map[string]any{"errorType": e.ErrorType, "cause": nonEmpty(e.Cause)})
 		if err != nil {
 			return fmt.Errorf("encoding error object: %w", err)
 		}
