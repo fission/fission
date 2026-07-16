@@ -167,6 +167,8 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 		}
 	}
 
+	errs = errors.Join(errs, st.validateFieldExclusivity(field))
+
 	switch st.Type {
 	case WorkflowStateTask:
 		switch {
@@ -187,20 +189,12 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
 				"a Task state sets exactly one of Next or End"))
 		}
-		if len(st.Choices) > 0 || st.Default != "" {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
-				"a Task state must not set Choices or Default"))
-		}
 		errs = errors.Join(errs, validateWorkflowRetry(field+".Retry", st.Retry))
 
 	case WorkflowStateChoice:
 		if len(st.Choices) == 0 {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".Choices", "",
 				"a Choice state needs at least one rule"))
-		}
-		if st.Function != nil || st.Retry != nil || len(st.Catch) > 0 || st.Timeout != nil || st.Next != "" || st.End {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
-				"a Choice state must not set Function, Retry, Catch, Timeout, Next, or End (routing is via Choices/Default)"))
 		}
 		for i, rule := range st.Choices {
 			errs = errors.Join(errs, rule.validate(fmt.Sprintf("%s.Choices[%d]", field, i)))
@@ -211,18 +205,62 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 		}
 
 	case WorkflowStateSucceed, WorkflowStateFail:
-		if st.Function != nil || st.Retry != nil || len(st.Catch) > 0 || st.Timeout != nil ||
-			len(st.Choices) > 0 || st.Default != "" || st.Next != "" || st.End ||
-			st.InputPath != "" || st.ResultPath != "" || st.OutputPath != "" {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field, st.Type,
-				fmt.Sprintf("a %s state is terminal and carries no other fields", st.Type)))
-		}
+		// Terminal shape enforced entirely by the exclusivity table.
 
 	default:
 		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, field+".Type", st.Type,
 			"not a supported state type"))
 	}
 
+	return errs
+}
+
+// stateField declares one WorkflowState field and which state types may set
+// it. EVERY new field added to WorkflowState gets exactly one row here —
+// missing a row means the field is silently admitted on every type, which is
+// how junk fields creep into durable spec snapshots.
+type stateField struct {
+	name      string
+	isSet     func(WorkflowState) bool
+	allowedOn map[WorkflowStateType]bool
+}
+
+var stateFields = []stateField{
+	{"Function", func(s WorkflowState) bool { return s.Function != nil },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Timeout", func(s WorkflowState) bool { return s.Timeout != nil },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Retry", func(s WorkflowState) bool { return s.Retry != nil },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Catch", func(s WorkflowState) bool { return len(s.Catch) > 0 },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Choices", func(s WorkflowState) bool { return len(s.Choices) > 0 },
+		map[WorkflowStateType]bool{WorkflowStateChoice: true}},
+	{"Default", func(s WorkflowState) bool { return s.Default != "" },
+		map[WorkflowStateType]bool{WorkflowStateChoice: true}},
+	{"InputPath", func(s WorkflowState) bool { return s.InputPath != "" },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"ResultPath", func(s WorkflowState) bool { return s.ResultPath != "" },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"OutputPath", func(s WorkflowState) bool { return s.OutputPath != "" },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"Next", func(s WorkflowState) bool { return s.Next != "" },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+	{"End", func(s WorkflowState) bool { return s.End },
+		map[WorkflowStateType]bool{WorkflowStateTask: true}},
+}
+
+// validateFieldExclusivity rejects fields set on a state type that does not
+// carry them (a Choice with a Function, a Succeed with a Next, ...). One
+// declarative pass replaces per-type hand-enumerated "must not set" lists.
+func (st WorkflowState) validateFieldExclusivity(field string) error {
+	var errs error
+	for _, f := range stateFields {
+		if f.isSet(st) && !f.allowedOn[st.Type] {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+"."+f.name, st.Type,
+				fmt.Sprintf("a %s state must not set %s", st.Type, f.name)))
+		}
+	}
 	return errs
 }
 

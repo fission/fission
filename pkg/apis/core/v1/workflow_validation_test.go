@@ -106,7 +106,7 @@ func TestWorkflowSpecValidate(t *testing.T) {
 		}, "Function"},
 		{"succeed with next", func(s *WorkflowSpec) {
 			s.States["done"] = WorkflowState{Type: WorkflowStateSucceed, Next: "a"}
-		}, "terminal"},
+		}, "must not set Next"},
 		{"fail with retry", func(s *WorkflowSpec) {
 			s.States["done"] = WorkflowState{Type: WorkflowStateFail, Retry: &RetryPolicy{}}
 		}, "Fail state"},
