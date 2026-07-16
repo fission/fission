@@ -1,6 +1,6 @@
 # RFC-0020: End-to-End Benchmarking Suite & Continuous Performance Tracking
 
-- Status: Proposed (not yet implemented)
+- Status: Implemented ([#3542](https://github.com/fission/fission/pull/3542), merged 2026-06-26): the `fission-benchmark` engine + CLI + scenarios + `benchmark.yaml` CI entry in the separate `test/benchmark` module; scenarios extended in [#3550](https://github.com/fission/fission/pull/3550), [#3559](https://github.com/fission/fission/pull/3559).
 - Tracking issue: —
 - Supersedes: the ad-hoc bash/k6 benchmark assets under `test/benchmark/` (`rfc0002-perf-runbook.sh`, `tests/**/run.sh`, `tests/**/sample.js`, `picasso.go`)
 - Targets: Fission v1.N+ (additive tooling; no control-plane or CRD change)
