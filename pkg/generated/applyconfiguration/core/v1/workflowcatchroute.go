@@ -16,6 +16,13 @@ type WorkflowCatchRouteApplyConfiguration struct {
 	// Fission.Timeout), or Fission.All (matches anything).
 	ErrorType *string `json:"errorType,omitempty"`
 	Next      *string `json:"next,omitempty"`
+	// ResultPath, when set, merges the error object
+	// ({"errorType": ..., "cause": ...}) into the flowing document at
+	// this JSONPath, so the catch target still sees the business data
+	// (e.g. retry a charge after a grace period). Unset keeps the
+	// Step-Functions-parity default: the error object REPLACES the
+	// document.
+	ResultPath *string `json:"resultPath,omitempty"`
 }
 
 // WorkflowCatchRouteApplyConfiguration constructs a declarative configuration of the WorkflowCatchRoute type for use with
@@ -37,5 +44,13 @@ func (b *WorkflowCatchRouteApplyConfiguration) WithErrorType(value string) *Work
 // If called multiple times, the Next field is set to the value of the last call.
 func (b *WorkflowCatchRouteApplyConfiguration) WithNext(value string) *WorkflowCatchRouteApplyConfiguration {
 	b.Next = &value
+	return b
+}
+
+// WithResultPath sets the ResultPath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ResultPath field is set to the value of the last call.
+func (b *WorkflowCatchRouteApplyConfiguration) WithResultPath(value string) *WorkflowCatchRouteApplyConfiguration {
+	b.ResultPath = &value
 	return b
 }

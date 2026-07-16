@@ -144,6 +144,7 @@ Step outcomes adopt the RFC-0024 settle matrix so the platform behaves uniformly
 | step timeout | retryable (`Fission.Timeout`) | retry per policy, then `Catch` |
 
 A function signals a **typed** error by returning non-2xx with a JSON body `{"errorType": "<Name>", "cause": ...}` — `Catch` matches on `errorType` first, falling back to the status-class built-ins above when the body doesn't parse; `Fission.All` matches anything.
+On a matched catch the error object **replaces** the flowing document (Step Functions parity); a route's optional `resultPath` instead merges it into the document at that JSONPath, so the catch target keeps the business data (a dunning flow retrying a charge after a grace period needs the original subscription, not just the error).
 This convention is the function author's whole error API and appears in the docs example below.
 
 ### Worked example

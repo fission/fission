@@ -329,13 +329,31 @@ func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) erro
 	}
 	st := s.Spec.States[s.Current]
 	s.BranchRuns, s.RegionID = nil, ""
-	if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != "" {
-		errObj, err := json.Marshal(map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)})
+	if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != nil {
+		errAny := map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)}
+		next := any(errAny)
+		if route.ResultPath != "" {
+			doc, derr := s.currentDoc(deref)
+			if derr != nil {
+				return derr
+			}
+			p, perr := expr.Parse(route.ResultPath)
+			if perr == nil {
+				next, perr = p.SetResult(doc, errAny)
+			}
+			if perr != nil {
+				s.Current = ""
+				s.PendingError = fv1.WorkflowErrInvalidPath
+				s.Cause = causeOf(fmt.Errorf("catch resultPath %q: %v", route.ResultPath, perr))
+				return nil
+			}
+		}
+		errObj, err := json.Marshal(next)
 		if err != nil {
 			return fmt.Errorf("encoding error object: %w", err)
 		}
 		s.Doc, s.DocRef = errObj, ""
-		return s.advance(route, deref)
+		return s.advance(route.Next, deref)
 	}
 	s.Current = ""
 	s.PendingError = fv1.WorkflowErrBranchFailed
@@ -454,13 +472,35 @@ func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
 		return nil
 	}
 	st := s.Spec.States[e.State]
-	if route := matchCatch(st.Catch, e.ErrorType); route != "" {
-		errObj, err := json.Marshal(map[string]any{"errorType": e.ErrorType, "cause": nonEmpty(e.Cause)})
+	if route := matchCatch(st.Catch, e.ErrorType); route != nil {
+		errAny := map[string]any{"errorType": e.ErrorType, "cause": nonEmpty(e.Cause)}
+		next := any(errAny)
+		if route.ResultPath != "" {
+			// Merge the error into the flowing document so the catch target
+			// keeps the business data; replacement is the SF-parity default.
+			doc, err := s.currentDoc(deref)
+			if err != nil {
+				return err
+			}
+			p, err := expr.Parse(route.ResultPath)
+			if err == nil {
+				next, err = p.SetResult(doc, errAny)
+			}
+			if err != nil {
+				// Admission validates the path; an unwritable one here (e.g.
+				// setting under a scalar) is as permanent as a Fail state.
+				s.Current = ""
+				s.PendingError = fv1.WorkflowErrInvalidPath
+				s.Cause = causeOf(fmt.Errorf("catch resultPath %q: %v", route.ResultPath, err))
+				return nil
+			}
+		}
+		raw, err := json.Marshal(next)
 		if err != nil {
 			return fmt.Errorf("encoding error object: %w", err)
 		}
-		s.Doc, s.DocRef = errObj, ""
-		return s.advance(route, deref)
+		s.Doc, s.DocRef = raw, ""
+		return s.advance(route.Next, deref)
 	}
 	s.Current = ""
 	s.PendingError = e.ErrorType
@@ -486,13 +526,13 @@ func (s *RunState) maxAttempts(state string) int {
 
 // matchCatch returns the first route matching the error type (exact match
 // first-wins in declaration order; Fission.All matches anything).
-func matchCatch(routes []fv1.WorkflowCatchRoute, errorType string) string {
-	for _, r := range routes {
+func matchCatch(routes []fv1.WorkflowCatchRoute, errorType string) *fv1.WorkflowCatchRoute {
+	for i, r := range routes {
 		if r.ErrorType == errorType || r.ErrorType == fv1.WorkflowErrAll {
-			return r.Next
+			return &routes[i]
 		}
 	}
-	return ""
+	return nil
 }
 
 func nonEmpty(raw json.RawMessage) json.RawMessage {

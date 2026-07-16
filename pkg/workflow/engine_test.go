@@ -213,6 +213,48 @@ func TestEngineRetryThenCatch(t *testing.T) {
 	assert.Equal(t, 1, h.calls["fn-b"])
 }
 
+// TestEngineCatchResultPathKeepsDocument pins the catch resultPath contract:
+// the error object merges into the flowing document instead of replacing it
+// (the SF-parity default), so the catch target still sees the business data —
+// the shape a dunning flow needs to retry a charge after a grace period.
+func TestEngineCatchResultPathKeepsDocument(t *testing.T) {
+	t.Parallel()
+
+	spec := pipelineSpec()
+	a := spec.States["a"]
+	a.Catch = []fv1.WorkflowCatchRoute{{ErrorType: "CardDeclined", Next: "b", ResultPath: "$.lastError"}}
+	spec.States["a"] = a
+
+	h := newHarness(t, spec)
+	h.run.Spec.Input = &apiextensionsv1.JSON{Raw: []byte(`{"card":"past-due"}`)}
+
+	var mu sync.Mutex
+	bodies := map[string]string{}
+	h.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/fission-function/")
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies[name] = string(body)
+		mu.Unlock()
+		if name == "fn-a" {
+			w.WriteHeader(http.StatusPaymentRequired)
+			_, _ = w.Write([]byte(`{"errorType":"CardDeclined","cause":{"reason":"past due"}}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+
+	s := h.drive(t, h.engine, 10*time.Second)
+	require.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.JSONEq(t,
+		`{"card":"past-due","lastError":{"errorType":"CardDeclined","cause":{"reason":"past due"}}}`,
+		bodies["fn-b"], "catch target keeps the document with the error merged at resultPath")
+}
+
 func TestEnginePermanentErrorFailsRun(t *testing.T) {
 	t.Parallel()
 

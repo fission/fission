@@ -535,3 +535,30 @@ func TestWorkflowSpecApplyDefaults(t *testing.T) {
 	assert.EqualValues(t, FunctionReferenceTypeFunctionName, s.States["a"].Function.Type)
 	assert.NoError(t, s.Validate())
 }
+
+// TestWorkflowSpecApplyDefaultsBranches pins defaulting one level down: a
+// Parallel/Map manifest that omits function.type inside a branch must
+// default and validate like a top-level Task does.
+func TestWorkflowSpecApplyDefaultsBranches(t *testing.T) {
+	t.Parallel()
+
+	s := wfBase()
+	s.States["fan"] = WorkflowState{
+		Type: WorkflowStateParallel,
+		Branches: []WorkflowBranch{{
+			StartAt: "b0",
+			States: map[string]WorkflowBranchState{
+				"b0": {Type: WorkflowStateTask, Function: &FunctionReference{Name: "fn"}, End: true},
+			},
+		}},
+		Next: "done",
+	}
+	st := s.States["a"]
+	st.Next = "fan"
+	s.States["a"] = st
+
+	require.Error(t, s.Validate(), "un-defaulted branch reference must fail validation")
+	s.ApplyDefaults()
+	assert.EqualValues(t, FunctionReferenceTypeFunctionName, s.States["fan"].Branches[0].States["b0"].Function.Type)
+	assert.NoError(t, s.Validate())
+}

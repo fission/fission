@@ -560,6 +560,14 @@ type (
 		// Fission.Timeout), or Fission.All (matches anything).
 		ErrorType string `json:"errorType"`
 		Next      string `json:"next"`
+		// ResultPath, when set, merges the error object
+		// ({"errorType": ..., "cause": ...}) into the flowing document at
+		// this JSONPath, so the catch target still sees the business data
+		// (e.g. retry a charge after a grace period). Unset keeps the
+		// Step-Functions-parity default: the error object REPLACES the
+		// document.
+		// +optional
+		ResultPath string `json:"resultPath,omitempty"`
 	}
 
 	// WorkflowChoiceCondition is a leaf comparison against the state input.

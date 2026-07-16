@@ -75,8 +75,19 @@ func (spec *WorkflowSpec) ApplyDefaults() {
 	for name, st := range spec.States {
 		if st.Function != nil && st.Function.Name != "" && st.Function.Type == "" {
 			st.Function.Type = FunctionReferenceTypeFunctionName
-			spec.States[name] = st
 		}
+		// Branch states carry the same function references one level down —
+		// a default that skips them makes every Parallel/Map manifest that
+		// omits function.type fail validation.
+		for bi := range st.Branches {
+			for bn, bst := range st.Branches[bi].States {
+				if bst.Function != nil && bst.Function.Name != "" && bst.Function.Type == "" {
+					bst.Function.Type = FunctionReferenceTypeFunctionName
+					st.Branches[bi].States[bn] = bst
+				}
+			}
+		}
+		spec.States[name] = st
 	}
 }
 
@@ -169,6 +180,7 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 		if c.Next == "" {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, cf+".Next", "", "required"))
 		}
+		jsonpath(fmt.Sprintf("Catch[%d].ResultPath", i), c.ResultPath)
 	}
 
 	errs = errors.Join(errs, st.validateFieldExclusivity(field))

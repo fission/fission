@@ -134,6 +134,15 @@ spec:
                                         type: string
                                       next:
                                         type: string
+                                      resultPath:
+                                        description: |-
+                                          ResultPath, when set, merges the error object
+                                          ({"errorType": ..., "cause": ...}) into the flowing document at
+                                          this JSONPath, so the catch target still sees the business data
+                                          (e.g. retry a charge after a grace period). Unset keeps the
+                                          Step-Functions-parity default: the error object REPLACES the
+                                          document.
+                                        type: string
                                     required:
                                     - errorType
                                     - next
@@ -444,6 +453,15 @@ spec:
                               Fission.Timeout), or Fission.All (matches anything).
                             type: string
                           next:
+                            type: string
+                          resultPath:
+                            description: |-
+                              ResultPath, when set, merges the error object
+                              ({"errorType": ..., "cause": ...}) into the flowing document at
+                              this JSONPath, so the catch target still sees the business data
+                              (e.g. retry a charge after a grace period). Unset keeps the
+                              Step-Functions-parity default: the error object REPLACES the
+                              document.
                             type: string
                         required:
                         - errorType
