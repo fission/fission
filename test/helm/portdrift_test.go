@@ -92,6 +92,19 @@ func containerArgs(t *testing.T, doc map[string]any) []string {
 	return out
 }
 
+// containerPorts returns the first container's declared containerPort numbers.
+func containerPorts(t *testing.T, doc map[string]any) []int {
+	t.Helper()
+	require.NotNil(t, doc)
+	containers := doc["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)
+	raw, _ := containers[0].(map[string]any)["ports"].([]any)
+	out := make([]int, 0, len(raw))
+	for _, p := range raw {
+		out = append(out, int(p.(map[string]any)["containerPort"].(float64)))
+	}
+	return out
+}
+
 // containerEnv returns the first container's env name→value map.
 func containerEnv(t *testing.T, doc map[string]any) map[string]string {
 	t.Helper()
@@ -225,7 +238,8 @@ func TestWorkflowChart(t *testing.T) {
 	docs := render(t,
 		"--set", "workflows.enabled=true",
 		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
-		"--set", "networkPolicy.enabled=true")
+		"--set", "networkPolicy.enabled=true",
+		"--set", "serviceMonitor.enabled=true")
 
 	t.Run("workflow deployment arg and env", func(t *testing.T) {
 		deploy := find(docs, "Deployment", svcinfo.SvcWorkflow)
@@ -255,6 +269,17 @@ func TestWorkflowChart(t *testing.T) {
 		require.NotNil(t, ssNP)
 		assert.True(t, npAllowsFromSvc(ssNP, svcinfo.SvcWorkflow),
 			"the engine reads/writes its log on the statestore")
+	})
+
+	t.Run("metrics are scrapable", func(t *testing.T) {
+		// A ServiceMonitor without the pod exposing 8080 (or vice versa) is
+		// silently-unscraped metrics — pin both halves.
+		sm := find(docs, "ServiceMonitor", "workflow-monitor")
+		require.NotNil(t, sm, "workflow ServiceMonitor must render when serviceMonitor.enabled")
+
+		deploy := find(docs, "Deployment", svcinfo.SvcWorkflow)
+		ports := containerPorts(t, deploy)
+		assert.Contains(t, ports, 8080, "metrics containerPort")
 	})
 
 	t.Run("disabled by default", func(t *testing.T) {

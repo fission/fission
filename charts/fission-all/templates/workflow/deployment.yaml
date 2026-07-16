@@ -20,6 +20,10 @@ spec:
       labels:
         svc: workflow
         application: fission-workflow
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       {{- if (dig "securityContext" (dict "enabled" false) (.Values.workflows | default dict)).enabled }}
       securityContext: {{- omit .Values.workflows.securityContext "enabled" | toYaml | nindent 8 }}
@@ -62,6 +66,15 @@ spec:
         {{- include "opentelemtry.envs" . | indent 8 }}
         {{- include "internalAuth.envs" . | indent 8 }}
         {{- include "coverage.envs" . | indent 8 }}
+        ports:
+        - containerPort: {{ include "fission.workflowPort" . }}
+          name: workflow
+        - containerPort: 8080
+          name: metrics
+        {{- if .Values.pprof.enabled }}
+        - containerPort: 6060
+          name: pprof
+        {{- end }}
         # /readyz gates on cache sync AND a statestore ping — a replica that
         # cannot reach its log must not be serviced.
         readinessProbe:

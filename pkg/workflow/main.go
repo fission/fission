@@ -45,6 +45,7 @@ import (
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/httpx"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 // wakeBuffer bounds the append-then-wake channel; a dropped wake is healed
@@ -227,6 +228,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "workflow", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
 		})
+		return nil
+	})
+	// Serve the OTel-bridged run/step metrics on the shared metrics port —
+	// without this the meters record into a registry nobody scrapes.
+	// ServeMetrics blocks until ctx ends (it owns the drain), so it needs
+	// its own goroutine like the listener above.
+	mgr.Go(func() error {
+		metrics.ServeMetrics(ctx, "workflow", logger, mgr)
 		return nil
 	})
 
