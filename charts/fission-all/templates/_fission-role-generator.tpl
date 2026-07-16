@@ -23,6 +23,9 @@ metadata:
 {{- if eq "mcp" .component }}
 {{- include "mcp-rules" . }}
 {{- end }}
+{{- if eq "workflow" .component }}
+{{- include "workflow-rules" . }}
+{{- end }}
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}
 {{- end }}
@@ -93,6 +96,9 @@ metadata:
 {{- end }}
 {{- if eq "mcp" .component }}
 {{- include "mcp-rules" . }}
+{{- end }}
+{{- if eq "workflow" .component }}
+{{- include "workflow-rules" . }}
 {{- end }}
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}

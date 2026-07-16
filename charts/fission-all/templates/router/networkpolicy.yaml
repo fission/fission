@@ -94,6 +94,12 @@ spec:
         - podSelector:
             matchLabels:
               svc: mcp
+        # The workflow engine (RFC-0022) POSTs task-step invocations to
+        # /fission-function/... on the internal listener (HMAC-signed, like
+        # the publishers above).
+        - podSelector:
+            matchLabels:
+              svc: workflow
         {{- if .Values.asyncInvocation.enabled }}
         # RFC-0024: the in-router async dispatcher POSTs deliveries to
         # svc/router-internal, which may land on a DIFFERENT router replica —
