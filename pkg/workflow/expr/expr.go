@@ -34,8 +34,3 @@ func Parse(path string) (Path, error) {
 	}
 	return Path{x: x}, nil
 }
-
-// String returns the canonical form of the parsed path.
-func (p Path) String() string {
-	return p.x.String()
-}
