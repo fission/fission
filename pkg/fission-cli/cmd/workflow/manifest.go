@@ -5,6 +5,7 @@
 package workflow
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,13 @@ func parseManifest(input cli.Input) (*fv1.Workflow, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	// sigs.k8s.io/yaml silently decodes only the FIRST document of a
+	// ----separated file; dropping the rest with exit 0 loses user intent.
+	// Reject multi-document input explicitly (use `fission spec` for sets).
+	if docs := countYAMLDocuments(data); docs > 1 {
+		return nil, fmt.Errorf("%s contains %d YAML documents; this command takes exactly one Workflow (use `fission spec` for multi-resource files)", path, docs)
 	}
 
 	// Sniff the kind to decide full-manifest vs bare-spec.
@@ -61,6 +69,18 @@ func parseManifest(input cli.Input) (*fv1.Workflow, error) {
 	// so offline validation matches admission.
 	wf.Spec.ApplyDefaults()
 	return &wf, nil
+}
+
+// countYAMLDocuments counts non-empty documents in a ----separated stream,
+// splitting the same way the spec reader does (spec/validate.go).
+func countYAMLDocuments(data []byte) int {
+	docs := 0
+	for _, doc := range bytes.Split(append([]byte("\n"), data...), []byte("\n---")) {
+		if len(bytes.TrimSpace(doc)) > 0 {
+			docs++
+		}
+	}
+	return docs
 }
 
 // loadWorkflow is parseManifest plus the name requirement — for commands

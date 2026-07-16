@@ -298,6 +298,25 @@ func TestWorkflowSpecValidate(t *testing.T) {
 			st.Next = "w"
 			s.States["a"] = st
 		}, "Type"},
+		{"task with function-weights reference", func(s *WorkflowSpec) {
+			// Legal on HTTPTriggers, unexecutable by the workflow engine —
+			// must be rejected at admission, not discovered at run time.
+			st := s.States["a"]
+			st.Function = &FunctionReference{
+				Type:            FunctionReferenceTypeFunctionWeights,
+				Name:            "fn",
+				FunctionWeights: map[string]int{"fn": 100},
+			}
+			s.States["a"] = st
+		}, "by name"},
+		{"state name with illegal characters", func(s *WorkflowSpec) {
+			// Names become durable identifiers (event stream, activeStates,
+			// mermaid output) — the grammar is pinned before phase 2.
+			s.States["bad name: x --> y"] = wfTask("", true)
+			st := s.States["a"]
+			st.Next = "bad name: x --> y"
+			s.States["a"] = st
+		}, "state names"},
 	}
 
 	for _, tc := range cases {
@@ -357,23 +376,40 @@ func TestWorkflowRunSpecValidate(t *testing.T) {
 	}
 }
 
-// TestWorkflowValidateForAdmission pins that admission validation includes
-// metadata checks on top of the spec rules.
-func TestWorkflowValidateForAdmission(t *testing.T) {
+// TestWorkflowObjectValidate pins that object-level validation (what the
+// admission webhooks enforce) includes metadata checks on top of the spec
+// rules.
+func TestWorkflowObjectValidate(t *testing.T) {
 	t.Parallel()
 
 	w := &Workflow{
 		ObjectMeta: metav1.ObjectMeta{Name: "Bad_Name", Namespace: "default"},
 		Spec:       wfBase(),
 	}
-	require.Error(t, w.ValidateForAdmission())
+	require.Error(t, w.Validate())
 
 	w.Name = "good-name"
-	assert.NoError(t, w.ValidateForAdmission())
+	assert.NoError(t, w.Validate())
 
 	wr := &WorkflowRun{
 		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default"},
 		Spec:       WorkflowRunSpec{WorkflowRef: "wf"},
 	}
-	assert.NoError(t, wr.ValidateForAdmission())
+	assert.NoError(t, wr.Validate())
+}
+
+// TestWorkflowSpecApplyDefaults pins the "function type defaults to name"
+// contract the RFC's worked example relies on.
+func TestWorkflowSpecApplyDefaults(t *testing.T) {
+	t.Parallel()
+
+	s := wfBase()
+	st := s.States["a"]
+	st.Function = &FunctionReference{Name: "fn"} // no Type
+	s.States["a"] = st
+
+	require.Error(t, s.Validate(), "un-defaulted reference must fail validation")
+	s.ApplyDefaults()
+	assert.EqualValues(t, FunctionReferenceTypeFunctionName, s.States["a"].Function.Type)
+	assert.NoError(t, s.Validate())
 }

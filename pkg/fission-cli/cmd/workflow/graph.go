@@ -31,6 +31,10 @@ func Graph(input cli.Input) error {
 func (opts *GraphSubCommand) do(input cli.Input) error {
 	var spec fv1.WorkflowSpec
 
+	if input.String(flagkey.WfFile) != "" && input.String(flagkey.WfName) != "" {
+		return errors.New("--file and --name are mutually exclusive; render from the manifest or from the cluster, not both")
+	}
+
 	switch {
 	case input.String(flagkey.WfFile) != "":
 		wf, err := parseManifest(input)
@@ -39,6 +43,11 @@ func (opts *GraphSubCommand) do(input cli.Input) error {
 		}
 		spec = wf.Spec
 	case input.String(flagkey.WfName) != "":
+		// The command is cluster-optional (see command.go): --name needs the
+		// cluster, so fail clearly instead of dereferencing a nil client.
+		if !opts.ClusterAvailable() {
+			return errors.New("no Kubernetes cluster configured; use --file to render from a manifest, or set up a kubeconfig")
+		}
 		_, namespace, err := opts.GetResourceNamespace(input)
 		if err != nil {
 			return fmt.Errorf("error in rendering workflow graph: %w", err)
@@ -50,6 +59,11 @@ func (opts *GraphSubCommand) do(input cli.Input) error {
 		spec = wf.Spec
 	default:
 		return errors.New("need a workflow, use --name or --file")
+	}
+
+	// An empty spec renders a broken diagram with exit 0 — refuse it.
+	if spec.StartAt == "" || len(spec.States) == 0 {
+		return errors.New("the manifest has no states; nothing to render")
 	}
 
 	fmt.Println(mermaidFromSpec(spec))

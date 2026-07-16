@@ -654,6 +654,12 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		obj, err = parseResource[fv1.TimeTrigger](b, tm.Kind, loc, commitLabelVal, &fr.TimeTriggers)
 	case "Workflow":
 		obj, err = parseResource[fv1.Workflow](b, tm.Kind, loc, commitLabelVal, &fr.Workflows)
+		if err == nil {
+			// Same defaulting the mutating webhook and `workflow create`
+			// apply (function type -> "name"), so a manifest that kubectl
+			// accepts is not rejected by `fission spec validate/apply`.
+			fr.Workflows[len(fr.Workflows)-1].Spec.ApplyDefaults()
+		}
 	case "MessageQueueTrigger":
 		obj, err = parseResource[fv1.MessageQueueTrigger](b, tm.Kind, loc, commitLabelVal, &fr.MessageQueueTriggers)
 

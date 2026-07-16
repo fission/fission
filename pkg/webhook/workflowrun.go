@@ -30,7 +30,7 @@ func (r *WorkflowRun) Validate(new *v1.WorkflowRun) error {
 	// The input byte cap is the non-CEL rule here (raw-bytes fields break CEL
 	// cost estimation); workflowRef existence is a controller concern, same
 	// GitOps-ordering reasoning as the Workflow webhook.
-	if err := new.ValidateForAdmission(); err != nil {
+	if err := new.Validate(); err != nil {
 		return v1.AggregateValidationErrors("WorkflowRun", err)
 	}
 	return nil

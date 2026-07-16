@@ -123,6 +123,14 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	specTimeTriggers := filterByDeployID[fv1.TimeTrigger](tts, deployID)
 	ShowTimeTriggers(specTimeTriggers)
 
+	var wfs []fv1.Workflow
+	wfs, err = getAllWorkflows(input.Context(), opts.Client(), namespace)
+	if err != nil {
+		return fmt.Errorf("error getting Workflows from %s namespaces: %w", printNS, err)
+	}
+	specWorkflows := filterByDeployID[fv1.Workflow](wfs, deployID)
+	ShowWorkflows(specWorkflows)
+
 	var kws []fv1.KubernetesWatchTrigger
 	kws, err = getAllKubeWatchTriggers(input.Context(), opts.Client(), namespace)
 	if err != nil {
@@ -309,6 +317,21 @@ func ShowTimeTriggers(tts []fv1.TimeTrigger) {
 	}
 }
 
+// ShowWorkflows displays info of Workflows
+func ShowWorkflows(wfs []fv1.Workflow) {
+	if len(wfs) > 0 {
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+		fmt.Fprintf(w, "%v", "Workflows:\n")
+		fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "STARTAT", "STATES")
+		for _, wf := range wfs {
+			fmt.Fprintf(w, "%v\t%v\t%v\n",
+				wf.Name, wf.Spec.StartAt, len(wf.Spec.States))
+		}
+		fmt.Fprintf(w, "\n")
+		w.Flush()
+	}
+}
+
 // ShowAppliedKubeWatchers displays info of kube watchers
 func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
 	if len(ws) > 0 {
@@ -386,6 +409,15 @@ func getAllTimeTriggers(ctx context.Context, client cmd.Client, namespace string
 		return nil, fmt.Errorf("unable to get Time Triggers %w", err)
 	}
 	return tts.Items, nil
+}
+
+// getAllWorkflows get lists of Workflows in all namespaces
+func getAllWorkflows(ctx context.Context, client cmd.Client, namespace string) ([]fv1.Workflow, error) {
+	wfs, err := client.FissionClientSet.CoreV1().Workflows(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get Workflows %w", err)
+	}
+	return wfs.Items, nil
 }
 
 // getAllKubeWatchTriggers get lists of Kube Watchers in all namespaces

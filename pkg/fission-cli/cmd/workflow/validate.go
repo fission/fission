@@ -6,6 +6,8 @@ package workflow
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,21 +37,42 @@ func (opts *ValidateSubCommand) do(input cli.Input) error {
 		return err
 	}
 
+	// Run the same rule set admission enforces — a linter that passes what
+	// the real gate rejects is a broken contract. A name is optional here
+	// (bare-spec files are legal input), but when present it must be valid.
 	if err := wf.Spec.Validate(); err != nil {
 		return fv1.AggregateValidationErrors("Workflow", err)
 	}
-
 	name := wf.Name
 	if name == "" {
 		name = input.String(flagkey.WfFile)
+	} else if err := fv1.ValidateKubeName("Workflow.Name", wf.Name); err != nil {
+		return fv1.AggregateValidationErrors("Workflow", err)
 	}
 
-	if !input.Bool(flagkey.WfOffline) {
-		_, namespace, err := opts.GetResourceNamespace(input)
-		if err != nil {
-			return fmt.Errorf("error resolving namespace: %w", err)
+	switch {
+	case input.Bool(flagkey.WfOffline):
+		// Offline: skip cluster checks by request.
+	case !opts.ClusterAvailable():
+		// The command is cluster-optional (see command.go): without a usable
+		// kubeconfig the client is nil, so degrade to offline with a note
+		// instead of dereferencing it.
+		console.Warn("no Kubernetes cluster configured; skipping referenced-function existence checks (as if --offline)")
+	default:
+		// Check functions where the workflow will actually live: the
+		// manifest's namespace wins (mirroring create), the global flag is
+		// the fallback.
+		namespace := wf.Namespace
+		if namespace == "" {
+			_, ns, err := opts.GetResourceNamespace(input)
+			if err != nil {
+				return fmt.Errorf("error resolving namespace: %w", err)
+			}
+			namespace = ns
 		}
-		for state, st := range wf.Spec.States {
+		states := slices.Sorted(maps.Keys(wf.Spec.States))
+		for _, state := range states {
+			st := wf.Spec.States[state]
 			if st.Function == nil || st.Function.Name == "" {
 				continue
 			}

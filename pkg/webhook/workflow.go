@@ -5,6 +5,9 @@
 package webhook
 
 import (
+	"fmt"
+	"strings"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -20,6 +23,7 @@ func (r *Workflow) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = loggerfactory.GetLogger().WithName("workflow-resource")
 	r.Validator = r
 	r.Defaulter = r
+	r.Warner = r
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Workflow{})
 }
 
@@ -40,12 +44,38 @@ var _ admission.Validator[*v1.Workflow] = &Workflow{}
 
 func (r *Workflow) Validate(new *v1.Workflow) error {
 	// The whole workflow rule set is non-CEL (graph reachability needs a
-	// traversal, JSONPath needs a parser), so admission enforces everything.
-	// Referenced-function existence is deliberately NOT checked here: GitOps
-	// applies resources in arbitrary order, so a dangling reference is a
-	// status condition for the phase-2 controller, not an admission error.
-	if err := new.ValidateForAdmission(); err != nil {
+	// traversal, JSONPath needs a parser), so admission enforces Validate in
+	// full. Referenced-function existence is deliberately NOT checked here:
+	// GitOps applies resources in arbitrary order, so a dangling reference is
+	// a status condition for the phase-2 controller, not an admission error.
+	if err := new.Validate(); err != nil {
 		return v1.AggregateValidationErrors("Workflow", err)
 	}
 	return nil
+}
+
+// Warnings flags accepted-but-suspect specs: a Catch route on a typo'd
+// built-in error class (e.g. "Fission.Timout") passes validation — errorType
+// is free-form because functions emit arbitrary typed errors — but never
+// matches at runtime, silently disabling the route the author wrote.
+func (r *Workflow) Warnings(new *v1.Workflow) admission.Warnings {
+	builtin := map[string]bool{
+		v1.WorkflowErrAll:             true,
+		v1.WorkflowErrPermanentError:  true,
+		v1.WorkflowErrFunctionError:   true,
+		v1.WorkflowErrTimeout:         true,
+		v1.WorkflowErrInvalidPath:     true,
+		v1.WorkflowErrNoChoiceMatched: true,
+	}
+	var warnings admission.Warnings
+	for name, st := range new.Spec.States {
+		for _, c := range st.Catch {
+			if strings.HasPrefix(c.ErrorType, "Fission.") && !builtin[c.ErrorType] {
+				warnings = append(warnings, fmt.Sprintf(
+					"state %q catches %q, which is not a built-in Fission error class — the route will only match a function-emitted error of that exact type",
+					name, c.ErrorType))
+			}
+		}
+	}
+	return warnings
 }

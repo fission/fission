@@ -69,7 +69,7 @@ spec:
 func TestWorkflowCRUD(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -118,7 +118,7 @@ func TestWorkflowCRUD(t *testing.T) {
 func TestWorkflowRunAdmission(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
