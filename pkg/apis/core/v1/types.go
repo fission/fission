@@ -10,7 +10,6 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -631,10 +630,13 @@ type (
 		// +optional
 		WorkflowGeneration int64 `json:"workflowGeneration,omitempty"`
 
-		// Input is the run's initial input document, webhook-capped at 256KiB
-		// (etcd objects cap at ~1.5MiB) — pass larger inputs by reference.
+		// Input is the run's initial input document — ANY JSON value
+		// (apiextensionsv1.JSON, not RawExtension: the RawExtension schema is
+		// type=object and the apiserver would reject a bare string/array/
+		// number). Webhook-capped at 256KiB (etcd objects cap at ~1.5MiB) —
+		// pass larger inputs by reference.
 		// +optional
-		Input *runtime.RawExtension `json:"input,omitempty"`
+		Input *apiextensionsv1.JSON `json:"input,omitempty"`
 	}
 
 	// WorkflowRunEventSummary is one bounded-tail history entry for kubectl
@@ -666,10 +668,11 @@ type (
 		FinishedAt *metav1.Time `json:"finishedAt,omitempty"`
 
 		// Output holds the final output inline up to the step-I/O spill
-		// threshold; larger outputs spill to the statestore KV and OutputRef
-		// points there (the CLI dereferences).
+		// threshold — ANY JSON value (see Input for why apiextensionsv1.JSON);
+		// larger outputs spill to the statestore KV and OutputRef points
+		// there (the CLI dereferences).
 		// +optional
-		Output *runtime.RawExtension `json:"output,omitempty"`
+		Output *apiextensionsv1.JSON `json:"output,omitempty"`
 		// +optional
 		OutputRef string `json:"outputRef,omitempty"`
 

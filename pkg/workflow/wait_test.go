@@ -13,8 +13,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -56,7 +56,7 @@ func TestWaitStateVirtualTime(t *testing.T) {
 
 		run := &fv1.WorkflowRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "waiter", Namespace: "default", UID: types.UID("uid-waiter")},
-			Spec:       fv1.WorkflowRunSpec{WorkflowRef: "wf", Input: &runtime.RawExtension{Raw: []byte(`{"n":1}`)}},
+			Spec:       fv1.WorkflowRunSpec{WorkflowRef: "wf", Input: &apiextensionsv1.JSON{Raw: []byte(`{"n":1}`)}},
 		}
 		fetch := func(context.Context) (*fv1.WorkflowSpec, error) { return waitSpec(), nil }
 

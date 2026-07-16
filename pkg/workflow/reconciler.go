@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -116,7 +116,7 @@ func (r *WorkflowRunReconciler) writeStatus(ctx context.Context, run *fv1.Workfl
 		// results stay in KV and OutputRef points there (a big result must
 		// not turn the terminal status write into the failure).
 		if len(s.Output) > 0 && len(s.Output) <= spillThreshold {
-			run.Status.Output = &runtime.RawExtension{Raw: s.Output}
+			run.Status.Output = &apiextensionsv1.JSON{Raw: s.Output}
 		}
 		run.Status.OutputRef = s.OutputRef
 		// Failure classification so kubectl answers "why" (bounded; full

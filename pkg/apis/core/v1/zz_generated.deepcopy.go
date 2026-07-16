@@ -1885,7 +1885,7 @@ func (in *WorkflowRunSpec) DeepCopyInto(out *WorkflowRunSpec) {
 	*out = *in
 	if in.Input != nil {
 		in, out := &in.Input, &out.Input
-		*out = new(runtime.RawExtension)
+		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
 }
@@ -1918,7 +1918,7 @@ func (in *WorkflowRunStatus) DeepCopyInto(out *WorkflowRunStatus) {
 	}
 	if in.Output != nil {
 		in, out := &in.Output, &out.Output
-		*out = new(runtime.RawExtension)
+		*out = new(apiextensionsv1.JSON)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.RecentEvents != nil {

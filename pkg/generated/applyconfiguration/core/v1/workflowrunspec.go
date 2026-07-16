@@ -7,7 +7,7 @@
 package v1
 
 import (
-	runtime "k8s.io/apimachinery/pkg/runtime"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
 // WorkflowRunSpecApplyConfiguration represents a declarative configuration of the WorkflowRunSpec type for use
@@ -23,9 +23,12 @@ type WorkflowRunSpecApplyConfiguration struct {
 	// event stream at RunStarted; a Workflow edit or deletion mid-run can
 	// neither fork nor strand a run. Set by the CLI; 0 means unknown.
 	WorkflowGeneration *int64 `json:"workflowGeneration,omitempty"`
-	// Input is the run's initial input document, webhook-capped at 256KiB
-	// (etcd objects cap at ~1.5MiB) — pass larger inputs by reference.
-	Input *runtime.RawExtension `json:"input,omitempty"`
+	// Input is the run's initial input document — ANY JSON value
+	// (apiextensionsv1.JSON, not RawExtension: the RawExtension schema is
+	// type=object and the apiserver would reject a bare string/array/
+	// number). Webhook-capped at 256KiB (etcd objects cap at ~1.5MiB) —
+	// pass larger inputs by reference.
+	Input *apiextensionsv1.JSON `json:"input,omitempty"`
 }
 
 // WorkflowRunSpecApplyConfiguration constructs a declarative configuration of the WorkflowRunSpec type for use with
@@ -53,7 +56,7 @@ func (b *WorkflowRunSpecApplyConfiguration) WithWorkflowGeneration(value int64) 
 // WithInput sets the Input field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Input field is set to the value of the last call.
-func (b *WorkflowRunSpecApplyConfiguration) WithInput(value runtime.RawExtension) *WorkflowRunSpecApplyConfiguration {
+func (b *WorkflowRunSpecApplyConfiguration) WithInput(value apiextensionsv1.JSON) *WorkflowRunSpecApplyConfiguration {
 	b.Input = &value
 	return b
 }

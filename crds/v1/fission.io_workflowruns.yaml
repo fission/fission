@@ -60,9 +60,11 @@ spec:
             properties:
               input:
                 description: |-
-                  Input is the run's initial input document, webhook-capped at 256KiB
-                  (etcd objects cap at ~1.5MiB) — pass larger inputs by reference.
-                type: object
+                  Input is the run's initial input document — ANY JSON value
+                  (apiextensionsv1.JSON, not RawExtension: the RawExtension schema is
+                  type=object and the apiserver would reject a bare string/array/
+                  number). Webhook-capped at 256KiB (etcd objects cap at ~1.5MiB) —
+                  pass larger inputs by reference.
                 x-kubernetes-preserve-unknown-fields: true
               workflowGeneration:
                 description: |-
@@ -165,9 +167,9 @@ spec:
               output:
                 description: |-
                   Output holds the final output inline up to the step-I/O spill
-                  threshold; larger outputs spill to the statestore KV and OutputRef
-                  points there (the CLI dereferences).
-                type: object
+                  threshold — ANY JSON value (see Input for why apiextensionsv1.JSON);
+                  larger outputs spill to the statestore KV and OutputRef points
+                  there (the CLI dereferences).
                 x-kubernetes-preserve-unknown-fields: true
               outputRef:
                 type: string

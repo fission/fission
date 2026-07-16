@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -20,7 +20,6 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type RunSubCommand struct {
@@ -82,7 +81,7 @@ func (opts *RunSubCommand) do(input cli.Input) error {
 }
 
 // readRunInput parses --input: inline JSON, or @path to a file.
-func readRunInput(input cli.Input) (*runtime.RawExtension, error) {
+func readRunInput(input cli.Input) (*apiextensionsv1.JSON, error) {
 	raw := input.String(flagkey.WfInput)
 	if raw == "" {
 		return nil, nil
@@ -98,14 +97,14 @@ func readRunInput(input cli.Input) (*runtime.RawExtension, error) {
 	if !json.Valid(data) {
 		return nil, errors.New("--input must be valid JSON (or @file containing JSON)")
 	}
-	return &runtime.RawExtension{Raw: data}, nil
+	return &apiextensionsv1.JSON{Raw: data}, nil
 }
 
 // warnIfNoController checks the workflow Deployment has ready replicas.
 // Best-effort: RBAC or install-layout differences degrade to silence, never
 // to a failed run creation.
 func warnIfNoController(input cli.Input, opts *RunSubCommand) {
-	deploy, err := opts.Client().KubernetesClient.AppsV1().Deployments(util.GetFissionNamespace()).
+	deploy, err := opts.Client().KubernetesClient.AppsV1().Deployments(fissionNamespace()).
 		Get(input.Context(), "workflow", metav1.GetOptions{})
 	if err != nil || deploy.Status.ReadyReplicas == 0 {
 		console.Warn("no workflow controller appears to be running (is workflows.enabled set?); the run will sit Pending until one accepts it")

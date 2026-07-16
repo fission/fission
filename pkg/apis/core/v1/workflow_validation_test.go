@@ -12,8 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func wfTask(next string, end bool) WorkflowState {
@@ -470,17 +470,17 @@ func TestWorkflowRunSpecValidate(t *testing.T) {
 		{"valid", WorkflowRunSpec{WorkflowRef: "wf"}, ""},
 		{"valid with input", WorkflowRunSpec{
 			WorkflowRef: "wf",
-			Input:       &runtime.RawExtension{Raw: []byte(`{"a":1}`)},
+			Input:       &apiextensionsv1.JSON{Raw: []byte(`{"a":1}`)},
 		}, ""},
 		{"missing workflowRef", WorkflowRunSpec{}, "WorkflowRef"},
 		{"negative generation", WorkflowRunSpec{WorkflowRef: "wf", WorkflowGeneration: -1}, "WorkflowGeneration"},
 		{"input at cap", WorkflowRunSpec{
 			WorkflowRef: "wf",
-			Input:       &runtime.RawExtension{Raw: bytes.Repeat([]byte("x"), MaxWorkflowRunInputBytes)},
+			Input:       &apiextensionsv1.JSON{Raw: bytes.Repeat([]byte("x"), MaxWorkflowRunInputBytes)},
 		}, ""},
 		{"input over cap", WorkflowRunSpec{
 			WorkflowRef: "wf",
-			Input:       &runtime.RawExtension{Raw: bytes.Repeat([]byte("x"), MaxWorkflowRunInputBytes+1)},
+			Input:       &apiextensionsv1.JSON{Raw: bytes.Repeat([]byte("x"), MaxWorkflowRunInputBytes+1)},
 		}, "Input"},
 	}
 

@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -96,7 +96,7 @@ func TestWorkflowRunWebhookValidate(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "run-2", Namespace: "default"},
 		Spec: v1.WorkflowRunSpec{
 			WorkflowRef: "wf-1",
-			Input:       &runtime.RawExtension{Raw: bytes.Repeat([]byte("x"), v1.MaxWorkflowRunInputBytes+1)},
+			Input:       &apiextensionsv1.JSON{Raw: bytes.Repeat([]byte("x"), v1.MaxWorkflowRunInputBytes+1)},
 		},
 	}
 	err := r.Validate(oversized)

@@ -8,8 +8,8 @@ package v1
 
 import (
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	runtime "k8s.io/apimachinery/pkg/runtime"
 	applyconfigurationsmetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
@@ -24,9 +24,10 @@ type WorkflowRunStatusApplyConfiguration struct {
 	StartedAt    *metav1.Time `json:"startedAt,omitempty"`
 	FinishedAt   *metav1.Time `json:"finishedAt,omitempty"`
 	// Output holds the final output inline up to the step-I/O spill
-	// threshold; larger outputs spill to the statestore KV and OutputRef
-	// points there (the CLI dereferences).
-	Output    *runtime.RawExtension `json:"output,omitempty"`
+	// threshold — ANY JSON value (see Input for why apiextensionsv1.JSON);
+	// larger outputs spill to the statestore KV and OutputRef points
+	// there (the CLI dereferences).
+	Output    *apiextensionsv1.JSON `json:"output,omitempty"`
 	OutputRef *string               `json:"outputRef,omitempty"`
 	// ErrorType and Cause carry the terminal failure classification so
 	// kubectl answers "why did it fail" without the history endpoint.
@@ -83,7 +84,7 @@ func (b *WorkflowRunStatusApplyConfiguration) WithFinishedAt(value metav1.Time) 
 // WithOutput sets the Output field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Output field is set to the value of the last call.
-func (b *WorkflowRunStatusApplyConfiguration) WithOutput(value runtime.RawExtension) *WorkflowRunStatusApplyConfiguration {
+func (b *WorkflowRunStatusApplyConfiguration) WithOutput(value apiextensionsv1.JSON) *WorkflowRunStatusApplyConfiguration {
 	b.Output = &value
 	return b
 }

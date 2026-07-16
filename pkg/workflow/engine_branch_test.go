@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/runtime"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -96,7 +96,7 @@ func TestEngineMap(t *testing.T) {
 	}
 
 	h := newHarness(t, spec)
-	h.run.Spec.Input = &runtime.RawExtension{Raw: []byte(`{"items":[1,2,3,4,5]}`)}
+	h.run.Spec.Input = &apiextensionsv1.JSON{Raw: []byte(`{"items":[1,2,3,4,5]}`)}
 
 	// Track the max concurrent in-flight requests the throttle allows.
 	var mu sync.Mutex

@@ -19,8 +19,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -93,7 +93,7 @@ func newHarness(t *testing.T, spec *fv1.WorkflowSpec) *harness {
 		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default", UID: types.UID("uid-run-1")},
 		Spec: fv1.WorkflowRunSpec{
 			WorkflowRef: "wf",
-			Input:       &runtime.RawExtension{Raw: []byte(`{"seed":1}`)},
+			Input:       &apiextensionsv1.JSON{Raw: []byte(`{"seed":1}`)},
 		},
 	}
 
@@ -334,7 +334,7 @@ func TestEngineInputPathShapesRequestBody(t *testing.T) {
 	spec.States["b"] = b
 
 	h := newHarness(t, spec)
-	h.run.Spec.Input = &runtime.RawExtension{Raw: []byte(`{"order":{"id":4711},"noise":true}`)}
+	h.run.Spec.Input = &apiextensionsv1.JSON{Raw: []byte(`{"order":{"id":4711},"noise":true}`)}
 
 	var mu sync.Mutex
 	bodies := map[string]string{}

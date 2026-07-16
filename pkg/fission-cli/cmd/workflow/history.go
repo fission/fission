@@ -132,7 +132,7 @@ func workflowBaseURL(input cli.Input, opts *cmd.CommandActioner) (string, error)
 		return u, nil
 	}
 	localPort, err := util.SetupPortForwardToPort(input.Context(), opts.Client(),
-		util.GetFissionNamespace(), "svc="+svcinfo.SvcWorkflow, svcinfo.PortWorkflow)
+		fissionNamespace(), "svc="+svcinfo.SvcWorkflow, svcinfo.PortWorkflow)
 	if err != nil {
 		return "", fmt.Errorf("port-forwarding to the workflow head (is workflows.enabled set?): %w", err)
 	}
@@ -144,7 +144,7 @@ func workflowBaseURL(input cli.Input, opts *cmd.CommandActioner) (string, error)
 // verifier). A FAILED secret read is not the same as "auth not configured":
 // say so, or the resulting 401 is undebuggable.
 func workflowTransport(input cli.Input, opts *cmd.CommandActioner) http.RoundTripper {
-	master, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, util.GetFissionNamespace())
+	master, err := storagesvcClient.HMACSecretFromCluster(input.Context(), opts.Client().KubernetesClient, fissionNamespace())
 	if err != nil {
 		console.Warn(fmt.Sprintf("could not read the internal auth secret (%v); sending unsigned requests — a 401 below means your kubeconfig lacks access to it, not that auth is off", err))
 		return http.DefaultTransport
@@ -153,6 +153,16 @@ func workflowTransport(input cli.Input, opts *cmd.CommandActioner) http.RoundTri
 		return http.DefaultTransport
 	}
 	return hmacauth.ServiceSigner(master, hmacauth.ServiceWorkflow, http.DefaultTransport, time.Now)
+}
+
+// fissionNamespace is where the Fission control plane lives; the env var
+// wins, defaulting to "fission" (GetFissionNamespace returns "" when unset,
+// which as a namespace argument silently queries nothing).
+func fissionNamespace() string {
+	if ns := util.GetFissionNamespace(); ns != "" {
+		return ns
+	}
+	return "fission"
 }
 
 func orDash(s string) string {
