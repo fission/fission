@@ -28,7 +28,6 @@ import (
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/statestore/statestoresvc"
-	"github.com/fission/fission/pkg/workflow"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -39,6 +38,7 @@ import (
 	"github.com/fission/fission/pkg/utils/otel"
 	"github.com/fission/fission/pkg/utils/profile"
 	"github.com/fission/fission/pkg/webhook"
+	"github.com/fission/fission/pkg/workflow"
 )
 
 // Command line arguments

@@ -64,13 +64,44 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.WfName, flag.WfFile},
 	})
 
+	runCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "run",
+		Short: "Start one execution of a workflow",
+	}, Run, flag.FlagSet{
+		Required: []flag.Flag{flag.WfName},
+		Optional: []flag.Flag{flag.WfInput},
+	})
+
+	runsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "runs",
+		Short: "List workflow runs",
+	}, Runs, flag.FlagSet{
+		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
+	})
+
+	historyCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "history",
+		Short: "Show a run's full step-level event history",
+	}, History, flag.FlagSet{
+		Required: []flag.Flag{flag.WfName},
+		Optional: []flag.Flag{flag.WfIO},
+	})
+
+	describeCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "describe",
+		Short: "Answer \"where did this run stop\": phase, active state, last error, attempts",
+	}, Describe, flag.FlagSet{
+		Required: []flag.Flag{flag.WfName},
+	})
+
 	command := &cobra.Command{
 		Use:     "workflow",
 		Aliases: []string{"wf"},
 		Short:   "Create, update and manage workflows",
 	}
 
-	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, validateCmd, graphCmd)
+	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, validateCmd, graphCmd,
+		runCmd, runsCmd, historyCmd, describeCmd)
 
 	return command
 }

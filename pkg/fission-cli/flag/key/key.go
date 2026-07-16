@@ -146,6 +146,8 @@ const (
 	WfName    = resourceName
 	WfFile    = "file"
 	WfOffline = "offline"
+	WfInput   = "input"
+	WfIO      = "io"
 
 	MqtName            = resourceName
 	MqtFnName          = "function"
