@@ -393,8 +393,11 @@ type (
 		// StartAt names the state execution begins at.
 		StartAt string `json:"startAt"`
 
-		// States is the state machine graph, keyed by state name.
+		// States is the state machine graph, keyed by state name. The size
+		// bound mirrors validation.MaxWorkflowStates and lets the apiserver's
+		// CEL cost estimator bound rules on nested types.
 		// +kubebuilder:validation:MinProperties=1
+		// +kubebuilder:validation:MaxProperties=100
 		States map[string]WorkflowState `json:"states"`
 
 		// DefaultRetry applies to Task states that do not set their own Retry.
@@ -1184,7 +1187,11 @@ type (
 		// +kubebuilder:validation:Enum=name;function-weights
 		Type FunctionReferenceType `json:"type"`
 
-		// Name of the function.
+		// Name of the function. Bounded to a DNS-1123 label length: the CEL
+		// rule on this type needs the schema bound so the apiserver's cost
+		// estimator can price the regex — without it, embedding the type
+		// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
+		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
 
 		// Function Reference by weight. this map contains function name as key and its weight

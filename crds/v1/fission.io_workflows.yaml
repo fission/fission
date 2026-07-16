@@ -320,7 +320,12 @@ spec:
                           nullable: true
                           type: object
                         name:
-                          description: Name of the function.
+                          description: |-
+                            Name of the function. Bounded to a DNS-1123 label length: the CEL
+                            rule on this type needs the schema bound so the apiserver's cost
+                            estimator can price the regex — without it, embedding the type
+                            under a map (WorkflowSpec.States) blows the per-CRD cost budget.
+                          maxLength: 63
                           type: string
                         type:
                           description: |-
@@ -402,7 +407,11 @@ spec:
                   required:
                   - type
                   type: object
-                description: States is the state machine graph, keyed by state name.
+                description: |-
+                  States is the state machine graph, keyed by state name. The size
+                  bound mirrors validation.MaxWorkflowStates and lets the apiserver's
+                  CEL cost estimator bound rules on nested types.
+                maxProperties: 100
                 minProperties: 1
                 type: object
               timeout:
