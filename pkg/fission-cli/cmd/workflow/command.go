@@ -94,6 +94,13 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.WfName},
 	})
 
+	cancelCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "cancel",
+		Short: "Request cancellation of a workflow run (in-flight steps drain)",
+	}, Cancel, flag.FlagSet{
+		Required: []flag.Flag{flag.WfName},
+	})
+
 	command := &cobra.Command{
 		Use:     "workflow",
 		Aliases: []string{"wf"},
@@ -101,7 +108,7 @@ func Commands() *cobra.Command {
 	}
 
 	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, validateCmd, graphCmd,
-		runCmd, runsCmd, historyCmd, describeCmd)
+		runCmd, runsCmd, historyCmd, describeCmd, cancelCmd)
 
 	return command
 }
