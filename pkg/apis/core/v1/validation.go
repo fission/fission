@@ -559,16 +559,6 @@ func ValidateTopicName(field, topic string) error {
 	return nil
 }
 
-// Validate checks the provisioned-concurrency config (only reached when
-// FunctionSpec.ProvisionedConcurrency is non-nil): RFC-0026 PR 1 rejects any
-// scheduled Windows — only the base Target is supported. PR 2 will lift this.
-func (pcc *ProvisionedConcurrencyConfig) Validate() error {
-	if len(pcc.Windows) > 0 {
-		return MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", pcc.Windows, "scheduled windows are not yet supported (RFC-0026 PR 1)")
-	}
-	return nil
-}
-
 // Validate checks the streaming config: a known protocol, non-negative timeouts,
 // and a max duration that is not below the idle timeout when both are set.
 func (sc *StreamingConfig) Validate() error {
