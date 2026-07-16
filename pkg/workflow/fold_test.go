@@ -7,6 +7,7 @@ package workflow
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,14 +17,18 @@ import (
 	"github.com/fission/fission/pkg/statestore"
 )
 
-// wfLog encodes events into a numbered stream for fold tests.
+// wfLog encodes events into a numbered stream for fold tests, stamping the
+// store-assigned At (decide derives the run-timeout deadline from
+// RunStarted's timestamp — a zero At would read as timed out).
 func wfLog(t *testing.T, events ...Event) []statestore.Event {
 	t.Helper()
+	now := time.Now()
 	out := make([]statestore.Event, 0, len(events))
 	for i, e := range events {
 		se, err := encodeEvent(e)
 		require.NoError(t, err)
 		se.Seq = int64(i + 1)
+		se.At = now
 		out = append(out, se)
 	}
 	return out
@@ -165,8 +170,13 @@ func TestFoldCorruptionFailsLoud(t *testing.T) {
 func TestFoldDeterminism(t *testing.T) {
 	t.Parallel()
 
+	spec := pipelineSpec()
+	a := spec.States["a"]
+	a.Retry = &fv1.RetryPolicy{MaxAttempts: new(2)}
+	spec.States["a"] = a
+
 	full := []Event{
-		{Type: EvRunStarted, Spec: pipelineSpec(), Input: json.RawMessage(`{"n":1}`)},
+		{Type: EvRunStarted, Spec: spec, Input: json.RawMessage(`{"n":1}`)},
 		{Type: EvStepScheduled, State: "a", Attempt: 1},
 		{Type: EvStepFailed, State: "a", Attempt: 1, ErrorType: fv1.WorkflowErrFunctionError},
 		{Type: EvTimerFired, State: "a", Attempt: 1},

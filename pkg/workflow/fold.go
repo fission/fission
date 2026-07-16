@@ -145,7 +145,7 @@ func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
 		}
 		if e.Type == EvStepFailed {
 			s.Results[key] = stepResult{ErrorType: e.ErrorType, Cause: e.Cause}
-			return nil
+			return s.applyStepFailure(e, deref)
 		}
 		s.Results[key] = stepResult{Succeeded: true}
 		// The event carries the next state's (already shaped) document.
@@ -185,6 +185,64 @@ func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
 	}
 }
 
+// applyStepFailure routes a recorded failure — all deterministic from the
+// log (policy, attempt, class), so routing lives in the fold, not decide.
+// Retryable with budget left: stay on the state (decide arms the timer and
+// reschedules). Otherwise: the first matching Catch route advances with the
+// error object as the flowing document, or the failure goes run-level.
+func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
+	if isRetryable(e.ErrorType) && int(e.Attempt) < s.maxAttempts(e.State) {
+		return nil
+	}
+	st := s.Spec.States[e.State]
+	if route := matchCatch(st.Catch, e.ErrorType); route != "" {
+		errObj, err := json.Marshal(map[string]any{"errorType": e.ErrorType, "cause": json.RawMessage(nonEmpty(e.Cause))})
+		if err != nil {
+			return fmt.Errorf("encoding error object: %w", err)
+		}
+		s.Doc, s.DocRef = errObj, ""
+		return s.advance(route, deref)
+	}
+	s.Current = ""
+	s.PendingError = e.ErrorType
+	s.Cause = e.Cause
+	return nil
+}
+
+// isRetryable: only transport-class failures retry; permanent classes and
+// function-typed errors (the author's own vocabulary) go straight to Catch.
+func isRetryable(errorType string) bool {
+	return errorType == fv1.WorkflowErrFunctionError || errorType == fv1.WorkflowErrTimeout
+}
+
+// maxAttempts resolves the state's attempt budget; no declared policy means
+// one attempt (Step Functions parity: no retry unless asked for).
+func (s *RunState) maxAttempts(state string) int {
+	p := s.retryPolicy(state)
+	if p.MaxAttempts == nil {
+		return 1
+	}
+	return *p.MaxAttempts
+}
+
+// matchCatch returns the first route matching the error type (exact match
+// first-wins in declaration order; Fission.All matches anything).
+func matchCatch(routes []fv1.WorkflowCatchRoute, errorType string) string {
+	for _, r := range routes {
+		if r.ErrorType == errorType || r.ErrorType == fv1.WorkflowErrAll {
+			return r.Next
+		}
+	}
+	return ""
+}
+
+func nonEmpty(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	return raw
+}
+
 // advance moves Current to the named state, resolving consecutive Choice
 // states against the flowing document (Choice states never append events —
 // they are fold-internal, matching the TLA task-step model). It stops at a
@@ -210,7 +268,7 @@ func (s *RunState) advance(to string, deref derefFn) error {
 			return nil
 		case fv1.WorkflowStateFail:
 			s.Current = ""
-			s.PendingError = fv1.WorkflowErrAll // a bare Fail state fails the run
+			s.PendingError = fv1.WorkflowErrFailed
 			return nil
 		case fv1.WorkflowStateChoice:
 			next, matched := evalChoice(st, doc)

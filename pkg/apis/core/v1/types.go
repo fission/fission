@@ -61,6 +61,8 @@ const (
 	WorkflowErrTimeout         = "Fission.Timeout"
 	WorkflowErrInvalidPath     = "Fission.InvalidPath"
 	WorkflowErrNoChoiceMatched = "Fission.NoChoiceMatched"
+	// WorkflowErrFailed is the class a bare Fail state fails the run with.
+	WorkflowErrFailed = "Fission.Failed"
 )
 
 //
