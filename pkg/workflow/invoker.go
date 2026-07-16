@@ -124,8 +124,23 @@ func (inv *Invoker) execute(iv invocation) outcome {
 	ctx, cancel := context.WithTimeout(inv.baseCtx, timeout)
 	defer cancel()
 
+	// Defense-in-depth: the snapshot is admission-validated, but the engine
+	// treats it as authoritative forever — re-check the one field that
+	// becomes a URL path segment before building the request.
+	if err := fv1.ValidateKubeName("function", iv.stateSpec.Function.Name); err != nil {
+		return outcome{errorType: fv1.WorkflowErrPermanentError, cause: causeOf(err)}
+	}
+
+	// The function receives the InputPath-selected view; the raw flowing
+	// document stays in iv.input for the ResultPath merge (ASL semantics:
+	// ResultPath merges into the pre-InputPath input).
+	body, err := functionBody(iv)
+	if err != nil {
+		return outcome{errorType: fv1.WorkflowErrPermanentError, cause: causeOf(err)}
+	}
+
 	url := inv.routerURL + utils.UrlForFunction(iv.stateSpec.Function.Name, iv.namespace)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(iv.input))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return outcome{errorType: fv1.WorkflowErrFunctionError, cause: causeOf(err)}
 	}
@@ -142,7 +157,7 @@ func (inv *Invoker) execute(iv invocation) outcome {
 		return outcome{errorType: fv1.WorkflowErrFunctionError, cause: causeOf(err)}
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResultBytes+1))
+	body, err = io.ReadAll(io.LimitReader(resp.Body, maxResultBytes+1))
 	if err != nil {
 		return outcome{errorType: fv1.WorkflowErrFunctionError, cause: causeOf(err)}
 	}
@@ -158,6 +173,29 @@ func (inv *Invoker) execute(iv invocation) outcome {
 	default:
 		return classifyError(body, fv1.WorkflowErrFunctionError)
 	}
+}
+
+// functionBody is the request body the function sees: InputPath-shaped when
+// set, the raw flowing document verbatim (byte-identical) otherwise.
+func functionBody(iv invocation) (json.RawMessage, error) {
+	if iv.stateSpec.InputPath == "" {
+		return iv.input, nil
+	}
+	var doc any
+	if len(iv.input) > 0 {
+		if err := json.Unmarshal(iv.input, &doc); err != nil {
+			return nil, fmt.Errorf("decoding step input: %w", err)
+		}
+	}
+	shaped, err := shapeInput(iv.stateSpec, doc)
+	if err != nil {
+		return nil, err
+	}
+	out, err := json.Marshal(shaped)
+	if err != nil {
+		return nil, fmt.Errorf("encoding shaped input: %w", err)
+	}
+	return out, nil
 }
 
 // classifyError extracts a typed error ({"errorType": ..., "cause": ...})

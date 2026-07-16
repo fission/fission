@@ -195,7 +195,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	registerHistoryAPI(mux, logger, el, kv, storagesvcClient.HMACSecretFromEnv())
+	lookupUID := func(lctx context.Context, namespace, name string) (string, error) {
+		run, err := fissionClient.CoreV1().WorkflowRuns(namespace).Get(lctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		return string(run.UID), nil
+	}
+	registerHistoryAPI(mux, logger, el, kv, lookupUID, storagesvcClient.HMACSecretFromEnv())
 
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{

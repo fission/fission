@@ -62,19 +62,23 @@ func decide(s *RunState, cancelRequested bool, now time.Time, rand func() float6
 		return action{kind: actAppendRunStarted}
 	}
 
+	// A run whose fold already reached its outcome completes/fails on that
+	// outcome even when the deadline passed in the same reconcile — the
+	// timeout exists to stop runs that cannot finish, not to reclassify ones
+	// that did.
+	if s.PendingCompletion {
+		return action{kind: actCompleteRun}
+	}
+	if s.PendingError != "" {
+		return action{kind: actFailRun}
+	}
+
 	timeout := fv1.DefaultWorkflowTimeout
 	if s.Spec.Timeout != nil {
 		timeout = s.Spec.Timeout.Duration
 	}
 	if now.After(s.StartedAt.Add(timeout)) {
 		return action{kind: actTimeoutRun}
-	}
-
-	if s.PendingCompletion {
-		return action{kind: actCompleteRun}
-	}
-	if s.PendingError != "" {
-		return action{kind: actFailRun}
 	}
 	if s.Current == "" {
 		return action{kind: actNone} // nothing runnable; corrupt folds never get here (fold fails loud)

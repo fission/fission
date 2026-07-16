@@ -6,6 +6,7 @@ package workflow
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -314,6 +315,46 @@ func TestEngineConcurrentReconcilers(t *testing.T) {
 	s := h.drive(t, h.engine, 10*time.Second)
 	assert.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
 	assertInvariants(t, h.log(t), 1)
+}
+
+// TestEngineInputPathShapesRequestBody pins that a function receives the
+// InputPath-selected view while ResultPath still merges into the raw flowing
+// document (ASL semantics). The regression this guards: InputPath accepted
+// at admission but silently ignored at invoke time.
+func TestEngineInputPathShapesRequestBody(t *testing.T) {
+	t.Parallel()
+
+	spec := pipelineSpec()
+	a := spec.States["a"]
+	a.InputPath = "$.order"
+	a.ResultPath = "$.charge"
+	spec.States["a"] = a
+	b := spec.States["b"]
+	b.InputPath = "$.charge"
+	spec.States["b"] = b
+
+	h := newHarness(t, spec)
+	h.run.Spec.Input = &runtime.RawExtension{Raw: []byte(`{"order":{"id":4711},"noise":true}`)}
+
+	var mu sync.Mutex
+	bodies := map[string]string{}
+	h.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/fission-function/")
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies[name] = string(body)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"txn":"t-1"}`))
+	})
+
+	s := h.drive(t, h.engine, 10*time.Second)
+	require.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.JSONEq(t, `{"id":4711}`, bodies["fn-a"], "fn-a sees only $.order")
+	assert.JSONEq(t, `{"txn":"t-1"}`, bodies["fn-b"], "fn-b sees $.charge merged by fn-a's ResultPath")
 }
 
 // TestEnginePlainTextFunction pins the lenient success contract: a function

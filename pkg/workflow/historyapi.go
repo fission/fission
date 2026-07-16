@@ -5,6 +5,7 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -23,6 +24,12 @@ type HistoryEvent struct {
 	Event
 }
 
+// runUIDLookup resolves a run's UID by namespace/name — the binding that
+// stops a caller reading an arbitrary stream by UID while naming an
+// unrelated namespace (the UID is RBAC-scoped where the caller learned it;
+// the endpoint must enforce the same scoping).
+type runUIDLookup func(ctx context.Context, namespace, name string) (string, error)
+
 // registerHistoryAPI serves the run history read path:
 //
 //	GET /history/{namespace}/{name}?uid=<run-uid>[&io=true]
@@ -30,14 +37,23 @@ type HistoryEvent struct {
 // CRDs deliberately do not hold full history (etcd write amplification);
 // this is the one place it is readable. Verified with the ServiceWorkflow
 // HMAC channel — same posture as the other internal listeners (empty secret
-// = pass-through).
-func registerHistoryAPI(mux *http.ServeMux, logger logr.Logger, el statestore.EventLog, kv statestore.KVStore, master []byte) {
+// = pass-through) — and the uid must match the run actually living at
+// {namespace}/{name}, so history is only readable by callers who can name
+// the run where it lives.
+func registerHistoryAPI(mux *http.ServeMux, logger logr.Logger, el statestore.EventLog, kv statestore.KVStore, lookupUID runUIDLookup, master []byte) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		namespace := r.PathValue("namespace")
 		name := r.PathValue("name")
 		uid := r.URL.Query().Get("uid")
 		if namespace == "" || name == "" || uid == "" {
 			http.Error(w, "namespace, name, and uid are required", http.StatusBadRequest)
+			return
+		}
+		wantUID, err := lookupUID(r.Context(), namespace, name)
+		if err != nil || wantUID != uid {
+			// One error for both cases: a distinguishable "wrong uid" would
+			// confirm run existence to a caller who cannot read it.
+			http.Error(w, "no such run", http.StatusNotFound)
 			return
 		}
 
