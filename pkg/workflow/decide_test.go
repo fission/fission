@@ -71,7 +71,7 @@ func TestDecide(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, decide(tc.state, tc.cancel, tc.at, nil))
+			assert.Equal(t, []action{tc.want}, decide(tc.state, tc.cancel, tc.at, nil))
 		})
 	}
 }
@@ -95,7 +95,7 @@ func TestDecideRetryFlow(t *testing.T) {
 
 	t.Run("retryable failure arms the backoff timer", func(t *testing.T) {
 		t.Parallel()
-		got := decide(foldOf(t, started, sched(1), fail(1)), false, now, nil)
+		got := decide(foldOf(t, started, sched(1), fail(1)), false, now, nil)[0]
 		assert.Equal(t, actArmTimer, got.kind)
 		assert.Equal(t, "a", got.state)
 		assert.Equal(t, int32(1), got.attempt)
@@ -105,7 +105,7 @@ func TestDecideRetryFlow(t *testing.T) {
 	t.Run("timer fired -> schedule attempt+1 (W5)", func(t *testing.T) {
 		t.Parallel()
 		got := decide(foldOf(t, started, sched(1), fail(1),
-			Event{Type: EvTimerFired, State: "a", Attempt: 1}), false, now, nil)
+			Event{Type: EvTimerFired, State: "a", Attempt: 1}), false, now, nil)[0]
 		assert.Equal(t, action{kind: actScheduleStep, state: "a", attempt: 2}, got)
 	})
 
@@ -116,7 +116,7 @@ func TestDecideRetryFlow(t *testing.T) {
 			sched(2), fail(2), Event{Type: EvTimerFired, State: "a", Attempt: 2},
 			sched(3), fail(3))
 		assert.Equal(t, "b", s.Current, "fold advanced to the catch route")
-		got := decide(s, false, now, nil)
+		got := decide(s, false, now, nil)[0]
 		assert.Equal(t, action{kind: actScheduleStep, state: "b", attempt: 1}, got)
 		// The catch target's input is the error object.
 		var doc map[string]any
@@ -138,7 +138,7 @@ func TestDecideRetryFlow(t *testing.T) {
 			Event{Type: EvRunStarted, Spec: noCatch, Input: json.RawMessage(`{}`)},
 			Event{Type: EvStepScheduled, State: "a", Attempt: 1},
 			Event{Type: EvStepFailed, State: "a", Attempt: 1, ErrorType: fv1.WorkflowErrFunctionError})
-		got := decide(s, false, now, nil)
+		got := decide(s, false, now, nil)[0]
 		assert.Equal(t, actFailRun, got.kind)
 		assert.Equal(t, fv1.WorkflowErrFunctionError, s.PendingError)
 	})
@@ -151,7 +151,7 @@ func TestDecideRetryFlow(t *testing.T) {
 			sched(3), fail(3))
 		// Budget is 3: decide must not open attempt 4 — the fold already
 		// routed to catch, so the next action targets "b", never "a"/4.
-		got := decide(s, false, now, nil)
+		got := decide(s, false, now, nil)[0]
 		assert.NotEqual(t, actArmTimer, got.kind)
 		if got.kind == actScheduleStep {
 			assert.NotEqual(t, "a", got.state)

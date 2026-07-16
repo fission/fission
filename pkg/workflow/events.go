@@ -32,6 +32,10 @@ const (
 	EvRunFailed     EventType = "RunFailed"     // TLA "failed" {ErrorType, Cause}
 	EvRunCancelled  EventType = "RunCancelled"  // TLA "cancelled"
 	EvRunTimedOut   EventType = "RunTimedOut"   // run Timeout expiry
+	// EvBranchesJoined closes a parallel region (workflowbranch.tla W7/W8):
+	// unique, only after every branch succeeded, and nothing but the region's
+	// continuation follows it. Carries the shaped post-join document.
+	EvBranchesJoined EventType = "BranchesJoined"
 )
 
 // Event is one entry of a run's log. The schema is a durable wire contract:
@@ -41,6 +45,9 @@ type Event struct {
 	Type    EventType `json:"type"`
 	State   string    `json:"state,omitempty"`
 	Attempt int32     `json:"attempt,omitempty"`
+	// Branch discriminates parallel-region step events (workflowbranch.tla);
+	// empty = the main flow.
+	Branch string `json:"branch,omitempty"`
 
 	// RunStarted only: the spec snapshot this run executes, forever, plus the
 	// initial input. A Workflow edit or deletion mid-run can neither fork nor
@@ -66,6 +73,7 @@ var knownEventTypes = map[EventType]bool{
 	EvRunStarted: true, EvStepScheduled: true, EvStepSucceeded: true,
 	EvStepFailed: true, EvTimerFired: true, EvRunSucceeded: true,
 	EvRunFailed: true, EvRunCancelled: true, EvRunTimedOut: true,
+	EvBranchesJoined: true,
 }
 
 func encodeEvent(e Event) (statestore.Event, error) {

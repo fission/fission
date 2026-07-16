@@ -43,6 +43,7 @@ type invocation struct {
 	runUID      string
 	stream      string
 	namespace   string
+	branch      string // parallel-region invocations; "" = main flow
 	state       string
 	attempt     int32
 	stateSpec   fv1.WorkflowState
@@ -105,7 +106,7 @@ func NewInvoker(o InvokerOptions) *Invoker {
 // long steps (the head-of-line class the executor's specialization
 // semaphore documents).
 func (inv *Invoker) Dispatch(iv invocation) {
-	key := iv.runUID + "/" + stepKey(iv.state, iv.attempt)
+	key := iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
 	inv.mu.Lock()
 	if inv.inflight[key] {
 		inv.mu.Unlock()
@@ -191,6 +192,9 @@ func (inv *Invoker) execute(iv invocation) outcome {
 	// Idempotency contract: functions dedup on (run, attempt).
 	req.Header.Set("X-Fission-Workflow-Run", iv.runUID)
 	req.Header.Set("X-Fission-Workflow-Attempt", strconv.Itoa(int(iv.attempt)))
+	if iv.branch != "" {
+		req.Header.Set("X-Fission-Workflow-Branch", iv.branch)
+	}
 
 	resp, err := inv.client.Do(req)
 	if err != nil {
@@ -283,27 +287,27 @@ func causeOf(err error) json.RawMessage {
 func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 	var ev Event
 	if !res.succeeded {
-		ev = Event{Type: EvStepFailed, State: iv.state, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
+		ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
 	} else {
 		nextDoc, err := inv.shapeSuccess(iv, res.body)
 		if err != nil {
 			if errors.Is(err, errInvalidPath) {
-				ev = Event{Type: EvStepFailed, State: iv.state, Attempt: iv.attempt,
+				ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Attempt: iv.attempt,
 					ErrorType: fv1.WorkflowErrInvalidPath, Cause: causeOf(err)}
 			} else {
 				return err
 			}
 		} else if len(nextDoc) > spillThreshold {
-			ref, err := spill(inv.baseCtx, inv.kv, iv.namespace, iv.runKey.Name, iv.state, iv.attempt, nextDoc)
+			ref, err := spill(inv.baseCtx, inv.kv, iv.namespace, iv.runKey.Name, spillKeyPrefix(iv.branch, iv.state), iv.attempt, nextDoc)
 			if err != nil {
 				return err
 			}
-			ev = Event{Type: EvStepSucceeded, State: iv.state, Attempt: iv.attempt, OutputRef: ref}
+			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, OutputRef: ref}
 		} else {
-			ev = Event{Type: EvStepSucceeded, State: iv.state, Attempt: iv.attempt, Output: nextDoc}
+			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Attempt: iv.attempt, Output: nextDoc}
 		}
 	}
-	return appendGuarded(inv.baseCtx, inv.el, iv.stream, iv.expectedSeq, ev, resultGuard(iv.state, iv.attempt))
+	return appendGuarded(inv.baseCtx, inv.el, iv.stream, iv.expectedSeq, ev, resultGuard(iv.branch, iv.state, iv.attempt))
 }
 
 // shapeSuccess merges the function result into the state's input per
@@ -334,17 +338,29 @@ func (inv *Invoker) shapeSuccess(iv invocation, body json.RawMessage) (json.RawM
 
 // resultGuard drops an append when the log already resolved this attempt or
 // went terminal.
-func resultGuard(state string, attempt int32) func(Event) bool {
+func resultGuard(branch, state string, attempt int32) func(Event) bool {
 	return func(e Event) bool {
 		switch e.Type {
 		case EvStepSucceeded, EvStepFailed:
-			return e.State == state && e.Attempt == attempt
+			return e.Branch == branch && e.State == state && e.Attempt == attempt
+		case EvBranchesJoined:
+			// The region closed (W8): any late branch result is discarded.
+			return branch != ""
 		case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
 			return true
 		default:
 			return false
 		}
 	}
+}
+
+// spillKeyPrefix scopes spill keys per branch; the main flow keeps the
+// phase-2 key shape.
+func spillKeyPrefix(branch, state string) string {
+	if branch == "" {
+		return state
+	}
+	return branch + "/" + state
 }
 
 // appendGuarded CAS-appends ev at expectedSeq; on conflict it re-reads the

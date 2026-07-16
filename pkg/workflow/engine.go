@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -91,7 +92,8 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			return nil, err
 		}
 
-		act := decide(s, run.Annotations[CancelAnnotation] != "", e.clock(), e.rand)
+		acts := decide(s, run.Annotations[CancelAnnotation] != "", e.clock(), e.rand)
+		act := acts[0]
 
 		var ev Event
 		switch act.kind {
@@ -99,26 +101,21 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			e.saveCheckpoint(ctx, run, s)
 			return s, nil
 
-		case actInvoke:
-			st := s.Spec.States[act.state]
-			doc := s.Doc
-			if s.DocRef != "" {
-				if doc, err = deref(s.DocRef); err != nil {
-					return nil, err
+		case actInvoke, actArmTimer:
+			// Pure dispatches — a parallel region may carry several; process
+			// them ALL, then wait for wakes (decide sorts appends first, so
+			// reaching here means no append is pending).
+			for _, a := range acts {
+				switch a.kind {
+				case actInvoke:
+					if err := e.dispatchInvoke(run, stream, s, a, deref); err != nil {
+						return nil, err
+					}
+				case actArmTimer:
+					if err := e.armTimer(ctx, run, a); err != nil {
+						return nil, err
+					}
 				}
-			}
-			e.invoker.Dispatch(invocation{
-				runKey: types.NamespacedName{Namespace: run.Namespace, Name: run.Name},
-				runUID: string(run.UID), stream: stream, namespace: run.Namespace,
-				state: act.state, attempt: act.attempt, stateSpec: st, input: doc,
-				expectedSeq: s.LastSeq,
-			})
-			e.saveCheckpoint(ctx, run, s)
-			return s, nil
-
-		case actArmTimer:
-			if err := e.armTimer(ctx, run, act); err != nil {
-				return nil, err
 			}
 			e.saveCheckpoint(ctx, run, s)
 			return s, nil
@@ -135,7 +132,14 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			ev = Event{Type: EvRunStarted, Spec: spec, Input: input}
 
 		case actScheduleStep:
-			ev = Event{Type: EvStepScheduled, State: act.state, Attempt: act.attempt}
+			ev = Event{Type: EvStepScheduled, State: act.state, Branch: act.branch, Attempt: act.attempt}
+
+		case actJoin:
+			joined, err := e.assembleJoin(ctx, run, s, deref)
+			if err != nil {
+				return nil, err
+			}
+			ev = joined
 
 		case actCompleteRun:
 			ev = Event{Type: EvRunSucceeded, Output: s.Doc, OutputRef: s.DocRef}
@@ -165,6 +169,78 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			return nil, err
 		}
 	}
+}
+
+// dispatchInvoke hands one (possibly branch-scoped) invocation to the pool.
+func (e *Engine) dispatchInvoke(run *fv1.WorkflowRun, stream string, s *RunState, a action, deref derefFn) error {
+	machine := s
+	if a.branch != "" {
+		machine = s.BranchRuns[a.branch]
+		if machine == nil {
+			return fmt.Errorf("invoke for unknown branch %q", a.branch)
+		}
+	}
+	st := machine.Spec.States[a.state]
+	doc := machine.Doc
+	if machine.DocRef != "" {
+		var err error
+		if doc, err = deref(machine.DocRef); err != nil {
+			return err
+		}
+	}
+	e.invoker.Dispatch(invocation{
+		runKey: types.NamespacedName{Namespace: run.Namespace, Name: run.Name},
+		runUID: string(run.UID), stream: stream, namespace: run.Namespace,
+		branch: a.branch, state: a.state, attempt: a.attempt, stateSpec: st, input: doc,
+		expectedSeq: s.LastSeq,
+	})
+	return nil
+}
+
+// assembleJoin builds the EvBranchesJoined event: the ordered branch outputs
+// as an array, merged into the region's input per Result/OutputPath, spilled
+// when large. A join-shaping InvalidPath fails the RUN (validation rejects
+// unparseable paths at admission; the residual unwritable-shape case is a
+// documented v1 edge without catch routing).
+func (e *Engine) assembleJoin(ctx context.Context, run *fv1.WorkflowRun, s *RunState, deref derefFn) (Event, error) {
+	st := s.Spec.States[s.Current]
+
+	outputs := make([]any, len(s.BranchRuns))
+	for key, mini := range s.BranchRuns {
+		i, err := strconv.Atoi(key)
+		if err != nil || i < 0 || i >= len(outputs) {
+			return Event{}, fmt.Errorf("malformed branch key %q", key)
+		}
+		doc, err := mini.currentDoc(deref)
+		if err != nil {
+			return Event{}, err
+		}
+		outputs[i] = doc
+	}
+
+	regionInput, err := s.currentDoc(deref)
+	if err != nil {
+		return Event{}, err
+	}
+	shaped, err := shapeOutput(st, regionInput, outputs)
+	if err != nil {
+		if errors.Is(err, errInvalidPath) {
+			return Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrInvalidPath, Cause: causeOf(err)}, nil
+		}
+		return Event{}, err
+	}
+	raw, err := json.Marshal(shaped)
+	if err != nil {
+		return Event{}, fmt.Errorf("encoding join output: %w", err)
+	}
+	if len(raw) > spillThreshold {
+		ref, err := spill(ctx, e.kv, run.Namespace, run.Name, s.Current+"-join", 0, raw)
+		if err != nil {
+			return Event{}, err
+		}
+		return Event{Type: EvBranchesJoined, OutputRef: ref}, nil
+	}
+	return Event{Type: EvBranchesJoined, Output: raw}, nil
 }
 
 // foldTail reads and folds everything past the state's checkpoint.
@@ -218,14 +294,14 @@ func (e *Engine) FailUnstartable(ctx context.Context, run *fv1.WorkflowRun, caus
 func (e *Engine) armTimer(ctx context.Context, run *fv1.WorkflowRun, act action) error {
 	body, err := json.Marshal(timerMsg{
 		Namespace: run.Namespace, Name: run.Name, UID: string(run.UID),
-		State: act.state, Attempt: act.attempt,
+		Branch: act.branch, State: act.state, Attempt: act.attempt,
 	})
 	if err != nil {
 		return err
 	}
 	_, err = e.q.Enqueue(ctx, timerQueue, statestore.Message{Body: body}, statestore.EnqueueOptions{
 		Delay:    act.delay,
-		DedupKey: fmt.Sprintf("%s/%s/%d", string(run.UID), act.state, act.attempt),
+		DedupKey: fmt.Sprintf("%s/%s/%s/%d", string(run.UID), act.branch, act.state, act.attempt),
 	})
 	if err != nil {
 		return fmt.Errorf("arming timer for %s/%d: %w", act.state, act.attempt, err)

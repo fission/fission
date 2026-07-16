@@ -7,12 +7,14 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/workflow/expr"
 )
 
 // derefFn resolves a spilled document by its KV ref. Spilled entries are
@@ -53,6 +55,14 @@ type RunState struct {
 	Results  map[string]stepResult `json:"results,omitempty"`
 	// TimerFired records consumed backoff timers keyed "state/attempt".
 	TimersFired map[string]bool `json:"timersFired,omitempty"`
+
+	// BranchRuns holds the live parallel region's per-branch mini-runs,
+	// keyed by branch index ("0", "1", ...). A branch is a run in miniature:
+	// same fold machinery, spec synthesized from the branch definition
+	// (checkpointed as-is — at <=10 branches / <=100 items with bounded
+	// branch specs, correctness-simple beats a custom spec-stripping
+	// marshal). Non-nil exactly while Current is a Parallel/Map state.
+	BranchRuns map[string]*RunState `json:"branchRuns,omitempty"`
 
 	// PendingCompletion is set when advancement reached the end (End=true or
 	// a Succeed state): decide appends the terminal event.
@@ -110,6 +120,13 @@ func (s *RunState) fold(events []statestore.Event, deref derefFn) error {
 			}
 			return fmt.Errorf("fold: %s at seq %d after terminal %s (W4 violated — corrupt stream)", e.Type, se.Seq, s.Terminal)
 		}
+		if e.Branch != "" && s.BranchRuns == nil && e.Type == EvTimerFired {
+			// The same benign redelivery after the region already joined
+			// (workflowbranch.tla W8 covers step events; timers are outside
+			// the model's vocabulary, exactly like the terminal case above).
+			s.LastSeq = se.Seq
+			continue
+		}
 		if err := s.apply(e, se, deref); err != nil {
 			return fmt.Errorf("fold: seq %d (%s): %w", se.Seq, e.Type, err)
 		}
@@ -120,7 +137,30 @@ func (s *RunState) fold(events []statestore.Event, deref derefFn) error {
 }
 
 func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
+	if e.Branch != "" {
+		return s.applyBranchEvent(e, se, deref)
+	}
 	switch e.Type {
+	case EvBranchesJoined:
+		if s.BranchRuns == nil {
+			return fmt.Errorf("joined without a live parallel region (W8)")
+		}
+		for key, mini := range s.BranchRuns {
+			if !mini.PendingCompletion {
+				return fmt.Errorf("joined while branch %s is not complete (W7)", key)
+			}
+		}
+		// The event carries the shaped post-join document, like a step result.
+		s.Doc, s.DocRef = e.Output, e.OutputRef
+		st := s.Spec.States[s.Current]
+		s.BranchRuns = nil
+		if st.End {
+			s.Current = ""
+			s.PendingCompletion = true
+			return nil
+		}
+		return s.advance(st.Next, deref)
+
 	case EvRunStarted:
 		if s.Spec != nil {
 			return fmt.Errorf("duplicate RunStarted")
@@ -192,6 +232,137 @@ func (s *RunState) apply(e Event, se statestore.Event, deref derefFn) error {
 	default:
 		return fmt.Errorf("unhandled event type %q", e.Type)
 	}
+}
+
+// maxMapItems caps Map fan-out (the RFC's "cap ItemsPath length in v1").
+const maxMapItems = 100
+
+// applyBranchEvent routes a branch-tagged event into its mini-run, then
+// handles region-level consequences: a branch failing terminally is
+// fail-fast (workflowbranch.tla) — route the region's Catch on
+// Fission.BranchFailed or fail the run.
+func (s *RunState) applyBranchEvent(e Event, se statestore.Event, deref derefFn) error {
+	if s.BranchRuns == nil {
+		return fmt.Errorf("branch %q event without a live parallel region (W8 violated — corrupt stream)", e.Branch)
+	}
+	mini, ok := s.BranchRuns[e.Branch]
+	if !ok {
+		return fmt.Errorf("event for undeclared branch %q", e.Branch)
+	}
+
+	// The mini-run applies the event with the SAME machinery (its own
+	// current-state assertions, attempts, results, catch routing within the
+	// branch); strip the branch tag so its bookkeeping is branch-local.
+	inner := e
+	inner.Branch = ""
+	if err := mini.apply(inner, se, deref); err != nil {
+		return fmt.Errorf("branch %s: %w", e.Branch, err)
+	}
+
+	if mini.PendingError != "" {
+		// Fail-fast: the branch is terminally failed. The region fails with
+		// Fission.BranchFailed, routable by a Catch on the fan-out state.
+		cause, err := json.Marshal(map[string]any{
+			"branch":    e.Branch,
+			"errorType": mini.PendingError,
+			"cause":     nonEmpty(mini.Cause),
+		})
+		if err != nil {
+			return fmt.Errorf("encoding branch error object: %w", err)
+		}
+		st := s.Spec.States[s.Current]
+		s.BranchRuns = nil
+		if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != "" {
+			errObj, err := json.Marshal(map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)})
+			if err != nil {
+				return fmt.Errorf("encoding error object: %w", err)
+			}
+			s.Doc, s.DocRef = errObj, ""
+			return s.advance(route, deref)
+		}
+		s.Current = ""
+		s.PendingError = fv1.WorkflowErrBranchFailed
+		s.Cause = cause
+	}
+	return nil
+}
+
+// enterRegion initializes the parallel region's mini-runs when advancement
+// reaches a Parallel/Map state. Deterministic from the log: branch inputs
+// derive from the flowing document (deref'd spill refs are immutable).
+func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn) error {
+	doc, err := s.currentDoc(deref)
+	if err != nil {
+		return err
+	}
+	regionInput, err := shapeInput(st, doc)
+	if err != nil {
+		return err
+	}
+
+	type branchSeed struct {
+		branch fv1.WorkflowBranch
+		input  any
+	}
+	var seeds []branchSeed
+	switch st.Type {
+	case fv1.WorkflowStateParallel:
+		for _, b := range st.Branches {
+			seeds = append(seeds, branchSeed{branch: b, input: regionInput})
+		}
+	case fv1.WorkflowStateMap:
+		items, matched := mustParsePath(st.ItemsPath).Get(regionInput)
+		arr, ok := items.([]any)
+		if !matched || !ok {
+			s.Current = ""
+			s.PendingError = fv1.WorkflowErrPermanentError
+			s.Cause, _ = json.Marshal(fmt.Sprintf("itemsPath %s did not select an array", st.ItemsPath))
+			return nil
+		}
+		if len(arr) > maxMapItems {
+			s.Current = ""
+			s.PendingError = fv1.WorkflowErrPermanentError
+			s.Cause, _ = json.Marshal(fmt.Sprintf("map has %d items; at most %d in v1", len(arr), maxMapItems))
+			return nil
+		}
+		for _, item := range arr {
+			seeds = append(seeds, branchSeed{branch: st.Branches[0], input: item})
+		}
+	}
+
+	s.Current = name
+	s.BranchRuns = make(map[string]*RunState, len(seeds))
+	for i, seed := range seeds {
+		mini := newRunState()
+		mini.Spec = &fv1.WorkflowSpec{
+			StartAt: seed.branch.StartAt,
+			States:  seed.branch.StatesAsWorkflow(),
+			// The workflow-level retry default reaches branch tasks
+			// (retryPolicy falls back to Spec.DefaultRetry).
+			DefaultRetry: s.Spec.DefaultRetry,
+		}
+		raw, err := json.Marshal(seed.input)
+		if err != nil {
+			return fmt.Errorf("encoding branch %d input: %w", i, err)
+		}
+		mini.Doc = raw
+		if err := mini.advance(seed.branch.StartAt, deref); err != nil {
+			return fmt.Errorf("branch %d: %w", i, err)
+		}
+		s.BranchRuns[strconv.Itoa(i)] = mini
+	}
+	return nil
+}
+
+// mustParsePath is for admission-validated paths (a parse failure here means
+// a snapshot from a dialect this binary no longer accepts — the ItemsPath
+// no-array error path handles the nil).
+func mustParsePath(path string) expr.Path {
+	p, err := expr.Parse(path)
+	if err != nil {
+		return expr.Path{}
+	}
+	return p
 }
 
 // applyStepFailure routes a recorded failure — all deterministic from the
@@ -271,6 +442,8 @@ func (s *RunState) advance(to string, deref derefFn) error {
 		case fv1.WorkflowStateTask:
 			s.Current = to
 			return nil
+		case fv1.WorkflowStateParallel, fv1.WorkflowStateMap:
+			return s.enterRegion(to, st, deref)
 		case fv1.WorkflowStateSucceed:
 			s.Current = ""
 			s.PendingCompletion = true

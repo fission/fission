@@ -28,6 +28,7 @@ type timerMsg struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 	UID       string `json:"uid"`
+	Branch    string `json:"branch,omitempty"`
 	State     string `json:"state"`
 	Attempt   int32  `json:"attempt"`
 }
@@ -72,7 +73,7 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 		// lease expiry) can land a duplicate TimerFired when nothing else
 		// wrote in between: harmless — the fold's TimersFired set is
 		// idempotent and no W-invariant covers timer events.
-		ev := Event{Type: EvTimerFired, State: tm.State, Attempt: tm.Attempt}
+		ev := Event{Type: EvTimerFired, State: tm.State, Branch: tm.Branch, Attempt: tm.Attempt}
 		stream := "wfrun/" + tm.UID
 		head, err := e.el.Head(ctx, stream)
 		if err != nil {
@@ -85,7 +86,11 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 		err = appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
 			switch raced.Type {
 			case EvTimerFired:
-				return raced.State == tm.State && raced.Attempt == tm.Attempt
+				return raced.Branch == tm.Branch && raced.State == tm.State && raced.Attempt == tm.Attempt
+			case EvBranchesJoined:
+				// The region closed; a late branch timer is moot (the fold
+				// would ignore it anyway, but not appending is cleaner).
+				return tm.Branch != ""
 			case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
 				return true
 			default:
