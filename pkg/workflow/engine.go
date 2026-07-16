@@ -279,12 +279,7 @@ func (e *Engine) FailUnstartable(ctx context.Context, run *fv1.WorkflowRun, caus
 	}
 	ev := Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrPermanentError, Cause: causeOf(fmt.Errorf("%s", cause))}
 	return appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
-		switch raced.Type {
-		case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
-			return true
-		default:
-			return false
-		}
+		return isTerminalEvent(raced.Type)
 	})
 }
 

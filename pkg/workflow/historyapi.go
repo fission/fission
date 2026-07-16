@@ -57,7 +57,7 @@ func registerHistoryAPI(mux *http.ServeMux, logger logr.Logger, el statestore.Ev
 			return
 		}
 
-		stream := "wfrun/" + uid
+		stream := streamNameForUID(uid)
 		withIO := r.URL.Query().Get("io") == "true"
 
 		var out []HistoryEvent

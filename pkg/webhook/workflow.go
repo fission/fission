@@ -54,16 +54,15 @@ func (r *Workflow) Validate(new *v1.Workflow) error {
 	return nil
 }
 
-// workflowBuiltinErrorTypes is the fixed set of built-in error classes a
-// Catch route can rely on; anything else Fission.*-prefixed earns a warning.
-var workflowBuiltinErrorTypes = map[string]bool{
-	v1.WorkflowErrAll:             true,
-	v1.WorkflowErrPermanentError:  true,
-	v1.WorkflowErrFunctionError:   true,
-	v1.WorkflowErrTimeout:         true,
-	v1.WorkflowErrInvalidPath:     true,
-	v1.WorkflowErrNoChoiceMatched: true,
-}
+// workflowBuiltinErrorTypes is the set of built-in error classes a Catch
+// route can rely on; anything else Fission.*-prefixed earns a warning.
+var workflowBuiltinErrorTypes = func() map[string]bool {
+	m := make(map[string]bool, len(v1.WorkflowBuiltinErrorTypes))
+	for _, e := range v1.WorkflowBuiltinErrorTypes {
+		m[e] = true
+	}
+	return m
+}()
 
 // Warnings flags accepted-but-suspect specs: a Catch route on a typo'd
 // built-in error class (e.g. "Fission.Timout") passes validation — errorType

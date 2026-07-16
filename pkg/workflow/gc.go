@@ -13,6 +13,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
@@ -35,7 +36,7 @@ const (
 // payload (Trim keeps only the stream-head marker — one tiny row, documented
 // in the RFC) and the io/checkpoint KV keyspaces.
 func (e *Engine) CleanupRun(ctx context.Context, namespace, name string, uid types.UID) error {
-	stream := "wfrun/" + string(uid)
+	stream := streamNameForUID(string(uid))
 	head, err := e.el.Head(ctx, stream)
 	if err != nil {
 		return fmt.Errorf("reading head for cleanup: %w", err)
@@ -132,7 +133,7 @@ func (rs *RetentionSweeper) sweep(ctx context.Context) {
 			if !expired && !overCount {
 				continue
 			}
-			if !slices.Contains(run.Finalizers, FinalizerName) {
+			if !controllerutil.ContainsFinalizer(&run, FinalizerName) {
 				// Pre-finalizer run (upgrade edge): reclaim directly, since
 				// deletion won't trigger cleanup.
 				if err := rs.engine.CleanupRun(ctx, run.Namespace, run.Name, run.UID); err != nil {
@@ -162,21 +163,20 @@ func finishedAt(run fv1.WorkflowRun) time.Time {
 // reconcile should stop (the run is going away).
 func (r *WorkflowRunReconciler) handleDeletion(ctx context.Context, run *fv1.WorkflowRun) (bool, error) {
 	if run.DeletionTimestamp == nil {
-		if !slices.Contains(run.Finalizers, FinalizerName) {
-			run.Finalizers = append(run.Finalizers, FinalizerName)
+		if controllerutil.AddFinalizer(run, FinalizerName) {
 			if err := r.client.Update(ctx, run); err != nil {
 				return true, err
 			}
 		}
 		return false, nil
 	}
-	if !slices.Contains(run.Finalizers, FinalizerName) {
+	if !controllerutil.ContainsFinalizer(run, FinalizerName) {
 		return true, nil // nothing to do; someone else's finalizer or none
 	}
 	if err := r.engine.CleanupRun(ctx, run.Namespace, run.Name, run.UID); err != nil {
 		return true, err // requeue via error; the CR stays until cleanup lands
 	}
-	run.Finalizers = slices.DeleteFunc(run.Finalizers, func(f string) bool { return f == FinalizerName })
+	controllerutil.RemoveFinalizer(run, FinalizerName)
 	if err := r.client.Update(ctx, run); err != nil {
 		return true, err
 	}

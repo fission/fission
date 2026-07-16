@@ -71,6 +71,20 @@ const (
 	WorkflowErrBranchFailed = "Fission.BranchFailed"
 )
 
+// WorkflowBuiltinErrorTypes is the canonical list of the classes above —
+// consumers (e.g. the webhook's typo warning) derive lookups from it rather
+// than re-enumerating the constants and drifting.
+var WorkflowBuiltinErrorTypes = []string{
+	WorkflowErrAll,
+	WorkflowErrPermanentError,
+	WorkflowErrFunctionError,
+	WorkflowErrTimeout,
+	WorkflowErrInvalidPath,
+	WorkflowErrNoChoiceMatched,
+	WorkflowErrFailed,
+	WorkflowErrBranchFailed,
+}
+
 //
 // To add a Fission CRD type:
 //   1. Create a "spec" type, for everything in the type except metadata

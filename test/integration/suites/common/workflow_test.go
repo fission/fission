@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	typedcorev1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/test/integration/framework"
 )
@@ -35,6 +36,20 @@ func startedRunName(t *testing.T, out string) string {
 	m := regexp.MustCompile(`workflow run '([^']+)' started`).FindStringSubmatch(out)
 	require.NotNilf(t, m, "no started line in output:\n%s", out)
 	return m[1]
+}
+
+// waitForTerminalRun polls until the named run reaches a terminal phase and
+// returns it.
+func waitForTerminalRun(t *testing.T, ctx context.Context, runs typedcorev1.WorkflowRunInterface, runName string) *fv1.WorkflowRun {
+	t.Helper()
+	var run *fv1.WorkflowRun
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		run, err = runs.Get(ctx, runName, metav1.GetOptions{})
+		require.NoError(c, err)
+		require.True(c, run.Status.Phase.Terminal(), "phase %s", run.Status.Phase)
+	}, 3*time.Minute, 2*time.Second, "run must reach a terminal phase")
+	return run
 }
 
 // createWorkflow writes the manifest, creates it via the CLI, and registers
@@ -196,13 +211,7 @@ spec:
 	runName := startedRunName(t, out)
 
 	runs := f.FissionClient().CoreV1().WorkflowRuns(ns.Name)
-	var run *fv1.WorkflowRun
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		run, err = runs.Get(ctx, runName, metav1.GetOptions{})
-		require.NoError(c, err)
-		require.True(c, run.Status.Phase.Terminal(), "phase %s", run.Status.Phase)
-	}, 3*time.Minute, 2*time.Second, "run must reach a terminal phase")
+	run := waitForTerminalRun(t, ctx, runs, runName)
 
 	require.Equal(t, fv1.WorkflowRunSucceeded, run.Status.Phase)
 	require.NotNil(t, run.Status.Output)
@@ -274,13 +283,7 @@ spec:
 	runName := startedRunName(t, out)
 
 	runs := f.FissionClient().CoreV1().WorkflowRuns(ns.Name)
-	var run *fv1.WorkflowRun
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
-		run, err = runs.Get(ctx, runName, metav1.GetOptions{})
-		require.NoError(c, err)
-		require.True(c, run.Status.Phase.Terminal(), "phase %s", run.Status.Phase)
-	}, 3*time.Minute, 2*time.Second)
+	run := waitForTerminalRun(t, ctx, runs, runName)
 
 	require.Equal(t, fv1.WorkflowRunSucceeded, run.Status.Phase, "catch must route to recover")
 	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)

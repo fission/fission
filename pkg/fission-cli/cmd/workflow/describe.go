@@ -42,7 +42,7 @@ func (opts *DescribeSubCommand) do(input cli.Input) error {
 	fmt.Fprintf(w, "Workflow:\t%s (generation %d)\n", run.Spec.WorkflowRef, run.Spec.WorkflowGeneration)
 	fmt.Fprintf(w, "Phase:\t%s\n", runPhase(*run))
 	if len(run.Status.ActiveStates) > 0 {
-		fmt.Fprintf(w, "Active:\t%s\n", run.Status.ActiveStates[0])
+		fmt.Fprintf(w, "Active:\t%s\n", activeStates(*run))
 	}
 	if run.Status.StartedAt != nil {
 		end := time.Now()

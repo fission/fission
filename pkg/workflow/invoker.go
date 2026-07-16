@@ -356,10 +356,8 @@ func resultGuard(region, branch, state string, attempt int32) func(Event) bool {
 		case EvBranchesJoined:
 			// The region closed (W8): any late branch result is discarded.
 			return branch != ""
-		case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
-			return true
 		default:
-			return false
+			return isTerminalEvent(e.Type)
 		}
 	}
 }

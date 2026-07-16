@@ -66,19 +66,7 @@ func RegisterTenantScopedWithConcurrency(mgr ctrl.Manager, obj client.Object, re
 // TenantReenqueueHandler). The supplied predicates REPLACE the default
 // GenerationChangedPredicate (pass it explicitly if wanted).
 func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, predicates ...predicate.Predicate) error {
-	if !utils.CrdWatchClusterWide() {
-		return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicates...)
-	}
-	b := builder.ControllerManagedBy(mgr).
-		For(obj, builder.WithPredicates(tenantScopedPredicates(predicates)...)).
-		Watches(&fv1.FissionTenant{},
-			TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), obj),
-			builder.WithPredicates(TenantOnboardPredicate())).
-		Named(name)
-	if maxConcurrent > 0 {
-		b = b.WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrent})
-	}
-	return b.Complete(reconciler)
+	return RegisterTenantScopedWithRawSources(mgr, obj, reconciler, name, maxConcurrent, nil, predicates...)
 }
 
 // RegisterTenantScopedWithRawSources is RegisterTenantScopedWithPredicates

@@ -75,7 +75,7 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 		// wrote in between: harmless — the fold's TimersFired set is
 		// idempotent and no W-invariant covers timer events.
 		ev := Event{Type: EvTimerFired, State: tm.State, Branch: tm.Branch, Region: tm.Region, Attempt: tm.Attempt}
-		stream := "wfrun/" + tm.UID
+		stream := streamNameForUID(tm.UID)
 		head, err := e.el.Head(ctx, stream)
 		if err != nil {
 			e.logger.Error(err, "reading stream head for timer; will retry", "run", tm.Name, "state", tm.State)
@@ -92,10 +92,8 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 				// The region closed; a late branch timer is moot (the fold
 				// would ignore it anyway, but not appending is cleaner).
 				return tm.Branch != ""
-			case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
-				return true
 			default:
-				return false
+				return isTerminalEvent(raced.Type)
 			}
 		})
 		if err != nil {

@@ -106,5 +106,23 @@ func decodeEvent(se statestore.Event) (Event, error) {
 // streamName is the run's EventLog stream. Keyed on UID, not name: a
 // delete-and-recreate under the same name must never resume the old log.
 func streamName(run *fv1.WorkflowRun) string {
-	return "wfrun/" + string(run.UID)
+	return streamNameForUID(string(run.UID))
+}
+
+// streamNameForUID is streamName for call sites that only hold the UID
+// (timers, GC, the history API).
+func streamNameForUID(uid string) string {
+	return "wfrun/" + uid
+}
+
+// isTerminalEvent reports whether t ends the run — the shared guard for
+// dropping raced appends (a result, timer, or duplicate landing after the
+// log is sealed can never matter).
+func isTerminalEvent(t EventType) bool {
+	switch t {
+	case EvRunSucceeded, EvRunFailed, EvRunCancelled, EvRunTimedOut:
+		return true
+	default:
+		return false
+	}
 }

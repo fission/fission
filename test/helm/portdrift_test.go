@@ -217,10 +217,6 @@ func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
 	return false
 }
 
-// TestAsyncInvocationChart checks the RFC-0024 chart wiring: the router gains the
-// async env and the internal-listener NetworkPolicy admits svc: router (the
-// dispatcher's cross-replica delivery) only when asyncInvocation.enabled, and
-// neither renders by default.
 // TestWorkflowChart is the drift check for the RFC-0022 workflow head: port
 // constants against svcinfo, statestore env wiring, and — the known
 // silent-drop bite — membership in BOTH NetworkPolicy allowlists (router
@@ -267,6 +263,10 @@ func TestWorkflowChart(t *testing.T) {
 	})
 }
 
+// TestAsyncInvocationChart checks the RFC-0024 chart wiring: the router gains the
+// async env and the internal-listener NetworkPolicy admits svc: router (the
+// dispatcher's cross-replica delivery) only when asyncInvocation.enabled, and
+// neither renders by default.
 func TestAsyncInvocationChart(t *testing.T) {
 	t.Run("enabled: router env + svc:router NetworkPolicy row", func(t *testing.T) {
 		docs := render(t,
