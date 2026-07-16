@@ -71,6 +71,14 @@ spec:
 	ns.CLI(t, ctx, "workflow", "create", "-f", path)
 	t.Cleanup(func() {
 		bg := context.Background()
+		runs, _ := f.FissionClient().CoreV1().WorkflowRuns(ns.Name).List(bg, metav1.ListOptions{})
+		if runs != nil {
+			for _, r := range runs.Items {
+				if r.Spec.WorkflowRef == wfName {
+					_ = f.FissionClient().CoreV1().WorkflowRuns(ns.Name).Delete(bg, r.Name, metav1.DeleteOptions{})
+				}
+			}
+		}
 		_ = f.FissionClient().CoreV1().Workflows(ns.Name).Delete(bg, wfName, metav1.DeleteOptions{})
 	})
 
