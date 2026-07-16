@@ -472,15 +472,55 @@ func (d *DestinationRef) Validate(field string) error {
 // topicNameRegexp bounds statestore topic names to a stream-safe charset.
 var topicNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
-// Validate checks a topic destination: only the built-in statestore provider is
-// supported until the RFC-0027 egress phase lands, and the topic name must be
+// topicDestinationTypes are the MQ types a topic destination may target: the
+// built-in statestore provider (direct EventLog publish) and the broker types
+// whose classic heads run an RFC-0027 egress consumer. KEDA-only types (e.g.
+// aws-sqs-queue) have no classic head and therefore no egress loop — rejected.
+var topicDestinationTypes = map[MessageQueueType]struct{}{
+	MessageQueueTypeStatestore: {},
+	MessageQueueTypeKafka:      {},
+}
+
+// kafkaDestinationTopicRegexp mirrors the kafka provider's trigger-side topic
+// grammar (alphanumeric first/last character), which is stricter than the
+// statestore grammar: kafka rejects "." and ".." outright, and leading "_"
+// names collide with broker-internal topics — admitting them would create
+// destinations the broker refuses forever (retry churn straight to the DLQ).
+var kafkaDestinationTopicRegexp = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$`)
+
+// Validate checks a topic destination: the MQ type must have a publish path
+// (statestore direct, or a broker egress consumer), and the topic name must be
 // safe in the namespaced stream mapping topic/<ns>/<topic>.
+//
+// Broker topics, like kafka MessageQueueTriggers, are CLUSTER-FLAT: a topic
+// destination writes to the named broker topic as-is, with no per-namespace
+// prefixing — isolation between tenants on the broker side is the broker's
+// ACLs on the egress producer's principal. Whether a broker type's egress head
+// is actually deployed is an install property admission cannot see; the router
+// rejects publishes for undeployed types (EVENTING_EGRESS_TYPES).
 func (tr *TopicRef) Validate(field string) error {
-	if tr.MessageQueueType != MessageQueueTypeStatestore {
+	if _, ok := topicDestinationTypes[tr.MessageQueueType]; !ok {
 		return MakeValidationErr(ErrorInvalidValue, field+".messageQueueType", tr.MessageQueueType,
-			fmt.Sprintf("only %q topic destinations are supported (broker topics arrive with the RFC-0027 egress phase)", MessageQueueTypeStatestore))
+			fmt.Sprintf("topic destinations support %q (built-in) and %q (broker egress)", MessageQueueTypeStatestore, MessageQueueTypeKafka))
 	}
-	return ValidateTopicName(field+".topic", tr.Topic)
+	return ValidateTopicNameForMQType(field+".topic", string(tr.MessageQueueType), tr.Topic)
+}
+
+// ValidateTopicNameForMQType applies the base topic grammar plus the target
+// type's own restrictions (kafka's stricter rule for kafka). Exported so every
+// layer that handles a typed topic — admission, the mqpub publishers, the
+// egress consumer sink, the topic admin API — applies the SAME rule and a name
+// the broker refuses forever is rejected up front instead of churning retries
+// into the DLQ.
+func ValidateTopicNameForMQType(field, mqType, topic string) error {
+	if err := ValidateTopicName(field, topic); err != nil {
+		return err
+	}
+	if mqType == MessageQueueTypeKafka && !kafkaDestinationTopicRegexp.MatchString(topic) {
+		return MakeValidationErr(ErrorInvalidValue, field, topic,
+			"kafka topics must start and end with an alphanumeric character")
+	}
+	return nil
 }
 
 // ValidateTopicName bounds a statestore topic name: non-empty, at most 249

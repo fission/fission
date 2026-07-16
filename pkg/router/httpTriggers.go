@@ -359,6 +359,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types
 
 	ts.registerRouterOwnedRoutes(publicMux, featureConfig, homeHandled)
 	ts.registerAsyncDLQRoutes(internalMux)
+	ts.registerTopicRoutes(internalMux)
 
 	return publicMux, internalMux, nil
 }

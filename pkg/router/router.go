@@ -33,7 +33,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -534,7 +536,42 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		if elerr != nil {
 			return fmt.Errorf("async invocation: statestore eventlog capability: %w", elerr)
 		}
-		topicPublisher := mqpub.NewStatestorePublisher(eventLog)
+		// statestore topics append directly; broker topics become durable egress
+		// jobs on mq-egress-<type>, executed by that broker head's egress loop —
+		// SDKs and credentials never enter the router. The accepted broker types
+		// come from the chart (EVENTING_EGRESS_TYPES, set from kafka.enabled): a
+		// type is enqueued ONLY when a head exists to drain its queue, because a
+		// job on a consumer-less queue never leases, never dead-letters, and is
+		// invisible to every DLQ surface — the one loss mode the queue protocol
+		// cannot make loud. Unlisted types fail the publish with the unsupported
+		// sentinel instead. The publisher's sentinel is translated to the
+		// dispatcher's own so the dispatcher can classify without importing mqpub.
+		// Lowercased and deduped: MQ types are lowercase tokens, and the value
+		// forms queue NAMES — a mis-cased "Kafka" would enqueue to
+		// mq-egress-Kafka while the kafka head drains mq-egress-kafka,
+		// recreating the exact consumer-less-queue hole this gate closes. A
+		// repeated type must also not register the same observable gauge twice.
+		egressTypes := slices.Compact(slices.Sorted(slices.Values(
+			strings.FieldsFunc(strings.ToLower(os.Getenv("EVENTING_EGRESS_TYPES")),
+				func(r rune) bool { return r == ',' || r == ' ' }))))
+		topicPublisher := mqpub.NewMultiPublisher(
+			mqpub.NewStatestorePublisher(eventLog),
+			mqpub.NewEgressPublisher(queue, egressTypes...),
+		)
+		for _, t := range egressTypes {
+			asyncinvoke.RegisterEgressQueueGauges(queue, t, mqpub.EgressQueueForType(t))
+		}
+		publishTopic := func(pctx context.Context, ns, mqType, topic, contentType string, payload []byte) error {
+			err := topicPublisher.Publish(pctx, ns, mqType, topic, contentType, payload)
+			if errors.Is(err, mqpub.ErrUnsupportedMQType) {
+				return fmt.Errorf("%w: %w", asyncinvoke.ErrTopicUnsupported, err)
+			}
+			return err
+		}
+		// The topic admin surface (fission topic publish|peek) shares the same
+		// publisher and store handles.
+		triggers.asyncInvoker.eventLog = eventLog
+		triggers.asyncInvoker.publishTopic = publishTopic
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
 		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
@@ -545,7 +582,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			Deliverer:             deliverer,
 			Logger:                logger.WithName("async_dispatcher"),
 			ResolveFunctionConfig: newFunctionConfigResolver(crMgr.GetClient(), logger),
-			PublishTopic:          topicPublisher.Publish,
+			PublishTopic:          publishTopic,
 		})
 		if aerr := crMgr.Add(runnableFunc(func(rctx context.Context) error {
 			_ = dispatcher.Run(rctx) // returns only on ctx cancellation

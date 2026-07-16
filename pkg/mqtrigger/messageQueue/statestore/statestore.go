@@ -193,6 +193,10 @@ func (s *Statestore) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTri
 	go func() {
 		defer close(sub.done)
 		defer s.subs.remove(sub)
+		// Zero the lag gauge on teardown: it is a last-value gauge keyed by
+		// namespace/trigger, and a deleted trigger's series would otherwise
+		// freeze at its final lag and alert forever.
+		defer recordLag(context.WithoutCancel(subCtx), trigger.Namespace, trigger.Name, 0)
 		sub.run(subCtx)
 	}()
 	s.reaperOnce(ctx)

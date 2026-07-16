@@ -101,6 +101,13 @@ const (
 	FnAsyncMaxAge      = "async-max-age"
 	FnAsyncOnSuccess   = "async-on-success"
 	FnAsyncOnFailure   = "async-on-failure"
+	DlqQueue           = "queue"
+	// RFC-0027 `fission topic` dev commands.
+	TopicName        = "topic"
+	TopicData        = "data"
+	TopicContentType = "content-type"
+	TopicMQType      = "mqtype"
+	TopicLimit       = "limit"
 	// RFC-0027 topic destinations (statestore built-in eventing).
 	FnAsyncOnSuccessTopic = "async-on-success-topic"
 	FnAsyncOnFailureTopic = "async-on-failure-topic"

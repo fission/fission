@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -19,8 +20,10 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/mqtrigger/egress"
 	"github.com/fission/fission/pkg/mqtrigger/factory"
 	"github.com/fission/fission/pkg/mqtrigger/messageQueue"
+	"github.com/fission/fission/pkg/mqtrigger/mqpub"
 	"github.com/fission/fission/pkg/mqtrigger/validator"
 )
 
@@ -113,34 +116,102 @@ func New(logger logr.Logger, mqCfg messageQueue.Config, routerUrl string) (messa
 	return kafka, nil
 }
 
-func (kafka Kafka) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
-	kafka.logger.V(1).Info("inside kakfa subscribe", "trigger", trigger)
-	kafka.logger.V(1).Info("brokers set", "brokers", kafka.brokers)
-
-	// Create new consumer
-	consumerConfig := sarama.NewConfig()
-	consumerConfig.Consumer.Return.Errors = true
-	consumerConfig.Version = kafka.version
-
-	// Create new producer
-	producerConfig := sarama.NewConfig()
-	producerConfig.Producer.RequiredAcks = sarama.WaitForAll
-	producerConfig.Producer.Retry.Max = 10
-	producerConfig.Producer.Return.Successes = true
-	producerConfig.Version = kafka.version
-
-	// Setup TLS for both producer and consumer
+// consumerConfig builds the sarama consumer config (TLS included when enabled).
+func (kafka Kafka) consumerConfig() (*sarama.Config, error) {
+	cfg := sarama.NewConfig()
+	cfg.Consumer.Return.Errors = true
+	cfg.Version = kafka.version
 	if kafka.tls {
 		tlsConfig, err := kafka.getTLSConfig()
-
 		if err != nil {
 			return nil, err
 		}
+		cfg.Net.TLS.Enable = true
+		cfg.Net.TLS.Config = tlsConfig
+	}
+	return cfg, nil
+}
 
-		producerConfig.Net.TLS.Enable = true
-		producerConfig.Net.TLS.Config = tlsConfig
-		consumerConfig.Net.TLS.Enable = true
-		consumerConfig.Net.TLS.Config = tlsConfig
+// producerConfig builds the sarama producer config — shared by the
+// per-subscription response/error-topic producer and the RFC-0027 egress
+// publisher, so broker/TLS settings cannot drift between the two paths.
+func (kafka Kafka) producerConfig() (*sarama.Config, error) {
+	cfg := sarama.NewConfig()
+	cfg.Producer.RequiredAcks = sarama.WaitForAll
+	cfg.Producer.Retry.Max = 10
+	cfg.Producer.Return.Successes = true
+	cfg.Version = kafka.version
+	if kafka.tls {
+		tlsConfig, err := kafka.getTLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		cfg.Net.TLS.Enable = true
+		cfg.Net.TLS.Config = tlsConfig
+	}
+	return cfg, nil
+}
+
+// NewEgressPublisher implements egress.BrokerPublisherProvider: it opens one
+// shared SyncProducer and returns the publish function the egress consumer
+// loop executes jobs with, plus a closer for the head's shutdown path.
+// RequiredAcks=WaitForAll means a nil error is a broker ack (E4 — the settle
+// that follows is honest).
+func (kafka Kafka) NewEgressPublisher() (egress.PublishFunc, io.Closer, error) {
+	cfg, err := kafka.producerConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	producer, err := sarama.NewSyncProducer(kafka.brokers, cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("kafka egress: creating producer: %w", err)
+	}
+	publish := func(ctx context.Context, job mqpub.EgressJob) error {
+		// sarama's SyncProducer has no context plumbing, but the consumer's
+		// publishTimeout < lease coupling (A7 shape) must hold — a SendMessage
+		// stuck on a flapping broker (Retry.Max=10 × dial/read timeouts) would
+		// otherwise outlive the lease and turn healthy-but-slow publishes into
+		// redeliveries and false dead-letters. Run it in a goroutine and abandon
+		// it on ctx expiry: the orphaned send may still complete (counted as a
+		// failed attempt here → possible duplicate), which at-least-once already
+		// tolerates and settle_failed/retry meters make visible.
+		errCh := make(chan error, 1)
+		go func() {
+			// Kafka topics are flat: the fission topic name is used as-is. The
+			// headers are provenance/metadata only — fission-namespace is caller-
+			// supplied and NOT an authenticated tenant identity; a downstream
+			// consumer must not authorize on it.
+			_, _, err := producer.SendMessage(&sarama.ProducerMessage{
+				Topic: job.Topic,
+				Value: sarama.ByteEncoder(job.Payload),
+				Headers: []sarama.RecordHeader{
+					{Key: []byte("content-type"), Value: []byte(job.ContentType)},
+					{Key: []byte("fission-namespace"), Value: []byte(job.Namespace)},
+				},
+			})
+			errCh <- err
+		}()
+		select {
+		case err := <-errCh:
+			return err
+		case <-ctx.Done():
+			return fmt.Errorf("kafka egress: publish abandoned: %w", ctx.Err())
+		}
+	}
+	return publish, producer, nil
+}
+
+func (kafka Kafka) Subscribe(ctx context.Context, trigger *fv1.MessageQueueTrigger) (messageQueue.Subscription, error) {
+	kafka.logger.V(1).Info("inside kafka subscribe", "trigger", trigger)
+	kafka.logger.V(1).Info("brokers set", "brokers", kafka.brokers)
+
+	consumerConfig, err := kafka.consumerConfig()
+	if err != nil {
+		return nil, err
+	}
+	producerConfig, err := kafka.producerConfig()
+	if err != nil {
+		return nil, err
 	}
 
 	consumer, err := sarama.NewConsumerGroup(kafka.brokers, string(trigger.UID), consumerConfig)

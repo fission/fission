@@ -1,0 +1,61 @@
+{{- if and .Values.statestore.enabled .Values.eventing.enabled (dig "keda" "enabled" false (.Values.eventing | default dict)) }}
+{{- /*
+RFC-0027 eventing autoscaling for the statestore mqt head (opt-in, external
+mode only — the postgresql scaler cannot reach an embedded SQLite store). KEDA
+scales the mqtrigger-statestore Deployment on RETAINED TOPIC BACKLOG: the
+cursor KV rows do not record which stream they consume, so exact per-trigger
+lag is not SQL-joinable — but the reaper trims everything below the slowest
+subscriber's cursor each minute, so retained backlog converges on
+slowest-consumer lag with reaperInterval freshness. Consumers hold no
+partitions or leases, so scaling replicas requires leader election OFF is NOT
+the model — replicas beyond 1 need eventing.leaderElection.enabled=true and
+share work only across DIFFERENT triggers (subscriptions are leader-only); the
+scaler is therefore most useful as a 0/1 wake signal or with per-trigger
+sharding, a documented limit of the classic head.
+*/ -}}
+{{- if ne .Values.statestore.mode "external" }}
+{{ required "eventing.keda.enabled requires statestore.mode=external (the postgresql scaler cannot reach an embedded SQLite store)." nil }}
+{{- end }}
+{{- $secret := .Values.statestore.external.existingSecret | default "statestore-postgres" }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: eventing-lag-scaler
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: statestore
+spec:
+  secretTargetRef:
+    - parameter: connection
+      name: {{ $secret }}
+      key: dsn
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: eventing-lag
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: mqtrigger
+    messagequeue: statestore
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mqtrigger-statestore
+  minReplicaCount: {{ dig "keda" "minReplicas" 1 (.Values.eventing | default dict) }}
+  maxReplicaCount: {{ dig "keda" "maxReplicas" 3 (.Values.eventing | default dict) }}
+  pollingInterval: {{ dig "keda" "pollingInterval" 30 (.Values.eventing | default dict) }}
+  cooldownPeriod: {{ dig "keda" "cooldownPeriod" 300 (.Values.eventing | default dict) }}
+  triggers:
+    - type: postgresql
+      metadata:
+        # Retained events across all topic streams: head minus the trim floor
+        # (the floor is one below the first retained event; a fully-trimmed
+        # stream contributes 0).
+        targetQueryValue: "{{ dig "keda" "targetBacklogPerReplica" 1000 (.Values.eventing | default dict) }}"
+        query: "SELECT COALESCE(SUM(s.head - COALESCE((SELECT MIN(e.seq) - 1 FROM state_events e WHERE e.stream = s.stream), s.head)), 0) FROM state_streams s WHERE s.stream LIKE 'topic/%'"
+      authenticationRef:
+        name: eventing-lag-scaler
+{{- end }}

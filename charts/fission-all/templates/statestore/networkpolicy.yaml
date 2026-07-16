@@ -22,9 +22,11 @@ spec:
         - podSelector: { matchLabels: { svc: workflow } }
         - podSelector: { matchLabels: { svc: statesvc } }
         - podSelector: { matchLabels: { svc: router } }
-        # Only the statestore mqt head — svc: mqtrigger alone would also admit
-        # the kafka head, which has no statestore code path (least privilege).
+        # Per-head entries — svc: mqtrigger alone would admit every mqt head
+        # (least privilege): the statestore head consumes topics; the kafka head
+        # drains the RFC-0027 mq-egress-kafka queue.
         - podSelector: { matchLabels: { svc: mqtrigger, messagequeue: statestore } }
+        - podSelector: { matchLabels: { svc: mqtrigger, messagequeue: kafka } }
       ports:
         - port: {{ include "fission.statestorePort" . }}
           protocol: TCP

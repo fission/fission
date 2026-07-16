@@ -47,9 +47,11 @@ const (
 )
 
 type dlqMessage struct {
-	ID         string    `json:"id"`
-	Namespace  string    `json:"namespace"`
-	Function   string    `json:"function"`
+	ID        string `json:"id"`
+	Namespace string `json:"namespace"`
+	Function  string `json:"function"`
+	// Topic is set instead of Function for broker egress jobs (--queue mq-egress-<type>).
+	Topic      string    `json:"topic"`
 	Reason     string    `json:"reason"`
 	Attempts   int       `json:"attempts"`
 	EnqueuedAt time.Time `json:"enqueuedAt"`
@@ -80,24 +82,27 @@ func DLQCommands() *cobra.Command {
 		Use:   "list",
 		Short: "List dead-lettered async invocations",
 	}, DLQList, flag.FlagSet{
-		Optional: []flag.Flag{flag.Namespace, flag.DlqLimit, flag.Output},
+		Optional: []flag.Flag{flag.Namespace, flag.DlqLimit, flag.Output, flag.DlqQueue},
 	})
 	showCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "show",
 		Short: "Show the full envelope of one dead-lettered async invocation",
 	}, DLQShow, flag.FlagSet{
 		Required: []flag.Flag{flag.DlqID},
+		Optional: []flag.Flag{flag.DlqQueue},
 	})
 	redriveCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "redrive",
 		Short: "Re-enqueue dead-lettered async invocations for another delivery",
 	}, DLQRedrive, flag.FlagSet{
-		Optional: []flag.Flag{flag.DlqID, flag.DlqAll},
+		Optional: []flag.Flag{flag.DlqID, flag.DlqAll, flag.DlqQueue},
 	})
 	purgeCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "purge",
 		Short: "Permanently delete every dead-lettered async invocation",
-	}, DLQPurge, flag.FlagSet{})
+	}, DLQPurge, flag.FlagSet{
+		Optional: []flag.Flag{flag.DlqQueue},
+	})
 
 	command := &cobra.Command{
 		Use:   "dlq",
@@ -128,7 +133,11 @@ func (opts *dlqSubCommand) list(input cli.Input) error {
 	}
 	headers := []string{"ID", "NAMESPACE", "FUNCTION", "REASON", "ATTEMPTS", "DIED"}
 	row := func(m dlqMessage) []string {
-		return []string{m.ID, m.Namespace, m.Function, m.Reason, strconv.Itoa(m.Attempts), util.AgeOf(metav1.NewTime(m.DiedAt))}
+		target := m.Function
+		if target == "" && m.Topic != "" {
+			target = "topic:" + m.Topic
+		}
+		return []string{m.ID, m.Namespace, target, m.Reason, strconv.Itoa(m.Attempts), util.AgeOf(metav1.NewTime(m.DiedAt))}
 	}
 	if err := util.PrintObjects(format, msgs, headers, row, nil, func(dlqMessage) []string { return nil }); err != nil {
 		return err
@@ -244,6 +253,14 @@ func (opts *dlqSubCommand) purge(input cli.Input) error {
 // response into out (nil to ignore the body). The endpoints are on the internal
 // listener precisely so they are never an unauthenticated public surface.
 func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.Values, reqBody, out any) error {
+	// --queue targets an RFC-0027 broker egress DLQ instead of the async
+	// invocation queue; threaded here so every subcommand honors it.
+	if qn := input.String(flagkey.DlqQueue); qn != "" {
+		if query == nil {
+			query = url.Values{}
+		}
+		query.Set("queue", qn)
+	}
 	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
 	if err != nil {
 		return fmt.Errorf("connecting to the Fission router internal listener: %w", err)

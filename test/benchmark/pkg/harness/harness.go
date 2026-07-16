@@ -125,5 +125,21 @@ func (e *Env) InternalTarget(fnName string, concurrency int, keepAlive bool) *lo
 	})
 }
 
+// InternalAPITarget builds a loadgen target for a router internal-listener API
+// path with a query string (e.g. the RFC-0027 topic admin surface), signed
+// like InternalTarget.
+func (e *Env) InternalAPITarget(pathAndQuery, method string, body []byte, headers http.Header, concurrency int) *loadgen.HTTPTarget {
+	return loadgen.NewHTTPTarget(loadgen.HTTPTargetConfig{
+		URL:           e.routerInternalURL + pathAndQuery,
+		Method:        method,
+		Body:          body,
+		Headers:       headers,
+		Concurrency:   concurrency,
+		KeepAlive:     true,
+		Timeout:       60 * time.Second,
+		WrapTransport: e.signWrap,
+	})
+}
+
 // RouterURL returns the public router base URL.
 func (e *Env) RouterURL() string { return e.routerURL }

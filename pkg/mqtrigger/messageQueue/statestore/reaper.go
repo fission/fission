@@ -85,6 +85,19 @@ func (ss *subscriptionSet) byStream() map[string]int64 {
 	return min
 }
 
+// forStream snapshots the live subscriptions on one stream.
+func (ss *subscriptionSet) forStream(stream string) []*subscription {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	var subs []*subscription
+	for s := range ss.subs {
+		if s.stream == stream {
+			subs = append(subs, s)
+		}
+	}
+	return subs
+}
+
 // reaperOnce starts the retention loop the first time a subscription appears.
 // The loop is bound to the provider's lifetime via the given context's PARENT
 // semantics deliberately not being used: it runs on its own stop channel so a
@@ -121,22 +134,35 @@ func (s *Statestore) runReaper() {
 // phase's problem (needs stream listing).
 func (s *Statestore) reapTick(ctx context.Context) {
 	for stream, minCursor := range s.subs.byStream() {
-		s.reapStream(ctx, stream, minCursor)
+		head := s.reapStream(ctx, stream, minCursor)
+		if head < 0 {
+			continue
+		}
+		// The tick already paid the Head read — refresh the per-trigger lag
+		// gauge (head − committed cursor) from it, the RFC-0027 scaling and
+		// alerting signal, with reaperInterval freshness.
+		for _, sub := range s.subs.forStream(stream) {
+			if sub.started.Load() {
+				recordLag(ctx, sub.trigger.Namespace, sub.trigger.Name, head-sub.committed.Load())
+			}
+		}
 	}
 }
 
-func (s *Statestore) reapStream(ctx context.Context, stream string, minCursor int64) {
+// reapStream trims one stream and returns its head (for the lag gauge), or -1
+// when the head could not be read.
+func (s *Statestore) reapStream(ctx context.Context, stream string, minCursor int64) int64 {
 	// Current floor: the seq just below the first retained event (== head when
 	// the stream is fully trimmed or empty).
 	head, err := s.el.Head(ctx, stream)
 	if err != nil {
 		s.logger.Error(err, "reaper: reading stream head", "stream", stream)
-		return
+		return -1
 	}
 	first, err := s.el.Read(ctx, stream, 0, 1)
 	if err != nil {
 		s.logger.Error(err, "reaper: reading stream floor", "stream", stream)
-		return
+		return head
 	}
 	floor := head
 	if len(first) == 1 {
@@ -181,13 +207,14 @@ scan:
 	}
 
 	if trimTo <= floor {
-		return // nothing new to trim
+		return head // nothing new to trim
 	}
 	if err := s.el.Trim(ctx, stream, trimTo+1); err != nil {
 		s.logger.Error(err, "reaper: trimming stream", "stream", stream, "below", trimTo+1)
-		return
+		return head
 	}
 	recordTrimmed(ctx, reason, trimTo-floor)
 	s.logger.V(1).Info("reaper: trimmed topic stream",
 		"stream", stream, "events", trimTo-floor, "reason", reason)
+	return head
 }
