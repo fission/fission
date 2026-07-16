@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -42,27 +44,40 @@ func TestWorkflowResumeAcrossRestart(t *testing.T) {
 	envName := "nodejs-wfres-" + ns.ID
 	fnName := "hello-wfres-" + ns.ID
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
+	// wf-step returns a JSON object — the second Task receives the first's
+	// output through the Wait state, and the node env's strict body-parser
+	// rejects a bare-string body.
+	codePath := framework.WriteTestData(t, "nodejs/wf-step/wf-step.js")
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envName, Code: codePath})
+	// Warm the function: the run's single default attempt must not be spent
+	// on a router-cache 404 or cold-start hiccup.
+	f.Router(t).GetEventually(t, ctx, utils.UrlForFunction(fnName, ns.Name), framework.BodyContains("hops"))
 
+	wfName := "wf-resume-" + ns.ID
 	manifest := fmt.Sprintf(`
 apiVersion: fission.io/v1
 kind: Workflow
 metadata:
-  name: wf-resume
+  name: %[2]s
 spec:
   startAt: before
   states:
     before: {type: Task, function: {name: %[1]s}, next: pause}
     pause:  {type: Wait, duration: 45s, next: after}
     after:  {type: Task, function: {name: %[1]s}, end: true}
-`, fnName)
+`, fnName, wfName)
 	path := filepath.Join(t.TempDir(), "wf.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(manifest), 0o600))
 	ns.CLI(t, ctx, "workflow", "create", "-f", path)
+	t.Cleanup(func() {
+		bg := context.Background()
+		_ = f.FissionClient().CoreV1().Workflows(ns.Name).Delete(bg, wfName, metav1.DeleteOptions{})
+	})
 
-	out := ns.CLICaptureStdout(t, ctx, "workflow", "run", "--name", "wf-resume")
-	runName := strings.Trim(strings.Fields(strings.TrimSpace(out))[2], "'")
+	out := ns.CLICaptureStdout(t, ctx, "workflow", "run", "--name", wfName)
+	m := regexp.MustCompile(`workflow run '([^']+)' started`).FindStringSubmatch(out)
+	require.NotNilf(t, m, "no started line in output:\n%s", out)
+	runName := m[1]
 	runs := f.FissionClient().CoreV1().WorkflowRuns(ns.Name)
 
 	// Wait until the run is parked in the Wait state (step 1 done, timer
