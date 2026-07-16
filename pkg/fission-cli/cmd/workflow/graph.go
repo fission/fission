@@ -97,7 +97,7 @@ func mermaidFromSpec(spec fv1.WorkflowSpec) string {
 		for _, c := range st.Catch {
 			fmt.Fprintf(&b, "    %s --> %s : %s\n", name, c.Next, c.ErrorType)
 		}
-		if st.End || st.Type == fv1.WorkflowStateSucceed || st.Type == fv1.WorkflowStateFail {
+		if st.IsTerminal() {
 			fmt.Fprintf(&b, "    %s --> [*]\n", name)
 		}
 	}

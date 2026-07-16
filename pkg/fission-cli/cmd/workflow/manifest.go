@@ -14,6 +14,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
@@ -71,11 +72,11 @@ func parseManifest(input cli.Input) (*fv1.Workflow, error) {
 	return &wf, nil
 }
 
-// countYAMLDocuments counts non-empty documents in a ----separated stream,
-// splitting the same way the spec reader does (spec/validate.go).
+// countYAMLDocuments counts non-empty documents using the spec subsystem's
+// shared splitter, so create/spec never disagree on what one document is.
 func countYAMLDocuments(data []byte) int {
 	docs := 0
-	for _, doc := range bytes.Split(append([]byte("\n"), data...), []byte("\n---")) {
+	for _, doc := range spec.SplitYAMLDocuments(data) {
 		if len(bytes.TrimSpace(doc)) > 0 {
 			docs++
 		}

@@ -9,7 +9,6 @@ import (
 	"maps"
 	"slices"
 
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -70,20 +69,23 @@ func (opts *ValidateSubCommand) do(input cli.Input) error {
 			}
 			namespace = ns
 		}
-		states := slices.Sorted(maps.Keys(wf.Spec.States))
-		for _, state := range states {
+		// One List instead of a Get per state: a workflow may carry up to
+		// MaxWorkflowStates task states, several typically sharing functions.
+		fns, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).List(input.Context(), metav1.ListOptions{})
+		if err != nil {
+			return fmt.Errorf("listing functions in namespace %q: %w", namespace, err)
+		}
+		exists := make(map[string]bool, len(fns.Items))
+		for _, fn := range fns.Items {
+			exists[fn.Name] = true
+		}
+		for _, state := range slices.Sorted(maps.Keys(wf.Spec.States)) {
 			st := wf.Spec.States[state]
-			if st.Function == nil || st.Function.Name == "" {
+			if st.Function == nil || st.Function.Name == "" || exists[st.Function.Name] {
 				continue
 			}
-			_, err := opts.Client().FissionClientSet.CoreV1().Functions(namespace).Get(input.Context(), st.Function.Name, metav1.GetOptions{})
-			switch {
-			case kerrors.IsNotFound(err):
-				console.Warn(fmt.Sprintf("state %q references function %q which does not exist in namespace %q (create it before running the workflow)",
-					state, st.Function.Name, namespace))
-			case err != nil:
-				return fmt.Errorf("checking function %q: %w", st.Function.Name, err)
-			}
+			console.Warn(fmt.Sprintf("state %q references function %q which does not exist in namespace %q (create it before running the workflow)",
+				state, st.Function.Name, namespace))
 		}
 	}
 

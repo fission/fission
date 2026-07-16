@@ -86,6 +86,15 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	return nil
 }
 
+// SplitYAMLDocuments splits a byte stream into its ----separated YAML
+// documents. The one splitter shared by the spec reader and the workflow
+// manifest loader, so the two never drift on delimiter handling; documents
+// may be empty — callers trim and skip.
+func SplitYAMLDocuments(b []byte) [][]byte {
+	// The leading newline makes a file that STARTS with "---" split cleanly.
+	return bytes.Split(append([]byte("\n"), b...), []byte("\n---"))
+}
+
 // resourceConflictCheck checks if any of the spec resources with
 // the same name is already present in the same cluster namespace.
 // If a same name resource exists in the same namespace, a name
@@ -297,7 +306,7 @@ func ReadSpecs(specDir, specIgnore string, applyCommitLabel bool) (*FissionResou
 
 		// handle the case where there are multiple YAML docs per file. go-yaml
 		// doesn't support this directly, yet.
-		docs := bytes.Split(b, []byte("\n---"))
+		docs := SplitYAMLDocuments(b)
 		lines := 1
 		for _, doc := range docs {
 			d := []byte(strings.TrimSpace(string(doc)))

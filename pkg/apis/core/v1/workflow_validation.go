@@ -44,6 +44,13 @@ const (
 // mermaid output), so the charset is pinned before they are un-renameable.
 var wfStateNameRegexp = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// IsTerminal reports whether execution stops after this state — the single
+// source of truth for "terminal" shared by the graph validator, the mermaid
+// renderer, and (phase 2) the engine's fold.
+func (st WorkflowState) IsTerminal() bool {
+	return st.End || st.Type == WorkflowStateSucceed || st.Type == WorkflowStateFail
+}
+
 // ApplyDefaults fills the spec-level defaults the RFC's worked example
 // relies on: a Task's function reference type defaults to "name" (the only
 // other type, function-weights, is a canary concern that never applies to a
@@ -327,10 +334,6 @@ func validateWorkflowGraph(spec WorkflowSpec) error {
 		}
 		return out
 	}
-	terminal := func(st WorkflowState) bool {
-		return st.End || st.Type == WorkflowStateSucceed || st.Type == WorkflowStateFail
-	}
-
 	reached := map[string]bool{spec.StartAt: true}
 	queue := []string{spec.StartAt}
 	terminalReached := false
@@ -338,7 +341,7 @@ func validateWorkflowGraph(spec WorkflowSpec) error {
 		name := queue[0]
 		queue = queue[1:]
 		st := spec.States[name]
-		if terminal(st) {
+		if st.IsTerminal() {
 			terminalReached = true
 		}
 		for _, next := range edges(st) {

@@ -54,23 +54,26 @@ func (r *Workflow) Validate(new *v1.Workflow) error {
 	return nil
 }
 
+// workflowBuiltinErrorTypes is the fixed set of built-in error classes a
+// Catch route can rely on; anything else Fission.*-prefixed earns a warning.
+var workflowBuiltinErrorTypes = map[string]bool{
+	v1.WorkflowErrAll:             true,
+	v1.WorkflowErrPermanentError:  true,
+	v1.WorkflowErrFunctionError:   true,
+	v1.WorkflowErrTimeout:         true,
+	v1.WorkflowErrInvalidPath:     true,
+	v1.WorkflowErrNoChoiceMatched: true,
+}
+
 // Warnings flags accepted-but-suspect specs: a Catch route on a typo'd
 // built-in error class (e.g. "Fission.Timout") passes validation — errorType
 // is free-form because functions emit arbitrary typed errors — but never
 // matches at runtime, silently disabling the route the author wrote.
 func (r *Workflow) Warnings(new *v1.Workflow) admission.Warnings {
-	builtin := map[string]bool{
-		v1.WorkflowErrAll:             true,
-		v1.WorkflowErrPermanentError:  true,
-		v1.WorkflowErrFunctionError:   true,
-		v1.WorkflowErrTimeout:         true,
-		v1.WorkflowErrInvalidPath:     true,
-		v1.WorkflowErrNoChoiceMatched: true,
-	}
 	var warnings admission.Warnings
 	for name, st := range new.Spec.States {
 		for _, c := range st.Catch {
-			if strings.HasPrefix(c.ErrorType, "Fission.") && !builtin[c.ErrorType] {
+			if strings.HasPrefix(c.ErrorType, "Fission.") && !workflowBuiltinErrorTypes[c.ErrorType] {
 				warnings = append(warnings, fmt.Sprintf(
 					"state %q catches %q, which is not a built-in Fission error class — the route will only match a function-emitted error of that exact type",
 					name, c.ErrorType))
