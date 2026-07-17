@@ -94,6 +94,14 @@ func TestFunctionTestCLI(t *testing.T) {
 		env["FISSION_INTERNAL_AUTH_SECRET"] = secret
 	}
 
+	// Warm the internal route before invoking via CLI. The router's internal
+	// mux registers /fission-function/<fn> per-function (not a catch-all), so
+	// a freshly-created function 404s until the router reconciles it into the
+	// mux. GetEventually polls until the route is live + the function pod has
+	// specialized, avoiding the cold-start race that flaked CI on v1.32/v1.34.
+	_ = f.Router(t).GetEventually(t, ctx, "/fission-function/"+validFn,
+		framework.BodyContains("Hello, Fission"))
+
 	// `fission fn test` writes the function body to os.Stdout (not cobra's
 	// buffer), so use CLICaptureStdoutWithEnv which captures both.
 	out := ns.CLICaptureStdoutWithEnv(t, ctx, env, "fn", "test", "--name", validFn, "--method", "GET")
@@ -149,6 +157,14 @@ func TestFunctionTestCLIAsync(t *testing.T) {
 	if secret := string(f.InternalAuthSecret()); secret != "" {
 		env["FISSION_INTERNAL_AUTH_SECRET"] = secret
 	}
+
+	// Warm the internal route before invoking via CLI. The router's internal
+	// mux registers /fission-function/<fn> per-function (not a catch-all), so
+	// a freshly-created function 404s until the router reconciles it into the
+	// mux. GetEventually polls until the route is live + the function pod has
+	// specialized, avoiding the cold-start race that flaked CI on v1.32/v1.34.
+	_ = f.Router(t).GetEventually(t, ctx, "/fission-function/"+validFn,
+		framework.BodyContains("Hello, Fission"))
 
 	// `fission fn test --async` prints "Accepted (202)\ninvocationId: <id>"
 	// via fmt.Printf (os.Stdout), so use CLICaptureStdoutWithEnv.

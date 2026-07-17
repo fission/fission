@@ -40,7 +40,7 @@ Integration tests (`test/integration/`, Go + testify, build tag `//go:build inte
   Setting `FISSION_ROUTER` / `FISSION_ROUTER_INTERNAL` / `FISSION_MCP_BASE_URL` overrides a route with a fixed address (for hand-managed forwards or non-default installs).
 - `/fission-function/<ns>/<name>` moved off the public listener after GHSA-3g33-6vg6-27m8 (see Architecture).
   Tests that invoke functions go through the framework's `Router(t)` HTTP client which auto-routes those paths to the internal listener, or dial `f.RouterInternalBaseURL()` via `f.HTTPClient()` — base-URL hosts are portless route names, so plain `http.Client`s cannot resolve them.
-- Export `FISSION_INTERNAL_AUTH_SECRET` (read from `kubectl get secret fission-internal-auth -n fission -o jsonpath='{.data.master}' | base64 -d`) so the framework's transport signs requests on the internal listener — leave unset to test the verifier's pass-through mode.
+- Export `FISSION_INTERNAL_AUTH_SECRET` (read from `kubectl get secret fission-internal-auth -n fission -o jsonpath='{.data.secret}' | base64 -d`) so the framework's transport signs requests on the internal listener — leave unset to test the verifier's pass-through mode.
 - The MCP test (`TestMCPToolsListAndCall`) needs `svc/mcp` in the cluster (`mcp.enabled`/`mcp.allowInsecure` are on in the kind/kind-ci skaffold profiles); it `t.Skip`s when the endpoint is unreachable.
 - Run the full suite: `go test -tags=integration -timeout=30m -parallel 6 -v ./test/integration/suites/common/...`.
   Set runtime/builder image env vars (`NODE_RUNTIME_IMAGE`, `PYTHON_RUNTIME_IMAGE`, etc.) — tests `t.Skip` when their required image is unset.
