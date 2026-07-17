@@ -63,7 +63,7 @@ func Commands() *cobra.Command {
 		// Runs without a kubeconfig when rendering from --file.
 		Annotations: map[string]string{cmd.ClusterOptionalAnnotation: "true"},
 	}, Graph, flag.FlagSet{
-		Optional: []flag.Flag{flag.WfName, flag.WfFile},
+		Optional: []flag.Flag{flag.WfName, flag.WfFile, flag.WfOpen},
 	})
 
 	// run starts an execution and so acts on a Workflow (not a run) — it stays
@@ -109,11 +109,22 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.WfRunName},
 	})
 
+	runsGraphCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "graph",
+		Short: "Render a run's state machine with each state colored by what the run did",
+		Long: "Render a run's state machine as a mermaid diagram, coloring each state by what this run did: " +
+			"succeeded, active, failed, or never reached. Drawn against the spec snapshot the run is executing, " +
+			"so it stays accurate even if the workflow was edited or deleted since.",
+	}, RunsGraph, flag.FlagSet{
+		Required: []flag.Flag{flag.WfRunName},
+		Optional: []flag.Flag{flag.WfOpen},
+	})
+
 	runsCmd := &cobra.Command{
 		Use:   "runs",
 		Short: "List and inspect workflow runs (executions)",
 	}
-	runsCmd.AddCommand(runsListCmd, runsDescribeCmd, runsHistoryCmd, runsCancelCmd)
+	runsCmd.AddCommand(runsListCmd, runsDescribeCmd, runsHistoryCmd, runsCancelCmd, runsGraphCmd)
 
 	command := &cobra.Command{
 		Use:     "workflow",

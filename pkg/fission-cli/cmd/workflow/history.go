@@ -31,15 +31,24 @@ import (
 // historyEvent mirrors the workflow head's HistoryEvent wire shape (the CLI
 // deliberately decodes loosely — a newer head may add fields).
 type historyEvent struct {
-	Seq       int64           `json:"seq"`
-	At        string          `json:"at"`
-	Type      string          `json:"type"`
-	State     string          `json:"state,omitempty"`
-	Attempt   int32           `json:"attempt,omitempty"`
-	ErrorType string          `json:"errorType,omitempty"`
-	Cause     json.RawMessage `json:"cause,omitempty"`
-	Output    json.RawMessage `json:"output,omitempty"`
-	OutputRef string          `json:"outputRef,omitempty"`
+	Seq     int64  `json:"seq"`
+	At      string `json:"at"`
+	Type    string `json:"type"`
+	State   string `json:"state,omitempty"`
+	Attempt int32  `json:"attempt,omitempty"`
+	// Branch (the branch key) and Region ("state@entrySeq", naming the
+	// fan-out instance) place a parallel-region step event; `runs graph`
+	// needs both to color the right branch node.
+	Branch string `json:"branch,omitempty"`
+	Region string `json:"region,omitempty"`
+	// Spec is set on RunStarted only: the snapshot this run executes for its
+	// whole life. `runs graph` draws the history against it rather than the
+	// live Workflow, which may have since been edited or deleted.
+	Spec      *fv1.WorkflowSpec `json:"spec,omitempty"`
+	ErrorType string            `json:"errorType,omitempty"`
+	Cause     json.RawMessage   `json:"cause,omitempty"`
+	Output    json.RawMessage   `json:"output,omitempty"`
+	OutputRef string            `json:"outputRef,omitempty"`
 }
 
 type HistorySubCommand struct {

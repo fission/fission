@@ -251,7 +251,8 @@ Debugging is a first-class surface, not just the raw log:
 - `fission workflow runs describe --name <run>` — phase, active states, last error (`errorType` + cause), per-state attempt counts, next armed timer: the one-command answer to the motivating "where did order 4711's pipeline stop".
 - `fission workflow runs history --name <run> --step <state> --io` — the step's actual (shaped) input and output, dereferencing KV-spilled payloads; debugging JSONPath shaping without seeing real payloads is misery.
 - `fission workflow validate -f wf.yaml` — offline lint (graph reachability, expression parse, function existence) before anything touches the cluster.
-- `fission workflow graph <name>` — render the state machine as mermaid/DOT.
+- `fission workflow graph --name <name>` — render the state machine as mermaid (Parallel/Map branches as concurrent regions, states colored by type); `--open` renders it in a browser from an ephemeral local server, so the graph never leaves the machine.
+- `fission workflow runs graph --name <run>` — the same diagram with each state colored by what THIS run did (succeeded/active/failed/unreached), drawn against the run's own spec snapshot: the visual form of "where did order 4711 stop". Choice/Succeed/Fail keep their type color — they resolve in the fold and emit no events, so the log cannot say whether the run passed through them.
 - **Redrive** (resume a failed run from its failed state, preserving history — Step Functions' most-requested feature, shipped by AWS in 2023) is phase 5, but is named here so the event model never precludes it: it is one `RunRedriven` event resetting the failed state's attempt counter, which the fold already knows how to consume.
 
 The CLI talks CRDs directly (house style); `history`/`describe --io` read through a small read-only endpoint on the workflow head (CRDs do not hold full history), signed like other internal calls.

@@ -199,6 +199,7 @@ var (
 	WfOffline  = Flag{Type: Bool, Name: flagkey.WfOffline, Usage: "Skip cluster checks (e.g. referenced-function existence)"}
 	WfInput    = Flag{Type: String, Name: flagkey.WfInput, Usage: "Run input as inline JSON, or @path/to/file.json"}
 	WfIO       = Flag{Type: Bool, Name: flagkey.WfIO, Usage: "Include step input/output payloads (dereferences spilled documents)"}
+	WfOpen     = Flag{Type: Bool, Name: flagkey.WfOpen, Usage: "Render the diagram in a browser (served locally; the graph never leaves your machine)"}
 
 	TtName   = Flag{Type: String, Name: flagkey.TtName, Usage: "Time Trigger name"}
 	TtCron   = Flag{Type: String, Name: flagkey.TtCron, Usage: "Time trigger cron spec with each asterisk representing respectively second, minute, hour, the day of the month, month and day of the week. Also supports readable formats like '@every 5m', '@hourly'"}

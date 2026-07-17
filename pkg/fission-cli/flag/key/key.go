@@ -149,6 +149,7 @@ const (
 	WfInput    = "input"
 	WfIO       = "io"
 	WfWorkflow = "workflow"
+	WfOpen     = "open"
 
 	MqtName            = resourceName
 	MqtFnName          = "function"

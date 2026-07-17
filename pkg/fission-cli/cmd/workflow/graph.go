@@ -7,8 +7,6 @@ package workflow
 import (
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -66,40 +64,14 @@ func (opts *GraphSubCommand) do(input cli.Input) error {
 		return errors.New("the manifest has no states; nothing to render")
 	}
 
-	fmt.Println(mermaidFromSpec(spec))
+	diagram := mermaidFromSpec(spec)
+	if input.Bool(flagkey.WfOpen) {
+		title := input.String(flagkey.WfName)
+		if title == "" {
+			title = "workflow"
+		}
+		return serveDiagram(input.Context(), diagram, title, "")
+	}
+	fmt.Println(diagram)
 	return nil
-}
-
-// mermaidFromSpec renders a stateDiagram-v2. Output is deterministic: states
-// are emitted in sorted order.
-func mermaidFromSpec(spec fv1.WorkflowSpec) string {
-	var b strings.Builder
-	b.WriteString("stateDiagram-v2\n")
-	fmt.Fprintf(&b, "    [*] --> %s\n", spec.StartAt)
-
-	names := make([]string, 0, len(spec.States))
-	for name := range spec.States {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	for _, name := range names {
-		st := spec.States[name]
-		if st.Next != "" {
-			fmt.Fprintf(&b, "    %s --> %s\n", name, st.Next)
-		}
-		for i, c := range st.Choices {
-			fmt.Fprintf(&b, "    %s --> %s : rule %d\n", name, c.Next, i+1)
-		}
-		if st.Default != "" {
-			fmt.Fprintf(&b, "    %s --> %s : default\n", name, st.Default)
-		}
-		for _, c := range st.Catch {
-			fmt.Fprintf(&b, "    %s --> %s : %s\n", name, c.Next, c.ErrorType)
-		}
-		if st.IsTerminal() {
-			fmt.Fprintf(&b, "    %s --> [*]\n", name)
-		}
-	}
-	return b.String()
 }
