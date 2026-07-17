@@ -275,7 +275,11 @@ spec:
 `, fnName, wfName)
 	createWorkflow(t, ctx, f, ns, wfName, manifest)
 
-	out := ns.CLICaptureStdout(t, ctx, "workflow", "run", "--name", wfName)
+	// A run input is required: a Parallel region seeds each branch with the
+	// marshaled document, so a no-input run would hand branches the literal
+	// "null" that the node body-parser rejects (the main flow sends an empty
+	// body instead). Real workflows always carry an input.
+	out := ns.CLICaptureStdout(t, ctx, "workflow", "run", "--name", wfName, "--input", `{"hops":0}`)
 	runName := startedRunName(t, out)
 
 	runs := f.FissionClient().CoreV1().WorkflowRuns(ns.Name)
