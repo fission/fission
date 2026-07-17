@@ -42,6 +42,19 @@ func (opts *RunsSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("list workflow runs: %w", err)
 	}
 
+	// Optional --workflow filter: keep only runs of the named workflow
+	// (WorkflowRun.spec.workflowRef), so `runs list` can be scoped the way
+	// `list` covers workflows.
+	if wf := input.String(flagkey.WfWorkflow); wf != "" {
+		filtered := runs.Items[:0]
+		for _, r := range runs.Items {
+			if r.Spec.WorkflowRef == wf {
+				filtered = append(filtered, r)
+			}
+		}
+		runs.Items = filtered
+	}
+
 	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
 	if err != nil {
 		return err

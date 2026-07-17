@@ -25,7 +25,7 @@ The old `fission-workflows` failed on operational weight (its own NATS-STAN even
 
 - Declarative sequencing, branching, parallel fan-out/fan-in, per-step retry/backoff, and error routing across existing functions, without touching function code.
 - Durable, resumable executions: controller restart or node loss never loses or forks a run.
-- Full step-level history queryable from the CLI (`fission workflow history <run>`).
+- Full step-level history queryable from the CLI (`fission workflow runs history --name <run>`).
 - At-least-once step semantics with documented idempotency expectations (identical to Step Functions' contract).
 
 ## Non-goals
@@ -237,7 +237,7 @@ The parallel-region protocol is modeled in [`specs/workflowbranch.tla`](specs/wo
 
 ### Cancellation and history
 
-- `fission workflow cancel <run>` sets the metadata annotation `fission.io/cancel-requested` on the run → controller appends `RunCancelled`, stops scheduling, and lets in-flight invocations finish (no function kill signal exists; documented).
+- `fission workflow runs cancel --name <run>` sets the metadata annotation `fission.io/cancel-requested` on the run → controller appends `RunCancelled`, stops scheduling, and lets in-flight invocations finish (no function kill signal exists; documented).
 - History GC: a retention sweeper trims streams for finished runs past `HistoryRetention` via `EventLog.Trim`, and a `WorkflowRun` TTL (like Job `ttlSecondsAfterFinished`) deletes old run CRs.
 - **A finalizer on `WorkflowRun` trims the run's stream and deletes its KV scopes (io, checkpoint) before the CR is deleted** — whether by TTL, `kubectl delete`, or namespace deletion.
   This guarantees no orphaned run history by construction; RFC-0027 had to defer exactly this problem (a published-but-never-consumed topic has no CR to hang cleanup on, and `EventLog` has no stream listing) — workflows have the CR, so the hole never opens.
@@ -245,11 +245,11 @@ The parallel-region protocol is modeled in [`specs/workflowbranch.tla`](specs/wo
 
 ### CLI
 
-`fission workflow create|update|delete|list`, `fission workflow run --input @file.json`, `fission workflow runs`, `fission workflow history <run>` (renders the EventLog fold), `fission workflow cancel <run>`.
+`fission workflow create|update|delete|list`, `fission workflow run --input @file.json`, `fission workflow runs`, `fission workflow runs history --name <run>` (renders the EventLog fold), `fission workflow runs cancel --name <run>`.
 Debugging is a first-class surface, not just the raw log:
 
-- `fission workflow describe <run>` — phase, active states, last error (`errorType` + cause), per-state attempt counts, next armed timer: the one-command answer to the motivating "where did order 4711's pipeline stop".
-- `fission workflow history <run> --step <state> --io` — the step's actual (shaped) input and output, dereferencing KV-spilled payloads; debugging JSONPath shaping without seeing real payloads is misery.
+- `fission workflow runs describe --name <run>` — phase, active states, last error (`errorType` + cause), per-state attempt counts, next armed timer: the one-command answer to the motivating "where did order 4711's pipeline stop".
+- `fission workflow runs history --name <run> --step <state> --io` — the step's actual (shaped) input and output, dereferencing KV-spilled payloads; debugging JSONPath shaping without seeing real payloads is misery.
 - `fission workflow validate -f wf.yaml` — offline lint (graph reachability, expression parse, function existence) before anything touches the cluster.
 - `fission workflow graph <name>` — render the state machine as mermaid/DOT.
 - **Redrive** (resume a failed run from its failed state, preserving history — Step Functions' most-requested feature, shipped by AWS in 2023) is phase 5, but is named here so the event model never precludes it: it is one `RunRedriven` event resetting the failed state's attempt counter, which the fold already knows how to consume.

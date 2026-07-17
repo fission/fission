@@ -112,7 +112,7 @@ spec:
 
 	// W1 across the restart: each step scheduled exactly once — the resume
 	// must not have re-executed the pre-restart step.
-	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)
+	hist := ns.CLICaptureStdout(t, ctx, "workflow", "runs", "history", "--name", runName)
 	assert.Equal(t, 2, strings.Count(hist, "StepScheduled"), "before+after, once each:\n%s", hist)
 	assert.Equal(t, 1, strings.Count(hist, "TimerFired"), "the durable wait fired once:\n%s", hist)
 }

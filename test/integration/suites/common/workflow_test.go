@@ -220,10 +220,10 @@ spec:
 	assert.True(t, meta.IsStatusConditionTrue(run.Status.Conditions, fv1.WorkflowRunConditionAccepted))
 
 	// history + describe read back through the head's signed endpoint.
-	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)
+	hist := ns.CLICaptureStdout(t, ctx, "workflow", "runs", "history", "--name", runName)
 	assert.Contains(t, hist, "RunStarted")
 	assert.Contains(t, hist, "RunSucceeded")
-	desc := ns.CLICaptureStdout(t, ctx, "workflow", "describe", "--name", runName)
+	desc := ns.CLICaptureStdout(t, ctx, "workflow", "runs", "describe", "--name", runName)
 	assert.Contains(t, desc, "Succeeded")
 }
 
@@ -292,7 +292,7 @@ spec:
 	assert.Equal(t, 2, strings.Count(string(run.Status.Output.Raw), `"hops":1`),
 		"the join is the ordered array of both branch outputs")
 
-	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)
+	hist := ns.CLICaptureStdout(t, ctx, "workflow", "runs", "history", "--name", runName)
 	assert.Contains(t, hist, "BranchesJoined", "the region joined")
 	assert.Equal(t, 2, strings.Count(hist, "StepSucceeded"), "both branches recorded a result")
 }
@@ -356,7 +356,7 @@ spec:
 	run := waitForTerminalRun(t, ctx, runs, runName)
 
 	require.Equal(t, fv1.WorkflowRunSucceeded, run.Status.Phase, "catch must route to recover")
-	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)
+	hist := ns.CLICaptureStdout(t, ctx, "workflow", "runs", "history", "--name", runName)
 	assert.Equal(t, 2, strings.Count(hist, "StepFailed"), "both attempts recorded")
 	assert.Contains(t, hist, "TimerFired")
 }

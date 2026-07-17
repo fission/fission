@@ -143,11 +143,12 @@ const (
 	TtRound  = "round"
 	TtMethod = "method"
 
-	WfName    = resourceName
-	WfFile    = "file"
-	WfOffline = "offline"
-	WfInput   = "input"
-	WfIO      = "io"
+	WfName     = resourceName
+	WfFile     = "file"
+	WfOffline  = "offline"
+	WfInput    = "input"
+	WfIO       = "io"
+	WfWorkflow = "workflow"
 
 	MqtName            = resourceName
 	MqtFnName          = "function"

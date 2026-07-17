@@ -16,6 +16,7 @@ func Commands() *cobra.Command {
 	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a workflow from a manifest",
+		Long:  "Create a workflow from a manifest. --name overrides the manifest's metadata.name.",
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.WfFile},
 		Optional: []flag.Flag{flag.WfName, flag.SpecSave, flag.SpecDry},
@@ -24,6 +25,7 @@ func Commands() *cobra.Command {
 	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "update",
 		Short: "Update a workflow from a manifest",
+		Long:  "Update a workflow from a manifest. --name overrides the manifest's metadata.name.",
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.WfFile},
 		Optional: []flag.Flag{flag.WfName},
@@ -64,6 +66,8 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.WfName, flag.WfFile},
 	})
 
+	// run starts an execution and so acts on a Workflow (not a run) — it stays
+	// at the top level with the other workflow verbs and takes a workflow --name.
 	runCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "run",
 		Short: "Start one execution of a workflow",
@@ -72,34 +76,44 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.WfInput},
 	})
 
-	runsCmd := wrapper.SubCommand(&cobra.Command{
-		Use:   "runs",
+	// The `runs` subgroup operates on WorkflowRuns. Its subcommands take a run
+	// --name (WfRunName), so the flag help reads "Name of the workflow run"
+	// instead of the workflow-scoped help — the source of the run-vs-workflow
+	// confusion when these were flat siblings of the workflow verbs.
+	runsListCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "list",
 		Short: "List workflow runs",
 	}, Runs, flag.FlagSet{
-		Optional: []flag.Flag{flag.AllNamespaces, flag.Output},
+		Optional: []flag.Flag{flag.WfWorkflow, flag.AllNamespaces, flag.Output},
 	})
 
-	historyCmd := wrapper.SubCommand(&cobra.Command{
-		Use:   "history",
-		Short: "Show a run's full step-level event history",
-	}, History, flag.FlagSet{
-		Required: []flag.Flag{flag.WfName},
-		Optional: []flag.Flag{flag.WfIO},
-	})
-
-	describeCmd := wrapper.SubCommand(&cobra.Command{
+	runsDescribeCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "describe",
 		Short: "Answer \"where did this run stop\": phase, active state, last error, attempts",
 	}, Describe, flag.FlagSet{
-		Required: []flag.Flag{flag.WfName},
+		Required: []flag.Flag{flag.WfRunName},
 	})
 
-	cancelCmd := wrapper.SubCommand(&cobra.Command{
+	runsHistoryCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "history",
+		Short: "Show a run's full step-level event history",
+	}, History, flag.FlagSet{
+		Required: []flag.Flag{flag.WfRunName},
+		Optional: []flag.Flag{flag.WfIO},
+	})
+
+	runsCancelCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "cancel",
 		Short: "Request cancellation of a workflow run (in-flight steps drain)",
 	}, Cancel, flag.FlagSet{
-		Required: []flag.Flag{flag.WfName},
+		Required: []flag.Flag{flag.WfRunName},
 	})
+
+	runsCmd := &cobra.Command{
+		Use:   "runs",
+		Short: "List and inspect workflow runs (executions)",
+	}
+	runsCmd.AddCommand(runsListCmd, runsDescribeCmd, runsHistoryCmd, runsCancelCmd)
 
 	command := &cobra.Command{
 		Use:     "workflow",
@@ -108,7 +122,7 @@ func Commands() *cobra.Command {
 	}
 
 	command.AddCommand(createCmd, updateCmd, deleteCmd, listCmd, validateCmd, graphCmd,
-		runCmd, runsCmd, historyCmd, describeCmd, cancelCmd)
+		runCmd, runsCmd)
 
 	return command
 }
