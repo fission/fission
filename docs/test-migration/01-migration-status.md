@@ -167,7 +167,7 @@ Suggested batches (ordered by approximate complexity):
 6. **Function updates** ✅: all 7 in `test_fn_update/` migrated; `TestIdleObjectsReaper` is t.Skip'd pending fsvc TTL investigation under parallel load.
 7. **Backends** ✅: `test_backend_poolmgr.sh`, `test_backend_newdeploy.sh` migrated. `test_idle_objects_reaper.sh` migrated but t.Skip'd as above.
 8. **Namespacing** (partial ✅): 3 of 4 migrated; `test_ns_env.sh` deferred — sets FISSION_DEFAULT_NAMESPACE, which conflicts with the framework's process-global ClientOptions.Namespace under t.Parallel.
-9. **Misc** (partial ✅): `test_secret_cfgmap.sh` (7 subtests), `test_ws.sh` migrated. `test_kubectl.sh` deferred — needs `fission fn test` (not exposed via cobra writers) plus kubectl apply/replace semantics.
+9. **Misc** (partial ✅): `test_secret_cfgmap.sh` (7 subtests), `test_ws.sh` migrated. `test_kubectl.sh` deferred — needs `fission fn test` (not exposed via cobra writers) plus kubectl apply/replace semantics. `fission fn test` itself is now covered by `TestFunctionTestCLI` (drives the real CLI command in-process, forwarding `FISSION_INTERNAL_AUTH_SECRET` from the framework so the CLI's HMAC transport authenticates against the router internal listener); `TestFunctionTest` covers the `/fission-function/<fn>` route directly via the framework's signed HTTP client.
 
 ### Phase 5 — Disabled-test triage
 

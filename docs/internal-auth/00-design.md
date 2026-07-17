@@ -76,12 +76,25 @@ Service identifiers are part of the HKDF info string and must remain stable acro
 | `fetcher` | in-pod `cmd/fetcher` `/fetch`, `/upload`, `/clean`, `/specialize` (port 8000) | buildermgr (build → fetcher), executor (specialization → fetcher) | Phase 2 (PR-α) |
 | `builder` | in-pod `cmd/builder` `/build` (port 8001) | buildermgr | Phase 2 (PR-α) |
 | `executor` | `pkg/executor` HTTP API: `/v2/getServiceForFunction`, `/v2/tap`, `/v2/error`, etc. | router, kubewatcher, timer, mqt-fission-kafka, canaryconfig | Phase 2 (PR-β) |
-| `router-internal` | router's internal listener that hosts `/fission-function/<ns>/<name>` | executor, kubewatcher, timer, mqt-fission-kafka, mqt-keda connectors | Advisory 4 (separate PR) |
+| `router-internal` | router's internal listener that hosts `/fission-function/<ns>/<name>` | executor, kubewatcher, timer, mqt-fission-kafka, mqt-keda connectors, `fission` CLI (`fn test`, `fn test --async`) | Advisory 4 (separate PR) |
 
 Out of scope:
 - **Webhook server** — already authenticated by the kube-apiserver's CA on the admission path.
 - **`/healthz`, `/metrics`** — kubelet / Prometheus probes have no signing path; bypass is mandatory.
 - **MQT-KEDA connector → router-internal** — upstream `fission/kafka-http-connector` images don't sign; they need an upstream image change or a deploy-time NetworkPolicy-only acceptance.
+
+### CLI direct invocation (`fission fn test`)
+
+`fission fn test` (and `fission fn test --async`) invoke a function directly via `/fission-function/<ns>/<name>` on the router **internal** listener (port 8889, `svc/router-internal`) — not the public listener (8888), which no longer serves that path after GHSA-3g33-6vg6-27m8. The CLI port-forwards to `svc/router-internal` and HMAC-signs the request with the `ServiceRouterInternal` key when `FISSION_INTERNAL_AUTH_SECRET` is set.
+
+**When internal auth is enabled** (`internalAuth.enabled=true`, the chart default), the operator must export `FISSION_INTERNAL_AUTH_SECRET` in the shell before running `fission fn test`:
+
+```bash
+export FISSION_INTERNAL_AUTH_SECRET="$(kubectl get secret fission-internal-auth -n fission -o jsonpath='{.data.secret}' | base64 -d)"
+fission fn test --name my-fn
+```
+
+Without it the router's internal verifier rejects the request with `401`/`403`. When internal auth is disabled (pass-through mode, `internalAuth.enabled=false`), no env var is needed — the verifier short-circuits and accepts unsigned requests.
 
 ## Design
 
