@@ -55,6 +55,13 @@ func (st WorkflowState) IsTerminal() bool {
 	return st.End || st.Type == WorkflowStateSucceed || st.Type == WorkflowStateFail
 }
 
+// IsTerminal reports whether execution stops after this branch state — the same
+// rule as WorkflowState.IsTerminal, kept as one definition so the two levels
+// (top-level states and parallel/map branch states) can never drift.
+func (st WorkflowBranchState) IsTerminal() bool {
+	return st.End || st.Type == WorkflowStateSucceed || st.Type == WorkflowStateFail
+}
+
 // Terminal reports whether the run phase is final.
 func (p WorkflowRunPhase) Terminal() bool {
 	switch p {

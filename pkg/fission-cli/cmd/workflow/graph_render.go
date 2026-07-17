@@ -36,6 +36,15 @@ func mermaidID(parts ...string) string {
 	return idUnsafe.ReplaceAllString(strings.Join(parts, "__"), "_")
 }
 
+// topLevelID resolves a top-level state name to its node id (writeTransitions
+// wants a single-arg resolver; mermaidID is variadic).
+func topLevelID(name string) string { return mermaidID(name) }
+
+// mapTemplateBranch is the single region a Map is drawn as (see
+// renderedBranches): its branches are per-item instances of one template, so
+// the diagram draws region 0 and eventNodeID folds every item's events onto it.
+const mapTemplateBranch = "0"
+
 // branchNodeID scopes a branch state's id under its region. Branch state names
 // are only unique within their branch — a top-level state (or another region)
 // may reuse the name, and mermaid ids are global.
@@ -43,9 +52,17 @@ func branchNodeID(parent string, idx int, name string) string {
 	return mermaidID(parent, strconv.Itoa(idx), name)
 }
 
+// typeClassPrefix marks a class as a state-type class ("wftask") rather than a
+// run-status class ("ok"); the two share one class namespace, and the legend
+// tells them apart by this prefix.
+const typeClassPrefix = "wf"
+
 func typeClass(t fv1.WorkflowStateType) string {
-	return "wf" + strings.ToLower(string(t))
+	return typeClassPrefix + strings.ToLower(string(t))
 }
+
+// isTypeClass reports whether c is a state-type class (vs a run-status class).
+func isTypeClass(c string) bool { return strings.HasPrefix(c, typeClassPrefix) }
 
 // classStyle is one semantic role: a mid-tone (Tailwind 400/500) fill with
 // white text — the one palette that stays legible against both a white and a
@@ -112,9 +129,14 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) (string
 	}
 	slices.Sort(names)
 
-	byClass := map[string][]string{}
+	// nodeType records every node the overlay may color, keyed by mermaid id.
+	// Fan-out containers are deliberately absent: a region is structure — its
+	// composite shape already says "this fans out", and its status is whatever
+	// its branches show — so filling it would be redundant ink competing with
+	// the branch nodes inside it (and mermaid draws a cluster's title on its own
+	// themed bar, where a forced white label goes invisible on a light canvas).
 	nodeType := map[string]fv1.WorkflowStateType{}
-	var allNodes, notes []string
+	var notes []string
 
 	for _, name := range names {
 		st := spec.States[name]
@@ -122,36 +144,12 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) (string
 		if id != name {
 			fmt.Fprintf(&b, "    state %q as %s\n", name, id)
 		}
-		isRegion := len(st.Branches) > 0
-		if isRegion {
-			renderRegions(&b, name, st, byClass, &allNodes, nodeType)
-		}
-		if st.Next != "" {
-			fmt.Fprintf(&b, "    %s --> %s\n", id, mermaidID(st.Next))
-		}
-		for i, c := range st.Choices {
-			fmt.Fprintf(&b, "    %s --> %s : rule %d\n", id, mermaidID(c.Next), i+1)
-		}
-		if st.Default != "" {
-			fmt.Fprintf(&b, "    %s --> %s : default\n", id, mermaidID(st.Default))
-		}
-		for _, c := range st.Catch {
-			fmt.Fprintf(&b, "    %s --> %s : %s\n", id, mermaidID(c.Next), c.ErrorType)
-		}
-		if st.IsTerminal() {
-			fmt.Fprintf(&b, "    %s --> [*]\n", id)
-		}
-		// A fan-out container is structure, not content: its composite shape
-		// already says "this fans out", and its status is whatever its branches
-		// show — filling it too is redundant ink competing with the branches
-		// inside it. (Mermaid also draws a cluster's title on its own themed
-		// bar, where a forced white label goes invisible on a light canvas.)
-		// So it is left unclassed, and never enters the set the overlay colors.
-		if !isRegion {
-			byClass[typeClass(st.Type)] = append(byClass[typeClass(st.Type)], id)
-			allNodes = append(allNodes, id)
+		if len(st.Branches) > 0 {
+			renderRegions(&b, name, st, nodeType)
+		} else {
 			nodeType[id] = st.Type
 		}
+		writeTransitions(&b, "    ", id, topLevelID, st.Next, st.Default, st.Choices, st.Catch, st.IsTerminal())
 		if n := stateNote(id, st); n != "" {
 			notes = append(notes, n)
 		}
@@ -160,27 +158,37 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) (string
 	for _, n := range notes {
 		b.WriteString(n + "\n")
 	}
-	if overlay != nil {
-		byClass = map[string][]string{}
-		for _, id := range allNodes {
-			switch s, ok := overlay[id]; {
-			case ok:
-				byClass[string(s)] = append(byClass[string(s)], id)
-			case routingOnly(nodeType[id]):
-				// This state cannot produce step events, so the log says
-				// nothing about it either way — keep its type color rather
-				// than claim the run never reached it.
-				byClass[typeClass(nodeType[id])] = append(byClass[typeClass(nodeType[id])], id)
-			default:
-				byClass[string(statusUnreached)] = append(byClass[string(statusUnreached)], id)
-			}
-		}
+
+	// A node's class is a pure function of its type and the overlay, so it is
+	// assigned once, after the body is written — no per-node bookkeeping in the
+	// loop, and no second pass that discards and rebuilds it for a run view.
+	byClass := map[string][]string{}
+	for id, t := range nodeType {
+		c := classFor(id, t, overlay)
+		byClass[c] = append(byClass[c], id)
 	}
 	// Not `return b.String(), writeClasses(...)`: the return values evaluate
 	// left to right, so b.String() would snapshot the builder before the
 	// classes were written into it.
 	classes := writeClasses(&b, byClass)
 	return b.String(), classes
+}
+
+// classFor is the class a node carries: its state type in a definition view;
+// its run status in a run view. A routing-only state (Choice/Succeed/Fail)
+// resolves in the fold and emits no events, so the log says nothing about it
+// either way — it keeps its type color rather than claim "unreached".
+func classFor(id string, t fv1.WorkflowStateType, overlay map[string]nodeStatus) string {
+	if overlay == nil {
+		return typeClass(t)
+	}
+	if s, ok := overlay[id]; ok {
+		return string(s)
+	}
+	if routingOnly(t) {
+		return typeClass(t)
+	}
+	return string(statusUnreached)
 }
 
 // routingOnly reports whether a state type is resolved inside the engine's fold
@@ -195,53 +203,67 @@ func routingOnly(t fv1.WorkflowStateType) bool {
 	return false
 }
 
-// renderRegions renders a fan-out state's branches as a composite state, one
-// concurrent region ("--"-separated) per branch.
-func renderRegions(b *strings.Builder, parent string, st fv1.WorkflowState, byClass map[string][]string, allNodes *[]string, nodeType map[string]fv1.WorkflowStateType) {
-	branches := st.Branches
-	// A Map's branch is a per-item TEMPLATE, not N concurrent machines: render
-	// it once. The real fan-out width is data-driven and rides in the note.
-	if st.Type == fv1.WorkflowStateMap && len(branches) > 1 {
-		branches = branches[:1]
+// writeTransitions emits the outgoing edges of one state — the same vocabulary
+// (next, choice rules, default, typed catches, terminal) at both the top level
+// and inside a branch, so the two can never drift. resolve maps a target state
+// name to its node id at this level (bare id up top, branch-scoped inside).
+func writeTransitions(b *strings.Builder, indent, id string, resolve func(string) string,
+	next, def string, choices []fv1.WorkflowChoiceRule, catch []fv1.WorkflowCatchRoute, terminal bool) {
+	if next != "" {
+		fmt.Fprintf(b, "%s%s --> %s\n", indent, id, resolve(next))
 	}
+	for i, c := range choices {
+		fmt.Fprintf(b, "%s%s --> %s : rule %d\n", indent, id, resolve(c.Next), i+1)
+	}
+	if def != "" {
+		fmt.Fprintf(b, "%s%s --> %s : default\n", indent, id, resolve(def))
+	}
+	for _, c := range catch {
+		fmt.Fprintf(b, "%s%s --> %s : %s\n", indent, id, resolve(c.Next), c.ErrorType)
+	}
+	if terminal {
+		fmt.Fprintf(b, "%s%s --> [*]\n", indent, id)
+	}
+}
+
+// renderRegions renders a fan-out state's branches as a composite state, one
+// concurrent region ("--"-separated) per branch, recording each branch node's
+// type for the overlay.
+func renderRegions(b *strings.Builder, parent string, st fv1.WorkflowState, nodeType map[string]fv1.WorkflowStateType) {
 	fmt.Fprintf(b, "    state %s {\n", mermaidID(parent))
-	for i, br := range branches {
+	for i, br := range renderedBranches(st) {
 		if i > 0 {
 			b.WriteString("        --\n")
 		}
+		resolve := func(name string) string { return branchNodeID(parent, i, name) }
 		bnames := make([]string, 0, len(br.States))
 		for n := range br.States {
 			bnames = append(bnames, n)
 		}
 		slices.Sort(bnames)
 		for _, bn := range bnames {
-			fmt.Fprintf(b, "        state %q as %s\n", bn, branchNodeID(parent, i, bn))
+			fmt.Fprintf(b, "        state %q as %s\n", bn, resolve(bn))
 		}
-		fmt.Fprintf(b, "        [*] --> %s\n", branchNodeID(parent, i, br.StartAt))
+		fmt.Fprintf(b, "        [*] --> %s\n", resolve(br.StartAt))
 		for _, bn := range bnames {
 			bst := br.States[bn]
-			bid := branchNodeID(parent, i, bn)
-			if bst.Next != "" {
-				fmt.Fprintf(b, "        %s --> %s\n", bid, branchNodeID(parent, i, bst.Next))
-			}
-			for j, c := range bst.Choices {
-				fmt.Fprintf(b, "        %s --> %s : rule %d\n", bid, branchNodeID(parent, i, c.Next), j+1)
-			}
-			if bst.Default != "" {
-				fmt.Fprintf(b, "        %s --> %s : default\n", bid, branchNodeID(parent, i, bst.Default))
-			}
-			for _, c := range bst.Catch {
-				fmt.Fprintf(b, "        %s --> %s : %s\n", bid, branchNodeID(parent, i, c.Next), c.ErrorType)
-			}
-			if bst.End || bst.Type == fv1.WorkflowStateSucceed || bst.Type == fv1.WorkflowStateFail {
-				fmt.Fprintf(b, "        %s --> [*]\n", bid)
-			}
-			byClass[typeClass(bst.Type)] = append(byClass[typeClass(bst.Type)], bid)
-			*allNodes = append(*allNodes, bid)
+			bid := resolve(bn)
+			writeTransitions(b, "        ", bid, resolve, bst.Next, bst.Default, bst.Choices, bst.Catch, bst.IsTerminal())
 			nodeType[bid] = bst.Type
 		}
 	}
 	b.WriteString("    }\n")
+}
+
+// renderedBranches is the branches the diagram draws. A Map's branch is a
+// per-item TEMPLATE, not N concurrent machines, so it is drawn once as region
+// mapTemplateBranch; the real fan-out width is data-driven and rides in the
+// note. eventNodeID folds every item's events onto that same region.
+func renderedBranches(st fv1.WorkflowState) []fv1.WorkflowBranch {
+	if st.Type == fv1.WorkflowStateMap && len(st.Branches) > 1 {
+		return st.Branches[:1]
+	}
+	return st.Branches
 }
 
 // stateNote surfaces the fields the graph shape cannot: a Map's fan-out source

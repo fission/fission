@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -49,7 +48,9 @@ func legendFor(classes []string, runView bool) []legendItem {
 			continue
 		}
 		label := s.Label
-		if runView && strings.HasPrefix(c, "wf") {
+		// In a run view a type class only survives on a state that emits no
+		// events, so label it as such rather than let it read as a status.
+		if runView && isTypeClass(c) {
 			label += " (not tracked)"
 		}
 		items = append(items, legendItem{Color: s.Fill, Label: label})

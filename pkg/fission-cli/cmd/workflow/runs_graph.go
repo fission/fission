@@ -161,11 +161,10 @@ func eventNodeID(spec fv1.WorkflowSpec, e historyEvent) string {
 		return ""
 	}
 	branch := e.Branch
-	// A Map's branches are per-item instances of ONE template, and the diagram
-	// draws that template once (region 0), so every item's events collapse onto
-	// it — the node then shows the latest item activity rather than one item's.
+	// A Map draws its template as a single region, so every item's events
+	// collapse onto it (the node then shows the latest item's activity).
 	if spec.States[parent].Type == fv1.WorkflowStateMap {
-		branch = "0"
+		branch = mapTemplateBranch
 	}
 	return mermaidID(parent, branch, e.State)
 }
