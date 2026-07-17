@@ -64,13 +64,17 @@ func (opts *GraphSubCommand) do(input cli.Input) error {
 		return errors.New("the manifest has no states; nothing to render")
 	}
 
-	diagram := mermaidFromSpec(spec)
+	diagram, classes := renderMermaid(spec, nil)
 	if input.Bool(flagkey.WfOpen) {
 		title := input.String(flagkey.WfName)
 		if title == "" {
 			title = "workflow"
 		}
-		return serveDiagram(input.Context(), diagram, title, "")
+		return serveDiagram(input.Context(), pageData{
+			Title:   title,
+			Diagram: diagram,
+			Legend:  legendFor(classes, false),
+		})
 	}
 	fmt.Println(diagram)
 	return nil

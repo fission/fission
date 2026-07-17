@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -36,12 +37,53 @@ func (opts *RunsGraphSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	diagram := renderMermaid(*spec, overlayFromRun(*spec, events, run))
+	diagram, classes := renderMermaid(*spec, overlayFromRun(*spec, events, run))
 	if input.Bool(flagkey.WfOpen) {
-		return serveDiagram(input.Context(), diagram, run.Name, runLegend)
+		return serveDiagram(input.Context(), pageData{
+			Title:    run.Name,
+			Subtitle: runClaim(run),
+			Diagram:  diagram,
+			Legend:   legendFor(classes, true),
+		})
 	}
 	fmt.Println(diagram)
 	return nil
+}
+
+// runClaim says in words what the diagram is evidence for, so the exhibit is
+// never orphaned from the claim: the phase, why it stopped, and where.
+func runClaim(run *fv1.WorkflowRun) string {
+	phase := run.Status.Phase
+	if phase == "" {
+		phase = fv1.WorkflowRunPending
+	}
+	parts := []string{string(phase)}
+	if run.Status.ErrorType != "" {
+		parts = append(parts, run.Status.ErrorType)
+	}
+	if !phase.Terminal() && len(run.Status.ActiveStates) > 0 {
+		parts = append(parts, "at "+strings.Join(run.Status.ActiveStates, ", "))
+	}
+	if d := runElapsed(run); d != "" {
+		parts = append(parts, d)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// runElapsed is how long the run took, or has been going.
+func runElapsed(run *fv1.WorkflowRun) string {
+	if run.Status.StartedAt == nil {
+		return ""
+	}
+	end := time.Now()
+	if run.Status.FinishedAt != nil {
+		end = run.Status.FinishedAt.Time
+	}
+	d := end.Sub(run.Status.StartedAt.Time).Round(time.Second)
+	if d < 0 {
+		return ""
+	}
+	return d.String()
 }
 
 // runSpec returns the spec this run is executing. The RunStarted event carries
@@ -94,53 +136,12 @@ func overlayFromRun(spec fv1.WorkflowSpec, events []historyEvent, run *fv1.Workf
 			overlay[id] = statusOK
 		}
 	}
-	rollUpRegions(spec, overlay)
 	// The engine's own view of what is in flight, for states whose last event
 	// does not say so (a Wait parked on a timer, say).
 	for _, s := range run.Status.ActiveStates {
 		overlay[mermaidID(s)] = statusActive
 	}
 	return overlay
-}
-
-// rollUpRegions gives a fan-out state the status of its branches. The composite
-// never appears in the log itself — only its branch steps do — so without this
-// a region that actually ran would render as never-reached.
-func rollUpRegions(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) {
-	for name, st := range spec.States {
-		if len(st.Branches) == 0 {
-			continue
-		}
-		worst, seen := statusOK, false
-		for i := range st.Branches {
-			// Only region 0 of a Map is drawn (see eventNodeID).
-			if st.Type == fv1.WorkflowStateMap && i > 0 {
-				break
-			}
-			for bn := range st.Branches[i].States {
-				s, ok := overlay[branchNodeID(name, i, bn)]
-				if !ok {
-					continue
-				}
-				seen = true
-				worst = worseStatus(worst, s)
-			}
-		}
-		if seen {
-			overlay[mermaidID(name)] = worst
-		}
-	}
-}
-
-// worseStatus ranks failed > active > ok so a region surfaces the branch that
-// most needs attention — one failed branch fails the region (fail-fast), and a
-// still-running sibling keeps it active.
-func worseStatus(a, b nodeStatus) nodeStatus {
-	rank := map[nodeStatus]int{statusOK: 0, statusActive: 1, statusFailed: 2}
-	if rank[b] > rank[a] {
-		return b
-	}
-	return a
 }
 
 // eventNodeID maps a history event to the diagram node it colors, or "" for

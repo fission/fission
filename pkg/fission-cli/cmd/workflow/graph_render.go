@@ -47,32 +47,61 @@ func typeClass(t fv1.WorkflowStateType) string {
 	return "wf" + strings.ToLower(string(t))
 }
 
-// classDefs are emitted only for the classes actually used, keeping the
-// diagram tight. Colors read on both mermaid's light and dark themes.
-var classDefFor = map[string]string{
-	"wftask":     "fill:#1f3a5f,stroke:#4a90d9,color:#fff",
-	"wfchoice":   "fill:#43305f,stroke:#a07ed9,color:#fff",
-	"wfparallel": "fill:#1f4f4a,stroke:#4ad9c0,color:#fff",
-	"wfmap":      "fill:#1f4f4a,stroke:#4ad9c0,color:#fff",
-	"wfwait":     "fill:#5f4a1f,stroke:#d9a04a,color:#fff",
-	"wfsucceed":  "fill:#1f5f2f,stroke:#4ad96a,color:#fff",
-	"wffail":     "fill:#5f1f1f,stroke:#d94a4a,color:#fff",
+// classStyle is one semantic role: a mid-tone (Tailwind 400/500) fill with
+// white text — the one palette that stays legible against both a white and a
+// black canvas, so the viewer's day/night toggle only has to flip the page,
+// never the diagram. Label drives the legend, so a color never appears in the
+// viewer without the word that decodes it.
+type classStyle struct {
+	Fill   string
+	Stroke string
+	Label  string
+	Bold   bool // run-status classes outline harder than the type classes
+}
 
-	string(statusOK):        "fill:#1f5f2f,stroke:#4ad96a,color:#fff,stroke-width:2px",
-	string(statusFailed):    "fill:#5f1f1f,stroke:#d94a4a,color:#fff,stroke-width:2px",
-	string(statusActive):    "fill:#5f4a1f,stroke:#d9a04a,color:#fff,stroke-width:2px",
-	string(statusUnreached): "fill:#2b2b2b,stroke:#555,color:#888",
+// classStyles are emitted only for the classes a diagram actually uses.
+var classStyles = map[string]classStyle{
+	// Definition view: the role each state plays.
+	"wftask":    {"#64748b", "#334155", "Task", false},    // external: invokes a function
+	"wfchoice":  {"#38bdf8", "#0369a1", "Choice", false},  // process: logic / decision
+	"wfwait":    {"#94a3b8", "#475569", "Wait", false},    // standby: passive / waiting
+	"wfsucceed": {"#10b981", "#047857", "Succeed", false}, // leader: terminal success
+	"wffail":    {"#fb7185", "#be123c", "Fail", false},    // resource: terminal failure
+	// Parallel/Map need no class: the container is structure (see renderMermaid).
+
+	// Run view: what this run did. Unreached is the least saturated so visited
+	// states carry the eye. These must not collide with the type colors that
+	// survive into a run view (the routing-only states): Choice stays sky,
+	// distinct from active's amber, while Succeed/Fail intentionally match ok
+	// and failed — a Succeed state IS success.
+	string(statusOK):        {"#10b981", "#047857", "succeeded", true},
+	string(statusActive):    {"#f59e0b", "#b45309", "active", true},
+	string(statusFailed):    {"#fb7185", "#be123c", "failed", true},
+	string(statusUnreached): {"#94a3b8", "#475569", "unreached", false},
+}
+
+func (c classStyle) classDef() string {
+	def := fmt.Sprintf("fill:%s,stroke:%s,color:#fff", c.Fill, c.Stroke)
+	if c.Bold {
+		def += ",stroke-width:2px"
+	}
+	return def
 }
 
 // mermaidFromSpec renders the definition view of a workflow.
-func mermaidFromSpec(spec fv1.WorkflowSpec) string { return renderMermaid(spec, nil) }
+func mermaidFromSpec(spec fv1.WorkflowSpec) string {
+	d, _ := renderMermaid(spec, nil)
+	return d
+}
 
-// renderMermaid renders spec as a stateDiagram-v2. With overlay non-nil every
-// node is colored by its run status instead of its state type — in a run view
-// the question is where the run got to, not what kind of state each node is
-// (and it keeps a node from carrying two competing classes). Output is
+// renderMermaid renders spec as a stateDiagram-v2, and returns the classes it
+// used so a caller can build a legend for exactly those (a color must never
+// reach the viewer without the word that decodes it). With overlay non-nil
+// every node is colored by its run status instead of its state type — in a run
+// view the question is where the run got to, not what kind of state each node
+// is (and it keeps a node from carrying two competing classes). Output is
 // deterministic: states are emitted in sorted order.
-func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) string {
+func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) (string, []string) {
 	var b strings.Builder
 	b.WriteString("stateDiagram-v2\n")
 	fmt.Fprintf(&b, "    [*] --> %s\n", mermaidID(spec.StartAt))
@@ -93,7 +122,8 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) string 
 		if id != name {
 			fmt.Fprintf(&b, "    state %q as %s\n", name, id)
 		}
-		if len(st.Branches) > 0 {
+		isRegion := len(st.Branches) > 0
+		if isRegion {
 			renderRegions(&b, name, st, byClass, &allNodes, nodeType)
 		}
 		if st.Next != "" {
@@ -111,9 +141,17 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) string 
 		if st.IsTerminal() {
 			fmt.Fprintf(&b, "    %s --> [*]\n", id)
 		}
-		byClass[typeClass(st.Type)] = append(byClass[typeClass(st.Type)], id)
-		allNodes = append(allNodes, id)
-		nodeType[id] = st.Type
+		// A fan-out container is structure, not content: its composite shape
+		// already says "this fans out", and its status is whatever its branches
+		// show — filling it too is redundant ink competing with the branches
+		// inside it. (Mermaid also draws a cluster's title on its own themed
+		// bar, where a forced white label goes invisible on a light canvas.)
+		// So it is left unclassed, and never enters the set the overlay colors.
+		if !isRegion {
+			byClass[typeClass(st.Type)] = append(byClass[typeClass(st.Type)], id)
+			allNodes = append(allNodes, id)
+			nodeType[id] = st.Type
+		}
 		if n := stateNote(id, st); n != "" {
 			notes = append(notes, n)
 		}
@@ -138,8 +176,11 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) string 
 			}
 		}
 	}
-	writeClasses(&b, byClass)
-	return b.String()
+	// Not `return b.String(), writeClasses(...)`: the return values evaluate
+	// left to right, so b.String() would snapshot the builder before the
+	// classes were written into it.
+	classes := writeClasses(&b, byClass)
+	return b.String(), classes
 }
 
 // routingOnly reports whether a state type is resolved inside the engine's fold
@@ -225,23 +266,23 @@ func stateNote(id string, st fv1.WorkflowState) string {
 }
 
 // writeClasses emits a classDef and its assignment for every class in use, in
-// sorted order so the rendering stays deterministic.
-func writeClasses(b *strings.Builder, byClass map[string][]string) {
+// sorted order so the rendering stays deterministic, and returns those classes
+// for the legend.
+func writeClasses(b *strings.Builder, byClass map[string][]string) []string {
 	classes := make([]string, 0, len(byClass))
 	for c := range byClass {
-		classes = append(classes, c)
+		if _, known := classStyles[c]; known {
+			classes = append(classes, c)
+		}
 	}
 	slices.Sort(classes)
 	for _, c := range classes {
-		def, ok := classDefFor[c]
-		if !ok {
-			continue
-		}
-		fmt.Fprintf(b, "    classDef %s %s\n", c, def)
+		fmt.Fprintf(b, "    classDef %s %s\n", c, classStyles[c].classDef())
 	}
 	for _, c := range classes {
 		ids := slices.Clone(byClass[c])
 		slices.Sort(ids)
 		fmt.Fprintf(b, "    class %s %s\n", strings.Join(ids, ","), c)
 	}
+	return classes
 }

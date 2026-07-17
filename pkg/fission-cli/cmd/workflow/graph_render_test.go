@@ -50,7 +50,7 @@ func fanSpec() fv1.WorkflowSpec {
 
 func TestRenderMermaidParallelBranches(t *testing.T) {
 	t.Parallel()
-	out := renderMermaid(fanSpec(), nil)
+	out, _ := renderMermaid(fanSpec(), nil)
 
 	// The region is a composite state with one concurrent region per branch.
 	assert.Contains(t, out, "state screening {")
@@ -62,7 +62,8 @@ func TestRenderMermaidParallelBranches(t *testing.T) {
 	assert.Contains(t, out, "screening__0__fraud --> [*]")
 	// The region still wires into the outer flow.
 	assert.Contains(t, out, "screening --> charge")
-	assert.Equal(t, out, renderMermaid(fanSpec(), nil), "deterministic")
+	again, _ := renderMermaid(fanSpec(), nil)
+	assert.Equal(t, out, again, "deterministic")
 }
 
 func TestRenderMermaidScopesBranchIDs(t *testing.T) {
@@ -71,7 +72,7 @@ func TestRenderMermaidScopesBranchIDs(t *testing.T) {
 	// A branch state that shares a name with a top-level state must not
 	// collide: mermaid ids are global.
 	spec.States["screening"].Branches[0].States["charge"] = endTask("branch-charge-fn")
-	out := renderMermaid(spec, nil)
+	out, _ := renderMermaid(spec, nil)
 
 	assert.Contains(t, out, `state "charge" as screening__0__charge`)
 	assert.Contains(t, out, "charge --> [*]", "the top-level charge keeps its bare id")
@@ -90,7 +91,7 @@ func TestRenderMermaidSanitizesIDs(t *testing.T) {
 			"done":          {Type: fv1.WorkflowStateSucceed},
 		},
 	}
-	out := renderMermaid(spec, nil)
+	out, _ := renderMermaid(spec, nil)
 
 	assert.Contains(t, out, `state "first-attempt" as first_attempt`)
 	assert.Contains(t, out, `state "grace-period" as grace_period`)
@@ -117,7 +118,7 @@ func TestRenderMermaidMapRendersTemplateOnce(t *testing.T) {
 			"done": {Type: fv1.WorkflowStateSucceed},
 		},
 	}
-	out := renderMermaid(spec, nil)
+	out, _ := renderMermaid(spec, nil)
 
 	assert.Contains(t, out, "state enrich {")
 	assert.Contains(t, out, `state "one" as enrich__0__one`)
@@ -136,7 +137,7 @@ func TestRenderMermaidTypeClasses(t *testing.T) {
 			"done": {Type: fv1.WorkflowStateSucceed},
 		},
 	}
-	out := renderMermaid(spec, nil)
+	out, _ := renderMermaid(spec, nil)
 
 	assert.Contains(t, out, "classDef wftask")
 	assert.Contains(t, out, "classDef wfchoice")
@@ -162,33 +163,18 @@ func TestOverlayFromRun(t *testing.T) {
 
 	assert.Equal(t, statusOK, overlay["screening__0__fraud"])
 	assert.Equal(t, statusFailed, overlay["screening__1__stock"])
-	// The region itself never appears in the log; it takes its branches' worst
-	// status, so a region that ran is never drawn as never-reached.
-	assert.Equal(t, statusFailed, overlay["screening"], "a failed branch fails the region")
 	_, reached := overlay["charge"]
 	assert.False(t, reached, "a state with no events stays unreached")
 
 	// Unreached nodes render grey rather than falling back to a type color.
-	out := renderMermaid(spec, overlay)
+	out, _ := renderMermaid(spec, overlay)
 	assert.Contains(t, out, "classDef unreached")
 	assert.Contains(t, out, "class charge unreached")
 	assert.Contains(t, out, "class screening__0__fraud ok")
+	// The container is structure: never classed, so it cannot compete with the
+	// branches that carry the actual status.
+	assert.NotContains(t, out, "class screening ")
 	assert.NotContains(t, out, "classDef wftask", "a run view colors by status, not by type")
-}
-
-func TestOverlayRegionRollUp(t *testing.T) {
-	t.Parallel()
-	spec := fanSpec()
-	base := func(evs ...historyEvent) map[string]nodeStatus {
-		return overlayFromRun(spec, evs, &fv1.WorkflowRun{})
-	}
-	ok0 := historyEvent{Type: "StepSucceeded", State: "fraud", Branch: "0", Region: "screening@1"}
-	ok1 := historyEvent{Type: "StepSucceeded", State: "stock", Branch: "1", Region: "screening@1"}
-	active1 := historyEvent{Type: "StepScheduled", State: "stock", Branch: "1", Region: "screening@1"}
-
-	assert.Equal(t, statusOK, base(ok0, ok1)["screening"], "all branches ok -> region ok")
-	assert.Equal(t, statusActive, base(ok0, active1)["screening"], "a running sibling keeps the region active")
-	assert.NotContains(t, base()["screening"], statusOK, "a region with no branch events stays unreached")
 }
 
 func TestOverlayRetrySucceedsWins(t *testing.T) {
@@ -254,7 +240,7 @@ func TestOverlayKeepsRoutingStatesUncolored(t *testing.T) {
 		{Type: "StepSucceeded", State: "validate"},
 		{Type: "StepSucceeded", State: "reject"},
 	}
-	out := renderMermaid(spec, overlayFromRun(spec, events, &fv1.WorkflowRun{}))
+	out, _ := renderMermaid(spec, overlayFromRun(spec, events, &fv1.WorkflowRun{}))
 
 	assert.Contains(t, out, "class decision wfchoice", "a routing-only state keeps its type color")
 	assert.Contains(t, out, "class fulfil unreached", "a Task with no events really was not reached")
