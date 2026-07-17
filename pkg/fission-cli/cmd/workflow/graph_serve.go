@@ -48,8 +48,6 @@ func legendFor(classes []string, runView bool) []legendItem {
 			continue
 		}
 		label := s.Label
-		// In a run view a type class only survives on a state that emits no
-		// events, so label it as such rather than let it read as a status.
 		if runView && isTypeClass(c) {
 			label += " (not tracked)"
 		}
@@ -144,15 +142,15 @@ const diagramPage = `<!doctype html>
 </html>
 `
 
+// pageTmpl is the viewer page. diagramPage is a compile-time constant, so it is
+// parsed once here rather than on every --open.
+var pageTmpl = template.Must(template.New("page").Parse(diagramPage))
+
 // serveDiagram renders the page in the user's browser from an ephemeral local
 // server, and blocks until the context is cancelled or the user interrupts.
 func serveDiagram(ctx context.Context, data pageData) error {
-	tmpl, err := template.New("page").Parse(diagramPage)
-	if err != nil {
-		return fmt.Errorf("building viewer page: %w", err)
-	}
 	var page bytes.Buffer
-	if err := tmpl.Execute(&page, data); err != nil {
+	if err := pageTmpl.Execute(&page, data); err != nil {
 		return fmt.Errorf("building viewer page: %w", err)
 	}
 

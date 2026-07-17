@@ -45,12 +45,8 @@ func (opts *DescribeSubCommand) do(input cli.Input) error {
 		fmt.Fprintf(w, "Active:\t%s\n", activeStates(*run))
 	}
 	if run.Status.StartedAt != nil {
-		end := time.Now()
-		if run.Status.FinishedAt != nil {
-			end = run.Status.FinishedAt.Time
-		}
 		fmt.Fprintf(w, "Started:\t%s\n", run.Status.StartedAt.Format(time.RFC3339))
-		fmt.Fprintf(w, "Duration:\t%s\n", end.Sub(run.Status.StartedAt.Time).Round(time.Millisecond))
+		fmt.Fprintf(w, "Duration:\t%s\n", runDuration(run).Round(time.Millisecond))
 	}
 	if run.Status.Output != nil {
 		fmt.Fprintf(w, "Output:\t%s\n", string(run.Status.Output.Raw))

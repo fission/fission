@@ -37,7 +37,7 @@ func TestMermaidFromSpec(t *testing.T) {
 		},
 	}
 
-	out := mermaidFromSpec(spec)
+	out, _ := renderMermaid(spec, nil)
 
 	assert.Contains(t, out, "stateDiagram-v2")
 	assert.Contains(t, out, "[*] --> a")
@@ -49,5 +49,6 @@ func TestMermaidFromSpec(t *testing.T) {
 	assert.Contains(t, out, "fail --> [*]")
 
 	// Deterministic output: same spec, same rendering.
-	assert.Equal(t, out, mermaidFromSpec(spec))
+	again, _ := renderMermaid(spec, nil)
+	assert.Equal(t, out, again)
 }

@@ -97,6 +97,16 @@ func activeStates(r fv1.WorkflowRun) string {
 	return r.Status.ActiveStates[0]
 }
 
+// runDuration is how long the run ran (or has been running): finished-or-now
+// minus started. Callers guard on StartedAt != nil and round to taste.
+func runDuration(run *fv1.WorkflowRun) time.Duration {
+	end := time.Now()
+	if run.Status.FinishedAt != nil {
+		end = run.Status.FinishedAt.Time
+	}
+	return end.Sub(run.Status.StartedAt.Time)
+}
+
 func timeOrDash(t *metav1.Time) string {
 	if t == nil {
 		return "-"

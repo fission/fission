@@ -36,20 +36,19 @@ func mermaidID(parts ...string) string {
 	return idUnsafe.ReplaceAllString(strings.Join(parts, "__"), "_")
 }
 
-// topLevelID resolves a top-level state name to its node id (writeTransitions
-// wants a single-arg resolver; mermaidID is variadic).
-func topLevelID(name string) string { return mermaidID(name) }
-
 // mapTemplateBranch is the single region a Map is drawn as (see
 // renderedBranches): its branches are per-item instances of one template, so
 // the diagram draws region 0 and eventNodeID folds every item's events onto it.
 const mapTemplateBranch = "0"
 
-// branchNodeID scopes a branch state's id under its region. Branch state names
-// are only unique within their branch — a top-level state (or another region)
-// may reuse the name, and mermaid ids are global.
-func branchNodeID(parent string, idx int, name string) string {
-	return mermaidID(parent, strconv.Itoa(idx), name)
+// branchNodeID is the one place the branch-node id shape is defined: it scopes
+// a branch state's id under its region by branch key. Branch state names are
+// only unique within their branch — a top-level state (or another region) may
+// reuse the name, and mermaid ids are global. The renderer keys by the region
+// index (strconv.Itoa(i)) and the overlay by the wire Branch field; both are
+// the same string, so both must build the id through here or coloring drifts.
+func branchNodeID(parent, branch, name string) string {
+	return mermaidID(parent, branch, name)
 }
 
 // typeClassPrefix marks a class as a state-type class ("wftask") rather than a
@@ -105,12 +104,6 @@ func (c classStyle) classDef() string {
 	return def
 }
 
-// mermaidFromSpec renders the definition view of a workflow.
-func mermaidFromSpec(spec fv1.WorkflowSpec) string {
-	d, _ := renderMermaid(spec, nil)
-	return d
-}
-
 // renderMermaid renders spec as a stateDiagram-v2, and returns the classes it
 // used so a caller can build a legend for exactly those (a color must never
 // reach the viewer without the word that decodes it). With overlay non-nil
@@ -149,7 +142,8 @@ func renderMermaid(spec fv1.WorkflowSpec, overlay map[string]nodeStatus) (string
 		} else {
 			nodeType[id] = st.Type
 		}
-		writeTransitions(&b, "    ", id, topLevelID, st.Next, st.Default, st.Choices, st.Catch, st.IsTerminal())
+		writeTransitions(&b, "    ", id, func(n string) string { return mermaidID(n) },
+			st.Next, st.Default, st.Choices, st.Catch, st.IsTerminal())
 		if n := stateNote(id, st); n != "" {
 			notes = append(notes, n)
 		}
@@ -235,7 +229,7 @@ func renderRegions(b *strings.Builder, parent string, st fv1.WorkflowState, node
 		if i > 0 {
 			b.WriteString("        --\n")
 		}
-		resolve := func(name string) string { return branchNodeID(parent, i, name) }
+		resolve := func(name string) string { return branchNodeID(parent, strconv.Itoa(i), name) }
 		bnames := make([]string, 0, len(br.States))
 		for n := range br.States {
 			bnames = append(bnames, n)

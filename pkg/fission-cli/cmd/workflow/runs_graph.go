@@ -51,17 +51,14 @@ func (opts *RunsGraphSubCommand) do(input cli.Input) error {
 }
 
 // runClaim says in words what the diagram is evidence for, so the exhibit is
-// never orphaned from the claim: the phase, why it stopped, and where.
+// never orphaned from the claim: the phase (via the shared runPhase, which also
+// surfaces a missing controller), why it stopped, and where.
 func runClaim(run *fv1.WorkflowRun) string {
-	phase := run.Status.Phase
-	if phase == "" {
-		phase = fv1.WorkflowRunPending
-	}
-	parts := []string{string(phase)}
+	parts := []string{runPhase(*run)}
 	if run.Status.ErrorType != "" {
 		parts = append(parts, run.Status.ErrorType)
 	}
-	if !phase.Terminal() && len(run.Status.ActiveStates) > 0 {
+	if !run.Status.Phase.Terminal() && len(run.Status.ActiveStates) > 0 {
 		parts = append(parts, "at "+strings.Join(run.Status.ActiveStates, ", "))
 	}
 	if d := runElapsed(run); d != "" {
@@ -70,20 +67,16 @@ func runClaim(run *fv1.WorkflowRun) string {
 	return strings.Join(parts, " · ")
 }
 
-// runElapsed is how long the run took, or has been going.
+// runElapsed is how long the run took, or has been going, or "" before it
+// started.
 func runElapsed(run *fv1.WorkflowRun) string {
 	if run.Status.StartedAt == nil {
 		return ""
 	}
-	end := time.Now()
-	if run.Status.FinishedAt != nil {
-		end = run.Status.FinishedAt.Time
+	if d := runDuration(run).Round(time.Second); d >= 0 {
+		return d.String()
 	}
-	d := end.Sub(run.Status.StartedAt.Time).Round(time.Second)
-	if d < 0 {
-		return ""
-	}
-	return d.String()
+	return ""
 }
 
 // runSpec returns the spec this run is executing. The RunStarted event carries
@@ -166,5 +159,5 @@ func eventNodeID(spec fv1.WorkflowSpec, e historyEvent) string {
 	if spec.States[parent].Type == fv1.WorkflowStateMap {
 		branch = mapTemplateBranch
 	}
-	return mermaidID(parent, branch, e.State)
+	return branchNodeID(parent, branch, e.State)
 }
