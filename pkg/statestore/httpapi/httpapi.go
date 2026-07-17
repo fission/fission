@@ -50,6 +50,13 @@ const (
 type Error struct {
 	Code    string `json:"code"`
 	Message string `json:"message,omitempty"`
+	// Head carries the stream's current head on a version_conflict from
+	// EventLog.Append, so the CAS caller can resynchronize without a second
+	// round-trip. The interface contract makes the head meaningful on
+	// ErrVersionConflict; dropping it (returning 0) traps a conflicting
+	// appender in an infinite retry at the wrong sequence. Zero/omitted for
+	// every other code.
+	Head int64 `json:"head,omitempty"`
 }
 
 // Stable error codes.

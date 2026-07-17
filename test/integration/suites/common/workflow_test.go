@@ -227,6 +227,72 @@ spec:
 	assert.Contains(t, desc, "Succeeded")
 }
 
+// TestWorkflowEngineParallel drives a Parallel state whose two branches run
+// concurrently and join. This exercises the concurrent branch-result appends
+// that race the CAS on the shared run stream — the path that infinite-looped
+// when the HTTP statestore client dropped the conflict head (a losing appender
+// retried at seq 0 forever). Nothing else in the suite runs Parallel on a real
+// cluster, so without this a join regression ships silently.
+func TestWorkflowEngineParallel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+	ns := f.NewTestNamespace(t)
+
+	envName := "nodejs-wfp-" + ns.ID
+	fnName := "step-wfp-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+	codePath := framework.WriteTestData(t, "nodejs/wf-step/wf-step.js")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Env: envName, Code: codePath})
+	f.Router(t).GetEventually(t, ctx, utils.UrlForFunction(fnName, ns.Name), framework.BodyContains("hops"))
+
+	wfName := "wf-parallel-" + ns.ID
+	// fan runs both branches concurrently; the join is the ordered array of
+	// their outputs, which the Succeed state emits as the run output.
+	manifest := fmt.Sprintf(`
+apiVersion: fission.io/v1
+kind: Workflow
+metadata:
+  name: %[2]s
+spec:
+  startAt: fan
+  states:
+    fan:
+      type: Parallel
+      branches:
+        - startAt: a
+          states:
+            a: {type: Task, function: {name: %[1]s}, end: true}
+        - startAt: b
+          states:
+            b: {type: Task, function: {name: %[1]s}, end: true}
+      next: done
+    done: {type: Succeed}
+`, fnName, wfName)
+	createWorkflow(t, ctx, f, ns, wfName, manifest)
+
+	out := ns.CLICaptureStdout(t, ctx, "workflow", "run", "--name", wfName)
+	runName := startedRunName(t, out)
+
+	runs := f.FissionClient().CoreV1().WorkflowRuns(ns.Name)
+	run := waitForTerminalRun(t, ctx, runs, runName)
+
+	require.Equal(t, fv1.WorkflowRunSucceeded, run.Status.Phase, "the parallel join must complete")
+	require.NotNil(t, run.Status.Output)
+	// The join is the ordered [branchA, branchB] array; each branch ran wf-step
+	// once, so both outputs carry "hops":1.
+	assert.Equal(t, 2, strings.Count(string(run.Status.Output.Raw), `"hops":1`),
+		"the join is the ordered array of both branch outputs")
+
+	hist := ns.CLICaptureStdout(t, ctx, "workflow", "history", "--name", runName)
+	assert.Contains(t, hist, "BranchesJoined", "the region joined")
+	assert.Equal(t, 2, strings.Count(hist, "StepSucceeded"), "both branches recorded a result")
+}
+
 // TestWorkflowEngineRetryCatch drives the retry-then-catch path with a
 // deliberately failing function: attempts hit the budget, the catch routes
 // to a recovery function, and the run succeeds.

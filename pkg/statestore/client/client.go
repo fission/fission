@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,7 +137,23 @@ func decodeErr(resp *http.Response) error {
 	if e.Code == "" {
 		return fmt.Errorf("statestore/client: unexpected status %d", resp.StatusCode)
 	}
+	if e.Code == httpapi.CodeVersionConflict {
+		// Carry the head so Append can resynchronize; it still Is-matches
+		// ErrVersionConflict for every other caller.
+		return &conflictError{head: e.Head}
+	}
 	return httpapi.CodeToErr(e.Code, e.Message)
+}
+
+// conflictError is an ErrVersionConflict that carries the stream head the
+// server reported, so EventLog.Append can return it (the contract makes the
+// head meaningful on a conflict). It Is-matches the sentinel so callers that
+// only test errors.Is(err, ErrVersionConflict) are unaffected.
+type conflictError struct{ head int64 }
+
+func (e *conflictError) Error() string { return statestore.ErrVersionConflict.Error() }
+func (e *conflictError) Is(target error) bool {
+	return target == statestore.ErrVersionConflict
 }
 
 // --- KVStore ---
@@ -172,6 +189,11 @@ func (c *Client) List(ctx context.Context, s statestore.Scope, prefix string, pa
 func (c *Client) Append(ctx context.Context, stream string, expectedSeq int64, events []statestore.Event) (int64, error) {
 	var resp httpapi.EventAppendResp
 	if err := c.post(ctx, httpapi.PathEventAppend, httpapi.EventAppendReq{Stream: stream, ExpectedSeq: expectedSeq, Events: events}, &resp); err != nil {
+		// A conflict carries the current head so the CAS caller can
+		// resynchronize (contract: the head is meaningful on ErrVersionConflict).
+		if ce, ok := errors.AsType[*conflictError](err); ok {
+			return ce.head, statestore.ErrVersionConflict
+		}
 		return 0, err
 	}
 	return resp.Head, nil

@@ -6,6 +6,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -187,6 +188,12 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 	}
 	head, err := el.Append(r.Context(), req.Stream, req.ExpectedSeq, req.Events)
 	if err != nil {
+		if errors.Is(err, statestore.ErrVersionConflict) {
+			// The head is meaningful on a conflict (the contract lets the caller
+			// resynchronize with it); carry it so the client need not re-Head.
+			writeCode(w, http.StatusConflict, Error{Code: CodeVersionConflict, Message: err.Error(), Head: head})
+			return
+		}
 		writeErr(w, err)
 		return
 	}
