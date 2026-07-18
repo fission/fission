@@ -63,10 +63,12 @@ func TestFunctionTest(t *testing.T) {
 // the /fission-function/<ns>/<fn> request, not hit the public listener
 // (8888) which returns 404 for that path.
 //
-// FISSION_INTERNAL_AUTH_SECRET is forwarded from the framework to the CLI
-// subprocess env so the CLI's HMAC signing transport can authenticate
-// against the internal listener when auth is enabled; when auth is off
-// (pass-through mode) the secret is empty and no signing is needed.
+// FISSION_INTERNAL_AUTH_SECRET is forwarded from the framework into the
+// CLI's process env (set via os.Setenv under cliMu.Lock() — the CLI runs
+// in-process, not a subprocess) so the CLI's HMAC signing transport can
+// authenticate against the internal listener when auth is enabled; when
+// auth is off (pass-through mode) the secret is empty and no signing is
+// needed.
 func TestFunctionTestCLI(t *testing.T) {
 	t.Parallel()
 
@@ -87,8 +89,10 @@ func TestFunctionTestCLI(t *testing.T) {
 		Name: validFn, Env: envName, Code: validCode,
 	})
 
-	// Forward the internal auth secret to the CLI subprocess env so the
-	// CLI's HMAC transport can sign the request when auth is enabled.
+	// Forward the internal auth secret into the CLI's process env (set via
+	// os.Setenv under cliMu.Lock() — the CLI runs in-process, not a
+	// subprocess) so the CLI's HMAC transport can sign the request when
+	// auth is enabled.
 	env := map[string]string{}
 	if secret := string(f.InternalAuthSecret()); secret != "" {
 		env["FISSION_INTERNAL_AUTH_SECRET"] = secret
@@ -151,8 +155,10 @@ func TestFunctionTestCLIAsync(t *testing.T) {
 		Name: validFn, Env: envName, Code: validCode,
 	})
 
-	// Forward the internal auth secret to the CLI subprocess env so the
-	// CLI's HMAC transport can sign the request when auth is enabled.
+	// Forward the internal auth secret into the CLI's process env (set via
+	// os.Setenv under cliMu.Lock() — the CLI runs in-process, not a
+	// subprocess) so the CLI's HMAC transport can sign the request when
+	// auth is enabled.
 	env := map[string]string{}
 	if secret := string(f.InternalAuthSecret()); secret != "" {
 		env["FISSION_INTERNAL_AUTH_SECRET"] = secret
