@@ -6,21 +6,23 @@ package function
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 )
 
-// fakeTestInput overrides only the accessors invokeAsync/testQueryValues read.
+// fakeTestInput overrides only the accessors testQueryValues reads.
 type fakeTestInput struct {
 	fakeDLQInput
 	ss map[string][]string
@@ -28,58 +30,6 @@ type fakeTestInput struct {
 
 func (f fakeTestInput) StringSlice(k string) []string { return f.ss[k] }
 func (f fakeTestInput) Context() context.Context      { return context.Background() }
-
-func TestInvokeAsyncSendsAsyncHeaderAndPrintsID(t *testing.T) {
-	var got struct {
-		method, path, body, invokeMode, hdr string
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got.method, got.path, got.body = r.Method, r.URL.Path, string(b)
-		got.invokeMode = r.Header.Get(asyncinvoke.HeaderInvokeMode)
-		got.hdr = r.Header.Get("X-Custom")
-		w.Header().Set(asyncinvoke.HeaderInvocationID, "asyncinv/9")
-		w.WriteHeader(http.StatusAccepted)
-	}))
-	defer srv.Close()
-	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
-
-	in := fakeTestInput{
-		fakeDLQInput: fakeDLQInput{s: map[string]string{flagkey.FnTestBody: "hello"}},
-		ss:           map[string][]string{flagkey.FnTestHeader: {"X-Custom: v"}},
-	}
-	err := (&TestSubCommand{}).invokeAsync(context.Background(), in, &metav1.ObjectMeta{Name: "fn", Namespace: "ns"}, http.MethodPost)
-	require.NoError(t, err)
-
-	assert.Equal(t, http.MethodPost, got.method)
-	assert.Equal(t, "/fission-function/ns/fn", got.path)
-	assert.Equal(t, "hello", got.body)
-	assert.Equal(t, asyncinvoke.InvokeModeAsync, got.invokeMode, "async mode header is set")
-	assert.Equal(t, "v", got.hdr, "user headers are forwarded")
-}
-
-func TestInvokeAsyncDisabledAndErrorStatuses(t *testing.T) {
-	cases := map[string]struct {
-		status int
-		errSub string
-	}{
-		"disabled 501":     {http.StatusNotImplemented, "not enabled"},
-		"unauthorized 401": {http.StatusUnauthorized, "FISSION_INTERNAL_AUTH_SECRET"},
-		"server 500":       {http.StatusInternalServerError, "500"},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(tc.status)
-			}))
-			defer srv.Close()
-			t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
-			err := (&TestSubCommand{}).invokeAsync(context.Background(), fakeTestInput{}, &metav1.ObjectMeta{Name: "fn", Namespace: "ns"}, http.MethodPost)
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tc.errSub)
-		})
-	}
-}
 
 func TestTestQueryValues(t *testing.T) {
 	t.Parallel()
@@ -92,87 +42,59 @@ func TestTestQueryValues(t *testing.T) {
 	assert.False(t, q.Has(""), "an empty key is dropped")
 }
 
-// TestBuildInternalRequestSync verifies the shared helper used by the sync
-// `fission fn test` path: it must hit /fission-function/<ns>/<fn> on the
-// internal listener, forward user headers/body/query, set NO invoke-mode
-// header, and skip HMAC signing when FISSION_INTERNAL_AUTH_SECRET is unset.
-func TestBuildInternalRequestSync(t *testing.T) {
+// TestCombinedHTTPRequestForwardsRequest verifies the shared request-building
+// helper forwards method/body/headers verbatim and, by default, attaches
+// neither an invoke-mode header nor a bearer token nor an HMAC signature.
+func TestCombinedHTTPRequestForwardsRequest(t *testing.T) {
 	var got struct {
-		method, path, query, body, invokeMode, customHdr string
-		sigHdr                                           string
+		method, body, customHdr, invokeMode, authHdr, sigHdr string
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		got.method = r.Method
-		got.path = r.URL.Path
-		got.query = r.URL.RawQuery
 		got.body = string(b)
-		got.invokeMode = r.Header.Get(asyncinvoke.HeaderInvokeMode)
 		got.customHdr = r.Header.Get("X-Custom")
+		got.invokeMode = r.Header.Get(asyncinvoke.HeaderInvokeMode)
+		got.authHdr = r.Header.Get("Authorization")
 		got.sigHdr = r.Header.Get(hmacauth.HeaderSignature)
 		w.WriteHeader(http.StatusOK)
-		_, _ = io.WriteString(w, "Hello, Fission")
 	}))
 	defer srv.Close()
-	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
-	in := fakeTestInput{
-		fakeDLQInput: fakeDLQInput{
-			s:   map[string]string{flagkey.FnTestBody: "req-body"},
-			set: map[string]bool{flagkey.FnSubPath: true},
-		},
-		ss: map[string][]string{
-			flagkey.FnTestHeader: {"X-Custom: v"},
-			flagkey.FnTestQuery:  {"q=42"},
-		},
-	}
-	// fakeDLQInput.String returns "" for unset keys, so set the subpath value.
-	in.s[flagkey.FnSubPath] = "sub"
-
-	req, hc, cleanup, err := (&TestSubCommand{}).buildInternalRequest(
-		context.Background(), in, &metav1.ObjectMeta{Name: "fn", Namespace: "ns"},
-		http.MethodPost, "")
-	require.NoError(t, err)
-	defer cleanup()
-
-	resp, err := hc.Do(req)
+	resp, err := combinedHTTPRequest(context.Background(), invokeOptions{
+		Method:  http.MethodPost,
+		URL:     srv.URL + "/fission-function/ns/fn",
+		Body:    "req-body",
+		Headers: []string{"X-Custom: v"},
+	})
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.MethodPost, got.method)
-	assert.Equal(t, "/fission-function/ns/fn/sub", got.path, "subpath appended to fn URI")
-	assert.Equal(t, "q=42", got.query, "query params encoded")
 	assert.Equal(t, "req-body", got.body)
 	assert.Equal(t, "v", got.customHdr, "user headers forwarded")
-	assert.Empty(t, got.invokeMode, "sync path must NOT set invoke-mode header")
-	assert.Empty(t, got.sigHdr, "no HMAC signature when secret is unset")
+	assert.Empty(t, got.invokeMode, "no invoke-mode header unless requested")
+	assert.Empty(t, got.authHdr, "no bearer token unless requested")
+	assert.Empty(t, got.sigHdr, "no HMAC signature unless requested")
 }
 
-// TestBuildInternalRequestAsyncHeaderRegression guards the "set LAST" rule:
-// even if the user passes -H "X-Fission-Invoke-Mode: sync", the helper must
-// overwrite it with async when invokeModeHeader=InvokeModeAsync.
-func TestBuildInternalRequestAsyncHeaderRegression(t *testing.T) {
+// TestCombinedHTTPRequestInvokeModeSetLast guards the "set LAST" rule: even if
+// the user passes -H "X-Fission-Invoke-Mode: sync", opts.InvokeModeHeader must
+// win so --async stays authoritative.
+func TestCombinedHTTPRequestInvokeModeSetLast(t *testing.T) {
 	var gotInvokeMode string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotInvokeMode = r.Header.Get(asyncinvoke.HeaderInvokeMode)
 		w.WriteHeader(http.StatusAccepted)
-		_, _ = io.WriteString(w, `{"invocationId":"asyncinv/1"}`)
 	}))
 	defer srv.Close()
-	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
-	in := fakeTestInput{
-		ss: map[string][]string{
-			flagkey.FnTestHeader: {asyncinvoke.HeaderInvokeMode + ": sync"},
-		},
-	}
-	req, hc, cleanup, err := (&TestSubCommand{}).buildInternalRequest(
-		context.Background(), in, &metav1.ObjectMeta{Name: "fn", Namespace: "ns"},
-		http.MethodPost, asyncinvoke.InvokeModeAsync)
-	require.NoError(t, err)
-	defer cleanup()
-
-	resp, err := hc.Do(req)
+	resp, err := combinedHTTPRequest(context.Background(), invokeOptions{
+		Method:           http.MethodPost,
+		URL:              srv.URL,
+		Headers:          []string{asyncinvoke.HeaderInvokeMode + ": sync"},
+		InvokeModeHeader: asyncinvoke.InvokeModeAsync,
+	})
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -180,58 +102,158 @@ func TestBuildInternalRequestAsyncHeaderRegression(t *testing.T) {
 		"async header must overwrite a user-supplied sync header")
 }
 
-// TestBuildInternalRequestHMACSigned asserts that when
-// FISSION_INTERNAL_AUTH_SECRET is set, the helper's transport adds the
-// X-Fission-Auth-Signature + X-Fission-Auth-Timestamp headers.
-func TestBuildInternalRequestHMACSigned(t *testing.T) {
-	var sig, ts string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sig = r.Header.Get(hmacauth.HeaderSignature)
-		ts = r.Header.Get(hmacauth.HeaderTimestamp)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
-	t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "test-master-secret")
+// TestCombinedHTTPRequestHMACSigning covers both sides of the pass-through
+// contract: signed when SignWithHMAC is set AND a secret is configured,
+// silently unsigned when SignWithHMAC is set but no secret is present
+// (matches the chart's internalAuth.enabled=false default). The
+// "requested but no secret" case guards against a regression where this path
+// briefly became a hard error instead of a pass-through.
+func TestCombinedHTTPRequestHMACSigning(t *testing.T) {
+	cases := []struct {
+		name         string
+		signWithHMAC bool
+		secret       string
+		wantSigned   bool
+	}{
+		{"signed when requested and secret set", true, "test-secret", true},
+		{"pass-through when requested but no secret", true, "", false},
+		{"never signed when not requested", false, "test-secret", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var sig string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				sig = r.Header.Get(hmacauth.HeaderSignature)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+			t.Setenv("FISSION_INTERNAL_AUTH_SECRET", tc.secret)
 
-	in := fakeTestInput{}
-	req, hc, cleanup, err := (&TestSubCommand{}).buildInternalRequest(
-		context.Background(), in, &metav1.ObjectMeta{Name: "fn", Namespace: "ns"},
-		http.MethodGet, "")
-	require.NoError(t, err)
-	defer cleanup()
+			resp, err := combinedHTTPRequest(context.Background(), invokeOptions{
+				Method: http.MethodGet,
+				// The signing transport only signs paths under this prefix
+				// (pkg/auth/hmac/transport.go) — matches how do() builds URLs.
+				URL:          srv.URL + "/fission-function/ns/fn",
+				SignWithHMAC: tc.signWithHMAC,
+			})
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-	resp, err := hc.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.NotEmpty(t, sig, "HMAC signature header present when secret is set")
-	assert.NotEmpty(t, ts, "HMAC timestamp header present when secret is set")
+			if tc.wantSigned {
+				assert.NotEmpty(t, sig)
+			} else {
+				assert.Empty(t, sig)
+			}
+		})
+	}
 }
 
-// TestBuildInternalRequestDefaultNamespaceFolding checks that
-// utils.UrlForFunction folds the default namespace out of the path —
-// /fission-function/<fn> not /fission-function/default/<fn>.
-func TestBuildInternalRequestDefaultNamespaceFolding(t *testing.T) {
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
+// TestCombinedHTTPRequestAttachesBearerToken covers both sides: attached when
+// requested and FISSION_AUTH_TOKEN is set, never attached when not requested
+// — fn test intentionally omits this since the internal listener
+// authenticates via HMAC, not the JWT gateway.
+func TestCombinedHTTPRequestAttachesBearerToken(t *testing.T) {
+	cases := []struct {
+		name       string
+		attach     bool
+		wantHeader string
+	}{
+		{"attached when requested", true, "Bearer test-token"},
+		{"omitted when not requested", false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var authHdr string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				authHdr = r.Header.Get("Authorization")
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+			t.Setenv(util.FISSION_AUTH_TOKEN, "test-token")
 
-	in := fakeTestInput{}
-	req, hc, cleanup, err := (&TestSubCommand{}).buildInternalRequest(
-		context.Background(), in, &metav1.ObjectMeta{Name: "fn", Namespace: "default"},
-		http.MethodGet, "")
-	require.NoError(t, err)
-	defer cleanup()
+			resp, err := combinedHTTPRequest(context.Background(), invokeOptions{
+				Method:            http.MethodGet,
+				URL:               srv.URL,
+				AttachBearerToken: tc.attach,
+			})
+			require.NoError(t, err)
+			defer resp.Body.Close()
 
-	resp, err := hc.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
+			assert.Equal(t, tc.wantHeader, authHdr)
+		})
+	}
+}
 
-	assert.Equal(t, "/fission-function/fn", gotPath,
-		"default namespace is folded out of the direct-invoke path")
+// TestCombinedHTTPRequestMalformedHeaderErrors guards the header-parsing
+// contract chosen when the sync/async request builders were merged: a header
+// with no ":" is a hard error (matching the old DoHTTPRequest behavior used
+// by `fn run`), not a silent drop.
+func TestCombinedHTTPRequestMalformedHeaderErrors(t *testing.T) {
+	_, err := combinedHTTPRequest(context.Background(), invokeOptions{
+		Method:  http.MethodGet,
+		URL:     "http://example.invalid",
+		Headers: []string{"NoColonHere"},
+	})
+	require.Error(t, err)
+}
+
+// TestCombinedHTTPRequestInvalidMethod guards method validation, which
+// combinedHTTPRequest must do itself since invokeLocal (fn run) does not
+// validate before calling in.
+func TestCombinedHTTPRequestInvalidMethod(t *testing.T) {
+	_, err := combinedHTTPRequest(context.Background(), invokeOptions{
+		Method: "NOT-A-METHOD",
+		URL:    "http://example.invalid",
+	})
+	require.Error(t, err)
+}
+
+// fakeResponse builds an *http.Response for handleAsyncResponse tests without
+// a real round trip — it only ever inspects status/header/body.
+func fakeResponse(status int, header http.Header, body string) *http.Response {
+	if header == nil {
+		header = http.Header{}
+	}
+	return &http.Response{
+		StatusCode: status,
+		Status:     fmt.Sprintf("%d %s", status, http.StatusText(status)),
+		Header:     header,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func TestHandleAsyncResponseAccepted(t *testing.T) {
+	t.Run("invocation id from header", func(t *testing.T) {
+		hdr := http.Header{}
+		hdr.Set(asyncinvoke.HeaderInvocationID, "asyncinv/9")
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, hdr, ""))
+		require.NoError(t, err)
+	})
+	t.Run("invocation id falls back to JSON body", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, `{"invocationId":"asyncinv/5"}`))
+		require.NoError(t, err)
+	})
+	t.Run("no id anywhere still succeeds with a warning", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, ""))
+		require.NoError(t, err)
+	})
+}
+
+func TestHandleAsyncResponseErrorStatuses(t *testing.T) {
+	cases := map[string]struct {
+		status int
+		errSub string
+	}{
+		"disabled 501":     {http.StatusNotImplemented, "not enabled"},
+		"unauthorized 401": {http.StatusUnauthorized, "FISSION_INTERNAL_AUTH_SECRET"},
+		"forbidden 403":    {http.StatusForbidden, "FISSION_INTERNAL_AUTH_SECRET"},
+		"server 500":       {http.StatusInternalServerError, "500"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := handleAsyncResponse(fakeResponse(tc.status, nil, ""))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.errSub)
+		})
+	}
 }

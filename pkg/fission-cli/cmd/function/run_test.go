@@ -112,7 +112,7 @@ func TestShortID(t *testing.T) {
 // fakeRuntime implements localRuntime without Docker: StartContainer binds a
 // real HTTP server on the requested host port that emulates the env runtime —
 // recording the /v2/specialize body and echoing invocations — so runLocal's
-// real httpx specialize call and DoHTTPRequest invoke path are exercised
+// real httpx specialize call and combinedHTTPRequest invoke path are exercised
 // end-to-end.
 type fakeRuntime struct {
 	echo string // body returned on invoke

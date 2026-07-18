@@ -612,14 +612,24 @@ func specialize(ctx context.Context, cfg runConfig, hostPort int) error {
 	return httpx.PostWithConnRetry(ctx, client, url, "application/json", payload, logr.Logger{}, specializeMaxRetries, nil)
 }
 
-// invokeLocal calls the specialized function over the same DoHTTPRequest path
-// `function test` uses, attaching the X-Fission-Function-* headers and rendering
-// the response (or RFC-0015 failure attribution) the same way.
+// invokeLocal calls the specialized function over the same combinedHTTPRequest
+// path `function test` uses, attaching the X-Fission-Function-* headers and
+// rendering the response (or RFC-0015 failure attribution) the same way. It
+// talks directly to a locally-specialized pod, not the router internal
+// listener, so it attaches the bearer token (not HMAC) and sets no
+// invoke-mode header.
 func invokeLocal(ctx context.Context, cfg runConfig, hostPort int, stdout, stderr io.Writer) error {
 	url := fmt.Sprintf("http://%s:%d%s", localhostAddr, hostPort, invokePath(cfg.subPath))
 	headers := append(functionHeaders(cfg.functionMeta), cfg.headers...)
 
-	resp, err := DoHTTPRequest(ctx, url, headers, cfg.method, cfg.body)
+	resp, err := combinedHTTPRequest(ctx, invokeOptions{
+		Method:            cfg.method,
+		URL:               url,
+		Body:              cfg.body,
+		Headers:           headers,
+		SignWithHMAC:      false,
+		AttachBearerToken: true,
+	})
 	if err != nil {
 		return err
 	}
