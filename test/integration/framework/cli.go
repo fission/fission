@@ -137,11 +137,33 @@ func (ns *TestNamespace) CLICaptureStdoutBestEffort(t *testing.T, ctx context.Co
 	return ns.cliCaptureStdoutBoth(t, ctx, args...)
 }
 
+// CLICaptureStdoutWithEnv is the env-aware variant of CLICaptureStdout:
+// it sets extra env vars for the duration of the call (restored on return)
+// AND captures os.Stdout in addition to the cobra Out/Err buffer. Used by
+// tests that drive CLI subcommands printing via fmt.Println/os.Stdout
+// while also needing env-resolved flags (e.g. `fission fn test` reading
+// FISSION_INTERNAL_AUTH_SECRET). Holds cliMu.Lock() so concurrent CLI
+// calls don't race on the global stdout or env state.
+func (ns *TestNamespace) CLICaptureStdoutWithEnv(t *testing.T, ctx context.Context, env map[string]string, args ...string) string {
+	t.Helper()
+	out, err := ns.cliCaptureStdoutBothWithEnv(t, ctx, env, args...)
+	require.NoErrorf(t, err, "fission %s\n%s", strings.Join(args, " "), out)
+	return out
+}
+
 func (ns *TestNamespace) cliCaptureStdoutBoth(t *testing.T, ctx context.Context, args ...string) (string, error) {
 	t.Helper()
-	ns.f.logger.Info("CLICaptureStdout", "ns", ns.Name, "args", args)
+	return ns.cliCaptureStdoutBothWithEnv(t, ctx, nil, args...)
+}
+
+func (ns *TestNamespace) cliCaptureStdoutBothWithEnv(t *testing.T, ctx context.Context, env map[string]string, args ...string) (string, error) {
+	t.Helper()
+	ns.f.logger.Info("CLICaptureStdout", "ns", ns.Name, "env", env, "args", args)
 	cliMu.Lock()
 	defer cliMu.Unlock()
+
+	restore := setEnvOverrides(env)
+	defer restore()
 
 	origStdout := os.Stdout
 	r, w, err := os.Pipe()

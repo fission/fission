@@ -415,3 +415,21 @@ func TestFunctionPodLogs(t *testing.T) {
 		assert.Contains(t, err.Error(), "no active pods")
 	})
 }
+
+// TestGetRouterInternalURLIgnoresPublicRouterVar locks in that the internal
+// listener's resolution never falls back to FISSION_ROUTER_URL (the public
+// listener's override): the two are unrelated env vars, and a fallback here
+// would silently point `fn test`/`fn test --async` HMAC-signed requests at
+// the wrong (public) listener. With FISSION_ROUTER_INTERNAL_URL unset and no
+// cluster to port-forward to, resolution must fail on pod discovery, not
+// quietly succeed with the public URL.
+func TestGetRouterInternalURLIgnoresPublicRouterVar(t *testing.T) {
+	t.Setenv("FISSION_ROUTER_URL", "http://should-not-be-used.invalid")
+	t.Setenv("FISSION_ROUTER_INTERNAL_URL", "")
+
+	client := cmd.Client{KubernetesClient: k8sfake.NewClientset()}
+	_, err := GetRouterInternalURL(t.Context(), client)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "should-not-be-used")
+	assert.Contains(t, err.Error(), "no available pod")
+}

@@ -51,7 +51,7 @@ const (
 
 // functionHeaders renders the X-Fission-Function-* metadata headers the router
 // attaches in-cluster (setFunctionMetadataToHeader), in the "Key:Value" form
-// DoHTTPRequest consumes — so a local invocation carries the same function
+// combinedHTTPRequest consumes — so a local invocation carries the same function
 // context as an in-cluster one.
 func functionHeaders(meta metav1.ObjectMeta) []string {
 	return []string{

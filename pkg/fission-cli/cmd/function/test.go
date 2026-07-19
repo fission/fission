@@ -7,6 +7,7 @@ package function
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +16,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"errors"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -63,42 +62,6 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		Namespace: namespace,
 	}
 
-	routerURL, err := util.GetRouterURL(input.Context(), opts.Client())
-	if err != nil {
-		return fmt.Errorf("error getting router URL: %w", err)
-	}
-	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
-	if input.IsSet(flagkey.FnSubPath) {
-		subPath := input.String(flagkey.FnSubPath)
-		if !strings.HasPrefix(subPath, "/") {
-			fnURI = fnURI + "/" + subPath
-		} else {
-			fnURI = fnURI + subPath
-		}
-	}
-	fnURL := routerURL.JoinPath(fnURI)
-	console.Verbose(2, "Function test url: %v", fnURL.String())
-
-	queryParams := input.StringSlice(flagkey.FnTestQuery)
-	if len(queryParams) > 0 {
-		query := url.Values{}
-		for _, q := range queryParams {
-			queryParts := strings.SplitN(q, "=", 2)
-			var key, value string
-			if len(queryParts) == 0 {
-				continue
-			}
-			if len(queryParts) > 0 {
-				key = queryParts[0]
-			}
-			if len(queryParts) > 1 {
-				value = queryParts[1]
-			}
-			query.Set(key, value)
-		}
-		fnURL.RawQuery = query.Encode()
-	}
-
 	var (
 		ctx        context.Context
 		reqTimeout time.Duration
@@ -109,7 +72,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 
 	if input.IsSet(flagkey.FnTestTimeout) && (fnTestTimeout < fnSpecTimeout) {
 		reqTimeout = fnTestTimeout
-		console.Warn(fmt.Sprintf("timeout specified is less than functionTimeout %d Overriding value to %d", fnTestTimeout, fnSpecTimeout))
+		console.Warn(fmt.Sprintf("test timeout %s is less than functionTimeout %s; using the smaller test timeout", fnTestTimeout, fnSpecTimeout))
 	} else {
 		reqTimeout = fnSpecTimeout
 	}
@@ -118,7 +81,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		ctx = input.Context()
 	} else {
 		var closeCtx context.CancelFunc
-		ctx, closeCtx = context.WithTimeoutCause(input.Context(), reqTimeout, fmt.Errorf("function request timeout (%d)s exceeded", reqTimeout))
+		ctx, closeCtx = context.WithTimeoutCause(input.Context(), reqTimeout, fmt.Errorf("function request timeout (%s) exceeded", reqTimeout.String()))
 		defer closeCtx()
 	}
 
@@ -132,17 +95,55 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	if input.Bool(flagkey.FnTestAsync) {
-		return opts.invokeAsync(ctx, input, m, method)
+	isAsync := input.Bool(flagkey.FnTestAsync)
+
+	// Sync and async both hit the router INTERNAL listener (port 8889,
+	// svc/router-internal) for /fission-function/<ns>/<name> — the public
+	// listener (8888) no longer serves that path after GHSA-3g33-6vg6-27m8.
+	// HMAC signing is applied when FISSION_INTERNAL_AUTH_SECRET is set; empty
+	// secret = pass-through (matches the chart's internalAuth.enabled=false).
+	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
+	if err != nil {
+		return fmt.Errorf("resolving the router internal listener: %w", err)
 	}
-	resp, err := DoHTTPRequest(ctx, fnURL.String(),
-		input.StringSlice(flagkey.FnTestHeader),
-		method,
-		input.String(flagkey.FnTestBody))
+
+	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
+	if input.IsSet(flagkey.FnSubPath) {
+		subPath := input.String(flagkey.FnSubPath)
+		if !strings.HasPrefix(subPath, "/") {
+			fnURI += "/"
+		}
+		fnURI += subPath
+	}
+	fnURL := internalURL.JoinPath(fnURI)
+	if q := testQueryValues(input); len(q) > 0 {
+		fnURL.RawQuery = q.Encode()
+	}
+
+	invokeMode := ""
+	if isAsync {
+		// Set the invoke-mode header LAST (inside combinedHTTPRequest) so
+		// --async stays authoritative over a user -H "X-Fission-Invoke-Mode: sync".
+		invokeMode = asyncinvoke.InvokeModeAsync
+	}
+	invokeOpts := invokeOptions{
+		Method:            method,
+		URL:               fnURL.String(),
+		Headers:           input.StringSlice(flagkey.FnTestHeader),
+		Body:              input.String(flagkey.FnTestBody),
+		SignWithHMAC:      true,
+		AttachBearerToken: false,
+		InvokeModeHeader:  invokeMode,
+	}
+	resp, err := combinedHTTPRequest(ctx, invokeOpts)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+
+	if isAsync {
+		return handleAsyncResponse(resp)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -160,71 +161,36 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		os.Stdout.Write(body)
 		return nil
 	}
-
-	// On failure, render the structured RFC-0015 attribution when the router
-	// produced one (X-Fission-Component header), else the legacy raw body.
-	renderInvocationFailure(os.Stderr, m.Name, resp.StatusCode,
-		resp.Header.Get(correlation.HeaderComponent), body)
-
-	err = util.FunctionPodLogs(input.Context(), m.Name, m.Namespace, opts.Client())
-	if err != nil {
-		console.Errorf("getting function logs: %v. Try to get logs from log database.", err)
-		err = Log(input)
+	switch resp.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("router rejected the request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
+	default:
+		// On failure, render the structured RFC-0015 attribution when the router
+		// produced one (X-Fission-Component header), else the legacy raw body.
+		renderInvocationFailure(os.Stderr, m.Name, resp.StatusCode,
+			resp.Header.Get(correlation.HeaderComponent), body)
+		err = util.FunctionPodLogs(input.Context(), m.Name, m.Namespace, opts.Client())
 		if err != nil {
-			console.Errorf("getting function logs from log database: %v", err)
+			console.Errorf("getting function logs: %v. Try to get logs from log database.", err)
+			err = Log(input)
+			if err != nil {
+				console.Errorf("getting function logs from log database: %v", err)
+			}
 		}
+		if reqID != "" {
+			fmt.Fprintf(os.Stderr, "Correlated logs: fission function logs --name %s --request-id %s --dbtype loki\n", m.Name, reqID)
+		}
+		return errors.New("error getting function response")
 	}
-	if reqID != "" {
-		fmt.Fprintf(os.Stderr, "Correlated logs: fission function logs --name %s --request-id %s --dbtype loki\n", m.Name, reqID)
-	}
-	return errors.New("error getting function response")
 }
 
-// invokeAsync runs `fission function test --async` (RFC-0024): it POSTs to the
-// function on the router INTERNAL listener with X-Fission-Invoke-Mode: async,
-// HMAC-signing the request (ServiceRouterInternal) when FISSION_INTERNAL_AUTH_SECRET
-// is set so the internal verifier accepts it. The router returns 202 with the
-// durable invocation id, which is printed; the response body is not awaited.
-func (opts *TestSubCommand) invokeAsync(ctx context.Context, input cli.Input, m *metav1.ObjectMeta, method string) error {
-	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
-	if err != nil {
-		return fmt.Errorf("resolving the router internal listener: %w", err)
-	}
-	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
-	if input.IsSet(flagkey.FnSubPath) {
-		subPath := input.String(flagkey.FnSubPath)
-		if !strings.HasPrefix(subPath, "/") {
-			fnURI += "/"
-		}
-		fnURI += subPath
-	}
-	fnURL := internalURL.JoinPath(fnURI)
-	if q := testQueryValues(input); len(q) > 0 {
-		fnURL.RawQuery = q.Encode()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, fnURL.String(), strings.NewReader(input.String(flagkey.FnTestBody)))
-	if err != nil {
-		return err
-	}
-	for _, h := range input.StringSlice(flagkey.FnTestHeader) {
-		if k, v, ok := strings.Cut(h, ":"); ok {
-			req.Header.Set(strings.TrimSpace(k), strings.TrimSpace(v))
-		}
-	}
-	// Set the async mode header LAST so --async is authoritative: a user --header
-	// (e.g. -H "X-Fission-Invoke-Mode: sync") cannot silently downgrade the request.
-	req.Header.Set(asyncinvoke.HeaderInvokeMode, asyncinvoke.InvokeModeAsync)
-
-	var transport http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
-	if secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); secret != "" {
-		transport = hmacauth.NewServiceSigningTransport([]byte(secret), hmacauth.ServiceRouterInternal, transport, "/fission-function/")
-	}
-	resp, err := (&http.Client{Transport: transport}).Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+// handleAsyncResponse interprets the router's response to a `fission function
+// test --async` (RFC-0024) request: 202 carries the durable invocation id
+// (in the X-Fission-Invocation-Id header, or the JSON body as a fallback),
+// which is printed; the response body is otherwise not awaited. The body is
+// capped at 8KiB since only NotImplemented/error bodies are ever read in full
+// here, never a function's real payload.
+func handleAsyncResponse(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 
 	switch resp.StatusCode {
@@ -292,46 +258,73 @@ func renderInvocationFailure(out io.Writer, fnName string, statusCode int, compo
 	}
 }
 
-// DoHTTPRequest performs the shared CLI function-invoke request: it sets up the
-// OTel transport, injects the auth token and the caller's headers, optionally
-// dumps the request/response in verbose mode, and returns the response. Shared
-// by `function test` and `function run` (RFC-0018) so the local and in-cluster
-// invoke paths are byte-identical.
-func DoHTTPRequest(ctx context.Context, url string, headers []string, method, body string) (*http.Response, error) {
-	shutdown, err := otelUtils.InitProvider(ctx, logr.Logger{}, "fission-cli")
+type invokeOptions struct {
+	Method            string // raw, gets validated/normalized internally
+	URL               string
+	Body              string
+	Headers           []string // --header flags;
+	SignWithHMAC      bool     // fn test paths: true; invokeLocal: false
+	AttachBearerToken bool     //invokeLocal: true; fn test paths: false
+	InvokeModeHeader  string   // "" for sync, async.InvokeModeAsync for -- async; "" for invokeLocal
+}
+
+// combinedHTTPRequest builds and sends the HTTP request behind a function
+// invocation, applying HMAC signing, a bearer token, and/or an invoke-mode
+// header per opts. It is shared by `function test` (do, above) and `function
+// run`'s local invoke (invokeLocal, in run.go) so both paths build and send
+// requests identically.
+func combinedHTTPRequest(ctx context.Context, opts invokeOptions) (*http.Response, error) {
+	method, err := httptrigger.GetMethod(opts.Method)
 	if err != nil {
 		return nil, err
+	}
+	shutdown, err := otelUtils.InitProvider(ctx, logr.Logger{}, "fission-cli")
+	if err != nil {
+		console.Warn(fmt.Sprintf("otel init failed: %v", err))
 	}
 	if shutdown != nil {
 		defer shutdown(ctx)
 	}
-
 	tracer := otel.Tracer("fission-cli")
-	ctx, span := tracer.Start(ctx, "httpRequest")
+	spanCtx, span := tracer.Start(ctx, "httpRequest")
 	defer span.End()
-
-	method, err = httptrigger.GetMethod(method)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(spanCtx, method, opts.URL, strings.NewReader(opts.Body))
 	if err != nil {
 		return nil, fmt.Errorf("error creating HTTP request: %w", err)
 	}
-
-	accesstoken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
-	if ok && len(accesstoken) != 0 {
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", accesstoken))
-	}
-
-	for _, header := range headers {
+	for _, header := range opts.Headers {
 		headerKeyValue := strings.SplitN(header, ":", 2)
 		if len(headerKeyValue) != 2 {
 			return nil, errors.New("failed to create request without appropriate headers")
 		}
 		req.Header.Set(headerKeyValue[0], headerKeyValue[1])
 	}
+
+	if opts.AttachBearerToken {
+		accessToken, ok := os.LookupEnv(util.FISSION_AUTH_TOKEN)
+		if ok && len(accessToken) != 0 {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %v", accessToken))
+		}
+	}
+
+	if opts.InvokeModeHeader != "" {
+		req.Header.Set(asyncinvoke.HeaderInvokeMode, opts.InvokeModeHeader)
+	}
+
+	var transport http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	if opts.SignWithHMAC {
+		secret := os.Getenv("FISSION_INTERNAL_AUTH_SECRET")
+		if secret != "" {
+			transport = hmacauth.NewServiceSigningTransport(
+				[]byte(secret),
+				hmacauth.ServiceRouterInternal,
+				transport,
+				"/fission-function/",
+			)
+		}
+	}
+
+	hc := &http.Client{Transport: transport}
 
 	if console.Verbosity >= 2 {
 		dumpReq, err := httputil.DumpRequestOut(req, false)
@@ -341,12 +334,10 @@ func DoHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		console.Verbose(2, "%s", string(dumpReq))
 	}
 
-	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
-	resp, err := hc.Do(req.WithContext(ctx))
+	resp, err := hc.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error executing HTTP request: %w", err)
 	}
-
 	if console.Verbosity >= 2 {
 		dumpRes, err := httputil.DumpResponse(resp, false)
 		if err != nil {
@@ -354,6 +345,5 @@ func DoHTTPRequest(ctx context.Context, url string, headers []string, method, bo
 		}
 		console.Verbose(2, "%s", string(dumpRes))
 	}
-
 	return resp, nil
 }
