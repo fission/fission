@@ -35,3 +35,7 @@ func (m *MessageQueueTrigger) GetConditions() *[]metav1.Condition {
 func (c *CanaryConfig) GetConditions() *[]metav1.Condition { return &c.Status.Conditions }
 
 func (ft *FissionTenant) GetConditions() *[]metav1.Condition { return &ft.Status.Conditions }
+
+func (w *Workflow) GetConditions() *[]metav1.Condition { return &w.Status.Conditions }
+
+func (wr *WorkflowRun) GetConditions() *[]metav1.Condition { return &wr.Status.Conditions }

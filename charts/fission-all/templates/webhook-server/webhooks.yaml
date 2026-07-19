@@ -43,6 +43,27 @@ webhooks:
     resources:
     - packages
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $caBundleValue }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /mutate-fission-io-v1-workflow
+  failurePolicy: Fail
+  name: mworkflow.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workflows
+  sideEffects: None
 ---
 
 apiVersion: admissionregistration.k8s.io/v1
@@ -159,4 +180,46 @@ webhooks:
     - UPDATE
     resources:
     - packages
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $caBundleValue }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-workflow
+  failurePolicy: Fail
+  name: vworkflow.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workflows
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $caBundleValue }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-workflowrun
+  failurePolicy: Fail
+  name: vworkflowrun.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workflowruns
   sideEffects: None

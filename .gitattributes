@@ -1,0 +1,5 @@
+# Collapse generated output in GitHub diffs; the sources of truth are the
+# Go types (make codegen / generate-crds) — never hand-edit these paths.
+pkg/generated/** linguist-generated=true
+**/zz_generated*.go linguist-generated=true
+crds/v1/*.yaml linguist-generated=true

@@ -1,0 +1,117 @@
+{{- if dig "enabled" false .Values.workflows }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: workflow
+    application: fission-workflow
+spec:
+  # Single replica in v1: correctness never depends on it (the engine's
+  # CAS-append discipline is the arbiter), one replica just avoids wasted
+  # duplicate invocations from racing reconcilers.
+  replicas: {{ dig "replicas" 1 (.Values.workflows | default dict) }}
+  selector:
+    matchLabels:
+      svc: workflow
+  template:
+    metadata:
+      labels:
+        svc: workflow
+        application: fission-workflow
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
+    spec:
+      {{- if (dig "securityContext" (dict "enabled" false) (.Values.workflows | default dict)).enabled }}
+      securityContext: {{- omit .Values.workflows.securityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: workflow
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--workflowPort", "{{ include "fission.workflowPort" . }}"]
+        env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # The engine invokes functions on the router internal listener,
+        # signed like the timer/mqtrigger publishers (internalAuth.envs).
+        - name: ROUTER_INTERNAL_URL
+          value: {{ include "fission.routerInternalURL" . | quote }}
+        # Run history/state lives in the statestore (render-gated: the
+        # statestore validate template fails render when workflows.enabled
+        # && !statestore.enabled).
+        {{- if eq .Values.statestore.mode "embedded" }}
+        - name: STATESTORE_DRIVER
+          value: "client"
+        - name: STATESTORE_DSN
+          value: "http://statestore.{{ .Release.Namespace }}:{{ include "fission.statestorePort" . }}"
+        {{- else if eq .Values.statestore.mode "external" }}
+        - name: STATESTORE_DRIVER
+          value: "postgres"
+        - name: STATESTORE_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.statestore.external.existingSecret | default "statestore-postgres" }}
+              key: dsn
+        {{- end }}
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "kube_client.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        ports:
+        - containerPort: {{ include "fission.workflowPort" . }}
+          name: workflow
+        - containerPort: 8080
+          name: metrics
+        {{- if .Values.pprof.enabled }}
+        - containerPort: 6060
+          name: pprof
+        {{- end }}
+        # /readyz gates on cache sync AND a statestore ping — a replica that
+        # cannot reach its log must not be serviced.
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ include "fission.workflowPort" . }}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ include "fission.workflowPort" . }}
+          periodSeconds: 30
+        resources:
+          {{- toYaml (dig "resources" dict (.Values.workflows | default dict)) | nindent 10 }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+        {{- if .Values.coverage.enabled }}
+        volumeMounts:
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+      serviceAccountName: fission-workflow
+      {{- if .Values.coverage.enabled }}
+      volumes:
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- if .Values.extraCoreComponentPodConfig }}
+{{ toYaml .Values.extraCoreComponentPodConfig | indent 6 -}}
+{{- end }}
+{{- end }}

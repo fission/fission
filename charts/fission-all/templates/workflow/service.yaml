@@ -1,0 +1,20 @@
+{{- if dig "enabled" false .Values.workflows }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: workflow
+    application: fission-workflow
+spec:
+  # ClusterIP-only: health probes plus the HMAC-verified run-history read
+  # endpoint the CLI reaches over a port-forward. Never exposed publicly.
+  type: ClusterIP
+  ports:
+  - name: workflow
+    port: {{ include "fission.workflowPort" . }}
+    targetPort: {{ include "fission.workflowPort" . }}
+  selector:
+    svc: workflow
+{{- end }}

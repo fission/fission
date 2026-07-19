@@ -12,7 +12,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -20,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statestore/httpapi"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 func init() {
@@ -39,14 +42,27 @@ func init() {
 // here at the driver-open boundary (not in New) so the deterministic New(dsn, hc)
 // constructor stays env-free for tests.
 func signedClient() *http.Client {
+	// A pooled transport, not http.DefaultTransport: its MaxIdleConnsPerHost
+	// of 2 forces every statestore call beyond two-way concurrency onto a
+	// fresh connection, piling client-side TIME_WAIT until dials fail with
+	// EADDRNOTAVAIL under parallel-join bursts.
+	base := httpx.PooledTransport(64)
 	master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET")
 	if master == "" {
-		return &http.Client{Timeout: 30 * time.Second} // nil Transport → http.DefaultTransport (unsigned)
+		return &http.Client{Transport: base, Timeout: 30 * time.Second} // unsigned (pass-through mode)
 	}
 	return &http.Client{
-		Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceStatestore, http.DefaultTransport, time.Now),
+		Transport: hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceStatestore, base, time.Now),
 		Timeout:   30 * time.Second,
 	}
+}
+
+// drainClose reads the response to EOF (bounded) before closing so the
+// connection returns to the pool — json.Decoder stops at the end of the
+// value and the trailing newline alone defeats keep-alive reuse.
+func drainClose(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	_ = resp.Body.Close()
 }
 
 // Client is an HTTP-backed Capabilities. It implements all three capability
@@ -81,7 +97,7 @@ func (c *Client) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainClose(resp)
 	if resp.StatusCode/100 != 2 {
 		return decodeErr(resp)
 	}
@@ -105,7 +121,7 @@ func (c *Client) post(ctx context.Context, path string, req, out any) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer drainClose(resp)
 	if resp.StatusCode/100 != 2 {
 		return decodeErr(resp)
 	}
@@ -121,7 +137,23 @@ func decodeErr(resp *http.Response) error {
 	if e.Code == "" {
 		return fmt.Errorf("statestore/client: unexpected status %d", resp.StatusCode)
 	}
+	if e.Code == httpapi.CodeVersionConflict {
+		// Carry the head so Append can resynchronize; it still Is-matches
+		// ErrVersionConflict for every other caller.
+		return &conflictError{head: e.Head}
+	}
 	return httpapi.CodeToErr(e.Code, e.Message)
+}
+
+// conflictError is an ErrVersionConflict that carries the stream head the
+// server reported, so EventLog.Append can return it (the contract makes the
+// head meaningful on a conflict). It Is-matches the sentinel so callers that
+// only test errors.Is(err, ErrVersionConflict) are unaffected.
+type conflictError struct{ head int64 }
+
+func (e *conflictError) Error() string { return statestore.ErrVersionConflict.Error() }
+func (e *conflictError) Is(target error) bool {
+	return target == statestore.ErrVersionConflict
 }
 
 // --- KVStore ---
@@ -157,6 +189,11 @@ func (c *Client) List(ctx context.Context, s statestore.Scope, prefix string, pa
 func (c *Client) Append(ctx context.Context, stream string, expectedSeq int64, events []statestore.Event) (int64, error) {
 	var resp httpapi.EventAppendResp
 	if err := c.post(ctx, httpapi.PathEventAppend, httpapi.EventAppendReq{Stream: stream, ExpectedSeq: expectedSeq, Events: events}, &resp); err != nil {
+		// A conflict carries the current head so the CAS caller can
+		// resynchronize (contract: the head is meaningful on ErrVersionConflict).
+		if ce, ok := errors.AsType[*conflictError](err); ok {
+			return ce.head, statestore.ErrVersionConflict
+		}
 		return 0, err
 	}
 	return resp.Head, nil

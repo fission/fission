@@ -8,6 +8,7 @@ import (
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -27,6 +28,62 @@ const (
 	// RouteProviderGateway creates a gateway.networking.k8s.io HTTPRoute.
 	RouteProviderGateway RouteProviderType = "gateway"
 )
+
+// Workflow state kinds (RFC-0022). The enum marker on WorkflowStateType must
+// list exactly these values; both grow together as later phases add
+// Parallel/Map/Wait.
+const (
+	WorkflowStateTask     WorkflowStateType = "Task"
+	WorkflowStateChoice   WorkflowStateType = "Choice"
+	WorkflowStateParallel WorkflowStateType = "Parallel"
+	WorkflowStateMap      WorkflowStateType = "Map"
+	WorkflowStateWait     WorkflowStateType = "Wait"
+	WorkflowStateSucceed  WorkflowStateType = "Succeed"
+	WorkflowStateFail     WorkflowStateType = "Fail"
+)
+
+// WorkflowRun lifecycle phases.
+const (
+	WorkflowRunPending   WorkflowRunPhase = "Pending"
+	WorkflowRunRunning   WorkflowRunPhase = "Running"
+	WorkflowRunSucceeded WorkflowRunPhase = "Succeeded"
+	WorkflowRunFailed    WorkflowRunPhase = "Failed"
+	WorkflowRunCancelled WorkflowRunPhase = "Cancelled"
+	WorkflowRunTimedOut  WorkflowRunPhase = "TimedOut"
+)
+
+// Built-in workflow error classes: the wire contract Catch routes on. A
+// function signals a typed error by returning non-2xx with a JSON body
+// {"errorType": "<Name>", "cause": ...}; these built-ins classify everything
+// else (4xx = permanent, 5xx/transport = retryable, attempt timeout).
+const (
+	WorkflowErrAll             = "Fission.All"
+	WorkflowErrPermanentError  = "Fission.PermanentError"
+	WorkflowErrFunctionError   = "Fission.FunctionError"
+	WorkflowErrTimeout         = "Fission.Timeout"
+	WorkflowErrInvalidPath     = "Fission.InvalidPath"
+	WorkflowErrNoChoiceMatched = "Fission.NoChoiceMatched"
+	// WorkflowErrFailed is the class a bare Fail state fails the run with.
+	WorkflowErrFailed = "Fission.Failed"
+	// WorkflowErrBranchFailed is the class a Parallel/Map state fails with
+	// when a branch fails terminally (fail-fast); a Catch on the state may
+	// route it.
+	WorkflowErrBranchFailed = "Fission.BranchFailed"
+)
+
+// WorkflowBuiltinErrorTypes is the canonical list of the classes above —
+// consumers (e.g. the webhook's typo warning) derive lookups from it rather
+// than re-enumerating the constants and drifting.
+var WorkflowBuiltinErrorTypes = []string{
+	WorkflowErrAll,
+	WorkflowErrPermanentError,
+	WorkflowErrFunctionError,
+	WorkflowErrTimeout,
+	WorkflowErrInvalidPath,
+	WorkflowErrNoChoiceMatched,
+	WorkflowErrFailed,
+	WorkflowErrBranchFailed,
+}
 
 //
 // To add a Fission CRD type:
@@ -280,6 +337,384 @@ type (
 		// Conditions are the latest observations of the tenant's state:
 		// RBACProvisioned, ServiceAccountsReady, AuthKeyProvisioned, WatchActive,
 		// and the Ready rollup.
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	//
+	// Workflows (RFC-0022)
+	//
+
+	// Workflow declares a durable state machine whose task states are Fission
+	// functions (RFC-0022). The engine executes WorkflowRuns against a snapshot
+	// of this spec embedded in the run's event stream; editing a Workflow never
+	// changes in-flight runs.
+	// +genclient
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:scope="Namespaced",shortName={wf}
+	// +kubebuilder:printcolumn:name="StartAt",type=string,JSONPath=`.spec.startAt`
+	// +kubebuilder:printcolumn:name="Validated",type=string,JSONPath=`.status.conditions[?(@.type=="Validated")].status`
+	// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+	Workflow struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              WorkflowSpec `json:"spec"`
+		// +optional
+		Status WorkflowStatus `json:"status,omitempty"`
+	}
+
+	// WorkflowList is a list of Workflows.
+	// +kubebuilder:object:root=true
+	WorkflowList struct {
+		metav1.TypeMeta `json:",inline"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []Workflow `json:"items"`
+	}
+
+	// WorkflowRun is one execution of a Workflow. Full step history lives in
+	// the statestore EventLog stream for the run, never in etcd; status carries
+	// a bounded tail for kubectl visibility.
+	// +genclient
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:scope="Namespaced",shortName={wfr}
+	// +kubebuilder:printcolumn:name="Workflow",type=string,JSONPath=`.spec.workflowRef`
+	// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+	// +kubebuilder:printcolumn:name="Started",type=date,JSONPath=`.status.startedAt`
+	// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+	WorkflowRun struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              WorkflowRunSpec `json:"spec"`
+		// +optional
+		Status WorkflowRunStatus `json:"status,omitempty"`
+	}
+
+	// WorkflowRunList is a list of WorkflowRuns.
+	// +kubebuilder:object:root=true
+	WorkflowRunList struct {
+		metav1.TypeMeta `json:",inline"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []WorkflowRun `json:"items"`
+	}
+
+	// WorkflowStateType enumerates the state kinds the engine executes.
+	// +kubebuilder:validation:Enum=Task;Choice;Parallel;Map;Wait;Succeed;Fail
+	WorkflowStateType string
+
+	// WorkflowSpec is a state machine: states are data, logic lives in
+	// functions.
+	WorkflowSpec struct {
+		// StartAt names the state execution begins at.
+		StartAt string `json:"startAt"`
+
+		// States is the state machine graph, keyed by state name. The size
+		// bound mirrors validation.MaxWorkflowStates and lets the apiserver's
+		// CEL cost estimator bound rules on nested types.
+		// +kubebuilder:validation:MinProperties=1
+		// +kubebuilder:validation:MaxProperties=100
+		States map[string]WorkflowState `json:"states"`
+
+		// DefaultRetry applies to Task states that do not set their own Retry.
+		// +optional
+		DefaultRetry *RetryPolicy `json:"defaultRetry,omitempty"`
+
+		// Timeout bounds a whole run; expiry fails it with errorType
+		// Fission.Timeout. Defaults to 24h (a mis-authored graph or endlessly
+		// caught-and-retried loop must not hold an active run forever).
+		// +optional
+		Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+		// HistoryRetention bounds stored history (count + age) per finished run.
+		// +optional
+		HistoryRetention *WorkflowRetentionPolicy `json:"historyRetention,omitempty"`
+	}
+
+	// WorkflowState is one state in the machine. Exactly the fields for its
+	// Type may be set (enforced at admission).
+	WorkflowState struct {
+		Type WorkflowStateType `json:"type"`
+
+		// Function is the Task state's target.
+		// +optional
+		Function *FunctionReference `json:"function,omitempty"`
+
+		// Timeout bounds one attempt of a Task invocation.
+		// +optional
+		Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+		// Retry overrides the workflow's DefaultRetry for this Task.
+		// +optional
+		Retry *RetryPolicy `json:"retry,omitempty"`
+
+		// Catch routes a failed Task (retries exhausted, or a permanent error)
+		// to another state by matched errorType; first match wins.
+		// +optional
+		Catch []WorkflowCatchRoute `json:"catch,omitempty"`
+
+		// Choices are the Choice state's ordered rules; first match wins.
+		// +optional
+		Choices []WorkflowChoiceRule `json:"choices,omitempty"`
+
+		// Default names the state a Choice falls through to when no rule
+		// matches; without it, no-match fails the run (Fission.NoChoiceMatched).
+		// +optional
+		Default string `json:"default,omitempty"`
+
+		// Branches are the Parallel state's concurrent sub-machines (or the
+		// Map state's single iterator template). Branch states cannot nest
+		// further fan-out — enforced by the bounded WorkflowBranchState type.
+		// +optional
+		// +kubebuilder:validation:MaxItems=10
+		Branches []WorkflowBranch `json:"branches,omitempty"`
+
+		// ItemsPath selects the array a Map state iterates (one branch per
+		// element, input = the element).
+		// +optional
+		ItemsPath string `json:"itemsPath,omitempty"`
+
+		// Duration is how long a Wait state pauses the run — durably: the
+		// delay is a statestore Queue message, so a controller restart never
+		// loses it (robfig/cron-style absolute schedules stay with the timer
+		// subsystem; only durations here).
+		// +optional
+		Duration *metav1.Duration `json:"duration,omitempty"`
+
+		// MaxConcurrency throttles how many branches execute at once. Zero
+		// means the engine default (10) — NOT unbounded: an unthrottled
+		// large Map against poolmgr is a self-inflicted cold-start burst.
+		// The default is applied by the engine, not the schema: a schema
+		// default would stamp the field onto every state type.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxConcurrency int32 `json:"maxConcurrency,omitempty"`
+
+		// InputPath/ResultPath/OutputPath shape step I/O with JSONPath
+		// (Step Functions semantics; dialect pinned in pkg/workflow/expr).
+		// +optional
+		InputPath string `json:"inputPath,omitempty"`
+		// +optional
+		ResultPath string `json:"resultPath,omitempty"`
+		// +optional
+		OutputPath string `json:"outputPath,omitempty"`
+
+		// Next names the state to run after this one; exactly one of Next/End
+		// is set on Task states (Succeed/Fail are implicitly terminal).
+		// +optional
+		Next string `json:"next,omitempty"`
+		// +optional
+		End bool `json:"end,omitempty"`
+	}
+
+	// WorkflowBranch is one concurrent sub-machine of a Parallel state (or
+	// the iterator template of a Map state).
+	WorkflowBranch struct {
+		StartAt string `json:"startAt"`
+		// MaxProperties=20 (vs 100 top-level) keeps the apiserver's CEL cost
+		// estimate for doubly-nested rules under budget — the phase-1 lesson.
+		// +kubebuilder:validation:MinProperties=1
+		// +kubebuilder:validation:MaxProperties=20
+		States map[string]WorkflowBranchState `json:"states"`
+	}
+
+	// WorkflowBranchState is WorkflowState minus the fan-out fields: nested
+	// Parallel/Map is impossible BY TYPE, which is what keeps the CRD schema
+	// non-recursive (controller-gen cannot render a self-referential type).
+	WorkflowBranchState struct {
+		Type WorkflowStateType `json:"type"`
+		// +optional
+		Function *FunctionReference `json:"function,omitempty"`
+		// +optional
+		Duration *metav1.Duration `json:"duration,omitempty"`
+		// +optional
+		Timeout *metav1.Duration `json:"timeout,omitempty"`
+		// +optional
+		Retry *RetryPolicy `json:"retry,omitempty"`
+		// +optional
+		Catch []WorkflowCatchRoute `json:"catch,omitempty"`
+		// +optional
+		Choices []WorkflowChoiceRule `json:"choices,omitempty"`
+		// +optional
+		Default string `json:"default,omitempty"`
+		// +optional
+		InputPath string `json:"inputPath,omitempty"`
+		// +optional
+		ResultPath string `json:"resultPath,omitempty"`
+		// +optional
+		OutputPath string `json:"outputPath,omitempty"`
+		// +optional
+		Next string `json:"next,omitempty"`
+		// +optional
+		End bool `json:"end,omitempty"`
+	}
+
+	// WorkflowCatchRoute routes a matched error class to a next state.
+	WorkflowCatchRoute struct {
+		// ErrorType matches a typed function error ({"errorType": ...} body),
+		// a built-in class (Fission.PermanentError, Fission.FunctionError,
+		// Fission.Timeout), or Fission.All (matches anything).
+		ErrorType string `json:"errorType"`
+		Next      string `json:"next"`
+		// ResultPath, when set, merges the error object
+		// ({"errorType": ..., "cause": ...}) into the flowing document at
+		// this JSONPath, so the catch target still sees the business data
+		// (e.g. retry a charge after a grace period). Unset keeps the
+		// Step-Functions-parity default: the error object REPLACES the
+		// document.
+		// +optional
+		ResultPath string `json:"resultPath,omitempty"`
+	}
+
+	// WorkflowChoiceCondition is a leaf comparison against the state input.
+	// Exactly one operator must be set. Numeric values use resource.Quantity
+	// (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+	WorkflowChoiceCondition struct {
+		// Variable is a JSONPath into the state's (shaped) input. Required on
+		// every leaf condition — enforced by the webhook, not the schema: this
+		// struct is inline-embedded in WorkflowChoiceRule, and a
+		// schema-required field would wrongly reject composite (and/or/not)
+		// rules that carry no inline leaf.
+		// +optional
+		Variable string `json:"variable,omitempty"`
+		// +optional
+		StringEquals *string `json:"stringEquals,omitempty"`
+		// +optional
+		NumericEquals *resource.Quantity `json:"numericEquals,omitempty"`
+		// +optional
+		NumericGreaterThan *resource.Quantity `json:"numericGreaterThan,omitempty"`
+		// +optional
+		NumericLessThan *resource.Quantity `json:"numericLessThan,omitempty"`
+		// +optional
+		BooleanEquals *bool `json:"booleanEquals,omitempty"`
+		// +optional
+		IsPresent *bool `json:"isPresent,omitempty"`
+		// +optional
+		IsNull *bool `json:"isNull,omitempty"`
+	}
+
+	// WorkflowChoiceRule is one ordered rule of a Choice state: either a leaf
+	// condition (inline) or exactly one of And/Or/Not over leaf conditions
+	// (depth-1 composition; deeper nesting is additive later).
+	WorkflowChoiceRule struct {
+		WorkflowChoiceCondition `json:",inline"`
+
+		// +optional
+		And []WorkflowChoiceCondition `json:"and,omitempty"`
+		// +optional
+		Or []WorkflowChoiceCondition `json:"or,omitempty"`
+		// +optional
+		Not *WorkflowChoiceCondition `json:"not,omitempty"`
+
+		// Next names the state to transition to when this rule matches.
+		Next string `json:"next"`
+	}
+
+	// WorkflowRetentionPolicy bounds retained history for finished runs.
+	WorkflowRetentionPolicy struct {
+		// +optional
+		MaxCount *int32 `json:"maxCount,omitempty"`
+		// +optional
+		MaxAge *metav1.Duration `json:"maxAge,omitempty"`
+	}
+
+	// WorkflowStatus describes the observed state of a Workflow.
+	WorkflowStatus struct {
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	// WorkflowRunPhase is the run's coarse lifecycle phase.
+	// +kubebuilder:validation:Enum=Pending;Running;Succeeded;Failed;Cancelled;TimedOut
+	WorkflowRunPhase string
+
+	// WorkflowRunSpec identifies the Workflow to execute and the run's input.
+	WorkflowRunSpec struct {
+		// WorkflowRef names the Workflow (same namespace) this run executes.
+		WorkflowRef string `json:"workflowRef"`
+
+		// WorkflowGeneration records (for observability) which Workflow
+		// generation this run executes. It is NOT the pinning mechanism: the
+		// authoritative spec is the snapshot the engine embeds in the run's
+		// event stream at RunStarted; a Workflow edit or deletion mid-run can
+		// neither fork nor strand a run. Set by the CLI; 0 means unknown.
+		// +optional
+		WorkflowGeneration int64 `json:"workflowGeneration,omitempty"`
+
+		// Input is the run's initial input document — ANY JSON value
+		// (apiextensionsv1.JSON, not RawExtension: the RawExtension schema is
+		// type=object and the apiserver would reject a bare string/array/
+		// number). Webhook-capped at 256KiB (etcd objects cap at ~1.5MiB) —
+		// pass larger inputs by reference.
+		// +optional
+		Input *apiextensionsv1.JSON `json:"input,omitempty"`
+	}
+
+	// WorkflowRunEventSummary is one bounded-tail history entry for kubectl
+	// visibility; the full history lives in the statestore EventLog.
+	WorkflowRunEventSummary struct {
+		Seq  int64  `json:"seq"`
+		Type string `json:"type"`
+		// +optional
+		State string `json:"state,omitempty"`
+		// +optional
+		Attempt int32       `json:"attempt,omitempty"`
+		At      metav1.Time `json:"at"`
+		// +optional
+		Note string `json:"note,omitempty"`
+	}
+
+	// WorkflowRunStatus describes the observed state of a WorkflowRun.
+	WorkflowRunStatus struct {
+		// +optional
+		Phase WorkflowRunPhase `json:"phase,omitempty"`
+
+		// ActiveStates lists the state names currently executing.
+		// +optional
+		ActiveStates []string `json:"activeStates,omitempty"`
+
+		// +optional
+		StartedAt *metav1.Time `json:"startedAt,omitempty"`
+		// +optional
+		FinishedAt *metav1.Time `json:"finishedAt,omitempty"`
+
+		// Output holds the final output inline up to the step-I/O spill
+		// threshold — ANY JSON value (see Input for why apiextensionsv1.JSON);
+		// larger outputs spill to the statestore KV and OutputRef points
+		// there (the CLI dereferences).
+		// +optional
+		Output *apiextensionsv1.JSON `json:"output,omitempty"`
+		// +optional
+		OutputRef string `json:"outputRef,omitempty"`
+
+		// ErrorType and Cause carry the terminal failure classification so
+		// kubectl answers "why did it fail" without the history endpoint.
+		// Cause is bounded; the full detail lives in the run history.
+		// +optional
+		ErrorType string `json:"errorType,omitempty"`
+		// +optional
+		// +kubebuilder:validation:MaxLength=1024
+		Cause string `json:"cause,omitempty"`
+
+		// RecentEvents is a bounded (<=20) tail; full history is in the
+		// EventLog.
+		// +optional
+		RecentEvents []WorkflowRunEventSummary `json:"recentEvents,omitempty"`
+
+		// +optional
+		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 		// +optional
 		// +patchMergeKey=type
 		// +patchStrategy=merge
@@ -863,7 +1298,11 @@ type (
 		// +kubebuilder:validation:Enum=name;function-weights
 		Type FunctionReferenceType `json:"type"`
 
-		// Name of the function.
+		// Name of the function. Bounded to a DNS-1123 label length: the CEL
+		// rule on this type needs the schema bound so the apiserver's cost
+		// estimator can price the regex — without it, embedding the type
+		// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
+		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
 
 		// Function Reference by weight. this map contains function name as key and its weight

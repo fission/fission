@@ -52,6 +52,14 @@ func (c *FakeCoreV1) TimeTriggers(namespace string) v1.TimeTriggerInterface {
 	return newFakeTimeTriggers(c, namespace)
 }
 
+func (c *FakeCoreV1) Workflows(namespace string) v1.WorkflowInterface {
+	return newFakeWorkflows(c, namespace)
+}
+
+func (c *FakeCoreV1) WorkflowRuns(namespace string) v1.WorkflowRunInterface {
+	return newFakeWorkflowRuns(c, namespace)
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeCoreV1) RESTClient() rest.Interface {

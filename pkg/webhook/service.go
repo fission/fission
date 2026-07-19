@@ -75,6 +75,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		&Function{},
 		&MessageQueueTrigger{},
 		&KubernetesWatchTrigger{},
+		&Workflow{},
+		&WorkflowRun{},
 	}
 
 	for _, injector := range webhookInjectors {

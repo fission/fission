@@ -122,6 +122,34 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.ToolConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TopicRef"):
 		return &corev1.TopicRefApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("Workflow"):
+		return &corev1.WorkflowApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowBranch"):
+		return &corev1.WorkflowBranchApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowBranchState"):
+		return &corev1.WorkflowBranchStateApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowCatchRoute"):
+		return &corev1.WorkflowCatchRouteApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowChoiceCondition"):
+		return &corev1.WorkflowChoiceConditionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowChoiceRule"):
+		return &corev1.WorkflowChoiceRuleApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowRetentionPolicy"):
+		return &corev1.WorkflowRetentionPolicyApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowRun"):
+		return &corev1.WorkflowRunApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowRunEventSummary"):
+		return &corev1.WorkflowRunEventSummaryApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowRunSpec"):
+		return &corev1.WorkflowRunSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowRunStatus"):
+		return &corev1.WorkflowRunStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowSpec"):
+		return &corev1.WorkflowSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowState"):
+		return &corev1.WorkflowStateApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("WorkflowStatus"):
+		return &corev1.WorkflowStatusApplyConfiguration{}
 
 	}
 	return nil

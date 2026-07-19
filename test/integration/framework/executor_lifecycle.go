@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -175,22 +174,5 @@ func executorEnvValue(dep *appsv1.Deployment, key string) (string, bool) {
 // see pkg/executor), so a completed rollout means the adopt pass has run.
 func (f *Framework) WaitForExecutorRollout(t *testing.T, ctx context.Context, atLeast int64, timeout time.Duration) {
 	t.Helper()
-	ns := f.FissionNamespace()
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		dep, err := f.kubeClient.AppsV1().Deployments(ns).Get(ctx, executorDeploymentName, metav1.GetOptions{})
-		if !assert.NoErrorf(c, err, "get executor Deployment") {
-			return
-		}
-		want := int32(1)
-		if dep.Spec.Replicas != nil {
-			want = *dep.Spec.Replicas
-		}
-		st := dep.Status
-		assert.GreaterOrEqualf(c, st.ObservedGeneration, atLeast,
-			"executor rollout not yet observed (observed %d, want >= %d)", st.ObservedGeneration, atLeast)
-		assert.Equalf(c, want, st.UpdatedReplicas, "executor updated replicas (rollout in progress?)")
-		assert.Equalf(c, want, st.AvailableReplicas, "executor available replicas")
-		assert.Equalf(c, want, st.Replicas, "executor total replicas (old pod still terminating?)")
-		assert.Zerof(c, st.UnavailableReplicas, "executor unavailable replicas")
-	}, timeout, 2*time.Second)
+	f.WaitForDeploymentRollout(t, ctx, executorDeploymentName, atLeast, timeout)
 }

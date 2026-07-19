@@ -72,6 +72,8 @@ manifests:
           serviceMonitor.namespace: monitoring
           statestore.enabled: "true"
           statestore.mode: "embedded"
+          # RFC-0022 durable workflows ride the same statestore.
+          workflows.enabled: "true"
           storagesvc.archivePruner.enabled: "true"
           storagesvc.archivePruner.interval: "60"
           # Multi-namespace tenancy is static by default; the dynamic-tenancy and

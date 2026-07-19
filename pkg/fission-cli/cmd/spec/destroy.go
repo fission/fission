@@ -95,6 +95,11 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return fmt.Errorf("messageQueueTrigger delete failed: %w", err)
 	}
 
+	_, _, err = applyWorkflows(ctx, fclient, fr, true, false, false)
+	if err != nil {
+		return fmt.Errorf("workflow delete failed: %w", err)
+	}
+
 	_, _, err = applyFunctions(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("function delete failed: %w", err)
@@ -156,6 +161,11 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 			fr.KubernetesWatchTriggers[i].Namespace = currentNS
 		}
 	}
+	for i := range fr.Workflows {
+		if fr.Workflows[i].Namespace == "" {
+			fr.Workflows[i].Namespace = currentNS
+		}
+	}
 
 	return nil
 }
@@ -185,6 +195,11 @@ func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 		return c.MessageQueueTriggers(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	}); err != nil {
 		return fmt.Errorf("messageQueueTrigger delete failed: %w", err)
+	}
+	if err := destroyResources(ctx, fr.Workflows, "workflow", func(ctx context.Context, ns, name string) error {
+		return c.Workflows(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	}); err != nil {
+		return fmt.Errorf("workflow delete failed: %w", err)
 	}
 	if err := destroyResources(ctx, fr.Functions, "function", func(ctx context.Context, ns, name string) error {
 		return c.Functions(ns).Delete(ctx, name, metav1.DeleteOptions{})

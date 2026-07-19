@@ -100,6 +100,7 @@ type (
 		KubernetesWatchTriggers []fv1.KubernetesWatchTrigger
 		TimeTriggers            []fv1.TimeTrigger
 		MessageQueueTriggers    []fv1.MessageQueueTrigger
+		Workflows               []fv1.Workflow
 		ArchiveUploadSpecs      []types.ArchiveUploadSpec
 
 		SourceMap SourceMap
@@ -314,6 +315,12 @@ func crdToYaml(resource any) (metav1.ObjectMeta, string, []byte, error) {
 		meta = typedres.ObjectMeta
 		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
+	case fv1.Workflow:
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "Workflow"
+		meta = typedres.ObjectMeta
+		kind = typedres.Kind
+		data, err = yaml.Marshal(typedres)
 	default:
 		err = fmt.Errorf("unknown object type '%v'", typedres)
 	}
@@ -510,6 +517,18 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		}
 		errs = errors.Join(errs, t.Validate())
 	}
+	for _, w := range fr.Workflows {
+		// A workflow carries one function reference per Task state.
+		for _, st := range w.Spec.States {
+			if st.Function == nil {
+				continue
+			}
+			if err := fr.validateFunctionReference(functions, w.Kind, &w.ObjectMeta, *st.Function); err != nil {
+				errs = errors.Join(errs, err)
+			}
+		}
+		errs = errors.Join(errs, w.Validate())
+	}
 	for _, t := range fr.MessageQueueTriggers {
 		err := fr.validateFunctionReference(functions, t.Kind, &t.ObjectMeta, t.Spec.FunctionReference)
 		if err != nil {
@@ -633,6 +652,14 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		obj, err = parseResource[fv1.KubernetesWatchTrigger](b, tm.Kind, loc, commitLabelVal, &fr.KubernetesWatchTriggers)
 	case "TimeTrigger":
 		obj, err = parseResource[fv1.TimeTrigger](b, tm.Kind, loc, commitLabelVal, &fr.TimeTriggers)
+	case "Workflow":
+		obj, err = parseResource[fv1.Workflow](b, tm.Kind, loc, commitLabelVal, &fr.Workflows)
+		if err == nil {
+			// Same defaulting the mutating webhook and `workflow create`
+			// apply (function type -> "name"), so a manifest that kubectl
+			// accepts is not rejected by `fission spec validate/apply`.
+			fr.Workflows[len(fr.Workflows)-1].Spec.ApplyDefaults()
+		}
 	case "MessageQueueTrigger":
 		obj, err = parseResource[fv1.MessageQueueTrigger](b, tm.Kind, loc, commitLabelVal, &fr.MessageQueueTriggers)
 
@@ -761,6 +788,13 @@ func (fr *FissionResources) ExistsInSpecs(resource any) (bool, error) {
 		}
 	case fv1.TimeTrigger:
 		for _, obj := range fr.TimeTriggers {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.Workflow:
+		for _, obj := range fr.Workflows {
 			if obj.Name == typedres.Name &&
 				obj.Namespace == typedres.Namespace {
 				return true, nil

@@ -25,6 +25,8 @@ type CoreV1Interface interface {
 	MessageQueueTriggersGetter
 	PackagesGetter
 	TimeTriggersGetter
+	WorkflowsGetter
+	WorkflowRunsGetter
 }
 
 // CoreV1Client is used to interact with features provided by the fission.io group.
@@ -66,6 +68,14 @@ func (c *CoreV1Client) Packages(namespace string) PackageInterface {
 
 func (c *CoreV1Client) TimeTriggers(namespace string) TimeTriggerInterface {
 	return newTimeTriggers(c, namespace)
+}
+
+func (c *CoreV1Client) Workflows(namespace string) WorkflowInterface {
+	return newWorkflows(c, namespace)
+}
+
+func (c *CoreV1Client) WorkflowRuns(namespace string) WorkflowRunInterface {
+	return newWorkflowRuns(c, namespace)
 }
 
 // NewForConfig creates a new CoreV1Client for the given config.

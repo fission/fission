@@ -764,6 +764,20 @@ statestore:
 asyncInvocation:
   enabled: false
 
+## RFC-0022 durable workflows: the Workflow/WorkflowRun engine head. Executes
+## declarative state machines over existing functions with durable,
+## resumable runs (statestore EventLog per run). Requires statestore.enabled
+## (the render gate in statestore/validate.yaml enforces it). Off by default.
+workflows:
+  enabled: false
+  ## Single replica in v1: correctness never depends on it (CAS-append is
+  ## the arbiter); one replica avoids wasted duplicate invocations.
+  replicas: 1
+  port: 8892
+  resources: {}
+  securityContext:
+    enabled: false
+
 ## RFC-0027 statestore-backed eventing: the built-in MessageQueue provider
 ## (messageQueueType: statestore) — topics on the statestore EventLog, consumed
 ## by the mqtrigger-statestore head with zero external brokers. Effective only

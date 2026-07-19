@@ -23,3 +23,7 @@ type MessageQueueTriggerExpansion interface{}
 type PackageExpansion interface{}
 
 type TimeTriggerExpansion interface{}
+
+type WorkflowExpansion interface{}
+
+type WorkflowRunExpansion interface{}

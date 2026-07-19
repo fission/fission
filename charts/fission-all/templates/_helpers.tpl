@@ -281,3 +281,11 @@ Mirrored by pkg/svcinfo.PortStatestore (RFC-0021).
 {{- define "fission.statestorePort" -}}
 {{ (.Values.statestore | default dict).port | default 8891 }}
 {{- end -}}
+
+{{/*
+fission.workflowPort is the workflow engine head's port. Mirrored by
+pkg/svcinfo.PortWorkflow (RFC-0022).
+*/}}
+{{- define "fission.workflowPort" -}}
+{{ (.Values.workflows | default dict).port | default 8892 }}
+{{- end -}}

@@ -578,7 +578,7 @@ jobs:
           # components for memory-leak triage. pprof is exposed on :6060 by the
           # kind-ci profile (pprof.enabled=true). Best-effort: never fail the job.
           mkdir -p pprof-dumps
-          for svc in router executor; do
+          for svc in router executor workflow; do
             pod=$(kubectl get pods -n fission -l svc=$svc -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
             [ -z "$pod" ] && { echo "no $svc pod found, skipping"; continue; }
             kubectl port-forward -n fission "pod/$pod" 6060:6060 >/dev/null 2>&1 &

@@ -104,6 +104,45 @@ rules:
   - update
   - patch
 {{- end }}
+{{- define "workflow-rules" }}
+rules:
+# The workflow engine reads Workflows (spec snapshots) and Functions (the
+# crd.WaitForFunctionCRDs boot probe needs list — Forbidden there
+# crash-loops the head), drives WorkflowRuns (update/patch covers the
+# phase-3 finalizer), and writes status on both workflow kinds. Invocation
+# itself is HTTP via the router internal listener.
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  - workflows
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - workflowruns
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  # delete: the retention sweeper reclaims finished runs past
+  # HistoryRetention (the finalizer then cleans the stream/KV).
+  - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - workflows/status
+  - workflowruns/status
+  verbs:
+  - get
+  - update
+  - patch
+{{- end }}
 {{- define "statestore-mqt-rules" }}
 rules:
 # functions list is required by the boot path (crd.WaitForFunctionCRDs probes
@@ -200,6 +239,8 @@ rules:
   - messagequeuetriggers
   - packages
   - timetriggers
+  - workflows
+  - workflowruns
   verbs:
   - list
 {{- end }}

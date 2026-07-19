@@ -107,6 +107,11 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 			fr.KubernetesWatchTriggers[i].Namespace = currentNS
 		}
 	}
+	for i := range fr.Workflows {
+		if fr.Workflows[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.Workflows[i].Namespace = currentNS
+		}
+	}
 
 	return nil
 }
@@ -508,6 +513,12 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 		return nil, nil, fmt.Errorf("timeTrigger apply failed: %w", err)
 	}
 	applyStatus["TimeTrigger"] = *ras
+
+	_, ras, err = applyWorkflows(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
+	if err != nil {
+		return nil, nil, fmt.Errorf("workflow apply failed: %w", err)
+	}
+	applyStatus["Workflow"] = *ras
 
 	_, ras, err = applyMessageQueueTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {
@@ -952,6 +963,46 @@ func applyTimeTriggers(ctx context.Context, fclient cmd.Client, fr *FissionResou
 		},
 		delete: func(ctx context.Context, ns, name string) error {
 			return triggers(ns).Delete(ctx, name, metav1.DeleteOptions{})
+		},
+	}, delete, specAllowConflicts, dryRun)
+}
+
+func applyWorkflows(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+	workflows := func(ns string) typedv1.WorkflowInterface {
+		return fclient.FissionClientSet.CoreV1().Workflows(ns)
+	}
+	return applyResourceType(ctx, fr, resourceOps[fv1.Workflow, *fv1.Workflow]{
+		items: func(fr *FissionResources) []fv1.Workflow { return fr.Workflows },
+		list: func(ctx context.Context) ([]fv1.Workflow, error) {
+			l, err := workflows(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return l.Items, nil
+		},
+		meta: func(w *fv1.Workflow) *metav1.ObjectMeta { return &w.ObjectMeta },
+		equal: func(e, d *fv1.Workflow) bool {
+			return isObjectMetaEqual(e.ObjectMeta, d.ObjectMeta) && reflect.DeepEqual(e.Spec, d.Spec)
+		},
+		create: func(ctx context.Context, w *fv1.Workflow) (*metav1.ObjectMeta, error) {
+			n, err := workflows(w.Namespace).Create(ctx, w, metav1.CreateOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return &n.ObjectMeta, nil
+		},
+		update: func(ctx context.Context, _, d *fv1.Workflow) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, workflows(d.Namespace), d.Name, func(cur *fv1.Workflow) {
+				d.ResourceVersion = cur.ResourceVersion
+				*cur = *d
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &n.ObjectMeta, nil
+		},
+		delete: func(ctx context.Context, ns, name string) error {
+			return workflows(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
 	}, delete, specAllowConflicts, dryRun)
 }

@@ -20,7 +20,10 @@ TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
 # re-verify the jar is genuine tla2tools (manifest Main-class tlc2.TLC, Microsoft
 # vendor) and bump this pin. The pin stays so an UNEXPECTED artifact still fails
 # loudly rather than silently running arbitrary downloaded code.
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-58d44845a37a8d776deaf8cf3a623213b59d311bc0ec287bcdfbe148dd11bb3d}"
+# Last bumped 2026-07-19 for the upstream rebuild dated 2026-07-18 (verified:
+# manifest Main-class tlc2.TLC, tlc2/TLC.class present, from the official
+# tlaplus/tlaplus v1.8.0 release).
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-cc4803dce2a8ffaf0f5920a9dc39df4b5ee34ab4cb53fb58ac557277a7e516b3}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"
@@ -55,7 +58,7 @@ tlc() {
 
 fail=0
 
-for cfg in queue.cfg workflowfold.cfg eventlogsub.cfg; do
+for cfg in queue.cfg workflowfold.cfg workflowbranch.cfg eventlogsub.cfg; do
   spec="$(basename "${cfg}" .cfg).tla"
   echo "=== TLC (must pass): ${cfg} ==="
   if tlc "${cfg}" "${spec}"; then

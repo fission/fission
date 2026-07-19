@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
@@ -65,15 +66,27 @@ func RegisterTenantScopedWithConcurrency(mgr ctrl.Manager, obj client.Object, re
 // TenantReenqueueHandler). The supplied predicates REPLACE the default
 // GenerationChangedPredicate (pass it explicitly if wanted).
 func RegisterTenantScopedWithPredicates(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, predicates ...predicate.Predicate) error {
-	if !utils.CrdWatchClusterWide() {
-		return RegisterWithPredicates(mgr, obj, reconciler, name, maxConcurrent, predicates...)
-	}
+	return RegisterTenantScopedWithRawSources(mgr, obj, reconciler, name, maxConcurrent, nil, predicates...)
+}
+
+// RegisterTenantScopedWithRawSources is RegisterTenantScopedWithPredicates
+// plus raw event sources (e.g. a wake source.Channel whose pushers enqueue a
+// reconcile without a CR change — the workflow engine's append-then-wake
+// path). The supplied predicates REPLACE the default
+// GenerationChangedPredicate, and raw sources bypass predicates entirely
+// (their producers already decided the event matters).
+func RegisterTenantScopedWithRawSources(mgr ctrl.Manager, obj client.Object, reconciler reconcile.Reconciler, name string, maxConcurrent int, srcs []source.TypedSource[reconcile.Request], predicates ...predicate.Predicate) error {
 	b := builder.ControllerManagedBy(mgr).
 		For(obj, builder.WithPredicates(tenantScopedPredicates(predicates)...)).
-		Watches(&fv1.FissionTenant{},
-			TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), obj),
-			builder.WithPredicates(TenantOnboardPredicate())).
 		Named(name)
+	if utils.CrdWatchClusterWide() {
+		b = b.Watches(&fv1.FissionTenant{},
+			TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), obj),
+			builder.WithPredicates(TenantOnboardPredicate()))
+	}
+	for _, src := range srcs {
+		b = b.WatchesRawSource(src)
+	}
 	if maxConcurrent > 0 {
 		b = b.WithOptions(ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrent})
 	}

@@ -24,7 +24,10 @@ type FunctionReferenceApplyConfiguration struct {
 	// - name
 	// - function-weights
 	Type *corev1.FunctionReferenceType `json:"type,omitempty"`
-	// Name of the function.
+	// Name of the function. Bounded to a DNS-1123 label length: the CEL
+	// rule on this type needs the schema bound so the apiserver's cost
+	// estimator can price the regex — without it, embedding the type
+	// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
 	Name *string `json:"name,omitempty"`
 	// Function Reference by weight. this map contains function name as key and its weight
 	// as the value. This is for canary upgrade purpose.

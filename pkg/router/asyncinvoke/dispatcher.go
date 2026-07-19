@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils/backoff"
 )
 
 // Dead-letter reasons the dispatcher assigns (statestore.ReasonRetriesExhausted
@@ -519,19 +520,11 @@ func (d *Dispatcher) deliveryTimeout(env Envelope) time.Duration {
 // capped, with full jitter (a uniform draw in [0, computed)) unless disabled. It
 // assumes p is a resolved policy (non-zero base/cap); the result is in [0, cap].
 func (d *Dispatcher) backoff(p Policy, attempt int) time.Duration {
-	if attempt < 1 {
-		attempt = 1
+	rand := d.rand
+	if p.NoJitter {
+		rand = nil
 	}
-	delay := p.BackoffCap
-	if shift := attempt - 1; shift < 62 {
-		if e := p.BackoffBase << shift; e > 0 && e < p.BackoffCap {
-			delay = e
-		}
-	}
-	if !p.NoJitter {
-		delay = time.Duration(d.rand() * float64(delay))
-	}
-	return delay
+	return backoff.ExpFullJitter(p.BackoffBase, p.BackoffCap, attempt, rand)
 }
 
 // resolvePolicy fills a Policy's zero fields with the dispatcher's platform

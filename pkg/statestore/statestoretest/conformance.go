@@ -170,9 +170,14 @@ func runEventLog(t *testing.T, newCaps Factory) {
 		head, err := el.Append(ctx, "s", 0, []statestore.Event{{Type: "a"}, {Type: "b"}})
 		require.NoError(t, err)
 		require.EqualValues(t, 2, head)
-		// stale expectedSeq loses
-		_, err = el.Append(ctx, "s", 0, []statestore.Event{{Type: "x"}})
+		// stale expectedSeq loses — and the conflict must report the current
+		// head so a CAS caller can resynchronize (contract: the head is
+		// meaningful on ErrVersionConflict). The HTTP client driver in
+		// particular must carry it over the wire, not drop it to 0, or a
+		// conflicting appender retries at the wrong seq forever.
+		conflictHead, err := el.Append(ctx, "s", 0, []statestore.Event{{Type: "x"}})
 		require.ErrorIs(t, err, statestore.ErrVersionConflict)
+		require.EqualValues(t, 2, conflictHead, "the conflict reports the current head")
 		evs, err := el.Read(ctx, "s", 0, 10)
 		require.NoError(t, err)
 		require.Len(t, evs, 2)

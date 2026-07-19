@@ -1,0 +1,868 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: workflows.fission.io
+spec:
+  group: fission.io
+  names:
+    kind: Workflow
+    listKind: WorkflowList
+    plural: workflows
+    shortNames:
+    - wf
+    singular: workflow
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.startAt
+      name: StartAt
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Validated")].status
+      name: Validated
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Workflow declares a durable state machine whose task states are Fission
+          functions (RFC-0022). The engine executes WorkflowRuns against a snapshot
+          of this spec embedded in the run's event stream; editing a Workflow never
+          changes in-flight runs.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              WorkflowSpec is a state machine: states are data, logic lives in
+              functions.
+            properties:
+              defaultRetry:
+                description: DefaultRetry applies to Task states that do not set their
+                  own Retry.
+                properties:
+                  backoffBase:
+                    description: |-
+                      BackoffBase is the delay before the first retry; it grows exponentially per
+                      attempt up to BackoffCap. nil means the platform default. Must be >= 0.
+                    type: string
+                  backoffCap:
+                    description: |-
+                      BackoffCap bounds the per-retry backoff. nil means the platform default.
+                      Must be >= 0 and >= BackoffBase when both are set.
+                    type: string
+                  jitter:
+                    description: |-
+                      Jitter, when non-nil and false, disables the randomized jitter the
+                      dispatcher otherwise adds to each backoff to avoid synchronized retries.
+                      nil means the platform default (jitter enabled).
+                    type: boolean
+                  maxAttempts:
+                    description: |-
+                      MaxAttempts is the total number of delivery attempts before the invocation
+                      is dead-lettered. nil means DefaultMaxAttempts. Must be >= 1 when set.
+                    type: integer
+                type: object
+              historyRetention:
+                description: HistoryRetention bounds stored history (count + age)
+                  per finished run.
+                properties:
+                  maxAge:
+                    type: string
+                  maxCount:
+                    format: int32
+                    type: integer
+                type: object
+              startAt:
+                description: StartAt names the state execution begins at.
+                type: string
+              states:
+                additionalProperties:
+                  description: |-
+                    WorkflowState is one state in the machine. Exactly the fields for its
+                    Type may be set (enforced at admission).
+                  properties:
+                    branches:
+                      description: |-
+                        Branches are the Parallel state's concurrent sub-machines (or the
+                        Map state's single iterator template). Branch states cannot nest
+                        further fan-out — enforced by the bounded WorkflowBranchState type.
+                      items:
+                        description: |-
+                          WorkflowBranch is one concurrent sub-machine of a Parallel state (or
+                          the iterator template of a Map state).
+                        properties:
+                          startAt:
+                            type: string
+                          states:
+                            additionalProperties:
+                              description: |-
+                                WorkflowBranchState is WorkflowState minus the fan-out fields: nested
+                                Parallel/Map is impossible BY TYPE, which is what keeps the CRD schema
+                                non-recursive (controller-gen cannot render a self-referential type).
+                              properties:
+                                catch:
+                                  items:
+                                    description: WorkflowCatchRoute routes a matched
+                                      error class to a next state.
+                                    properties:
+                                      errorType:
+                                        description: |-
+                                          ErrorType matches a typed function error ({"errorType": ...} body),
+                                          a built-in class (Fission.PermanentError, Fission.FunctionError,
+                                          Fission.Timeout), or Fission.All (matches anything).
+                                        type: string
+                                      next:
+                                        type: string
+                                      resultPath:
+                                        description: |-
+                                          ResultPath, when set, merges the error object
+                                          ({"errorType": ..., "cause": ...}) into the flowing document at
+                                          this JSONPath, so the catch target still sees the business data
+                                          (e.g. retry a charge after a grace period). Unset keeps the
+                                          Step-Functions-parity default: the error object REPLACES the
+                                          document.
+                                        type: string
+                                    required:
+                                    - errorType
+                                    - next
+                                    type: object
+                                  type: array
+                                choices:
+                                  items:
+                                    description: |-
+                                      WorkflowChoiceRule is one ordered rule of a Choice state: either a leaf
+                                      condition (inline) or exactly one of And/Or/Not over leaf conditions
+                                      (depth-1 composition; deeper nesting is additive later).
+                                    properties:
+                                      and:
+                                        items:
+                                          description: |-
+                                            WorkflowChoiceCondition is a leaf comparison against the state input.
+                                            Exactly one operator must be set. Numeric values use resource.Quantity
+                                            (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                                          properties:
+                                            booleanEquals:
+                                              type: boolean
+                                            isNull:
+                                              type: boolean
+                                            isPresent:
+                                              type: boolean
+                                            numericEquals:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            numericGreaterThan:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            numericLessThan:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            stringEquals:
+                                              type: string
+                                            variable:
+                                              description: |-
+                                                Variable is a JSONPath into the state's (shaped) input. Required on
+                                                every leaf condition — enforced by the webhook, not the schema: this
+                                                struct is inline-embedded in WorkflowChoiceRule, and a
+                                                schema-required field would wrongly reject composite (and/or/not)
+                                                rules that carry no inline leaf.
+                                              type: string
+                                          type: object
+                                        type: array
+                                      booleanEquals:
+                                        type: boolean
+                                      isNull:
+                                        type: boolean
+                                      isPresent:
+                                        type: boolean
+                                      next:
+                                        description: Next names the state to transition
+                                          to when this rule matches.
+                                        type: string
+                                      not:
+                                        description: |-
+                                          WorkflowChoiceCondition is a leaf comparison against the state input.
+                                          Exactly one operator must be set. Numeric values use resource.Quantity
+                                          (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                                        properties:
+                                          booleanEquals:
+                                            type: boolean
+                                          isNull:
+                                            type: boolean
+                                          isPresent:
+                                            type: boolean
+                                          numericEquals:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          numericGreaterThan:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          numericLessThan:
+                                            anyOf:
+                                            - type: integer
+                                            - type: string
+                                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                            x-kubernetes-int-or-string: true
+                                          stringEquals:
+                                            type: string
+                                          variable:
+                                            description: |-
+                                              Variable is a JSONPath into the state's (shaped) input. Required on
+                                              every leaf condition — enforced by the webhook, not the schema: this
+                                              struct is inline-embedded in WorkflowChoiceRule, and a
+                                              schema-required field would wrongly reject composite (and/or/not)
+                                              rules that carry no inline leaf.
+                                            type: string
+                                        type: object
+                                      numericEquals:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      numericGreaterThan:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      numericLessThan:
+                                        anyOf:
+                                        - type: integer
+                                        - type: string
+                                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                        x-kubernetes-int-or-string: true
+                                      or:
+                                        items:
+                                          description: |-
+                                            WorkflowChoiceCondition is a leaf comparison against the state input.
+                                            Exactly one operator must be set. Numeric values use resource.Quantity
+                                            (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                                          properties:
+                                            booleanEquals:
+                                              type: boolean
+                                            isNull:
+                                              type: boolean
+                                            isPresent:
+                                              type: boolean
+                                            numericEquals:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            numericGreaterThan:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            numericLessThan:
+                                              anyOf:
+                                              - type: integer
+                                              - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            stringEquals:
+                                              type: string
+                                            variable:
+                                              description: |-
+                                                Variable is a JSONPath into the state's (shaped) input. Required on
+                                                every leaf condition — enforced by the webhook, not the schema: this
+                                                struct is inline-embedded in WorkflowChoiceRule, and a
+                                                schema-required field would wrongly reject composite (and/or/not)
+                                                rules that carry no inline leaf.
+                                              type: string
+                                          type: object
+                                        type: array
+                                      stringEquals:
+                                        type: string
+                                      variable:
+                                        description: |-
+                                          Variable is a JSONPath into the state's (shaped) input. Required on
+                                          every leaf condition — enforced by the webhook, not the schema: this
+                                          struct is inline-embedded in WorkflowChoiceRule, and a
+                                          schema-required field would wrongly reject composite (and/or/not)
+                                          rules that carry no inline leaf.
+                                        type: string
+                                    required:
+                                    - next
+                                    type: object
+                                  type: array
+                                default:
+                                  type: string
+                                duration:
+                                  type: string
+                                end:
+                                  type: boolean
+                                function:
+                                  description: FunctionReference refers to a function
+                                  properties:
+                                    functionweights:
+                                      additionalProperties:
+                                        type: integer
+                                      description: |-
+                                        Function Reference by weight. this map contains function name as key and its weight
+                                        as the value. This is for canary upgrade purpose.
+                                      nullable: true
+                                      type: object
+                                    name:
+                                      description: |-
+                                        Name of the function. Bounded to a DNS-1123 label length: the CEL
+                                        rule on this type needs the schema bound so the apiserver's cost
+                                        estimator can price the regex — without it, embedding the type
+                                        under a map (WorkflowSpec.States) blows the per-CRD cost budget.
+                                      maxLength: 63
+                                      type: string
+                                    type:
+                                      description: |-
+                                        Type indicates whether this function reference is by name or selector. For now,
+                                        the only supported reference type is by "name".  Future reference types:
+                                          * Function by label or annotation
+                                          * Branch or tag of a versioned function
+                                          * A "rolling upgrade" from one version of a function to another
+                                        Available value:
+                                        - name
+                                        - function-weights
+                                      enum:
+                                      - name
+                                      - function-weights
+                                      type: string
+                                  required:
+                                  - name
+                                  - type
+                                  type: object
+                                  x-kubernetes-validations:
+                                  - message: functionref.name must be a valid DNS1123
+                                      label (lowercase alphanumeric or '-', start/end
+                                      alphanumeric, max 63 chars) when type is 'name'
+                                    rule: self.type != 'name' || (self.name.size()
+                                      <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                                inputPath:
+                                  type: string
+                                next:
+                                  type: string
+                                outputPath:
+                                  type: string
+                                resultPath:
+                                  type: string
+                                retry:
+                                  description: |-
+                                    RetryPolicy is the async delivery retry policy: the attempt budget and the
+                                    exponential-backoff schedule between delivery attempts. All fields are
+                                    optional; a nil field takes the platform default.
+                                  properties:
+                                    backoffBase:
+                                      description: |-
+                                        BackoffBase is the delay before the first retry; it grows exponentially per
+                                        attempt up to BackoffCap. nil means the platform default. Must be >= 0.
+                                      type: string
+                                    backoffCap:
+                                      description: |-
+                                        BackoffCap bounds the per-retry backoff. nil means the platform default.
+                                        Must be >= 0 and >= BackoffBase when both are set.
+                                      type: string
+                                    jitter:
+                                      description: |-
+                                        Jitter, when non-nil and false, disables the randomized jitter the
+                                        dispatcher otherwise adds to each backoff to avoid synchronized retries.
+                                        nil means the platform default (jitter enabled).
+                                      type: boolean
+                                    maxAttempts:
+                                      description: |-
+                                        MaxAttempts is the total number of delivery attempts before the invocation
+                                        is dead-lettered. nil means DefaultMaxAttempts. Must be >= 1 when set.
+                                      type: integer
+                                  type: object
+                                timeout:
+                                  type: string
+                                type:
+                                  description: WorkflowStateType enumerates the state
+                                    kinds the engine executes.
+                                  enum:
+                                  - Task
+                                  - Choice
+                                  - Parallel
+                                  - Map
+                                  - Wait
+                                  - Succeed
+                                  - Fail
+                                  type: string
+                              required:
+                              - type
+                              type: object
+                            description: |-
+                              MaxProperties=20 (vs 100 top-level) keeps the apiserver's CEL cost
+                              estimate for doubly-nested rules under budget — the phase-1 lesson.
+                            maxProperties: 20
+                            minProperties: 1
+                            type: object
+                        required:
+                        - startAt
+                        - states
+                        type: object
+                      maxItems: 10
+                      type: array
+                    catch:
+                      description: |-
+                        Catch routes a failed Task (retries exhausted, or a permanent error)
+                        to another state by matched errorType; first match wins.
+                      items:
+                        description: WorkflowCatchRoute routes a matched error class
+                          to a next state.
+                        properties:
+                          errorType:
+                            description: |-
+                              ErrorType matches a typed function error ({"errorType": ...} body),
+                              a built-in class (Fission.PermanentError, Fission.FunctionError,
+                              Fission.Timeout), or Fission.All (matches anything).
+                            type: string
+                          next:
+                            type: string
+                          resultPath:
+                            description: |-
+                              ResultPath, when set, merges the error object
+                              ({"errorType": ..., "cause": ...}) into the flowing document at
+                              this JSONPath, so the catch target still sees the business data
+                              (e.g. retry a charge after a grace period). Unset keeps the
+                              Step-Functions-parity default: the error object REPLACES the
+                              document.
+                            type: string
+                        required:
+                        - errorType
+                        - next
+                        type: object
+                      type: array
+                    choices:
+                      description: Choices are the Choice state's ordered rules; first
+                        match wins.
+                      items:
+                        description: |-
+                          WorkflowChoiceRule is one ordered rule of a Choice state: either a leaf
+                          condition (inline) or exactly one of And/Or/Not over leaf conditions
+                          (depth-1 composition; deeper nesting is additive later).
+                        properties:
+                          and:
+                            items:
+                              description: |-
+                                WorkflowChoiceCondition is a leaf comparison against the state input.
+                                Exactly one operator must be set. Numeric values use resource.Quantity
+                                (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                              properties:
+                                booleanEquals:
+                                  type: boolean
+                                isNull:
+                                  type: boolean
+                                isPresent:
+                                  type: boolean
+                                numericEquals:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                numericGreaterThan:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                numericLessThan:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                stringEquals:
+                                  type: string
+                                variable:
+                                  description: |-
+                                    Variable is a JSONPath into the state's (shaped) input. Required on
+                                    every leaf condition — enforced by the webhook, not the schema: this
+                                    struct is inline-embedded in WorkflowChoiceRule, and a
+                                    schema-required field would wrongly reject composite (and/or/not)
+                                    rules that carry no inline leaf.
+                                  type: string
+                              type: object
+                            type: array
+                          booleanEquals:
+                            type: boolean
+                          isNull:
+                            type: boolean
+                          isPresent:
+                            type: boolean
+                          next:
+                            description: Next names the state to transition to when
+                              this rule matches.
+                            type: string
+                          not:
+                            description: |-
+                              WorkflowChoiceCondition is a leaf comparison against the state input.
+                              Exactly one operator must be set. Numeric values use resource.Quantity
+                              (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                            properties:
+                              booleanEquals:
+                                type: boolean
+                              isNull:
+                                type: boolean
+                              isPresent:
+                                type: boolean
+                              numericEquals:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              numericGreaterThan:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              numericLessThan:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              stringEquals:
+                                type: string
+                              variable:
+                                description: |-
+                                  Variable is a JSONPath into the state's (shaped) input. Required on
+                                  every leaf condition — enforced by the webhook, not the schema: this
+                                  struct is inline-embedded in WorkflowChoiceRule, and a
+                                  schema-required field would wrongly reject composite (and/or/not)
+                                  rules that carry no inline leaf.
+                                type: string
+                            type: object
+                          numericEquals:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          numericGreaterThan:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          numericLessThan:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          or:
+                            items:
+                              description: |-
+                                WorkflowChoiceCondition is a leaf comparison against the state input.
+                                Exactly one operator must be set. Numeric values use resource.Quantity
+                                (CRDs cannot carry floats; Quantity accepts YAML numbers and strings).
+                              properties:
+                                booleanEquals:
+                                  type: boolean
+                                isNull:
+                                  type: boolean
+                                isPresent:
+                                  type: boolean
+                                numericEquals:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                numericGreaterThan:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                numericLessThan:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                stringEquals:
+                                  type: string
+                                variable:
+                                  description: |-
+                                    Variable is a JSONPath into the state's (shaped) input. Required on
+                                    every leaf condition — enforced by the webhook, not the schema: this
+                                    struct is inline-embedded in WorkflowChoiceRule, and a
+                                    schema-required field would wrongly reject composite (and/or/not)
+                                    rules that carry no inline leaf.
+                                  type: string
+                              type: object
+                            type: array
+                          stringEquals:
+                            type: string
+                          variable:
+                            description: |-
+                              Variable is a JSONPath into the state's (shaped) input. Required on
+                              every leaf condition — enforced by the webhook, not the schema: this
+                              struct is inline-embedded in WorkflowChoiceRule, and a
+                              schema-required field would wrongly reject composite (and/or/not)
+                              rules that carry no inline leaf.
+                            type: string
+                        required:
+                        - next
+                        type: object
+                      type: array
+                    default:
+                      description: |-
+                        Default names the state a Choice falls through to when no rule
+                        matches; without it, no-match fails the run (Fission.NoChoiceMatched).
+                      type: string
+                    duration:
+                      description: |-
+                        Duration is how long a Wait state pauses the run — durably: the
+                        delay is a statestore Queue message, so a controller restart never
+                        loses it (robfig/cron-style absolute schedules stay with the timer
+                        subsystem; only durations here).
+                      type: string
+                    end:
+                      type: boolean
+                    function:
+                      description: Function is the Task state's target.
+                      properties:
+                        functionweights:
+                          additionalProperties:
+                            type: integer
+                          description: |-
+                            Function Reference by weight. this map contains function name as key and its weight
+                            as the value. This is for canary upgrade purpose.
+                          nullable: true
+                          type: object
+                        name:
+                          description: |-
+                            Name of the function. Bounded to a DNS-1123 label length: the CEL
+                            rule on this type needs the schema bound so the apiserver's cost
+                            estimator can price the regex — without it, embedding the type
+                            under a map (WorkflowSpec.States) blows the per-CRD cost budget.
+                          maxLength: 63
+                          type: string
+                        type:
+                          description: |-
+                            Type indicates whether this function reference is by name or selector. For now,
+                            the only supported reference type is by "name".  Future reference types:
+                              * Function by label or annotation
+                              * Branch or tag of a versioned function
+                              * A "rolling upgrade" from one version of a function to another
+                            Available value:
+                            - name
+                            - function-weights
+                          enum:
+                          - name
+                          - function-weights
+                          type: string
+                      required:
+                      - name
+                      - type
+                      type: object
+                      x-kubernetes-validations:
+                      - message: functionref.name must be a valid DNS1123 label (lowercase
+                          alphanumeric or '-', start/end alphanumeric, max 63 chars)
+                          when type is 'name'
+                        rule: self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                    inputPath:
+                      description: |-
+                        InputPath/ResultPath/OutputPath shape step I/O with JSONPath
+                        (Step Functions semantics; dialect pinned in pkg/workflow/expr).
+                      type: string
+                    itemsPath:
+                      description: |-
+                        ItemsPath selects the array a Map state iterates (one branch per
+                        element, input = the element).
+                      type: string
+                    maxConcurrency:
+                      description: |-
+                        MaxConcurrency throttles how many branches execute at once. Zero
+                        means the engine default (10) — NOT unbounded: an unthrottled
+                        large Map against poolmgr is a self-inflicted cold-start burst.
+                        The default is applied by the engine, not the schema: a schema
+                        default would stamp the field onto every state type.
+                      format: int32
+                      minimum: 0
+                      type: integer
+                    next:
+                      description: |-
+                        Next names the state to run after this one; exactly one of Next/End
+                        is set on Task states (Succeed/Fail are implicitly terminal).
+                      type: string
+                    outputPath:
+                      type: string
+                    resultPath:
+                      type: string
+                    retry:
+                      description: Retry overrides the workflow's DefaultRetry for
+                        this Task.
+                      properties:
+                        backoffBase:
+                          description: |-
+                            BackoffBase is the delay before the first retry; it grows exponentially per
+                            attempt up to BackoffCap. nil means the platform default. Must be >= 0.
+                          type: string
+                        backoffCap:
+                          description: |-
+                            BackoffCap bounds the per-retry backoff. nil means the platform default.
+                            Must be >= 0 and >= BackoffBase when both are set.
+                          type: string
+                        jitter:
+                          description: |-
+                            Jitter, when non-nil and false, disables the randomized jitter the
+                            dispatcher otherwise adds to each backoff to avoid synchronized retries.
+                            nil means the platform default (jitter enabled).
+                          type: boolean
+                        maxAttempts:
+                          description: |-
+                            MaxAttempts is the total number of delivery attempts before the invocation
+                            is dead-lettered. nil means DefaultMaxAttempts. Must be >= 1 when set.
+                          type: integer
+                      type: object
+                    timeout:
+                      description: Timeout bounds one attempt of a Task invocation.
+                      type: string
+                    type:
+                      description: WorkflowStateType enumerates the state kinds the
+                        engine executes.
+                      enum:
+                      - Task
+                      - Choice
+                      - Parallel
+                      - Map
+                      - Wait
+                      - Succeed
+                      - Fail
+                      type: string
+                  required:
+                  - type
+                  type: object
+                description: |-
+                  States is the state machine graph, keyed by state name. The size
+                  bound mirrors validation.MaxWorkflowStates and lets the apiserver's
+                  CEL cost estimator bound rules on nested types.
+                maxProperties: 100
+                minProperties: 1
+                type: object
+              timeout:
+                description: |-
+                  Timeout bounds a whole run; expiry fails it with errorType
+                  Fission.Timeout. Defaults to 24h (a mis-authored graph or endlessly
+                  caught-and-retried loop must not hold an active run forever).
+                type: string
+            required:
+            - startAt
+            - states
+            type: object
+          status:
+            description: WorkflowStatus describes the observed state of a Workflow.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                format: int64
+                type: integer
+            type: object
+        required:
+        - metadata
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

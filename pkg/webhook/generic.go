@@ -30,12 +30,22 @@ type Defaulter[T client.Object] interface {
 	ApplyDefaults(T) error
 }
 
+// UpdateValidator is an optional facet for rules that need the OLD object —
+// immutability checks, transition rules. It runs on update in addition to
+// Validator (which sees only the new object). The method is deliberately NOT
+// named ValidateUpdate: implementers embed GenericWebhook, and a same-named
+// method would shadow the admission.Validator implementation.
+type UpdateValidator[T client.Object] interface {
+	ValidateTransition(old, new T) error
+}
+
 // GenericWebhook implements the webhook interfaces for a generic type T.
 type GenericWebhook[T client.Object] struct {
-	Logger    logr.Logger
-	Validator Validator[T]
-	Defaulter Defaulter[T]
-	Warner    Warner[T]
+	Logger          logr.Logger
+	Validator       Validator[T]
+	Defaulter       Defaulter[T]
+	Warner          Warner[T]
+	UpdateValidator UpdateValidator[T]
 }
 
 // SetupWebhookWithManager sets up the webhook with the manager.
@@ -68,10 +78,17 @@ func (w *GenericWebhook[T]) ValidateCreate(_ context.Context, obj T) (admission.
 }
 
 // ValidateUpdate implements admission.Validator.
-func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, _, newObj T) (admission.Warnings, error) {
+func (w *GenericWebhook[T]) ValidateUpdate(_ context.Context, oldObj, newObj T) (admission.Warnings, error) {
 	w.Logger.V(1).Info("validate update", "name", newObj.GetName())
 	if w.Validator != nil {
-		return w.warnings(newObj), w.Validator.Validate(newObj)
+		if err := w.Validator.Validate(newObj); err != nil {
+			return w.warnings(newObj), err
+		}
+	}
+	if w.UpdateValidator != nil {
+		if err := w.UpdateValidator.ValidateTransition(oldObj, newObj); err != nil {
+			return w.warnings(newObj), err
+		}
 	}
 	return w.warnings(newObj), nil
 }

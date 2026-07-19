@@ -59,6 +59,10 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().Packages().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("timetriggers"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().TimeTriggers().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("workflows"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().Workflows().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("workflowruns"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().WorkflowRuns().Informer()}, nil
 
 	}
 

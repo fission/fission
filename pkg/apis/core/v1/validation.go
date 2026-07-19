@@ -413,6 +413,24 @@ const (
 // (0, MaxAsyncMaxAge]. These bounds keep the dispatcher's retry loop well-defined
 // (a zero attempt budget or max age would mean "accepted but never deliverable")
 // and keep one tenant from setting absurd values on the shared queue.
+// validateBackoffBounds checks the ordering rules every RetryPolicy consumer
+// shares (base >= 0, cap >= 0, cap >= base). Attempt budgets stay at the
+// callers — async delivery clamps to MaxAsyncAttempts, workflows to
+// MaxWorkflowAttempts — because they bound different things.
+func (r *RetryPolicy) validateBackoffBounds(field string) error {
+	var errs error
+	if r.BackoffBase != nil && r.BackoffBase.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".BackoffBase", r.BackoffBase.Duration, "must be >= 0"))
+	}
+	if r.BackoffCap != nil && r.BackoffCap.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".BackoffCap", r.BackoffCap.Duration, "must be >= 0"))
+	}
+	if r.BackoffBase != nil && r.BackoffCap != nil && r.BackoffCap.Duration < r.BackoffBase.Duration {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".BackoffCap", r.BackoffCap.Duration, "must be >= BackoffBase"))
+	}
+	return errs
+}
+
 func (ic *InvocationConfig) Validate() error {
 	var errs error
 	r := ic.Retry
@@ -422,15 +440,7 @@ func (ic *InvocationConfig) Validate() error {
 	if r.MaxAttempts != nil && *r.MaxAttempts > MaxAsyncAttempts {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.MaxAttempts", *r.MaxAttempts, fmt.Sprintf("must be <= %d (the platform async attempt budget)", MaxAsyncAttempts)))
 	}
-	if r.BackoffBase != nil && r.BackoffBase.Duration < 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffBase", r.BackoffBase.Duration, "must be >= 0"))
-	}
-	if r.BackoffCap != nil && r.BackoffCap.Duration < 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffCap", r.BackoffCap.Duration, "must be >= 0"))
-	}
-	if r.BackoffBase != nil && r.BackoffCap != nil && r.BackoffCap.Duration < r.BackoffBase.Duration {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.Retry.BackoffCap", r.BackoffCap.Duration, "must be >= BackoffBase"))
-	}
+	errs = errors.Join(errs, r.validateBackoffBounds("FunctionSpec.Invocation.Retry"))
 	if ic.MaxAge != nil && ic.MaxAge.Duration <= 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Invocation.MaxAge", ic.MaxAge.Duration, "must be > 0"))
 	}
