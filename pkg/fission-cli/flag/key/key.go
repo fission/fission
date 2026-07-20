@@ -106,11 +106,19 @@ const (
 	TopicName        = "topic"
 	TopicData        = "data"
 	TopicContentType = "content-type"
-	TopicMQType      = "mqtype"
-	TopicLimit       = "limit"
+
+	TopicMQType = "mqtype"
+	TopicLimit  = "limit"
 	// RFC-0027 topic destinations (statestore built-in eventing).
 	FnAsyncOnSuccessTopic = "async-on-success-topic"
 	FnAsyncOnFailureTopic = "async-on-failure-topic"
+
+	// RFC-0023 `fission fn state` admin commands.
+	StateKey       = "key"
+	StateValue     = "value"
+	StatePrefix    = "prefix"
+	StateTTL       = "ttl"
+	StateIfVersion = "if-version"
 
 	HtName              = resourceName
 	HtMethod            = "method"

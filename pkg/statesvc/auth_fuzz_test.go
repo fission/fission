@@ -22,10 +22,10 @@ func FuzzStateTokenVerify(f *testing.F) {
 
 	valid := stateTokenFor(master, "ns-a", "cart")
 	f.Add(valid, "ns-a", "cart")
-	f.Add(valid, "ns-b", "cart")                              // namespace splice
-	f.Add(valid, "ns-a", "sessions")                          // keyspace splice
-	f.Add(valid[:len(valid)-2], "ns-a", "cart")               // truncation
-	f.Add(valid+"00", "ns-a", "cart")                         // extension
+	f.Add(valid, "ns-b", "cart")                                    // namespace splice
+	f.Add(valid, "ns-a", "sessions")                                // keyspace splice
+	f.Add(valid[:len(valid)-2], "ns-a", "cart")                     // truncation
+	f.Add(valid+"00", "ns-a", "cart")                               // extension
 	f.Add(stateTokenFor(masterOld, "ns-a", "cart"), "ns-a", "cart") // rotation key (valid)
 	f.Add("", "ns-a", "cart")
 	f.Add("not-hex-at-all", "ns-a", "cart")
