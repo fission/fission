@@ -1,6 +1,6 @@
 # RFC-0022: Durable function workflows
 
-- Status: Proposed (revised 2026-07-16, pre-implementation: design review against the shipped RFC-0021/0024/0027 implementations — spec-snapshot-in-stream, error model, worker-pool invocation, fold checkpoints, UX surface)
+- Status: Implemented ([#3587](https://github.com/fission/fission/pull/3587), merged 2026-07-19; pre-implementation revision [#3586](https://github.com/fission/fission/pull/3586)): `Workflow`/`WorkflowRun` CRDs + validation/webhooks, the `pkg/workflow` EventLog-fold engine (CAS-append, no leader election, spec-snapshot-in-stream, checkpointed folds, worker-pool invocation), Task/Choice/Parallel/Map/Wait/Succeed/Fail states with the pinned error model + expression grammar, the `fission workflow` CLI (+ `runs` subgroup + day/night graph viewer), and integration + serial-resume tests; TLA+-checked protocol (`workflowfold`/`workflowbranch`). The design review below is retained for rationale.
 - Tracking issue: TBD
 - Supersedes: the abandoned pre-2020 `fission-workflows` project (external repo, NATS-backed, unmaintained)
 - Targets: Fission v1.N+1

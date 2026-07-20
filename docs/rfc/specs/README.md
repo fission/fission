@@ -9,6 +9,8 @@ The specs are the design source of truth for these protocols: change the protoco
 | `workflowfold.tla` | CAS-append event-log fold: racing reconcilers, crash/replan, retries, cancel, terminal stability | RFC-0021 `EventLog`, RFC-0022 engine |
 | `workflowbranch.tla` | Parallel-region protocol: concurrent branches over one CAS log, join discipline (unique, all-branches-ok), fail-fast, nothing-after-join | RFC-0022 phase 3 Parallel/Map |
 | `eventlogsub.tla` | Topic subscription: AppendAny publishers, overlapping consumers with a version-CAS KV cursor, poison→ErrorTopic, min-cursor retention | RFC-0027 statestore MQ provider |
+| `quota.tla` | Keyspace quota under concurrent writers: check-then-act vs atomic reserve+commit against a `MaxKeys` budget | RFC-0023 `statesvc` scoped KV quota (invariant S3) |
+| `aliasgc.tla` | Retention-GC vs alias-create race: two-phase sweep, delete-time alias re-check | RFC-0025 versions/aliases GC (invariants V2/V3) |
 
 ## RFC-0024 async dispatcher
 
@@ -34,6 +36,8 @@ java -jar tla2tools.jar -deadlock -config eventlogsub.cfg eventlogsub.tla
 ```sh
 java -jar tla2tools.jar -deadlock -config queue-unguarded.cfg queue.tla
 java -jar tla2tools.jar -deadlock -config eventlogsub-blindwrite.cfg eventlogsub.tla
+java -jar tla2tools.jar -deadlock -config quota-nonatomic.cfg quota.tla
+java -jar tla2tools.jar -deadlock -config aliasgc-norecheck.cfg aliasgc.tla
 ```
 
 are **expected to fail** — each documents why a guard exists:
@@ -42,6 +46,10 @@ are **expected to fail** — each documents why a guard exists:
   This is the documented reason the Postgres driver's settle statements must be guarded on the epoch column (`... WHERE id = $1 AND epoch = $2`), not the id alone.
 - `eventlogsub-blindwrite.cfg` checks the topic subscription with `CasGuard = FALSE` (cursor commits as blind last-writer-wins Sets) and TLC finds the leadership-overlap trace — a consumer holding an older cursor view commits its smaller progress over a newer commit and regresses the cursor (`CursorMonotonic` violated).
   This is the documented reason RFC-0027's cursor writes must be KV version-CAS (`SetOptions.IfVersion`), not blind `Set`s.
+- `quota-nonatomic.cfg` checks the keyspace quota with `AtomicQuota = FALSE` (the budget check and the counter increment are separate steps) and TLC finds the check-then-act trace — two writers both observe `count < MaxKeys`, both pass the check, and both commit past the budget (`QuotaNeverExceeded` violated).
+  This is the documented reason RFC-0023's `statesvc` must enforce `MaxKeys` / the namespace byte budget with an atomic counter operation (a KV CAS or a counted transaction), not a plain read-check-then-write.
+- `aliasgc-norecheck.cfg` checks the alias/GC race with `RecheckGuard = FALSE` (retention GC deletes on the snapshot its sweep took) and TLC finds the interleaving where an alias-create commits between GC's scan and its delete, stranding the alias on a deleted version (`NoDanglingAlias` violated).
+  This is the documented reason RFC-0025's retention GC must re-check alias references inside the delete step (or gate delete on an alias-held finalizer/ownerRef), not act on the start-of-sweep snapshot.
 
 ## Scope and honesty
 

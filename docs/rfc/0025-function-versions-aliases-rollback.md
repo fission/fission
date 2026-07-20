@@ -1,10 +1,10 @@
 # RFC-0025: Function versions, aliases, and instant rollback
 
-- Status: Proposed
+- Status: Proposed (revised 2026-07-19, pre-implementation: design review against the shipped `pkg/router/routetable`, `functionReferenceResolver`, `pkg/executor/fscache`, `pkg/canaryconfigmgr`, and `pkg/webhook` code — the resolver no longer caches, the warm-pool reaper drains non-latest generations, the zero-drift "CI bar" is documentation-only, and a TLA+-checked alias/GC-race spec)
 - Tracking issue: TBD
 - Supersedes: — (long-term it absorbs `CanaryConfig`, kept working via a shim through a deprecation window)
 - Targets: Fission v1.N+1
-- Requires: nothing hard; OCI package delivery (RFC-0001/0012) makes version pins content-addressed, and the RFC-0013 route table provides the zero-rebuild pointer-swap path this rides on.
+- Requires: nothing hard; OCI package delivery (RFC-0001/0012) makes version pins content-addressed, and the RFC-0013 route table provides the zero-rebuild pointer-swap path this rides on (`routetable.ApplyTrigger` → `HandlerSwapped`, verified present).
 
 ## Summary
 
@@ -52,7 +52,7 @@ type FunctionVersionSpec struct {
 }
 ```
 
-Immutability is enforced by the validating webhook (spec updates rejected), the pattern CEL cannot cover for us anyway per the known CRD-CEL limits.
+Immutability is enforced by the validating webhook, not CEL (spec immutability is one of the known CRD-CEL limits). The template already ships: `WorkflowRun.ValidateTransition(old, new)` rejects any `!equality.Semantic.DeepEqual(old.Spec, new.Spec)` via the `GenericWebhook[T]` `UpdateValidator` facet (`pkg/webhook/generic.go`, `pkg/webhook/workflowrun.go`) — `FunctionVersion` immutability is the same `ValidateTransition` five-liner, and it catches every mutation verb including patches (the risk V1 names).
 `FunctionVersion` carries an ownerRef to its Function (cascade delete) and, when the package was snapshotted, owns the snapshot Package CR.
 
 Aliases live in a separate small CRD rather than inside `FunctionSpec` — separate objects avoid alias-edit vs fn-update conflicts and give aliases their own RBAC (deploy tooling may move aliases without function write access):
@@ -75,14 +75,18 @@ type FunctionAliasSpec struct {
 
 ### Reference resolution
 
-`FunctionReference` (used by all trigger types) gains an optional `alias` (and `version`) field next to `name`; `pkg/router/functionReferenceResolver.go` resolves `name:alias` → alias CR → FunctionVersion → the snapshot spec, caching by (alias UID, alias Generation) consistently with the Generation-keyed change detection the router reconcilers already use.
-Weighted aliases resolve to the same two-target shape the canary path produces today, so the per-request weighted pick reuses the existing RFC-0013 `HandlerRef` machinery — an alias weight change or repoint is a handler-pointer swap, explicitly **not** a route-shape change, so the debounced materializer never runs.
+`FunctionReference` (used by all trigger types) gains an optional `alias` (and `version`) field next to `name`; `functionReferenceResolver.resolve` learns a `name:alias` case that reads the alias CR → FunctionVersion → the snapshot spec.
+The resolver **does not cache** (its trigger-RV-keyed result cache was removed in RFC-0014 phase 3 — resolution now runs only during a mux rebuild), so there is no resolver-side cache key to extend; the Generation-keyed change detection lives in the route table, not the resolver.
+
+An alias is a **separate CRD**, so moving it does not bump the referencing trigger's Generation. The router therefore adds a `FunctionAlias` informer that, on an alias change, enqueues the triggers referencing it for re-resolution and re-apply. The repoint then rides the shipped `routetable.ApplyTrigger` path: the new alias target resolves to a different FunctionVersion whose snapshot Generation lands in `RouteSpec.FnGens` (the per-backend `name → Generation` map RFC-0013 already keys handler swaps on), so `ApplyTrigger` finds the route **shape-equal** with changed `FnGens` and returns `HandlerSwapped` — one atomic `HandlerRef.Swap`, explicitly **not** a `ShapeChanged`, so the debounced materializer never runs.
+Weighted aliases resolve to the same two-target `resolveResultMultipleFunctions` shape the canary path produces today (`FunctionWeights` prefix-sum distribution), so the per-request weighted pick reuses that machinery unchanged.
 
 ### Executor
 
-- Cache keying: poolmgr's cache already keys by `(function UID, Generation)` (`pkg/executor/fscache/poolcache.go`), and pods carry `fission.io/function-generation`; the router's `functionServiceMap`, however, keys by `(name, namespace, ResourceVersion)` today and must gain a version dimension.
-  Versions make the executor's keying explicit — a specialize request for `orders-v3` carries the snapshot spec, and its pods are labeled with the version name, so two versions run side by side with independent warm pools (that is what makes rollback instant when the old version is still warm).
-- Idle versions reap normally; rollback to a cold version pays one ordinary cold start (~100ms poolmgr budget), which is still incomparably better than re-deploying.
+- Cache keying: poolmgr's cache already keys by `crd.CacheKeyURG` = `(UID, ResourceVersion, Generation)` (`pkg/executor/fscache/poolcache.go`), and pods carry `fission.io/function-generation` (`gp_pod.go`, also on the headless Service selector); the router's `functionServiceMap`, by contrast, keys by `metadataKey{Name, Namespace, ResourceVersion}` (`pkg/router/functionServiceMap.go`) with no Generation and must gain a version dimension.
+  A specialize request for `orders-v3` carries the snapshot spec, and its pods are labeled with that generation, so two versions can key side by side.
+- **Warm rollback needs a reaper-policy change — this is the load-bearing correction.** The RFC's "instant rollback when the old version's pods still exist" does **not** hold against the shipped idle reaper: `poolcache.ListAvailableValue` computes `latestFuncGen` per UID and sets `svcRetain = 0` for **every non-latest generation**, so only the newest generation keeps warm idle pods — an older version's pool is drained to zero even while an alias could still need it. Warm rollback therefore requires teaching the reaper that "referenced by a live alias" is an independent retain reason: retain `minPoolSize` warm pods for any generation an alias (primary or weighted secondary) currently points at, not just the latest. Without this change, "rollback to the previous version" always pays a cold start. This is a new phase-3 design element, not a free property of the existing pools.
+- Rollback to a version with no alias-retained pods pays one ordinary cold start (~100ms poolmgr budget), still incomparably better than re-deploying.
 - Newdeploy versions map to per-version Deployments with the version label; the known live-object reconcile race on `fn update` (coalesced specialization) actually *shrinks*, because versioned specs never mutate.
 
 ### CanaryConfig absorption
@@ -119,12 +123,13 @@ Package snapshots ride ownerRefs; OCI artifacts follow the RFC-0012 reaper's ret
 - V5 *(weight sanity)*: a weighted alias's effective weights always sum to 100, and resolution distributes accordingly.
 - V6 *(rollback atomicity)*: a repoint is one CRD patch propagated as one handler-pointer swap — requests observe either the old or the new version, never an error window.
 
-**Verification.** No model checking here — every mutation is serialized through the apiserver and the router consumes it via the already-verified RFC-0013 pointer-swap machinery; the risk profile is validation logic, not concurrency.
+**Verification.** Most of the surface is validation logic serialized through the apiserver, and repoint rides the already-verified RFC-0013 pointer swap. But there is exactly one genuinely concurrent claim — V2/V3, retention GC racing a concurrent alias create — and it is **TLC-checked**, not just interleaving-tested: `aliasgc.tla` models the two-phase GC sweep against alias repoint, and its negative config (`RecheckGuard = FALSE`) produces the dangling-alias trace. It is the design source of truth for "GC must re-check alias references *inside* the delete (or gate delete on an alias-held finalizer/ownerRef), never act on the start-of-sweep snapshot," and it shows the webhook admission check alone is insufficient (admission passing does not keep the version alive against a concurrent sweep).
 
-- V1/V2/V3: envtest webhook + controller matrix (update/patch/delete attempts; GC sweep racing an alias create is the one genuine race — covered with a deliberate interleaving test).
+- V1: envtest webhook matrix (update/patch/delete-spec attempts) against `ValidateTransition`.
+- V2/V3: the `aliasgc.tla` model above, plus an envtest controller test driving the modeled interleaving (alias-create committing between the GC scan and the GC delete) to confirm the implementation matches the guarded model.
 - V4: `pgregory.net/rapid` properties over generated spec pairs — idempotence, symmetry of "not affecting", and a golden table for each classified field.
 - V5/V6: integration — statistical distribution assertion for 90/10 splits (reusing the canary test's tolerance approach), and a repoint-under-load test asserting zero non-2xx responses during rollback (respecting the coalesced-specialization race: assert on served responses, not live Deployment specs).
-- Zero-drift gate: alias operations must not increment `fission_router_route_resync_drift_total` and must not trigger the materializer (same CI bar as RFC-0013).
+- Zero-drift gate: alias operations must not increment `fission_router_route_resync_drift_total` and must not trigger the materializer. Note this "bar" is documentation-only today (`CLAUDE.md`, RFC-0013) — there is no code-level `== 0` assertion — so this RFC's integration test must **add** the metric assertion to make it a real gate, not merely inherit it.
 
 ## Alternatives considered
 
@@ -144,20 +149,20 @@ CanaryConfig unaffected until the opt-in shim phase.
 
 1. `FunctionVersion` + `FunctionAlias` CRDs, codegen, webhook immutability + reference validation, `fn publish` / `fn versions` / `alias` CLI (no router integration — versions are inert but inspectable).
 2. Resolver + router: `name:alias` references, weighted alias via the HandlerRef path, `fn rollback`; integration tests.
-3. Executor version-keyed caching + side-by-side warm pools; rollback-warmth integration test.
+3. Executor version-keyed caching + the **reaper retention change** (retain warm pods for alias-referenced non-latest generations, not just the latest — the `ListAvailableValue`/`latestFuncGen` policy); rollback-warmth integration test asserting no cold start on rollback to an alias-retained version.
 4. Auto-publish on runtime-affecting update + retention GC.
 5. Canary-on-aliases shim + deprecation docs.
 
 ## Verification / test plan
 
 - Webhook: immutability rejection matrix; alias→missing-version rejection; runtime-affecting-field classifier table test.
-- Integration: publish → alias → invoke-by-alias; weighted 90/10 split distribution assertion (statistical bounds, reusing the canary test's tolerance approach); rollback repoint latency (< 1s to first correct response); warm-rollback (old version pods alive → no cold start observed).
+- Integration: publish → alias → invoke-by-alias; weighted 90/10 split distribution assertion (statistical bounds, reusing the canary test's tolerance approach); rollback repoint latency (< 1s to first correct response); warm-rollback — after the phase-3 reaper-retention change, an alias-retained older version serves rollback with **no** cold start observed (this test is meaningless before that change, since the reaper drains non-latest pools).
   Respect the known coalesced-specialization race: assert on served responses, not live Deployment specs.
-- Route-table: alias weight tick and repoint produce zero `fission_router_route_resync_drift_total` and no materializer runs (same CI bar as RFC-0013).
-- GC: retain-N sweep never deletes an aliased version.
+- Route-table: alias weight tick and repoint produce zero `fission_router_route_resync_drift_total` and no materializer runs. This test must **assert** the metric (the "bar" is documentation-only today — see Verification), turning the RFC-0013 convention into an enforced gate for alias ops.
+- GC: `aliasgc.tla` (V2/V3 model) plus an envtest retain-N sweep that never deletes an aliased version and survives the modeled alias-create-vs-delete interleaving.
 
 ## Open questions
 
 - Whether `mqtrigger`/`timer`/`kubewatcher` references support aliases in v1 or phase 2 ships HTTP-only first (leaning: all trigger types at once — the resolver is shared, and partial support confuses).
 - Auto-publish default: opt-in (`versioning.mode: auto` required, as drafted) vs on-by-default with retain-N; opt-in first, flip later with data.
-- Interaction with `fission spec apply` three-way diffs when versions are auto-created objects the spec never declared (likely: versions are excluded from spec-apply pruning by kind).
+- ~~Interaction with `fission spec apply` pruning when versions are auto-created objects the spec never declared.~~ **Resolved by review:** `spec apply --delete` only prunes objects carrying the spec's `FISSION_DEPLOYMENT_UID_KEY` annotation and absent from the desired set (`ownedByDeployment`, `pkg/fission-cli/cmd/spec/resourcetype.go`). Controller-created `FunctionVersion`s carry no such annotation, so they are never pruned. The design requirement is therefore simply: the auto-publish controller must **not** stamp the deployment-UID annotation on versions it creates (and there is no `applyFunctionVersions` closure, so versions are not a spec-managed kind). Aliases, if made spec-first for GitOps, *would* get an `applyFunctionAliases` closure and be pruned normally — which is the intended GitOps behavior.

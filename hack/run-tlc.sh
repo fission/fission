@@ -5,9 +5,11 @@
 
 # Model-check the RFC-0021/0022 protocol specs with TLC.
 #
-# The two "green" configs must pass; the negative config (queue-unguarded.cfg,
-# EpochGuard = FALSE) must FAIL with an invariant violation — it documents why
-# the queue driver's settles are guarded on the lease epoch, not the message id.
+# The "green" configs must pass; each negative config must FAIL with an
+# invariant violation — every negative model documents why a guard exists
+# (queue-unguarded → the lease-epoch settle guard; eventlogsub-blindwrite → the
+# version-CAS cursor commit; quota-nonatomic → the atomic quota counter;
+# aliasgc-norecheck → the delete-time alias re-check).
 # See docs/rfc/specs/README.md.
 
 set -euo pipefail
@@ -58,7 +60,7 @@ tlc() {
 
 fail=0
 
-for cfg in queue.cfg workflowfold.cfg workflowbranch.cfg eventlogsub.cfg; do
+for cfg in queue.cfg workflowfold.cfg workflowbranch.cfg eventlogsub.cfg quota.cfg aliasgc.cfg; do
   spec="$(basename "${cfg}" .cfg).tla"
   echo "=== TLC (must pass): ${cfg} ==="
   if tlc "${cfg}" "${spec}"; then
@@ -73,7 +75,7 @@ done
 # guard exists (queue-unguarded → the lease-epoch settle guard;
 # eventlogsub-blindwrite → the version-CAS cursor commit). "cfg:spec" pairs
 # because a negative config shares its base spec's .tla.
-for pair in "queue-unguarded.cfg:queue.tla" "eventlogsub-blindwrite.cfg:eventlogsub.tla"; do
+for pair in "queue-unguarded.cfg:queue.tla" "eventlogsub-blindwrite.cfg:eventlogsub.tla" "quota-nonatomic.cfg:quota.tla" "aliasgc-norecheck.cfg:aliasgc.tla"; do
   cfg="${pair%%:*}"
   spec="${pair##*:}"
   echo "=== TLC (must FAIL): ${cfg} ==="
