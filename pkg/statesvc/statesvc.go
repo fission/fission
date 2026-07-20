@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -35,6 +36,10 @@ import (
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 )
+
+// pingTimeout bounds the readyz store ping (kubelet probe timeout is 1s;
+// staying under it keeps a slow statestore from wedging readiness).
+const pingTimeout = 800 * time.Millisecond
 
 // Options configures Start. The listener is either pre-bound by the caller
 // (Listener — e.g. a test harness binding 127.0.0.1:0) or bound here from
@@ -132,8 +137,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	})); err != nil {
 		return fmt.Errorf("adding statesvc readiness runnable: %w", err)
 	}
+	// readyz pings the backing store, but with a hard bound: the kubelet probe
+	// times out at 1s and fires every 5s, so an unbounded Ping against a slow
+	// or briefly-unreachable statestore would pile up blocked goroutines and
+	// flap the pod out of its Service (readiness AND, under the resulting
+	// pressure, liveness). The bound keeps a transient statestore hiccup from
+	// taking statesvc down with it.
 	ready := func() bool {
-		return cacheSynced.Load() && scoped.Ping(ctx) == nil
+		if !cacheSynced.Load() {
+			return false
+		}
+		pingCtx, cancel := context.WithTimeout(ctx, pingTimeout)
+		defer cancel()
+		return scoped.Ping(pingCtx) == nil
 	}
 
 	handler := newHandler(kv, index, auth, ready, logger)
