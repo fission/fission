@@ -12,16 +12,7 @@ import (
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
-)
-
-// Scope/identity request headers. The namespace and keyspace a request
-// operates on are CLAIMS the caller presents; they become the statestore
-// Scope only after the bearer token (re-derived from exactly those claims) or
-// the admin HMAC signature verifies. A function cannot name another
-// function's keyspace: its token only ever matches its own (ns, keyspace).
-const (
-	HeaderStateNamespace = "X-Fission-State-Namespace"
-	HeaderStateKeyspace  = "X-Fission-State-Keyspace"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // StateOwner is the fixed Scope.Owner for every function-state keyspace.
@@ -63,7 +54,7 @@ func newAuthenticator(master, masterOld []byte, opts hmacauth.VerifierOpts) *aut
 
 // adminScopeFromQuery reads the signature-covered admin scope claims.
 func adminScopeFromQuery(r *http.Request) (ns, keyspace string) {
-	return r.URL.Query().Get(adminQueryNamespace), r.URL.Query().Get(adminQueryKeyspace)
+	return r.URL.Query().Get(stateapi.QueryScopeNamespace), r.URL.Query().Get(stateapi.QueryScopeKeyspace)
 }
 
 // passThrough reports dev mode: no master secret configured, bearer requests
@@ -100,19 +91,19 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 		if auth := r.Header.Get("Authorization"); auth != "" {
 			// Bearer path: scope claims ride headers, and the token — which is
 			// derived from exactly those claims — is what binds them.
-			ns := r.Header.Get(HeaderStateNamespace)
-			keyspace := r.Header.Get(HeaderStateKeyspace)
+			ns := r.Header.Get(stateapi.HeaderNamespace)
+			keyspace := r.Header.Get(stateapi.HeaderKeyspace)
 			if ns == "" || keyspace == "" {
-				writeError(w, http.StatusBadRequest, "bad_request", "the "+HeaderStateNamespace+" and "+HeaderStateKeyspace+" headers are required")
+				writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "the "+stateapi.HeaderNamespace+" and "+stateapi.HeaderKeyspace+" headers are required")
 				return
 			}
 			token, isBearer := strings.CutPrefix(auth, "Bearer ")
 			if !isBearer {
-				writeError(w, http.StatusUnauthorized, "unauthorized", "unsupported Authorization scheme")
+				writeError(w, http.StatusUnauthorized, stateapi.CodeUnauthorized, "unsupported Authorization scheme")
 				return
 			}
 			if !a.passThrough() && !a.verifyKeyspaceToken(token, ns, keyspace) {
-				writeError(w, http.StatusForbidden, "forbidden", "token does not match the requested namespace/keyspace scope")
+				writeError(w, http.StatusForbidden, stateapi.CodeForbidden, "token does not match the requested namespace/keyspace scope")
 				return
 			}
 			a.serveWithScope(w, r, next, ns, keyspace, false)
@@ -122,26 +113,20 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 		// Admin path fails closed: without a configured master secret there is
 		// nothing to verify a signature against, so refuse rather than trust.
 		if adminNext == nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "admin access requires the internal auth secret (FISSION_INTERNAL_AUTH_SECRET) to be configured")
+			writeError(w, http.StatusUnauthorized, stateapi.CodeUnauthorized, "admin access requires the internal auth secret (FISSION_INTERNAL_AUTH_SECRET) to be configured")
 			return
 		}
 		// Admin scope claims must ride the QUERY STRING, not headers: the HMAC
 		// canonical covers method+URI+body+timestamp but not headers, so
 		// header-borne claims could be retargeted on a replayed signature
 		// within the skew window. Query-borne claims are signature-covered.
-		if r.URL.Query().Get(adminQueryNamespace) == "" || r.URL.Query().Get(adminQueryKeyspace) == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "admin requests must carry the "+adminQueryNamespace+" and "+adminQueryKeyspace+" query parameters (signature-covered), not scope headers")
+		if r.URL.Query().Get(stateapi.QueryScopeNamespace) == "" || r.URL.Query().Get(stateapi.QueryScopeKeyspace) == "" {
+			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "admin requests must carry the "+stateapi.QueryScopeNamespace+" and "+stateapi.QueryScopeKeyspace+" query parameters (signature-covered), not scope headers")
 			return
 		}
 		adminNext.ServeHTTP(w, r)
 	})
 }
-
-// Admin scope query parameters — covered by the HMAC-signed request URI.
-const (
-	adminQueryNamespace = "scope-namespace"
-	adminQueryKeyspace  = "scope-keyspace"
-)
 
 func (a *authenticator) serveWithScope(w http.ResponseWriter, r *http.Request, next http.Handler, ns, keyspace string, admin bool) {
 	sc := authedScope{

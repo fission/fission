@@ -22,6 +22,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statestore/memory"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // newBubbleHandler builds the handler without a network listener so it can
@@ -45,8 +46,8 @@ func newBubbleHandler(t *testing.T, fns map[types.NamespacedName]*fv1.StateConfi
 
 func bubbleReq(h http.Handler, method, path, ns, ks, token string, body []byte, hdrs map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
-	req.Header.Set(HeaderStateNamespace, ns)
-	req.Header.Set(HeaderStateKeyspace, ks)
+	req.Header.Set(stateapi.HeaderNamespace, ns)
+	req.Header.Set(stateapi.HeaderKeyspace, ks)
 	req.Header.Set("Authorization", "Bearer "+token)
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
@@ -67,7 +68,7 @@ func TestTTLExpiryVirtualClock(t *testing.T) {
 		tok := stateToken("ns-a", "fn-a")
 
 		// Explicit header TTL wins over the keyspace default.
-		rec := bubbleReq(h, http.MethodPut, "/v1/state/short", "ns-a", "fn-a", tok, []byte("v"), map[string]string{HeaderStateTTL: "10s"})
+		rec := bubbleReq(h, http.MethodPut, "/v1/state/short", "ns-a", "fn-a", tok, []byte("v"), map[string]string{stateapi.HeaderTTL: "10s"})
 		require.Equal(t, http.StatusNoContent, rec.Code)
 		// No header: DefaultTTL (30s) applies.
 		rec = bubbleReq(h, http.MethodPut, "/v1/state/dflt", "ns-a", "fn-a", tok, []byte("v"), nil)

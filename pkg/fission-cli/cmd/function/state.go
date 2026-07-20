@@ -25,6 +25,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/flag"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // RFC-0023 keyed-state admin CLI. It drives statesvc's admin channel
@@ -32,10 +33,6 @@ import (
 // Kubernetes clientset, because state lives in the statestore behind
 // statesvc, not in a CRD. The admin path FAILS CLOSED: without the secret,
 // statesvc answers 401 and this CLI refuses up front with the same guidance.
-const (
-	stateHeaderVersion = "X-Fission-State-Version"
-	stateHeaderTTL     = "X-Fission-State-TTL"
-)
 
 // StateCommands builds the `fission function state` sub-group.
 func StateCommands() *cobra.Command {
@@ -98,7 +95,7 @@ func (opts *stateSubCommand) get(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "version: %s\n", resp.Header.Get(stateHeaderVersion))
+	fmt.Fprintf(os.Stderr, "version: %s\n", resp.Header.Get(stateapi.HeaderVersion))
 	fmt.Println(string(body))
 	return nil
 }
@@ -106,7 +103,7 @@ func (opts *stateSubCommand) get(input cli.Input) error {
 func (opts *stateSubCommand) set(input cli.Input) error {
 	hdrs := map[string]string{}
 	if ttl := input.Duration(flagkey.StateTTL); ttl > 0 {
-		hdrs[stateHeaderTTL] = ttl.String()
+		hdrs[stateapi.HeaderTTL] = ttl.String()
 	}
 	if input.IsSet(flagkey.StateIfVersion) {
 		hdrs["If-Match"] = strconv.Itoa(input.Int(flagkey.StateIfVersion))
@@ -160,10 +157,7 @@ func (opts *stateSubCommand) list(input cli.Input) error {
 			_ = resp.Body.Close()
 			return err
 		}
-		var page struct {
-			Keys   []string `json:"keys"`
-			Cursor string   `json:"cursor"`
-		}
+		var page stateapi.ListResponse
 		err = json.NewDecoder(resp.Body).Decode(&page)
 		_ = resp.Body.Close()
 		if err != nil {
@@ -221,8 +215,8 @@ func (opts *stateSubCommand) call(input cli.Input, method, key, rawQuery string,
 	if err != nil {
 		return nil, err
 	}
-	q.Set("scope-namespace", namespace)
-	q.Set("scope-keyspace", keyspace)
+	q.Set(stateapi.QueryScopeNamespace, namespace)
+	q.Set(stateapi.QueryScopeKeyspace, keyspace)
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(input.Context(), method, u.String(), body)
@@ -247,10 +241,7 @@ func stateStatusErr(resp *http.Response) error {
 		return nil
 	}
 	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-	var e struct {
-		Error string `json:"error"`
-		Code  string `json:"code"`
-	}
+	var e stateapi.Error
 	detail := strings.TrimSpace(string(msg))
 	if json.Unmarshal(msg, &e) == nil && e.Error != "" {
 		detail = e.Error

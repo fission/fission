@@ -15,15 +15,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/fission/fission/pkg/statestore"
-)
-
-// Wire headers for value versions and TTLs. Versions ride If-Match /
-// X-Fission-State-Version and map onto statestore's Value.Version /
-// SetOptions.IfVersion CAS semantics (there is no separate CAS primitive in
-// the substrate — CAS is Set with IfVersion, RFC-0023).
-const (
-	HeaderStateVersion = "X-Fission-State-Version"
-	HeaderStateTTL     = "X-Fission-State-TTL"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // maxListLimit bounds one listing page; larger requests are clamped. Listing
@@ -34,15 +26,10 @@ const (
 	maxListLimit     = 1000
 )
 
-type apiError struct {
-	Error string `json:"error"`
-	Code  string `json:"code"`
-}
-
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(apiError{Error: msg, Code: code})
+	_ = json.NewEncoder(w).Encode(stateapi.Error{Error: msg, Code: code})
 }
 
 // writeStoreErr maps substrate errors onto the HTTP surface. ErrQuotaExceeded
@@ -51,15 +38,15 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 func writeStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, statestore.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "key not found")
+		writeError(w, http.StatusNotFound, stateapi.CodeNotFound, "key not found")
 	case errors.Is(err, statestore.ErrVersionConflict):
-		writeError(w, http.StatusPreconditionFailed, "version_conflict", "version precondition failed")
+		writeError(w, http.StatusPreconditionFailed, stateapi.CodeVersionConflict, "version precondition failed")
 	case errors.Is(err, statestore.ErrQuotaExceeded):
-		writeError(w, http.StatusTooManyRequests, "quota_keys", "keyspace live-key quota exceeded")
+		writeError(w, http.StatusTooManyRequests, stateapi.CodeQuotaKeys, "keyspace live-key quota exceeded")
 	case errors.Is(err, statestore.ErrCapabilityUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "capability_unavailable", "state backend unavailable")
+		writeError(w, http.StatusServiceUnavailable, stateapi.CodeUnavailable, "state backend unavailable")
 	default:
-		writeError(w, http.StatusInternalServerError, "internal", "internal error")
+		writeError(w, http.StatusInternalServerError, stateapi.CodeInternal, "internal error")
 	}
 }
 
@@ -107,11 +94,11 @@ func (h *handler) requireKnownKeyspace(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sc, ok := scopeFrom(r.Context())
 		if !ok {
-			writeError(w, http.StatusInternalServerError, "internal", "missing auth scope")
+			writeError(w, http.StatusInternalServerError, stateapi.CodeInternal, "missing auth scope")
 			return
 		}
 		if !sc.admin && !h.index.Known(sc.scope.Namespace, sc.scope.Keyspace) {
-			writeError(w, http.StatusForbidden, "forbidden", "no function claims this keyspace")
+			writeError(w, http.StatusForbidden, stateapi.CodeForbidden, "no function claims this keyspace")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -125,7 +112,7 @@ func (h *handler) get(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	w.Header().Set(HeaderStateVersion, strconv.FormatInt(v.Version, 10))
+	w.Header().Set(stateapi.HeaderVersion, strconv.FormatInt(v.Version, 10))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	_, _ = w.Write(v.Data)
 }
@@ -141,10 +128,10 @@ func (h *handler) setOptions(r *http.Request, sc authedScope) (statestore.SetOpt
 		}
 		o.IfVersion = &ver
 	}
-	if ttlHdr := r.Header.Get(HeaderStateTTL); ttlHdr != "" {
+	if ttlHdr := r.Header.Get(stateapi.HeaderTTL); ttlHdr != "" {
 		ttl, err := time.ParseDuration(ttlHdr)
 		if err != nil || ttl < 0 {
-			return o, errors.New(HeaderStateTTL + " must be a non-negative Go duration (e.g. 300s)")
+			return o, errors.New(stateapi.HeaderTTL + " must be a non-negative Go duration (e.g. 300s)")
 		}
 		o.TTL = ttl
 	} else {
@@ -159,7 +146,7 @@ func (h *handler) readValue(w http.ResponseWriter, body io.Reader, sc authedScop
 	maxBytes := h.index.Resolve(sc.scope).MaxValueBytes
 	val, err := io.ReadAll(io.LimitReader(body, maxBytes+1))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "reading request body: "+err.Error())
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "reading request body: "+err.Error())
 		return nil, false
 	}
 	if int64(len(val)) > maxBytes {
@@ -172,14 +159,14 @@ func (h *handler) readValue(w http.ResponseWriter, body io.Reader, sc authedScop
 // writeValueTooLarge answers the shared MaxValueBytes rejection (PUT and CAS
 // both hit it), keeping the status and machine-readable code in one place.
 func writeValueTooLarge(w http.ResponseWriter) {
-	writeError(w, http.StatusRequestEntityTooLarge, "quota_value_bytes", "value exceeds the keyspace MaxValueBytes quota")
+	writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeQuotaValueBytes, "value exceeds the keyspace MaxValueBytes quota")
 }
 
 func (h *handler) put(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
 	o, err := h.setOptions(r, sc)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, err.Error())
 		return
 	}
 	val, ok := h.readValue(w, r.Body, sc)
@@ -199,7 +186,7 @@ func (h *handler) del(w http.ResponseWriter, r *http.Request) {
 	if im := r.Header.Get("If-Match"); im != "" {
 		ver, err := strconv.ParseInt(im, 10, 64)
 		if err != nil || ver <= 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "If-Match must be a positive integer version")
+			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "If-Match must be a positive integer version")
 			return
 		}
 		ifVersion = ver
@@ -211,25 +198,18 @@ func (h *handler) del(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// casRequest is the explicit CAS body for clients without If-Match plumbing.
-// Value is base64 (JSON []byte); expectVersion 0 means create-only.
-type casRequest struct {
-	ExpectVersion int64  `json:"expectVersion"`
-	Value         []byte `json:"value"`
-}
-
 func (h *handler) cas(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
 	maxBytes := h.index.Resolve(sc.scope).MaxValueBytes
 	// Envelope cap: base64 inflation (4/3) plus field overhead.
 	body := io.LimitReader(r.Body, maxBytes*2+4096)
-	var req casRequest
+	var req stateapi.CASRequest
 	if err := json.NewDecoder(body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "invalid CAS body: "+err.Error())
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid CAS body: "+err.Error())
 		return
 	}
 	if req.ExpectVersion < 0 {
-		writeError(w, http.StatusBadRequest, "bad_request", "expectVersion must be >= 0")
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "expectVersion must be >= 0")
 		return
 	}
 	if int64(len(req.Value)) > maxBytes {
@@ -244,18 +224,13 @@ func (h *handler) cas(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type listResponse struct {
-	Keys   []string `json:"keys"`
-	Cursor string   `json:"cursor,omitempty"`
-}
-
 func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
 	limit := defaultListLimit
 	if ls := r.URL.Query().Get("limit"); ls != "" {
 		n, err := strconv.Atoi(ls)
 		if err != nil || n <= 0 {
-			writeError(w, http.StatusBadRequest, "bad_request", "limit must be a positive integer")
+			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "limit must be a positive integer")
 			return
 		}
 		limit = min(n, maxListLimit)
@@ -269,5 +244,5 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(listResponse{Keys: kp.Keys, Cursor: kp.Next})
+	_ = json.NewEncoder(w).Encode(stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
 }

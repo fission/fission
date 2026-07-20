@@ -56,6 +56,14 @@ func TestNewSpecializeRequestStateKeyspace(t *testing.T) {
 		req := cfg.NewSpecializeRequest(stateTestFn(&fv1.StateConfig{Keyspace: "carts"}), stateTestEnv())
 		assert.Equal(t, "carts", req.LoadReq.StateKeyspace)
 	})
+
+	t.Run("infinite env: no token minted (specialize-time S1 backstop)", func(t *testing.T) {
+		t.Parallel()
+		env := stateTestEnv()
+		env.Spec.AllowedFunctionsPerContainer = fv1.AllowedFunctionsPerContainerInfinite
+		req := cfg.NewSpecializeRequest(stateTestFn(&fv1.StateConfig{Keyspace: "carts"}), env)
+		assert.Empty(t, req.LoadReq.StateKeyspace, "an infinite env must not receive a scoped token")
+	})
 }
 
 // TestSpecializePayloadCarriesNoToken pins the security property the

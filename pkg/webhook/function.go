@@ -124,10 +124,16 @@ func (r *Function) rejectStateOnInfiniteEnv(fn *v1.Function) error {
 	}
 	var env v1.Environment
 	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: fn.Spec.Environment.Name, Namespace: envNS}, &env); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil // env not created yet; the executor rechecks at specialize time
+		// Fail open for early UX feedback only: the authoritative enforcement is
+		// at specialize time (pkg/fetcher/config.stateKeyspace refuses to mint a
+		// token on an infinite env), which also covers what this admission check
+		// cannot — a function created before its environment (NotFound here), a
+		// transient lookup failure, or an environment mutated to infinite after
+		// functions opted in (no Function write to re-trigger this webhook).
+		if !apierrors.IsNotFound(err) {
+			r.Logger.V(1).Info("could not read environment to validate state opt-in; deferring to specialize-time enforcement", "function", fn.Name, "environment", fn.Spec.Environment.Name, "error", err)
 		}
-		return nil // transient lookup failure must not block unrelated function writes
+		return nil
 	}
 	if env.Spec.AllowedFunctionsPerContainer == v1.AllowedFunctionsPerContainerInfinite {
 		return fmt.Errorf("the state API (spec.state) is incompatible with environment %q (allowedFunctionsPerContainer: infinite): its pods serve multiple functions from one shared mount, which cannot deliver a per-function scoped state token", env.Name)

@@ -24,6 +24,7 @@ import (
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statestore/memory"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 var testMaster = []byte("test-master-secret")
@@ -60,8 +61,8 @@ func doState(t *testing.T, srv *httptest.Server, method, path, ns, keyspace, tok
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), method, srv.URL+path, bytes.NewReader(body))
 	require.NoError(t, err)
-	req.Header.Set(HeaderStateNamespace, ns)
-	req.Header.Set(HeaderStateKeyspace, keyspace)
+	req.Header.Set(stateapi.HeaderNamespace, ns)
+	req.Header.Set(stateapi.HeaderKeyspace, keyspace)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -99,7 +100,7 @@ func TestHandlerCRUDRoundTrip(t *testing.T) {
 
 	resp = doState(t, srv, http.MethodGet, "/v1/state/counter", "ns-a", "fn-a", tok, nil, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "1", resp.Header.Get(HeaderStateVersion))
+	assert.Equal(t, "1", resp.Header.Get(stateapi.HeaderVersion))
 	b, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, "41", string(b))
 
@@ -127,10 +128,10 @@ func TestHandlerCASMatrix(t *testing.T) {
 	assert.Equal(t, http.StatusPreconditionFailed, resp.StatusCode)
 
 	// Explicit CAS endpoint.
-	body, _ := json.Marshal(casRequest{ExpectVersion: 2, Value: []byte("v4")})
+	body, _ := json.Marshal(stateapi.CASRequest{ExpectVersion: 2, Value: []byte("v4")})
 	resp = doState(t, srv, http.MethodPost, "/v1/state/k/cas", "ns-a", "fn-a", tok, body, nil)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-	body, _ = json.Marshal(casRequest{ExpectVersion: 2, Value: []byte("v5")})
+	body, _ = json.Marshal(stateapi.CASRequest{ExpectVersion: 2, Value: []byte("v5")})
 	resp = doState(t, srv, http.MethodPost, "/v1/state/k/cas", "ns-a", "fn-a", tok, body, nil)
 	assert.Equal(t, http.StatusPreconditionFailed, resp.StatusCode)
 
@@ -177,7 +178,7 @@ func TestHandlerQuotaRejections(t *testing.T) {
 	// Value too large: 413 with the machine-readable code.
 	resp := doState(t, srv, http.MethodPut, "/v1/state/big", "ns-a", "fn-a", tok, []byte("123456789"), nil)
 	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
-	var e apiError
+	var e stateapi.Error
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
 	assert.Equal(t, "quota_value_bytes", e.Code)
 
@@ -188,7 +189,7 @@ func TestHandlerQuotaRejections(t *testing.T) {
 	}
 	resp = doState(t, srv, http.MethodPut, "/v1/state/k2", "ns-a", "fn-a", tok, []byte("v"), nil)
 	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
-	e = apiError{}
+	e = stateapi.Error{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
 	assert.Equal(t, "quota_keys", e.Code)
 }
@@ -204,14 +205,14 @@ func TestHandlerList(t *testing.T) {
 
 	resp := doState(t, srv, http.MethodGet, "/v1/state?prefix=a&limit=2", "ns-a", "fn-a", tok, nil, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var lr listResponse
+	var lr stateapi.ListResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&lr))
 	assert.Equal(t, []string{"a1", "a2"}, lr.Keys)
 	require.NotEmpty(t, lr.Cursor)
 
 	resp = doState(t, srv, http.MethodGet, "/v1/state?prefix=a&limit=2&cursor="+lr.Cursor, "ns-a", "fn-a", tok, nil, nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	lr = listResponse{}
+	lr = stateapi.ListResponse{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&lr))
 	assert.Equal(t, []string{"a3"}, lr.Keys)
 	assert.Empty(t, lr.Cursor)
@@ -222,10 +223,10 @@ func TestHandlerDefaultTTLHeaderApplied(t *testing.T) {
 	srv, _ := newTestServer(t, twoFns())
 	tok := stateToken("ns-a", "fn-a")
 	// Bad TTL header is a 400, not a silent default.
-	resp := doState(t, srv, http.MethodPut, "/v1/state/k", "ns-a", "fn-a", tok, []byte("v"), map[string]string{HeaderStateTTL: "soon"})
+	resp := doState(t, srv, http.MethodPut, "/v1/state/k", "ns-a", "fn-a", tok, []byte("v"), map[string]string{stateapi.HeaderTTL: "soon"})
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	// Valid TTL accepted.
-	resp = doState(t, srv, http.MethodPut, "/v1/state/k", "ns-a", "fn-a", tok, []byte("v"), map[string]string{HeaderStateTTL: "1h"})
+	resp = doState(t, srv, http.MethodPut, "/v1/state/k", "ns-a", "fn-a", tok, []byte("v"), map[string]string{stateapi.HeaderTTL: "1h"})
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
@@ -254,8 +255,8 @@ func TestHandlerAdminHMACPath(t *testing.T) {
 	// signature-covered, so accepting them would allow replay retargeting.
 	req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v1/state/admin-key", nil)
 	require.NoError(t, err)
-	req2.Header.Set(HeaderStateNamespace, "ns-a")
-	req2.Header.Set(HeaderStateKeyspace, "ghost")
+	req2.Header.Set(stateapi.HeaderNamespace, "ns-a")
+	req2.Header.Set(stateapi.HeaderKeyspace, "ghost")
 	resp2, err := signed.Do(req2)
 	require.NoError(t, err)
 	defer func() { _ = resp2.Body.Close() }()

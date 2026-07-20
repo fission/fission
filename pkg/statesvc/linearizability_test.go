@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // RFC-0023 S2 (no lost updates), checked against the real HTTP surface — not
@@ -86,13 +87,13 @@ func (c *stateClient) get(t *testing.T, key string) (int64, []byte, int) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
-	ver, _ := strconv.ParseInt(resp.Header.Get(HeaderStateVersion), 10, 64)
+	ver, _ := strconv.ParseInt(resp.Header.Get(stateapi.HeaderVersion), 10, 64)
 	return ver, body, resp.StatusCode
 }
 
 func (c *stateClient) cas(t *testing.T, key string, expect int64, val []byte) int {
 	t.Helper()
-	body, err := json.Marshal(casRequest{ExpectVersion: expect, Value: val})
+	body, err := json.Marshal(stateapi.CASRequest{ExpectVersion: expect, Value: val})
 	require.NoError(t, err)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, c.srv.URL+"/v1/state/"+key+"/cas", bytes.NewReader(body))
 	require.NoError(t, err)
@@ -104,8 +105,8 @@ func (c *stateClient) cas(t *testing.T, key string, expect int64, val []byte) in
 }
 
 func (c *stateClient) decorate(req *http.Request) {
-	req.Header.Set(HeaderStateNamespace, c.ns)
-	req.Header.Set(HeaderStateKeyspace, c.ks)
+	req.Header.Set(stateapi.HeaderNamespace, c.ns)
+	req.Header.Set(stateapi.HeaderKeyspace, c.ks)
 	req.Header.Set("Authorization", "Bearer "+c.token)
 }
 
