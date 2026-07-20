@@ -123,8 +123,12 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		replicas = *targetReplicas
 	}
 
+	if fn.Spec.PodSpec == nil {
+		return nil, fmt.Errorf("podSpec is not set for function %s", fn.Name)
+	}
+
 	gracePeriodSeconds := int64(6 * 60)
-	if *fn.Spec.PodSpec.TerminationGracePeriodSeconds >= 0 {
+	if fn.Spec.PodSpec.TerminationGracePeriodSeconds != nil && *fn.Spec.PodSpec.TerminationGracePeriodSeconds >= 0 {
 		gracePeriodSeconds = *fn.Spec.PodSpec.TerminationGracePeriodSeconds
 	}
 
@@ -166,10 +170,6 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
 	if err != nil {
 		return nil, err
-	}
-
-	if fn.Spec.PodSpec == nil {
-		return nil, fmt.Errorf("podSpec is not set for function %s", fn.Name)
 	}
 
 	container := &apiv1.Container{

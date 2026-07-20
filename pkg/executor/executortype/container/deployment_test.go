@@ -100,6 +100,30 @@ func TestContainerGetDeploymentSpec(t *testing.T) {
 		assert.Equal(t, int32(2), *deployment.Spec.Replicas)
 	})
 
+	t.Run("nil TerminationGracePeriodSeconds falls back to the default", func(t *testing.T) {
+		cn := newTestContainer()
+		fn := newTestContainerFunction()
+		fn.Spec.PodSpec.TerminationGracePeriodSeconds = nil
+		replicas := int32(1)
+
+		deployment, err := cn.getDeploymentSpec(t.Context(), fn, &replicas, "ctr-fn", "default", nil, nil)
+		require.NoError(t, err)
+
+		pod := deployment.Spec.Template.Spec
+		require.NotNil(t, pod.TerminationGracePeriodSeconds)
+		assert.Equal(t, int64(6*60), *pod.TerminationGracePeriodSeconds)
+	})
+
+	t.Run("nil PodSpec returns an error instead of panicking", func(t *testing.T) {
+		cn := newTestContainer()
+		fn := newTestContainerFunction()
+		fn.Spec.PodSpec = nil
+		replicas := int32(1)
+
+		_, err := cn.getDeploymentSpec(t.Context(), fn, &replicas, "ctr-fn", "default", nil, nil)
+		require.Error(t, err)
+	})
+
 	t.Run("istio disables sidecar injection", func(t *testing.T) {
 		cn := newTestContainer()
 		cn.useIstio = true
