@@ -112,22 +112,39 @@ func (ix *FunctionIndex) ClaimedByOther(fn types.NamespacedName, namespace, keys
 	return false
 }
 
-// lookup returns the effective (min-across-claimants) quota and TTL for a
-// keyspace; platform defaults when unclaimed (defensive — unclaimed keyspaces
-// are only reachable on the admin path).
+// lookup returns the effective quota and TTL for a keyspace: the MINIMUM
+// across its claimants' effective values (per-function defaults were applied
+// at Upsert, so a function declaring a quota ABOVE the platform default gets
+// it — the default is a fallback, never a ceiling; a lax claimant can never
+// widen a stricter one's budget). An unclaimed keyspace gets the platform
+// defaults (defensive — unclaimed keyspaces are only reachable on the admin
+// path).
 func (ix *FunctionIndex) lookup(namespace, keyspace string) (statestore.Quota, time.Duration) {
-	q := statestore.Quota{
-		MaxValueBytes: fv1.DefaultStateMaxValueBytes,
-		MaxKeys:       fv1.DefaultStateMaxKeys,
-	}
-	var ttl time.Duration
-
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
-	for claimant := range ix.byRef[keyspaceRef{namespace: namespace, keyspace: keyspace}] {
+
+	claimants := ix.byRef[keyspaceRef{namespace: namespace, keyspace: keyspace}]
+	if len(claimants) == 0 {
+		return statestore.Quota{
+			MaxValueBytes: fv1.DefaultStateMaxValueBytes,
+			MaxKeys:       fv1.DefaultStateMaxKeys,
+		}, 0
+	}
+
+	var (
+		q   statestore.Quota
+		ttl time.Duration
+	)
+	first := true
+	for claimant := range claimants {
 		st := ix.byFn[claimant]
-		q.MaxValueBytes = min(q.MaxValueBytes, st.maxValueBytes)
-		q.MaxKeys = min(q.MaxKeys, st.maxKeys)
+		if first {
+			q = statestore.Quota{MaxValueBytes: st.maxValueBytes, MaxKeys: st.maxKeys}
+			first = false
+		} else {
+			q.MaxValueBytes = min(q.MaxValueBytes, st.maxValueBytes)
+			q.MaxKeys = min(q.MaxKeys, st.maxKeys)
+		}
 		if st.defaultTTL > 0 && (ttl == 0 || st.defaultTTL < ttl) {
 			ttl = st.defaultTTL
 		}

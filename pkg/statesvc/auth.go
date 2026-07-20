@@ -61,6 +61,11 @@ func newAuthenticator(master, masterOld []byte, opts hmacauth.VerifierOpts) *aut
 	return a
 }
 
+// adminScopeFromQuery reads the signature-covered admin scope claims.
+func adminScopeFromQuery(r *http.Request) (ns, keyspace string) {
+	return r.URL.Query().Get(adminQueryNamespace), r.URL.Query().Get(adminQueryKeyspace)
+}
+
 // passThrough reports dev mode: no master secret configured, bearer requests
 // are accepted on their claims alone (parity with the router-internal and
 // statestoresvc empty-secret convention; the Helm chart always sets a secret).
@@ -87,18 +92,20 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 	adminNext := http.Handler(nil)
 	if a.adminMW != nil {
 		adminNext = a.adminMW(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			a.serveWithScope(w, r, next, true)
+			ns, keyspace := adminScopeFromQuery(r)
+			a.serveWithScope(w, r, next, ns, keyspace, true)
 		}))
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ns := r.Header.Get(HeaderStateNamespace)
-		keyspace := r.Header.Get(HeaderStateKeyspace)
-		if ns == "" || keyspace == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "the "+HeaderStateNamespace+" and "+HeaderStateKeyspace+" headers are required")
-			return
-		}
-
 		if auth := r.Header.Get("Authorization"); auth != "" {
+			// Bearer path: scope claims ride headers, and the token — which is
+			// derived from exactly those claims — is what binds them.
+			ns := r.Header.Get(HeaderStateNamespace)
+			keyspace := r.Header.Get(HeaderStateKeyspace)
+			if ns == "" || keyspace == "" {
+				writeError(w, http.StatusBadRequest, "bad_request", "the "+HeaderStateNamespace+" and "+HeaderStateKeyspace+" headers are required")
+				return
+			}
 			token, isBearer := strings.CutPrefix(auth, "Bearer ")
 			if !isBearer {
 				writeError(w, http.StatusUnauthorized, "unauthorized", "unsupported Authorization scheme")
@@ -108,7 +115,7 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 				writeError(w, http.StatusForbidden, "forbidden", "token does not match the requested namespace/keyspace scope")
 				return
 			}
-			a.serveWithScope(w, r, next, false)
+			a.serveWithScope(w, r, next, ns, keyspace, false)
 			return
 		}
 
@@ -118,16 +125,30 @@ func (a *authenticator) middleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "admin access requires the internal auth secret (FISSION_INTERNAL_AUTH_SECRET) to be configured")
 			return
 		}
+		// Admin scope claims must ride the QUERY STRING, not headers: the HMAC
+		// canonical covers method+URI+body+timestamp but not headers, so
+		// header-borne claims could be retargeted on a replayed signature
+		// within the skew window. Query-borne claims are signature-covered.
+		if r.URL.Query().Get(adminQueryNamespace) == "" || r.URL.Query().Get(adminQueryKeyspace) == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "admin requests must carry the "+adminQueryNamespace+" and "+adminQueryKeyspace+" query parameters (signature-covered), not scope headers")
+			return
+		}
 		adminNext.ServeHTTP(w, r)
 	})
 }
 
-func (a *authenticator) serveWithScope(w http.ResponseWriter, r *http.Request, next http.Handler, admin bool) {
+// Admin scope query parameters — covered by the HMAC-signed request URI.
+const (
+	adminQueryNamespace = "scope-namespace"
+	adminQueryKeyspace  = "scope-keyspace"
+)
+
+func (a *authenticator) serveWithScope(w http.ResponseWriter, r *http.Request, next http.Handler, ns, keyspace string, admin bool) {
 	sc := authedScope{
 		scope: statestore.Scope{
-			Namespace: r.Header.Get(HeaderStateNamespace),
+			Namespace: ns,
 			Owner:     StateOwner,
-			Keyspace:  r.Header.Get(HeaderStateKeyspace),
+			Keyspace:  keyspace,
 		},
 		admin: admin,
 	}

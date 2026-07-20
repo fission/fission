@@ -229,32 +229,45 @@ func TestHandlerDefaultTTLHeaderApplied(t *testing.T) {
 }
 
 // TestHandlerAdminHMACPath drives the CLI/operator channel: HMAC-signed
-// requests (no bearer) with ServiceStateAPI, including access to unclaimed
-// keyspaces (orphan inspection) — and fail-closed behavior without a secret.
+// requests (no bearer) with ServiceStateAPI and QUERY-borne scope claims
+// (signature-covered), including access to unclaimed keyspaces (orphan
+// inspection) — plus fail-closed behavior without a signature and rejection
+// of header-borne admin scope (the replay-retarget hardening).
 func TestHandlerAdminHMACPath(t *testing.T) {
 	t.Parallel()
 	srv, _ := newTestServer(t, twoFns())
 
 	signed := &http.Client{Transport: hmacauth.NewServiceSigningTransport(testMaster, hmacauth.ServiceStateAPI, http.DefaultTransport, "/v1/state")}
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/v1/state/admin-key", bytes.NewReader([]byte("v")))
+	// Signed PUT with scope in the query: accepted, even for an unclaimed
+	// keyspace (admin may inspect orphans).
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
+		srv.URL+"/v1/state/admin-key?scope-namespace=ns-a&scope-keyspace=ghost", bytes.NewReader([]byte("v")))
 	require.NoError(t, err)
-	req.Header.Set(HeaderStateNamespace, "ns-a")
-	req.Header.Set(HeaderStateKeyspace, "ghost") // unclaimed: admin may inspect
 	resp, err := signed.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	// Unsigned, bearer-less request: 401.
+	// Signed request with scope only in HEADERS: rejected — headers are not
+	// signature-covered, so accepting them would allow replay retargeting.
 	req2, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v1/state/admin-key", nil)
 	require.NoError(t, err)
 	req2.Header.Set(HeaderStateNamespace, "ns-a")
 	req2.Header.Set(HeaderStateKeyspace, "ghost")
-	resp2, err := srv.Client().Do(req2)
+	resp2, err := signed.Do(req2)
 	require.NoError(t, err)
 	defer func() { _ = resp2.Body.Close() }()
-	assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+
+	// Unsigned, bearer-less request: 401 from the verifier.
+	req3, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+"/v1/state/admin-key?scope-namespace=ns-a&scope-keyspace=ghost", nil)
+	require.NoError(t, err)
+	resp3, err := srv.Client().Do(req3)
+	require.NoError(t, err)
+	defer func() { _ = resp3.Body.Close() }()
+	assert.Equal(t, http.StatusUnauthorized, resp3.StatusCode)
 }
 
 func TestHandlerHealthEndpointsUnauthenticated(t *testing.T) {
@@ -279,6 +292,18 @@ func TestFunctionIndexMinQuotaAcrossClaimants(t *testing.T) {
 	q := ix.Resolve(statestore.Scope{Namespace: "ns", Owner: StateOwner, Keyspace: "shared"})
 	assert.EqualValues(t, 10, q.MaxKeys, "min across claimants")
 	assert.EqualValues(t, 1024, q.MaxValueBytes, "min across claimants")
+
+	// A declared quota ABOVE the platform default is honored — the default is
+	// a per-function fallback, never a ceiling.
+	ix.Upsert(types.NamespacedName{Namespace: "ns", Name: "big"}, &fv1.StateConfig{Keyspace: "big", MaxKeys: 50000, MaxValueBytes: 1 << 20})
+	qBig := ix.Resolve(statestore.Scope{Namespace: "ns", Owner: StateOwner, Keyspace: "big"})
+	assert.EqualValues(t, 50000, qBig.MaxKeys)
+	assert.EqualValues(t, 1<<20, qBig.MaxValueBytes)
+
+	// Unclaimed keyspace: platform defaults.
+	qGhost := ix.Resolve(statestore.Scope{Namespace: "ns", Owner: StateOwner, Keyspace: "ghost"})
+	assert.EqualValues(t, fv1.DefaultStateMaxKeys, qGhost.MaxKeys)
+	assert.EqualValues(t, fv1.DefaultStateMaxValueBytes, qGhost.MaxValueBytes)
 	assert.True(t, ix.ClaimedByOther(types.NamespacedName{Namespace: "ns", Name: "f1"}, "ns", "shared"))
 
 	ix.Delete(types.NamespacedName{Namespace: "ns", Name: "f2"})

@@ -33,10 +33,8 @@ import (
 // statesvc, not in a CRD. The admin path FAILS CLOSED: without the secret,
 // statesvc answers 401 and this CLI refuses up front with the same guidance.
 const (
-	stateHeaderNamespace = "X-Fission-State-Namespace"
-	stateHeaderKeyspace  = "X-Fission-State-Keyspace"
-	stateHeaderVersion   = "X-Fission-State-Version"
-	stateHeaderTTL       = "X-Fission-State-TTL"
+	stateHeaderVersion = "X-Fission-State-Version"
+	stateHeaderTTL     = "X-Fission-State-TTL"
 )
 
 // StateCommands builds the `fission function state` sub-group.
@@ -216,14 +214,21 @@ func (opts *stateSubCommand) call(input cli.Input, method, key, rawQuery string,
 	if key != "" {
 		u.Path += "/" + key
 	}
-	u.RawQuery = rawQuery
+	// Admin scope claims ride the QUERY STRING so the HMAC signature (which
+	// covers the request URI, not headers) binds them — statesvc rejects
+	// header-borne admin scope.
+	q, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return nil, err
+	}
+	q.Set("scope-namespace", namespace)
+	q.Set("scope-keyspace", keyspace)
+	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(input.Context(), method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set(stateHeaderNamespace, namespace)
-	req.Header.Set(stateHeaderKeyspace, keyspace)
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
 	}

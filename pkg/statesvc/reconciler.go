@@ -70,7 +70,12 @@ func (r *functionStateReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	if fn.Spec.State == nil {
 		// Opted out (or never opted in): drop from the index and release any
-		// finalizer so the opt-out never wedges a later delete.
+		// finalizer so the opt-out never wedges a later delete. Deliberately
+		// NO purge here: opt-out is reversible (re-adding the same keyspace
+		// re-attaches to the data), unlike delete; the operator reclaims a
+		// truly abandoned keyspace via `fission fn state delete` (admin path
+		// reaches unclaimed keyspaces) or by deleting the function while
+		// still opted in.
 		r.index.Delete(req.NamespacedName)
 		if controllerutil.ContainsFinalizer(fn, stateFinalizer) {
 			if _, err := r.updateFinalizerWithRetry(ctx, req.NamespacedName, func(f *fv1.Function) bool {
