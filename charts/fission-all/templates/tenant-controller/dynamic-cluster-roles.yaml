@@ -8,7 +8,7 @@
 # namespace-scoped (per-namespace Roles + scoped cache); cluster mode grants those
 # cluster-wide via the separate cluster-mode-bindings.yaml. The per-namespace Roles
 # remain for the static path.
-{{- range $component := list "buildermgr" "kubewatcher" "mcp" "kafka" "keda" "router" "timer" "canaryconfig" "executor" "statestore-mqt" "workflow" }}
+{{- range $component := list "buildermgr" "kubewatcher" "mcp" "kafka" "keda" "router" "timer" "canaryconfig" "executor" "statestore-mqt" "workflow" "statesvc" }}
 {{- include "fission-cluster-role-generator" (merge (dict "component" $component) $) }}
 {{- end }}
 {{- end }}

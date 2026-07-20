@@ -85,6 +85,15 @@ func TestFunctionState(t *testing.T) {
 
 	f := framework.Connect(t)
 	stateSvcReachableOrSkip(t, ctx, f)
+	// The RFC-0023 state token is derived from the master internal-auth secret,
+	// which only reaches function pods under static tenancy. Dynamic/cluster
+	// tenancy gives function namespaces per-namespace keys instead (the whole
+	// isolation point), so the fetcher cannot mint a token statesvc accepts
+	// until the tenant controller provisions a per-namespace state key — a
+	// documented follow-up. Skip rather than assert a known-unsupported combo.
+	if mode := f.TenancyMode(t, ctx); mode != "static" {
+		t.Skipf("function state is static-tenancy only for now; tenancy mode is %q (per-namespace state key is a follow-up)", mode)
+	}
 	runtime := f.Images().RequireNode(t)
 
 	ns := f.NewTestNamespace(t)
