@@ -139,6 +139,43 @@ func runKV(t *testing.T, newCaps Factory) {
 		require.NoError(t, ck.SetCounted(ctx, confScope, "q4", []byte("v"), statestore.SetOptions{}, 0))
 	})
 
+	t.Run("CountedQuotaConcurrent", func(t *testing.T) {
+		// The direct Go analogue of quota.tla's QuotaNeverExceeded under
+		// AtomicQuota=TRUE, run against THIS driver (not just memory): N racing
+		// creators of distinct keys against MaxKeys=K must end with exactly K
+		// live keys. This is what proves the sqlstore state_quota row-lock (and
+		// the Postgres READ COMMITTED assumption behind it) actually serializes
+		// counted writers — a claim a sequential test cannot make.
+		kv := kvOrSkip(t, newCaps)
+		ck, ok := kv.(statestore.CountedKV)
+		require.True(t, ok)
+		ctx := t.Context()
+		const maxKeys, writers = 4, 16
+		scope := statestore.Scope{Namespace: "ns", Owner: "function/conc", Keyspace: "ks"}
+
+		var wg sync.WaitGroup
+		for i := range writers {
+			wg.Go(func() {
+				_ = ck.SetCounted(ctx, scope, fmt.Sprintf("k-%02d", i), []byte("v"), statestore.SetOptions{}, maxKeys)
+			})
+		}
+		wg.Wait()
+
+		var live int64
+		page := statestore.Page{}
+		for {
+			kp, err := kv.List(ctx, scope, "", page)
+			require.NoError(t, err)
+			live += int64(len(kp.Keys))
+			if kp.Next == "" {
+				break
+			}
+			page.Token = kp.Next
+		}
+		assert.LessOrEqual(t, live, int64(maxKeys), "S3: live keys exceed MaxKeys under contention")
+		assert.Equal(t, int64(maxKeys), live, "all slots should be fillable")
+	})
+
 	t.Run("ListPrefixPaging", func(t *testing.T) {
 		kv := kvOrSkip(t, newCaps)
 		ctx := t.Context()

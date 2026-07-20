@@ -5,6 +5,8 @@
 package statesvc
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -145,6 +147,35 @@ func TestReconcilerSharedKeyspaceSkipsPurge(t *testing.T) {
 
 	assert.Equal(t, 1, keyCount(t, kv, "ns", "shared"), "still claimed by f2: not purged")
 	assert.True(t, r.index.Known("ns", "shared"))
+}
+
+// erroringKV wraps a KVStore and fails List, to exercise the purge-failure
+// path that must KEEP the finalizer (never silently orphan keyspace data).
+type erroringKV struct {
+	statestore.KVStore
+	listErr error
+}
+
+func (e erroringKV) List(ctx context.Context, s statestore.Scope, prefix string, page statestore.Page) (statestore.KeyPage, error) {
+	return statestore.KeyPage{}, e.listErr
+}
+
+func TestReconcilerPurgeFailureKeepsFinalizer(t *testing.T) {
+	t.Parallel()
+	fn := stateFn("f1", "ns", &fv1.StateConfig{Keyspace: "carts"})
+	fn.Finalizers = []string{stateFinalizer}
+	r, c, kv := newTestReconciler(t, fn)
+	reconcile(t, r, "f1", "ns")
+	seedKeys(t, kv, "ns", "carts", "a")
+	r.kv = erroringKV{KVStore: kv, listErr: errors.New("statestore unavailable")}
+
+	require.NoError(t, c.Delete(t.Context(), fn))
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "f1", Namespace: "ns"}})
+	require.Error(t, err, "purge failure must surface so the delete retries")
+
+	got := &fv1.Function{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Name: "f1", Namespace: "ns"}, got))
+	assert.Contains(t, got.Finalizers, stateFinalizer, "finalizer retained so data is never silently orphaned")
 }
 
 func TestReconcilerNotFoundDropsIndexEntry(t *testing.T) {

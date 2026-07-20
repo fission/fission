@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -270,6 +271,43 @@ func TestHandlerAdminHMACPath(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp3.StatusCode)
 }
 
+// TestHandlerDevPassThroughMode covers the no-master-secret branch (dev
+// clusters, matching the router-internal/statestoresvc convention): bearer
+// requests are accepted on their claims alone, but the admin HMAC path FAILS
+// CLOSED (401) — the "fail closed like MCP" decision from the RFC's open
+// questions — and the known-keyspace index guard still applies.
+func TestHandlerDevPassThroughMode(t *testing.T) {
+	t.Parallel()
+	inner, err := memory.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = inner.Close() })
+	index := NewFunctionIndex()
+	index.Upsert(fnA, &fv1.StateConfig{})
+	scoped := statestore.NewScoped(inner, index)
+	kv, err := scoped.KV()
+	require.NoError(t, err)
+	auth := newAuthenticator(nil, nil, hmacauth.VerifierOpts{}) // no master secret
+	srv := httptest.NewServer(newHandler(kv, index, auth, func() bool { return true }, logr.Discard()))
+	t.Cleanup(srv.Close)
+
+	// Bearer accepted on claims alone (any token), for a claimed keyspace.
+	resp := doState(t, srv, http.MethodPut, "/v1/state/k", "ns-a", "fn-a", "anything-goes", []byte("v"), nil)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	// But the index guard still rejects an unclaimed keyspace.
+	resp = doState(t, srv, http.MethodGet, "/v1/state/k", "ns-a", "ghost", "tok", nil, nil)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+	// Admin path fails closed: no signature to verify against a nil secret.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		srv.URL+"/v1/state/k?scope-namespace=ns-a&scope-keyspace=fn-a", nil)
+	require.NoError(t, err)
+	resp2, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp2.Body.Close() }()
+	assert.Equal(t, http.StatusUnauthorized, resp2.StatusCode)
+}
+
 func TestHandlerHealthEndpointsUnauthenticated(t *testing.T) {
 	t.Parallel()
 	srv, _ := newTestServer(t, nil)
@@ -292,6 +330,9 @@ func TestFunctionIndexMinQuotaAcrossClaimants(t *testing.T) {
 	q := ix.Resolve(statestore.Scope{Namespace: "ns", Owner: StateOwner, Keyspace: "shared"})
 	assert.EqualValues(t, 10, q.MaxKeys, "min across claimants")
 	assert.EqualValues(t, 1024, q.MaxValueBytes, "min across claimants")
+	// TTL merge: a lax claimant with no TTL must not erase the stricter
+	// claimant's DefaultTTL (the `ttl == 0 ||` guard in lookup).
+	assert.Equal(t, time.Minute, ix.DefaultTTL("ns", "shared"), "min-nonzero TTL across claimants")
 
 	// A declared quota ABOVE the platform default is honored — the default is
 	// a per-function fallback, never a ceiling.

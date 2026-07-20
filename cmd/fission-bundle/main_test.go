@@ -63,5 +63,5 @@ func TestBundleDispatchTableComplete(t *testing.T) {
 		assert.Falsef(t, seen[svc.name], "duplicate service name %s", svc.name)
 		seen[svc.name] = true
 	}
-	assert.Len(t, seen, 15)
+	assert.Len(t, seen, 16)
 }

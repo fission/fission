@@ -112,20 +112,9 @@ func (k *scopedKV) Set(ctx context.Context, s Scope, key string, val []byte, o S
 	if q.MaxKeys > 0 {
 		// MaxKeys must be atomic with the write (RFC-0023 S3; the quota.tla
 		// AtomicQuota=FALSE config traces exactly the read-check-then-write
-		// overshoot). Every in-repo driver implements CountedKV — the count
-		// and the write are one step inside the driver, which also makes the
-		// budget TTL-exact (expired keys drop out of the driver's live count).
-		ck, ok := k.inner.(CountedKV)
-		if !ok {
-			recordOp(ctx, "kv", "set")
-			return ErrCapabilityUnavailable
-		}
-		err := ck.SetCounted(ctx, s, key, val, o, q.MaxKeys)
-		if errors.Is(err, ErrQuotaExceeded) {
-			recordQuotaRejection(ctx, "keys")
-		}
-		observe(ctx, "kv", "set", err)
-		return err
+		// overshoot). SetCounted is the single enforcement path — Set and the
+		// direct SetCounted entry point must behave identically at the budget.
+		return k.SetCounted(ctx, s, key, val, o, q.MaxKeys)
 	}
 	err := k.inner.Set(ctx, s, key, val, o)
 	observe(ctx, "kv", "set", err)

@@ -888,7 +888,6 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	}
 }
 
-// WsStartHandler is used to generate websocket events in Kubernetes
 // StateCredentials is the JSON document the fetcher writes to
 // StateTokenFileName: everything a token-carrying client must present —
 // statesvc's stateless verification re-derives from the claimed (namespace,
@@ -931,6 +930,7 @@ func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
 	return os.WriteFile(path, blob, 0444)
 }
 
+// WsStartHandler is used to generate websocket events in Kubernetes
 func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)

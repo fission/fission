@@ -158,7 +158,7 @@ Sticky routing changes endpoint *selection order* only for opted-in functions on
 1. `StateConfig` CRD field + codegen + webhook validation; the scoped `statesvc` head (reusing `NewScoped`/`ServiceStatestore`) with KV routes, token verification, and **atomic** quota enforcement (per `quota.tla`); a Function finalizer for keyspace lifecycle on delete; Helm component + NetworkPolicies (`svc: statesvc` on the statestore inbound policy); CLI `fn state` commands.
 2. Executor/fetcher injection (specialize payload + newdeploy/container env), integration tests with a real function reading/writing state.
 3. Node + Python SDK helpers; RFC-0018 local-loop wiring (memory driver).
-4. Sticky routing: `StickyConfig`, HRW pick in the resolver, metrics (`fission_router_sticky_hits_total`, `_reshuffles_total`), bench scenario.
+4. Sticky routing: `StickyConfig`, HRW pick in the resolver, metrics (shipped as `fission_router_sticky_requests_total` + `fission_router_sticky_key_missing_total`; per-key `_reshuffles_total` was dropped — counting reshuffles needs per-key router memory, and reshuffle is churn-driven and already observable from pod events), bench scenario. The legacy data plane (`endpointSliceCache.mode=off`) silently ignores the sticky key (the executor-RPC resolver has no endpoint choice) rather than emitting a validated warning — the router cannot see the data-plane mode at admission time; documented here instead.
 
 ## Verification / test plan
 
