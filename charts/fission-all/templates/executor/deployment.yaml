@@ -57,6 +57,12 @@ spec:
           value: {{ .Values.executor.podReadyTimeout | default false | quote }}
         - name: ENABLE_ISTIO
           value: "{{ .Values.enableIstio }}"
+        {{- if .Values.functionState.enabled }}
+        # RFC-0023: the executor stamps this URL into function pods as
+        # FISSION_STATE_URL; unset (feature off) keeps pods byte-identical.
+        - name: STATESVC_URL
+          value: "http://statesvc.{{ .Release.Namespace }}:{{ include "fission.statesvcPort" . }}"
+        {{- end }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM

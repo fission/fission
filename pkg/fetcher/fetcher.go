@@ -811,6 +811,16 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		return code, fmt.Errorf("error fetching secrets/configs: %w", err)
 	}
 
+	// RFC-0023: materialize the scoped state token BEFORE specializing, so
+	// the SDK can read it the moment user code starts. Derived pod-locally
+	// from the fetcher's own master secret — the secret and the token never
+	// ride the (pod-visible) specialize request.
+	if loadReq.StateKeyspace != "" {
+		if err := fetcher.writeStateTokenFile(loadReq); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error writing state token file: %w", err)
+		}
+	}
+
 	// Specialize the pod
 
 	var contentType string
@@ -879,6 +889,29 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 }
 
 // WsStartHandler is used to generate websocket events in Kubernetes
+// writeStateTokenFile derives the RFC-0023 keyspace token from the fetcher's
+// master secret and writes it to StateTokenFileName under the shared mount
+// (0444: the env container runs as a different user and only ever reads it).
+// Without a master secret (dev clusters) it writes a placeholder — statesvc's
+// pass-through mode accepts any bearer, and the SDK contract stays uniform.
+func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
+	if loadReq.FunctionMetadata == nil {
+		return errors.New("specialize request with a state keyspace but no function metadata")
+	}
+	token := "dev-unauthenticated"
+	if master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")); len(master) > 0 {
+		token = hmacauth.EncodeKeyForEnv(hmacauth.DeriveStateKeyspaceKey(master,
+			loadReq.FunctionMetadata.Namespace, loadReq.StateKeyspace))
+	}
+	path := filepath.Join(fetcher.sharedVolumePath, StateTokenFileName)
+	// The file is read-only, so a re-specialize (infinite-functions pools,
+	// retried specialization) cannot overwrite in place — replace it.
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.WriteFile(path, []byte(token), 0444)
+}
+
 func (fetcher *Fetcher) WsStartHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)

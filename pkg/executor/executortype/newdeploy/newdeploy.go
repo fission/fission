@@ -176,12 +176,15 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		TerminationMessagePath: "/dev/termination-log",
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
-		Env: []apiv1.EnvVar{
+		Env: append([]apiv1.EnvVar{
 			{
 				Name:  fv1.ResourceVersionCount,
 				Value: fmt.Sprintf("%d", rvCount),
 			},
-		},
+			// RFC-0023 state API env (nil when functionState is off). The token
+			// itself arrives via the specialize-on-startup fetcher, which writes
+			// it to the shared mount (see fetcher.StateTokenFileName).
+		}, util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...),
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Ports: []apiv1.ContainerPort{
 			{

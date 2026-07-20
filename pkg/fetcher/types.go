@@ -12,6 +12,14 @@ import (
 
 // Fission-Environment interface. The following types are not
 // exposed in the Fission API, but rather used by Fission to
+// StateTokenFileName is the file under the shared mount (/userfunc) where the
+// fetcher writes the function's scoped state token at specialize time
+// (RFC-0023). It is a file, not an env var, because a poolmgr generic pod's
+// user container is already running before its function identity is known —
+// env vars cannot be added to a running container. The executor points the
+// SDK at it via FISSION_STATE_TOKEN_PATH.
+const StateTokenFileName = ".fission-state-token"
+
 // talk to environments.
 type (
 	FetchRequestType int
@@ -52,6 +60,15 @@ type (
 		FunctionMetadata *metav1.ObjectMeta
 
 		EnvVersion int `json:"envVersion"`
+
+		// StateKeyspace, when non-empty, is the RFC-0023 keyspace this
+		// function is entitled to: before specializing, the fetcher derives
+		// the scoped state token from its own master secret and writes it to
+		// StateTokenFileName under the shared mount for the user container's
+		// SDK to read. Only the NON-SECRET keyspace name rides this request
+		// (it appears in the pod-visible -specialize-request arg); the token
+		// itself never does.
+		StateKeyspace string `json:"stateKeyspace,omitempty"`
 	}
 
 	// ArchiveUploadRequest send from builder manager describes which

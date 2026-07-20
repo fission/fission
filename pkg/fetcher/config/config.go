@@ -211,8 +211,19 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 			FunctionName:     fn.Spec.Package.FunctionName,
 			FunctionMetadata: &fn.ObjectMeta,
 			EnvVersion:       env.Spec.Version,
+			StateKeyspace:    stateKeyspace(fn),
 		},
 	}
+}
+
+// stateKeyspace resolves the RFC-0023 keyspace for a stateful function
+// ("" = not opted in). Only this non-secret name travels in the specialize
+// request; the fetcher derives the actual token pod-locally.
+func stateKeyspace(fn *fv1.Function) string {
+	if fn.Spec.State == nil {
+		return ""
+	}
+	return fn.Spec.State.EffectiveKeyspace(fn.Name)
 }
 
 // AddFetcherToPodSpec adds the fetcher sidecar to podSpec. namespace is where the
