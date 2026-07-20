@@ -1,10 +1,10 @@
 # RFC-0023: Stateful functions — keyed state API and sticky routing
 
-- Status: Proposed
+- Status: Proposed (revised 2026-07-19, pre-implementation: design review against the shipped `pkg/statestore`, `pkg/router/endpointcache`, and `pkg/auth/hmac` code — statesvc/statestoresvc reconciliation, the KV CAS surface, the HRW admission seam, the injection target container, and a TLA+-checked quota-race spec)
 - Tracking issue: TBD
 - Supersedes: —
 - Targets: Fission v1.N+1 (phase 1) / v1.N+2 (sticky routing)
-- Requires: RFC-0021 statestore (`KVStore` capability); sticky routing additionally leans on the RFC-0002 EndpointSlice index (shipped, default-on).
+- Requires: RFC-0021 statestore (`KVStore` capability), implemented ([#3574](https://github.com/fission/fission/pull/3574)) — the `scopedCaps`/`scopedKV` wrapper (`NewScoped`), the `statestoresvc` HTTP head (`--statestorePort`), and the `hmac.ServiceStatestore` derivation channel all already exist and are reused here (see Design). Sticky routing additionally leans on the RFC-0002 EndpointSlice index (shipped, default-on).
 
 ## Summary
 
@@ -61,28 +61,39 @@ type StickyConfig struct {
 
 Webhook validation: keyspace charset, quota bounds, sticky source enum, and `Backend` referencing a configured driver (warning otherwise).
 
-### statesvc (`pkg/statesvc`)
+### statesvc — a scoped function-facing head, not a new database server
 
-A new small `fission-bundle` head (`--stateApiPort` — deliberately distinct from the existing `--storageServicePort` — ClusterIP-only `svc/statesvc`), mirroring the MCP head's shape: Options-only `Start`, injectable listener, `/readyz` gated on `statestore.Capabilities.Ping` (RFC-0021) and Function-cache sync.
+**Reconcile with what shipped.** RFC-0021 already added a `statestoresvc` head (`--statestorePort`, `pkg/statestore/statestoresvc`) — but that head serves the **raw, unscoped** `KVStore`/`EventLog`/`Queue` to the control-plane HTTP-client *driver* (embedded mode). It must never be reachable by function pods: a function hitting the raw port could read or write any owner's keys. So statesvc is a **separate, scoped** function-facing surface, not a second copy of the substrate:
 
-Routes (JSON over HTTP; ETag-style versions for CAS):
+- It is a `fission-bundle` head (`--stateApiPort`, ClusterIP-only `svc/statesvc`) built on the exact shape the shipped `statestoresvc`/`mcp` heads use: Options-only `Start(ctx, clientGen, logger, mgr, opts)` with an injectable `net.Listener`, `/readyz` gated on `statestore.Capabilities.Ping` (RFC-0021) and Function-cache sync, `/healthz`/`/readyz` bypassing auth.
+- It wraps every request's KV access in the shipped `scopedKV` (`statestore.NewScoped(inner, quotaResolver)`), with the scope derived from the verified token — the raw driver `Capabilities` are never handed to a function.
+- It reuses the `hmac.ServiceStatestore` derivation family (below) and mirrors the statestore NetworkPolicy conventions rather than inventing new ones.
+
+Routes (JSON over HTTP; ETag-style versions map onto the KV `Value.Version int64` and `SetOptions.IfVersion`):
 
 ```
 GET    /v1/state/{key}          → 200 {value} + X-Fission-State-Version | 404
-PUT    /v1/state/{key}          body=value; If-Match: <version> → CAS (412 on conflict); TTL via X-Fission-State-TTL
-DELETE /v1/state/{key}          If-Match honored
+PUT    /v1/state/{key}          body=value; If-Match: <version> → Set with IfVersion (412 on conflict); TTL via X-Fission-State-TTL
+DELETE /v1/state/{key}          If-Match → Delete with ifVersion
 POST   /v1/state/{key}/cas      {expectVersion, value} — explicit CAS for clients without If-Match plumbing
-GET    /v1/state?prefix=&cursor= → paged key listing
+GET    /v1/state?prefix=&cursor= → paged key listing (List)
 ```
 
-The scope is **not** client-supplied: it is derived entirely from the verified token (below), so a function cannot name another function's keyspace.
-Quota (`MaxValueBytes`, `MaxKeys`, namespace byte budget) enforced here via the RFC-0021 `scopedStore` wrapper; violations are 413/429 with machine-readable bodies.
+Note the KV surface: `statestore.KVStore` is `Get`/`Set`/`Delete`/`List` — **there is no separate `CAS` method**. Compare-and-swap is `Set` with `SetOptions.IfVersion` (`nil` = unconditional, `0` = create-only, `>0` = CAS on that version) and `Delete(..., ifVersion)`. `If-Match: <version>` maps to `IfVersion`; a missing/mismatched version is the 412.
+
+The scope is **not** client-supplied: it is the `scopedKV` `Scope{Namespace, Owner, Keyspace}` derived entirely from the verified token (below), so a function cannot name another function's keyspace.
+Quota (`MaxValueBytes`, `MaxKeys`, namespace byte budget) is enforced by `scopedKV.Set` via a live `countKeys`; violations are 413/429 with machine-readable bodies.
+
+**Quota-race pin (S3).** `scopedKV.Set`'s current shape — `countKeys` then `Set` — is a check-then-act: two concurrent writers can both read `count = MaxKeys-1`, both pass, and both write, overshooting the budget. `quota.tla` models exactly this and its negative config (`AtomicQuota = FALSE`) produces the trace. The design requirement (and a fix to audit in the shipped `scopedKV`): `MaxKeys` / namespace-byte enforcement must be **atomic with the write** — a KV CAS on a counter key, or the value write conditioned on a counted transaction — never a plain read-check-then-write. This is the same class of guard as the queue's epoch column and the cursor's version-CAS.
 
 ### Token derivation and injection
 
-- Per-function token: HKDF over `FISSION_INTERNAL_AUTH_SECRET` with info `state:<ns>:<fn-name>:<keyspace>`, hex-encoded (the binary-env-var bite from the tenant-controller work applies verbatim).
-  statesvc re-derives and compares — stateless verification, no token storage, same family as the `ServiceRouterInternal` key derivation.
-- Injection point: the executor adds `FISSION_STATE_URL` + `FISSION_STATE_TOKEN` to the fetcher **specialize payload** for opted-in functions, so poolmgr generic pods (which are function-agnostic until specialization) receive it at specialize time; newdeploy/container set plain env vars at Deployment render.
+- Per-function token: HKDF derivation via the shipped `pkg/auth/hmac` — the same `hkdf.Key(sha256, master, nil, info, 32)` construction as `DeriveServiceKeyNS`, extended with a keyspace-scoped `info` (`<KeyVersion>:statestore:<ns>:<keyspace>`) on the existing `ServiceStatestore` channel, hex-encoded for env transport with `EncodeKeyForEnv` (the binary-env-var UTF-8 bite from the tenant-controller work applies verbatim — this is why the encode step is not optional).
+  statesvc re-derives and compares — stateless verification, no token storage, the same family as `ServiceRouterInternal`/`ServiceStatestore`.
+- Injection point — split by what is function-agnostic vs per-function, because a poolmgr generic pod's **user-function container is already running before its function identity is known**, and env vars cannot be added to a running container:
+  - `FISSION_STATE_URL` is function-agnostic (the `svc/statesvc` ClusterIP), so it is a plain env var set at generic-pod creation (poolmgr) and at Deployment render (newdeploy/container) — the same place `internalAuthEnvVars` are added today (`pkg/fetcher/config`).
+  - `FISSION_STATE_TOKEN` is per-function/keyspace and only derivable at specialize time. For **poolmgr** it therefore cannot be a container env var; it rides the `FunctionSpecializeRequest` (already delivered to the fetcher as the `-specialize-request` CLI arg, `pkg/fetcher/config`) and is surfaced to function code by the environment runtime — written by the runtime's `/v2/specialize` handler to a known tmpfs path the `fission-state` SDK reads (a small addition to the env-image contract). For **newdeploy/container**, the pod is function-specific from creation, so the token is a plain env var at Deployment render.
+  This split is a real constraint the review surfaced; a naive "add both as env vars" design silently fails on the poolmgr warm path.
   Rotation of the root secret rotates all tokens on next specialization; a dual-accept window (old+new secret) covers running pods, matching the internal-auth rotation story.
 - statesvc joins the NetworkPolicy story: a policy admitting function pods (by the executor-managed pod labels) to statesvc only; statesvc itself is on the DSN allowlist per RFC-0021.
 
@@ -97,8 +108,8 @@ Quota (`MaxValueBytes`, `MaxKeys`, namespace byte budget) enforced here via the 
 Goal: all requests carrying the same key land on the same specialized pod while the pod set is stable, so in-memory caches (above the durable state API) stay coherent and single-writer patterns avoid CAS churn.
 
 - Seam: the EndpointSlice-fed index's admission path, not a pre-admission hook.
-  In the shipped data plane, endpoint pick and concurrency admission are **one fused atomic operation**: the resolver (`pkg/router/resolver_fallback.go`) calls `endpointcache.Index.Admit`, which selects the best ready endpoint (the merged `Lookup` list contains not-ready endpoints too; `Admit`/`ReadyCount` filter), takes the concurrency slot, and returns the `Release` closure.
-  Sticky routing therefore lands as a variant selection policy *inside* `Admit` (an HRW pick restricted to ready endpoints, with the routing key passed down from the resolver after extraction per `StickyConfig`); **rendezvous hashing** (HRW) gives minimal reshuffle on pod add/remove with no ring state — a pure function of (key, ready endpoints).
+  In the shipped data plane, endpoint pick and concurrency admission are **one fused atomic operation**: the resolver (`pkg/router/resolver_fallback.go`, the two `Admit` call sites — the poolmgr warm path and the newdeploy/container endpoint-LB path) calls `endpointcache.Index.Admit(namespace, name, requestsPerPod)`, which returns `(Endpoint, release func(), AdmitResult)`. `Admit` scans the immutable endpoint snapshot, skips not-ready/quarantined/at-capacity endpoints, and today keeps the **least-outstanding** one (lowest in-flight) before a bounded-CAS slot take.
+  There is **no pluggable pick interface** to swap — least-outstanding is inlined in `Admit`. Sticky routing therefore adds a *branch* to that scan, not a strategy object: `Admit` gains an optional routing key (threaded from the resolver after extraction per `StickyConfig`); when present, the scan ranks ready endpoints by **rendezvous hash** (HRW) of (key, endpoint) and takes the highest-ranked admissible one instead of the least-outstanding one. HRW gives minimal reshuffle on pod add/remove with no ring state — a pure function of (key, ready endpoints). The `(Endpoint, release, AdmitResult)` return shape is unchanged, so the accounting seam below is untouched.
 - Requests missing the key fall back to the default pick (documented; not an error).
 - Accounting invariant: because the sticky pick stays inside `Admit`, the router-admitted vs executor-resolved split is untouched — `Release != nil` ⟺ router-admitted still holds, and `pkg/router/transport.go` needs no changes.
   If the hashed-to endpoint is saturated, `Admit` falls back to its normal overflow behavior rather than queueing on the sticky target (stickiness is best-effort under saturation; documented).
@@ -121,12 +132,12 @@ Goal: all requests carrying the same key land on the same specialized pod while 
 **Verification.**
 
 - S1 is fuzzed, not just example-tested: `go test -fuzz` mutates valid tokens (bit flips, truncation, scope-field splices, re-encoding) against the verifier and asserts nothing but the exact derived token authenticates — a fuzzer is the right adversary for an HKDF-scope check.
-- S2: `porcupine` linearizability checking over recorded concurrent histories driven through the real statesvc HTTP surface (not just the driver), plus the classic get→cas counter integration test asserting zero lost increments under load.
-- S3: `pgregory.net/rapid` sequences of writes/deletes racing quota boundaries against the memory model.
+- S2: `porcupine` linearizability checking over recorded concurrent histories driven through the real statesvc HTTP surface (not just the driver), plus the classic get→cas counter integration test asserting zero lost increments under load. The per-key CAS protocol itself (`Set`+`IfVersion`) is already TLC-covered by the substrate (`eventlogsub.tla`'s version-CAS cursor, `workflowfold.tla`'s CAS-append), so statesvc inherits it rather than re-proving it.
+- S3 is **TLC-checked**, not just property-tested: `quota.tla` models concurrent writers racing the `MaxKeys` counter, and its negative config (`AtomicQuota = FALSE`) produces the check-then-act overshoot — the design source of truth for "enforce the budget atomically, never read-check-then-write" (and a bug to audit in the shipped `scopedKV.Set`, which does `countKeys` then `Set`). On top of the model, `pgregory.net/rapid` sequences of writes/deletes race the quota boundary against the memory driver.
 - S4/S5 are pure-function properties, two-line `rapid` tests: distribution balance within χ² tolerance for N keys over M pods, and the only-removed-pod's-keys-move assertion under random churn sequences.
 - TTL behavior and token-rotation dual-accept windows run in `testing/synctest` bubbles (virtual clock, deterministic, no sleeps).
 - The sticky resolver path runs under `-race` with concurrent endpoint churn (the same build-vs-serve race family the gorilla `Methods()` bite documented).
-- No model checking here: statesvc is a stateless proxy over the RFC-0021 KV whose CAS protocol is already covered by the substrate's verification; the concurrency lives in the driver, not this layer.
+- Only the genuinely concurrent claim is modeled: S3 (the quota counter race) is `quota.tla`. S4/S5 are pure-function HRW properties (below) — `rapid`, not TLC. The per-key CAS is the substrate's already-verified protocol. Modeling a stateless scoped proxy end-to-end would add noise for no new insight (see the specs' "Scope and honesty").
 
 ## Alternatives considered
 
@@ -143,7 +154,7 @@ Sticky routing changes endpoint *selection order* only for opted-in functions on
 
 ## Rollout phases (one PR each, bisectable)
 
-1. `StateConfig` CRD field + codegen + webhook validation; statesvc head with KV routes, token verification, quotas; Helm component + NetworkPolicies; CLI `fn state` commands.
+1. `StateConfig` CRD field + codegen + webhook validation; the scoped `statesvc` head (reusing `NewScoped`/`ServiceStatestore`) with KV routes, token verification, and **atomic** quota enforcement (per `quota.tla`); a Function finalizer for keyspace lifecycle on delete; Helm component + NetworkPolicies (`svc: statesvc` on the statestore inbound policy); CLI `fn state` commands.
 2. Executor/fetcher injection (specialize payload + newdeploy/container env), integration tests with a real function reading/writing state.
 3. Node + Python SDK helpers; RFC-0018 local-loop wiring (memory driver).
 4. Sticky routing: `StickyConfig`, HRW pick in the resolver, metrics (`fission_router_sticky_hits_total`, `_reshuffles_total`), bench scenario.
@@ -157,6 +168,7 @@ Sticky routing changes endpoint *selection order* only for opted-in functions on
 
 ## Open questions
 
+- **Keyspace lifecycle on function delete.** A keyspace outlives nothing automatically today — deleting a stateful `Function` leaves its keys in the store. The keyspace defaults to the function name but is explicit precisely so a rename does not orphan data, which means delete cannot blindly purge. Leaning: a Function finalizer that, on delete, either purges the keyspace (default) or leaves it for an explicit `--keep-state` / operator retention policy; either way the decision must be a deliberate design element in phase 1, not an afterthought (an unbounded orphaned keyspace is a namespace-budget leak). Prefix-delete needs the same `List`+`Delete` primitives the abuse-prone `List` endpoint exposes, so the two questions are linked.
 - Admin/global access model for `fission fn state` when authentication is disabled (leaning: require the internal auth secret path, refuse otherwise — fail closed like MCP).
 - Whether `Backend: redis` selection is per-function (as drafted) or per-namespace policy (operator-controlled); per-function is more flexible, per-namespace easier to reason about for capacity.
 - Key listing pagination limits and whether `List` is even exposed to functions in v1 (needed for cleanup patterns, but it is the most abusable endpoint).
