@@ -59,6 +59,12 @@ type FunctionSpecApplyConfiguration struct {
 	// the on switch (like Streaming): nil (the default) means the function is
 	// never advertised as a tool. Additive and backward compatible.
 	Tool *ToolConfigApplyConfiguration `json:"tool,omitempty"`
+	// State, when non-nil, opts this function into the RFC-0023 keyed-state
+	// API: a scoped statesvc keyspace backed by the RFC-0021 statestore, with
+	// a per-function token injected at specialization time. Presence is the
+	// on switch (like Streaming and Tool): nil (the default) means exactly
+	// today's behavior. Additive and backward compatible.
+	State *StateConfigApplyConfiguration `json:"state,omitempty"`
 	// Invocation, when non-nil, tunes RFC-0024 asynchronous invocation
 	// (X-Fission-Invoke-Mode: async) for this function: the durable retry policy
 	// and the maximum event age before an undelivered invocation is
@@ -175,6 +181,14 @@ func (b *FunctionSpecApplyConfiguration) WithStreaming(value *StreamingConfigApp
 // If called multiple times, the Tool field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithTool(value *ToolConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
 	b.Tool = value
+	return b
+}
+
+// WithState sets the State field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the State field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithState(value *StateConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.State = value
 	return b
 }
 

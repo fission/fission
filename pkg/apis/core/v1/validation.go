@@ -369,6 +369,13 @@ func (spec FunctionSpec) Validate() error {
 		errs = errors.Join(errs, spec.Tool.Validate())
 	}
 
+	if spec.State != nil {
+		errs = errors.Join(errs, spec.State.Validate())
+		if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.State", "", "the state API requires the poolmgr or newdeploy executor (the container executor has no fetcher sidecar to deliver a scoped token)"))
+		}
+	}
+
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
 	errs = errors.Join(errs, spec.validateForAdmission())
@@ -592,6 +599,71 @@ func (tc *ToolConfig) Validate() error {
 	}
 
 	return errs
+}
+
+// stateKeyspaceRegexp mirrors the StateConfig.Keyspace kubebuilder marker.
+// The charset deliberately excludes ':' (token-derivation info-string
+// separator) and '#' (the platform-reserved "<keyspace>#meta" quota sibling).
+var stateKeyspaceRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
+
+// Validate checks the keyed-state config (only reached when FunctionSpec.State
+// is non-nil): keyspace charset/length, non-negative quotas and TTL, and a
+// well-formed sticky declaration. Re-checked in Go so the CLI validates
+// client-side; the CRD markers enforce the same bounds at the API server.
+func (sc *StateConfig) Validate() error {
+	var errs error
+
+	if sc.Keyspace != "" && (len(sc.Keyspace) > 63 || !stateKeyspaceRegexp.MatchString(sc.Keyspace)) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Keyspace", sc.Keyspace, "must be 1-63 characters matching ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"))
+	}
+	if sc.MaxValueBytes < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxValueBytes", sc.MaxValueBytes, "must be >= 0"))
+	}
+	if sc.MaxKeys < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxKeys", sc.MaxKeys, "must be >= 0"))
+	}
+	if sc.DefaultTTL != nil && sc.DefaultTTL.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.DefaultTTL", sc.DefaultTTL.Duration.String(), "must be >= 0"))
+	}
+	if sc.Sticky != nil {
+		switch sc.Sticky.Source {
+		case StickySourceHeader, StickySourceQueryParam:
+			// ok
+		default:
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Sticky.Source", sc.Sticky.Source, "must be one of: header, queryparam"))
+		}
+		if sc.Sticky.Name == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Sticky.Name", sc.Sticky.Name, "a header or query-parameter name is required"))
+		}
+	}
+
+	return errs
+}
+
+// EffectiveKeyspace resolves the keyspace, defaulting to the function name.
+func (sc *StateConfig) EffectiveKeyspace(fnName string) string {
+	if sc.Keyspace != "" {
+		return sc.Keyspace
+	}
+	return fnName
+}
+
+// EffectiveMaxValueBytes resolves the per-value size cap, applying the
+// platform default when unset.
+func (sc *StateConfig) EffectiveMaxValueBytes() int64 {
+	if sc.MaxValueBytes > 0 {
+		return sc.MaxValueBytes
+	}
+	return DefaultStateMaxValueBytes
+}
+
+// EffectiveMaxKeys resolves the live-key cap, applying the platform default
+// when unset.
+func (sc *StateConfig) EffectiveMaxKeys() int64 {
+	if sc.MaxKeys > 0 {
+		return sc.MaxKeys
+	}
+	return DefaultStateMaxKeys
 }
 
 func (is InvokeStrategy) Validate() error {
