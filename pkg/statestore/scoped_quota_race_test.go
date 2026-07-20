@@ -56,6 +56,24 @@ func liveCount(t *testing.T, raw statestore.KVStore, s statestore.Scope) int64 {
 	}
 }
 
+// TestScopedImplementsCountedKV guards the statestoresvc path: that head wraps
+// its driver in NewScoped and type-asserts CountedKV on the result, so the
+// scoped wrapper MUST forward the capability (a regression here surfaces as a
+// 503 "state backend unavailable" from statesvc, not a test failure).
+func TestScopedImplementsCountedKV(t *testing.T) {
+	inner, err := memory.New()
+	require.NoError(t, err)
+	caps := statestore.NewScoped(inner, nil)
+	t.Cleanup(func() { _ = caps.Close() })
+	kv, err := caps.KV()
+	require.NoError(t, err)
+	ck, ok := kv.(statestore.CountedKV)
+	require.True(t, ok, "scoped KV must satisfy CountedKV for the statestoresvc head")
+	// And it must actually enforce the forwarded budget.
+	require.NoError(t, ck.SetCounted(t.Context(), rsc, "a", []byte("v"), statestore.SetOptions{}, 1))
+	require.ErrorIs(t, ck.SetCounted(t.Context(), rsc, "b", []byte("v"), statestore.SetOptions{}, 1), statestore.ErrQuotaExceeded)
+}
+
 func TestScopedQuota_ExistingKeySetConsumesNoSlot(t *testing.T) {
 	_, kv := rawAndScoped(t, 2)
 	ctx := t.Context()

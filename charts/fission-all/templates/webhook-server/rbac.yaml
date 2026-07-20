@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# The validating webhook reads Environments (get only) to enforce env-dependent
+# Function invariants CEL cannot express — currently that RFC-0023 state opt-in
+# is refused on an allowedFunctionsPerContainer: infinite environment (one
+# shared mount cannot deliver a per-function scoped state token). Functions may
+# reference an environment in any Fission-watched namespace, so the read is
+# cluster-scoped; it is get-only (uncached API reader), the minimum for a
+# point lookup.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Release.Name }}-webhook-env-reader"
+  labels:
+    application: fission-webhook
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+rules:
+  - apiGroups:
+      - fission.io
+    resources:
+      - environments
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Release.Name }}-webhook-env-reader"
+  labels:
+    application: fission-webhook
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: fission-webhook
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: "{{ .Release.Name }}-webhook-env-reader"
+  apiGroup: rbac.authorization.k8s.io

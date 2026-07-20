@@ -132,6 +132,26 @@ func (k *scopedKV) Set(ctx context.Context, s Scope, key string, val []byte, o S
 	return err
 }
 
+// SetCounted implements CountedKV so a scoped store still satisfies the
+// capability when it wraps a counted driver — the statestoresvc HTTP head
+// wraps its driver in NewScoped, and its handler type-asserts CountedKV to
+// serve the wire maxKeys. The caller's maxKeys is authoritative here (it is
+// the budget the originating scoped store already resolved); this layer only
+// re-adds metrics and forwards.
+func (k *scopedKV) SetCounted(ctx context.Context, s Scope, key string, val []byte, o SetOptions, maxKeys int64) error {
+	ck, ok := k.inner.(CountedKV)
+	if !ok {
+		recordOp(ctx, "kv", "set")
+		return ErrCapabilityUnavailable
+	}
+	err := ck.SetCounted(ctx, s, key, val, o, maxKeys)
+	if errors.Is(err, ErrQuotaExceeded) {
+		recordQuotaRejection(ctx, "keys")
+	}
+	observe(ctx, "kv", "set", err)
+	return err
+}
+
 func (k *scopedKV) Delete(ctx context.Context, s Scope, key string, ifVersion int64) error {
 	err := k.inner.Delete(ctx, s, key, ifVersion)
 	observe(ctx, "kv", "delete", err)
