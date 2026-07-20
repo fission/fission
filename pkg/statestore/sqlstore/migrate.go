@@ -70,6 +70,21 @@ func (d Dialect) migrations() []migration {
 				`CREATE INDEX IF NOT EXISTS idx_state_queue_dedup ON state_queue (queue, dedup_key)`,
 			},
 		},
+		{
+			// state_quota holds one row per keyspace whose MaxKeys budget is
+			// enforced; SetCounted's transaction locks it to serialize counted
+			// writers (RFC-0023 S3). The row carries no counter — the count is
+			// always the live TTL-filtered COUNT(*) taken under the lock.
+			version: 2,
+			stmts: []string{
+				`CREATE TABLE IF NOT EXISTS state_quota (
+					namespace TEXT NOT NULL,
+					owner     TEXT NOT NULL,
+					keyspace  TEXT NOT NULL,
+					PRIMARY KEY (namespace, owner, keyspace)
+				)`,
+			},
+		},
 	}
 }
 

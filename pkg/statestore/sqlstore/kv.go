@@ -46,6 +46,12 @@ func (k *kvStore) Get(ctx context.Context, sc statestore.Scope, key string) (sta
 // concurrent CAS on the same key, and the WHERE re-check on the committed row is
 // what makes CAS linearizable (invariant K1).
 func (k *kvStore) Set(ctx context.Context, sc statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
+	return k.setOn(ctx, k.s.db, sc, key, val, o)
+}
+
+// setOn is Set against e (the pool or a transaction), so SetCounted can run
+// the identical statements inside its quota transaction.
+func (k *kvStore) setOn(ctx context.Context, e execer, sc statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
 	now := nowNanos()
 	var expires sql.NullInt64
 	if o.TTL > 0 {
@@ -56,7 +62,7 @@ func (k *kvStore) Set(ctx context.Context, sc statestore.Scope, key string, val 
 	case o.IfVersion == nil:
 		// Unconditional upsert. An expired existing row counts as absent, so its
 		// version resets to 1 (parity with the memory driver).
-		_, err := k.s.exec(ctx,
+		_, err := k.s.execOn(ctx, e,
 			`INSERT INTO state_kv (namespace, owner, keyspace, key, value, version, expires_at)
 			 VALUES (?, ?, ?, ?, ?, 1, ?)
 			 ON CONFLICT (namespace, owner, keyspace, key) DO UPDATE SET
@@ -71,7 +77,7 @@ func (k *kvStore) Set(ctx context.Context, sc statestore.Scope, key string, val 
 	case *o.IfVersion == 0:
 		// Create-only: succeed if the key is absent or expired; conflict if a live
 		// row exists.
-		res, err := k.s.exec(ctx,
+		res, err := k.s.execOn(ctx, e,
 			`INSERT INTO state_kv (namespace, owner, keyspace, key, value, version, expires_at)
 			 VALUES (?, ?, ?, ?, ?, 1, ?)
 			 ON CONFLICT (namespace, owner, keyspace, key) DO UPDATE SET
@@ -83,7 +89,7 @@ func (k *kvStore) Set(ctx context.Context, sc statestore.Scope, key string, val 
 
 	default:
 		// CAS on *o.IfVersion: match a live row at exactly that version.
-		res, err := k.s.exec(ctx,
+		res, err := k.s.execOn(ctx, e,
 			`UPDATE state_kv SET value = ?, version = version + 1, expires_at = ?
 			 WHERE namespace = ? AND owner = ? AND keyspace = ? AND key = ?
 			   AND version = ? AND (expires_at IS NULL OR expires_at > ?)`,
@@ -91,6 +97,77 @@ func (k *kvStore) Set(ctx context.Context, sc statestore.Scope, key string, val 
 		)
 		return conflictIfNoRows(res, err)
 	}
+}
+
+// SetCounted implements statestore.CountedKV. The transaction first takes a
+// row lock on the keyspace's state_quota row, serializing every counted writer
+// to that keyspace (Postgres: ON CONFLICT DO UPDATE locks the row under READ
+// COMMITTED; SQLite's single writer serializes anyway). Under that lock the
+// TTL-filtered live-key COUNT and the write are one atomic step (RFC-0023 S3 /
+// quota.tla), and expired rows drop out of the count with no drift. Scopes
+// enforcing a budget must funnel all writes through SetCounted (scopedKV
+// does); the per-key statements in setOn stay atomic regardless.
+func (k *kvStore) SetCounted(ctx context.Context, sc statestore.Scope, key string, val []byte, o statestore.SetOptions, maxKeys int64) error {
+	if maxKeys <= 0 {
+		return k.Set(ctx, sc, key, val, o)
+	}
+	return k.s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := k.s.execOn(ctx, tx,
+			`INSERT INTO state_quota (namespace, owner, keyspace) VALUES (?, ?, ?)
+			 ON CONFLICT (namespace, owner, keyspace) DO UPDATE SET keyspace = excluded.keyspace`,
+			sc.Namespace, sc.Owner, sc.Keyspace,
+		); err != nil {
+			return err
+		}
+
+		now := nowNanos()
+		var (
+			version int64
+			expires sql.NullInt64
+		)
+		err := tx.QueryRowContext(ctx, k.s.rebind(
+			`SELECT version, expires_at FROM state_kv WHERE namespace = ? AND owner = ? AND keyspace = ? AND key = ?`),
+			sc.Namespace, sc.Owner, sc.Keyspace, key,
+		).Scan(&version, &expires)
+		exists := false
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+		case err != nil:
+			return err
+		default:
+			exists = !expiredAt(expires, now)
+		}
+
+		// CAS precedence before the budget check (parity with the memory
+		// driver): a write that could never apply is a version conflict, not a
+		// quota rejection.
+		if o.IfVersion != nil {
+			curVersion := int64(0)
+			if exists {
+				curVersion = version
+			}
+			if curVersion != *o.IfVersion {
+				return statestore.ErrVersionConflict
+			}
+		}
+
+		if !exists {
+			var live int64
+			if err := tx.QueryRowContext(ctx, k.s.rebind(
+				`SELECT COUNT(*) FROM state_kv
+				 WHERE namespace = ? AND owner = ? AND keyspace = ? AND key <> ?
+				   AND (expires_at IS NULL OR expires_at > ?)`),
+				sc.Namespace, sc.Owner, sc.Keyspace, key, now,
+			).Scan(&live); err != nil {
+				return err
+			}
+			if live >= maxKeys {
+				return statestore.ErrQuotaExceeded
+			}
+		}
+
+		return k.setOn(ctx, tx, sc, key, val, o)
+	})
 }
 
 // conflictIfNoRows maps an atomic write that changed no rows to

@@ -131,6 +131,9 @@ type KVSetReq struct {
 	Value     []byte           `json:"value"`
 	IfVersion *int64           `json:"ifVersion,omitempty"`
 	TTLNanos  int64            `json:"ttlNanos,omitempty"`
+	// MaxKeys > 0 requests an atomic counted set (statestore.CountedKV):
+	// creating a live key beyond this budget fails with quota_exceeded.
+	MaxKeys int64 `json:"maxKeys,omitempty"`
 }
 type KVDeleteReq struct {
 	Scope     statestore.Scope `json:"scope"`

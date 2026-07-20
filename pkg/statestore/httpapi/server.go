@@ -133,10 +133,21 @@ func (h *handler) kvSet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := kv.Set(r.Context(), req.Scope, req.Key, req.Value, statestore.SetOptions{
+	opts := statestore.SetOptions{
 		IfVersion: req.IfVersion,
 		TTL:       time.Duration(req.TTLNanos),
-	})
+	}
+	var err error
+	if req.MaxKeys > 0 {
+		ck, ok := kv.(statestore.CountedKV)
+		if !ok {
+			writeErr(w, statestore.ErrCapabilityUnavailable)
+			return
+		}
+		err = ck.SetCounted(r.Context(), req.Scope, req.Key, req.Value, opts, req.MaxKeys)
+	} else {
+		err = kv.Set(r.Context(), req.Scope, req.Key, req.Value, opts)
+	}
 	if err != nil {
 		writeErr(w, err)
 		return

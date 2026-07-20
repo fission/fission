@@ -112,6 +112,33 @@ func runKV(t *testing.T, newCaps Factory) {
 		require.ErrorIs(t, err, statestore.ErrNotFound)
 	})
 
+	t.Run("CountedQuota", func(t *testing.T) {
+		// statestore.CountedKV (RFC-0023 S3): the MaxKeys budget check is
+		// atomic with the write. Every in-repo driver implements it.
+		kv := kvOrSkip(t, newCaps)
+		ck, ok := kv.(statestore.CountedKV)
+		require.True(t, ok, "driver must implement statestore.CountedKV")
+		ctx := t.Context()
+		const maxKeys = 2
+
+		// Fill the budget.
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q1", []byte("v"), statestore.SetOptions{}, maxKeys))
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q2", []byte("v"), statestore.SetOptions{}, maxKeys))
+		// A third live key is rejected; overwriting a live key is not a create.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{}, maxKeys), statestore.ErrQuotaExceeded)
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q1", []byte("v2"), statestore.SetOptions{}, maxKeys))
+		// CAS precedence: an impossible CAS is a version conflict even at the
+		// budget boundary, and it consumes nothing.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{IfVersion: new(int64(7))}, maxKeys), statestore.ErrVersionConflict)
+		// Deleting frees the slot.
+		require.NoError(t, kv.Delete(ctx, confScope, "q2", 0))
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{}, maxKeys))
+		// Create-only semantics still hold through the counted path.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("x"), statestore.SetOptions{IfVersion: new(int64(0))}, maxKeys), statestore.ErrVersionConflict)
+		// maxKeys <= 0 means no budget.
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q4", []byte("v"), statestore.SetOptions{}, 0))
+	})
+
 	t.Run("ListPrefixPaging", func(t *testing.T) {
 		kv := kvOrSkip(t, newCaps)
 		ctx := t.Context()

@@ -23,6 +23,23 @@ type KVStore interface {
 	List(ctx context.Context, s Scope, prefix string, page Page) (KeyPage, error)
 }
 
+// CountedKV is an optional KVStore capability: a "set with live-key budget"
+// where the budget check and the write are ONE atomic step inside the driver
+// (RFC-0023 S3 / quota.tla — never read-check-then-write, whose overshoot the
+// AtomicQuota=FALSE config traces). SetCounted behaves exactly like Set with o,
+// except that a write which would CREATE a live key (target absent or expired)
+// in a scope already holding >= maxKeys live keys returns ErrQuotaExceeded.
+// Overwrites of live keys never consume budget, and because the driver counts
+// live keys directly the budget is TTL-exact: expired keys free their slot the
+// moment they expire, with no external counter to drift.
+//
+// A scope whose MaxKeys quota is enforced must funnel all its writes through
+// SetCounted (scopedKV does); mixing plain Set into such a scope bypasses the
+// budget. maxKeys <= 0 means no budget (identical to Set).
+type CountedKV interface {
+	SetCounted(ctx context.Context, s Scope, key string, val []byte, o SetOptions, maxKeys int64) error
+}
+
 // AppendAny is the sentinel expectedSeq for EventLog.Append that appends
 // unconditionally at the stream's current head — an atomic server-side
 // increment, not a compare-and-swap. Topic publishers use it (RFC-0027): topic
