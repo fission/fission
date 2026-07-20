@@ -90,6 +90,14 @@ func (r *functionStateReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	r.index.Upsert(req.NamespacedName, fn.Spec.State)
 	if !controllerutil.ContainsFinalizer(fn, stateFinalizer) {
 		if _, err := r.updateFinalizerWithRetry(ctx, req.NamespacedName, func(f *fv1.Function) bool {
+			// A delete may have raced in between the cached read above and this
+			// fresh Get: the API server forbids adding a finalizer to an object
+			// under deletion, so skip (the deletion reconcile, fired by the
+			// deletionTimestamp predicate, handles it). Prevents an error-requeue
+			// storm on the create→delete race.
+			if !f.DeletionTimestamp.IsZero() {
+				return false
+			}
 			return controllerutil.AddFinalizer(f, stateFinalizer)
 		}); err != nil {
 			return ctrl.Result{}, err

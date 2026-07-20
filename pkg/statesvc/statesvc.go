@@ -41,6 +41,12 @@ import (
 // staying under it keeps a slow statestore from wedging readiness).
 const pingTimeout = 800 * time.Millisecond
 
+// stateReconcileConcurrency is the Function reconciler's worker count. Sized
+// above the integration suite's parallelism so the controller-added finalizer
+// keeps ahead of concurrent create/delete churn (mirrors the executor's
+// funcReconcileConcurrency rationale). Reconciles stay serialized per key.
+const stateReconcileConcurrency = 8
+
 // Options configures Start. The listener is either pre-bound by the caller
 // (Listener — e.g. a test harness binding 127.0.0.1:0) or bound here from
 // Port. Caps optionally injects a pre-opened store (tests); when nil the
@@ -121,7 +127,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		index:  index,
 		kv:     kv,
 	}
-	if err := controller.RegisterTenantScopedWithPredicates(crMgr, &fv1.Function{}, r, "statesvc-function", 0,
+	// Several workers, matching the executor's funcreconciler: the finalizer is
+	// controller-added (the standard Fission pattern), so a single worker
+	// falling behind under load lets a fast create→delete race the finalizer in
+	// before it lands, orphaning the keyspace. Concurrency keeps the add ahead
+	// of realistic deletes; reconciles are still serialized per Function key.
+	if err := controller.RegisterTenantScopedWithPredicates(crMgr, &fv1.Function{}, r, "statesvc-function", stateReconcileConcurrency,
 		predicate.Or(predicate.GenerationChangedPredicate{}, deletionTimestampPredicate)); err != nil {
 		return fmt.Errorf("error registering statesvc function reconciler: %w", err)
 	}
