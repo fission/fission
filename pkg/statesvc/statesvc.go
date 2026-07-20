@@ -35,6 +35,7 @@ import (
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	"github.com/fission/fission/pkg/utils/metrics"
 )
 
 // pingTimeout bounds the readyz store ping (kubelet probe timeout is 1s;
@@ -168,6 +169,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "statesvc", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: handler,
 		})
+		return nil
+	})
+
+	// Serve the OTel-bridged statestore metrics (fission_statestore_ops_total,
+	// _quota_rejections_total, etc. recorded through the scoped store) on the
+	// shared metrics port — without this the meters record into a registry
+	// nobody scrapes, and the deployment's 8080 port is dangling. ServeMetrics
+	// blocks until ctx ends, so it needs its own goroutine.
+	mgr.Go(func() error {
+		metrics.ServeMetrics(ctx, "statesvc", logger, mgr)
 		return nil
 	})
 

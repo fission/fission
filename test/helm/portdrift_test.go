@@ -379,6 +379,20 @@ func TestStateSvcChart(t *testing.T) {
 			"function pods reach statesvc across namespaces; the policy must render with the head")
 	})
 
+	t.Run("metrics are scrapable", func(t *testing.T) {
+		// A ServiceMonitor without the pod exposing 8080 (or vice versa) is
+		// silently-unscraped metrics — statesvc emits fission_statestore_*
+		// through the OTel→Prometheus bridge, so pin both halves.
+		mdocs := render(t,
+			"--set", "functionState.enabled=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+			"--set", "serviceMonitor.enabled=true")
+		require.NotNil(t, find(mdocs, "ServiceMonitor", "statesvc-monitor"),
+			"statesvc ServiceMonitor must render when serviceMonitor.enabled")
+		deploy := find(mdocs, "Deployment", svcinfo.SvcStateSvc)
+		assert.Contains(t, containerPorts(t, deploy), 8080, "metrics containerPort")
+	})
+
 	t.Run("renders with coverage enabled (CI profile)", func(t *testing.T) {
 		// The kind-ci profile sets coverage.enabled=true; a stray coverage
 		// volumeMount without its own volumeMounts key lands under ports and
