@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.functionState.enabled }}
+# ClusterIP-only: function pods (gated by the NetworkPolicy) and the CLI's
+# port-forward reach the state API; it never joins the public router listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: statesvc
+  labels:
+    svc: statesvc
+    application: fission-statesvc
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - name: statesvc
+    port: {{ include "fission.statesvcPort" . }}
+    targetPort: {{ include "fission.statesvcPort" . }}
+  selector:
+    svc: statesvc
+{{- end }}

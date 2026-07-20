@@ -75,6 +75,7 @@ const (
 	SvcMCP            = "mcp"
 	SvcStatestore     = "statestore"
 	SvcWorkflow       = "workflow"
+	SvcStateSvc       = "statesvc"
 )
 
 // RouterURL returns the in-cluster URL of the router's public listener

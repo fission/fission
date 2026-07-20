@@ -43,6 +43,8 @@ manifests:
           fetcher.allowInsecureRegistries: ""
           fetcher.imageTag: ""
           functionNamespace: ""
+          # RFC-0023 keyed state rides the same statestore (statesvc head).
+          functionState.enabled: "true"
           gatewayAPI.enabled: "false"
           gatewayAPI.defaultParentRef: ""
           grafana.dashboards.enabled: "false"

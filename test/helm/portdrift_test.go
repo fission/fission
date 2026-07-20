@@ -340,3 +340,47 @@ func TestStatestoreChartPorts(t *testing.T) {
 		assert.EqualValues(t, svcinfo.PortStatestore, svc[0]["targetPort"])
 	})
 }
+
+// TestStateSvcChart is the drift check for the RFC-0023 statesvc head: port
+// constants against svcinfo, statestore client-driver env wiring, and
+// membership in the statestore NetworkPolicy allowlist (the silent-drop bite).
+func TestStateSvcChart(t *testing.T) {
+	docs := render(t,
+		"--set", "functionState.enabled=true",
+		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+		"--set", "networkPolicy.enabled=true")
+
+	t.Run("statesvc deployment arg and env", func(t *testing.T) {
+		deploy := find(docs, "Deployment", svcinfo.SvcStateSvc)
+		args := containerArgs(t, deploy)
+		assert.Equal(t, fmt.Sprint(svcinfo.PortStateSvc), argAfter(args, "--stateApiPort"))
+
+		env := containerEnv(t, deploy)
+		assert.Equal(t, "client", env["STATESTORE_DRIVER"])
+		assert.Contains(t, env["STATESTORE_DSN"], svcinfo.SvcStatestore)
+	})
+
+	t.Run("statesvc service", func(t *testing.T) {
+		svc := servicePorts(t, find(docs, "Service", svcinfo.SvcStateSvc))
+		require.Len(t, svc, 1)
+		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0]["port"])
+		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0]["targetPort"])
+	})
+
+	t.Run("statestore networkpolicy admits svc:statesvc", func(t *testing.T) {
+		ssNP := find(docs, "NetworkPolicy", "statestore")
+		require.NotNil(t, ssNP)
+		assert.True(t, npAllowsFromSvc(ssNP, svcinfo.SvcStateSvc),
+			"statesvc reads/writes keyspaces on the statestore; a missing row is a silent i/o timeout in CI")
+	})
+
+	t.Run("statesvc networkpolicy renders", func(t *testing.T) {
+		require.NotNil(t, find(docs, "NetworkPolicy", svcinfo.SvcStateSvc),
+			"function pods reach statesvc across namespaces; the policy must render with the head")
+	})
+
+	t.Run("disabled by default", func(t *testing.T) {
+		docs := render(t)
+		assert.Nil(t, find(docs, "Deployment", svcinfo.SvcStateSvc))
+	})
+}

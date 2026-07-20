@@ -283,6 +283,14 @@ Mirrored by pkg/svcinfo.PortStatestore (RFC-0021).
 {{- end -}}
 
 {{/*
+fission.statesvcPort is the statesvc function-facing keyed-state API port.
+Mirrored by pkg/svcinfo.PortStateSvc (RFC-0023).
+*/}}
+{{- define "fission.statesvcPort" -}}
+{{ (.Values.functionState | default dict).port | default 8893 }}
+{{- end -}}
+
+{{/*
 fission.workflowPort is the workflow engine head's port. Mirrored by
 pkg/svcinfo.PortWorkflow (RFC-0022).
 */}}

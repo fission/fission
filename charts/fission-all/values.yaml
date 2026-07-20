@@ -730,6 +730,25 @@ mcp:
 ## wires a user-managed Postgres DSN into a Secret; in "embedded" mode it runs a
 ## single-replica, PVC-backed SQLite store (Fission's own binary) for local/small
 ## deployments — explicitly single-writer and NOT HA.
+## functionState (RFC-0023) deploys statesvc, the function-facing keyed-state
+## API: functions opted in via FunctionSpec.state get a scoped keyspace over
+## the statestore, with per-function tokens injected at specialization time.
+## Requires statestore.enabled (render-validated).
+##
+functionState:
+  enabled: false
+  ## Port statesvc listens on (ClusterIP Service of the same port).
+  ##
+  port: 8893
+  ## replicas to deploy. statesvc is stateless (every replica indexes Function
+  ## StateConfigs itself, no leader election); the keyspace-purge finalizer is
+  ## idempotent, so replicas > 1 is safe for availability.
+  ##
+  replicas: 1
+  ## Pod resources.
+  ##
+  resources: {}
+
 statestore:
   ## Off by default. A statestore-dependent feature that is enabled without this
   ## fails the chart render.
