@@ -50,6 +50,10 @@ const (
 	// PortWorkflow is the workflow engine head's port (RFC-0022): health
 	// probes plus the read-only run-history endpoint.
 	PortWorkflow = 8892
+	// PortStateSvc is the statesvc function-facing keyed-state API port
+	// (RFC-0023). Scoped surface only — the raw statestore stays on
+	// PortStatestore, unreachable from function pods.
+	PortStateSvc = 8893
 	// PortMetrics is the default Prometheus metrics port every component
 	// serves when METRICS_ADDR is unset; chart ServiceMonitors scrape it.
 	PortMetrics = 8080
