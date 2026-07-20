@@ -163,10 +163,16 @@ func (h *handler) readValue(w http.ResponseWriter, body io.Reader, sc authedScop
 		return nil, false
 	}
 	if int64(len(val)) > maxBytes {
-		writeError(w, http.StatusRequestEntityTooLarge, "quota_value_bytes", "value exceeds the keyspace MaxValueBytes quota")
+		writeValueTooLarge(w)
 		return nil, false
 	}
 	return val, true
+}
+
+// writeValueTooLarge answers the shared MaxValueBytes rejection (PUT and CAS
+// both hit it), keeping the status and machine-readable code in one place.
+func writeValueTooLarge(w http.ResponseWriter) {
+	writeError(w, http.StatusRequestEntityTooLarge, "quota_value_bytes", "value exceeds the keyspace MaxValueBytes quota")
 }
 
 func (h *handler) put(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +233,7 @@ func (h *handler) cas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if int64(len(req.Value)) > maxBytes {
-		writeError(w, http.StatusRequestEntityTooLarge, "quota_value_bytes", "value exceeds the keyspace MaxValueBytes quota")
+		writeValueTooLarge(w)
 		return
 	}
 	o := statestore.SetOptions{IfVersion: &req.ExpectVersion, TTL: h.index.DefaultTTL(sc.scope.Namespace, sc.scope.Keyspace)}
