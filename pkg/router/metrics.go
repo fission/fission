@@ -44,6 +44,23 @@ var (
 		prometheus.DefBuckets,
 	)
 
+	// Sticky routing observability (RFC-0023 phase 3), labelled by
+	// function_namespace/function_name. A "hit" is a request that carried a
+	// sticky key into the resolver; "fallback" counts requests whose sticky
+	// declaration matched nothing in the request (missing header/param), which
+	// silently take the default pick — the metric is how an operator notices a
+	// misdeclared key source. Per-key ownership moves are deliberately NOT
+	// counted: that would need per-key memory in the router; reshuffle is
+	// churn-driven and observable from pod events.
+	stickyKeyRequests = metrics.Int64Counter(
+		"fission_router_sticky_requests_total",
+		"Requests to sticky-routed functions that carried their sticky key",
+	)
+	stickyKeyMissing = metrics.Int64Counter(
+		"fission_router_sticky_key_missing_total",
+		"Requests to sticky-routed functions missing their sticky key (default pick used)",
+	)
+
 	// Route-update observability (RFC-0013). muxRebuilds is the headline:
 	// it must NOT move under canary-weight / function churn — only route
 	// shape changes (trigger create/delete/path edits) increment it.

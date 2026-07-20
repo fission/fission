@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -176,6 +177,44 @@ func TestFunctionState(t *testing.T) {
 
 		ns.CLIWithEnv(t, ctx, cliEnv, "fn", "state", "delete", "--name", fnName, "--key", "k2")
 		ns.CLIWithEnv(t, ctx, cliEnv, "fn", "state", "set", "--name", fnName, "--key", "k3", "--value", "v3")
+	})
+
+	t.Run("sticky_routing_residency", func(t *testing.T) {
+		fnName := "fn-state-sticky-" + ns.ID
+		ns.CreateFunction(t, ctx, framework.FunctionOptions{
+			Name: fnName, Env: env, Code: framework.WriteTestData(t, "nodejs/state/whoami.js"),
+			State: true, StateStickySource: "queryparam", StateStickyName: "sid",
+		})
+		ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+		f.Router(t).GetEventually(t, ctx, "/"+fnName+"?sid=warm", framework.BodyContains(""))
+
+		// Concurrent burst (RequestsPerPod defaults to 1) specializes extra
+		// pods so the HRW pick has a real choice.
+		var wg sync.WaitGroup
+		for i := range 8 {
+			wg.Go(func() {
+				_, _, _ = f.Router(t).Get(ctx, fmt.Sprintf("/%s?sid=spread-%d", fnName, i))
+			})
+		}
+		wg.Wait()
+
+		// Residency: sequential repeats of one key land on one pod (the first
+		// request per key may cold-start off-owner; assert from the second on).
+		keys := []string{"alpha", "beta", "gamma", "delta"}
+		owners := map[string]map[string]bool{}
+		for _, key := range keys {
+			owners[key] = map[string]bool{}
+			_, _, _ = f.Router(t).Get(ctx, "/"+fnName+"?sid="+key) // settle
+			for range 4 {
+				status, body, err := f.Router(t).Get(ctx, "/"+fnName+"?sid="+key)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, status)
+				owners[key][body] = true
+			}
+		}
+		for key, pods := range owners {
+			assert.Lenf(t, pods, 1, "S4 residency: key %q served by %v (want exactly one pod)", key, pods)
+		}
 	})
 
 	t.Run("finalizer_purges_keyspace", func(t *testing.T) {

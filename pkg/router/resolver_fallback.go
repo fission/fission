@@ -60,9 +60,9 @@ func newFallbackResolver(logger logr.Logger, ix *endpointcache.Index, executor *
 	}
 }
 
-func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
+func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function, stickyKey string) (ResolvedEntry, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypePoolmgr {
-		return f.resolveDeployBacked(ctx, fn)
+		return f.resolveDeployBacked(ctx, fn, stickyKey)
 	}
 	// Strict-mode and OnceOnly functions take the legacy RPC path: strict for
 	// exact global concurrency accounting, OnceOnly because its pods serve
@@ -71,10 +71,10 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 	// the router-side belt to that brace).
 	if fn.StrictConcurrencyEnforcement() || fn.Spec.OnceOnly {
 		endpointcache.RecordFallback(endpointcache.FallbackStrict)
-		return f.executor.Resolve(ctx, fn)
+		return f.executor.Resolve(ctx, fn, stickyKey)
 	}
 
-	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod())
+	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod(), stickyKey)
 	if admit == endpointcache.Admitted {
 		endpointcache.RecordHit()
 		return ResolvedEntry{SvcURL: ep.URL, FromCache: true, Release: release}, nil
@@ -86,7 +86,7 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 		// executor RPC, byte-identical to the pre-RFC path — this is what keeps
 		// the ~100ms poolmgr cold start unchanged.
 		endpointcache.RecordMiss()
-		return f.executor.Resolve(ctx, fn)
+		return f.executor.Resolve(ctx, fn, stickyKey)
 	}
 
 	// Endpoints exist but none was admissible (busy / quarantined): ask the
@@ -116,20 +116,20 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function) (Resol
 			// Old executor without /v2/ensureCapacity — degrade to the legacy
 			// RPC, which still works (upgrade-order safety).
 			endpointcache.RecordFallback(endpointcache.FallbackCapacityUnsupported)
-			return f.executor.Resolve(ctx, fn)
+			return f.executor.Resolve(ctx, fn, stickyKey)
 		}
 		return ResolvedEntry{}, err
 	}
-	return f.executor.Resolve(ctx, fn)
+	return f.executor.Resolve(ctx, fn, stickyKey)
 }
 
 // resolveDeployBacked handles newdeploy/container: the Service DNS address
 // stays the dial target (the index contributes scale-state awareness) unless
 // endpointLB is on, in which case ready pod IPs are dialed directly with
 // least-outstanding selection.
-func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
+func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Function, stickyKey string) (ResolvedEntry, error) {
 	if f.index.ReadyCount(fn.Namespace, fn.Name) > 0 {
-		entry, err := f.executor.Resolve(ctx, fn)
+		entry, err := f.executor.Resolve(ctx, fn, stickyKey)
 		// The nil-SvcURL guard covers the throttler-follower race (Resolve can
 		// answer nil, nil): without it the LB entry would carry TapURL=nil and
 		// taps would silently key on the pod IP — starving newdeploy atime and
@@ -146,7 +146,7 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 		// address the executor knows, not the pod IP. Any inadmissible state
 		// (e.g. every endpoint quarantined) keeps the VIP entry, which still
 		// works.
-		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32)
+		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32, stickyKey)
 		if admit == endpointcache.Admitted {
 			// Counted separately from hits: the Service entry above may have
 			// cost an executor RPC, so this is NOT a "zero-RPC" hit — it is an

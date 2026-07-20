@@ -170,7 +170,7 @@ func TestAdmit(t *testing.T) {
 	t.Run("no entry", func(t *testing.T) {
 		t.Parallel()
 		ix := NewIndex()
-		_, release, result := ix.Admit("default", "ghost", 1)
+		_, release, result := ix.Admit("default", "ghost", 1, "")
 		assert.Equal(t, NoEntry, result)
 		assert.Nil(t, release)
 	})
@@ -185,7 +185,7 @@ func TestAdmit(t *testing.T) {
 		// others idle.
 		seen := map[string]int{}
 		for i := range 3 {
-			ep, release, result := ix.Admit("default", "fn-a", 1)
+			ep, release, result := ix.Admit("default", "fn-a", 1, "")
 			require.Equalf(t, Admitted, result, "admit %d", i)
 			require.NotNil(t, release)
 			seen[ep.Address]++
@@ -193,7 +193,7 @@ func TestAdmit(t *testing.T) {
 		assert.Len(t, seen, 3, "3 admissions at cap 1 must use 3 distinct pods, got %v", seen)
 
 		// Saturated now.
-		_, release, result := ix.Admit("default", "fn-a", 1)
+		_, release, result := ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, AllBusy, result)
 		assert.Nil(t, release)
 	})
@@ -205,16 +205,16 @@ func TestAdmit(t *testing.T) {
 
 		var releases []func()
 		for i := range 3 {
-			_, release, result := ix.Admit("default", "fn-a", 3)
+			_, release, result := ix.Admit("default", "fn-a", 3, "")
 			require.Equalf(t, Admitted, result, "admit %d of 3 on one pod", i)
 			releases = append(releases, release)
 		}
-		_, _, result := ix.Admit("default", "fn-a", 3)
+		_, _, result := ix.Admit("default", "fn-a", 3, "")
 		assert.Equal(t, AllBusy, result)
 
 		// Releasing one slot re-opens admission.
 		releases[0]()
-		_, release, result := ix.Admit("default", "fn-a", 3)
+		_, release, result := ix.Admit("default", "fn-a", 3, "")
 		assert.Equal(t, Admitted, result)
 		release()
 	})
@@ -224,7 +224,7 @@ func TestAdmit(t *testing.T) {
 		ix := NewIndex()
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
 
-		_, release, result := ix.Admit("default", "fn-a", 1)
+		_, release, result := ix.Admit("default", "fn-a", 1, "")
 		require.Equal(t, Admitted, result)
 		// The transport deliberately releases from two places (re-resolve and
 		// the per-request defer); a double release driving the counter negative
@@ -233,9 +233,9 @@ func TestAdmit(t *testing.T) {
 		release()
 		release()
 
-		_, r1, result := ix.Admit("default", "fn-a", 1)
+		_, r1, result := ix.Admit("default", "fn-a", 1, "")
 		require.Equal(t, Admitted, result)
-		_, _, result = ix.Admit("default", "fn-a", 1)
+		_, _, result = ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, AllBusy, result, "counter must not have gone negative from double release")
 		r1()
 	})
@@ -246,18 +246,18 @@ func TestAdmit(t *testing.T) {
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
 
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		ep, release, result := ix.Admit("default", "fn-a", 1)
+		ep, release, result := ix.Admit("default", "fn-a", 1, "")
 		require.Equal(t, Admitted, result)
 		assert.Equal(t, "10.0.0.2:8888", ep.Address, "quarantined endpoint must be skipped")
 		release()
 
 		ix.Quarantine("default", "fn-a", "10.0.0.2:8888")
-		_, _, result = ix.Admit("default", "fn-a", 1)
+		_, _, result = ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 
 		// Any slice event lifts the quarantine.
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
-		_, release, result = ix.Admit("default", "fn-a", 1)
+		_, release, result = ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, Admitted, result)
 		release()
 	})
@@ -272,11 +272,11 @@ func TestAdmit(t *testing.T) {
 		// quarantined while the executor is down, so no slice event will ever
 		// arrive to lift it. The TTL is the self-heal.
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		_, _, result := ix.Admit("default", "fn-a", 1)
+		_, _, result := ix.Admit("default", "fn-a", 1, "")
 		require.Equal(t, AllQuarantined, result)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, release, result := ix.Admit("default", "fn-a", 1)
+			_, release, result := ix.Admit("default", "fn-a", 1, "")
 			if assert.Equal(c, Admitted, result, "quarantine must expire after the TTL") {
 				release()
 			}
@@ -284,7 +284,7 @@ func TestAdmit(t *testing.T) {
 
 		// A dead pod is simply re-quarantined by the next dial failure.
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		_, _, result = ix.Admit("default", "fn-a", 1)
+		_, _, result = ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
 
@@ -296,7 +296,7 @@ func TestAdmit(t *testing.T) {
 		es.Endpoints[0].Conditions.Ready = &notReady
 		ix.ApplySlice(es)
 
-		_, release, result := ix.Admit("default", "fn-a", 1)
+		_, release, result := ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, NoCountedReady, result)
 		assert.Nil(t, release)
 	})
@@ -312,7 +312,7 @@ func TestAdmit(t *testing.T) {
 		var wg sync.WaitGroup
 		for range goroutines {
 			wg.Go(func() {
-				_, release, result := ix.Admit("default", "fn-a", perPod)
+				_, release, result := ix.Admit("default", "fn-a", perPod, "")
 				switch result {
 				case Admitted:
 					admitted.Add(1)
@@ -343,12 +343,12 @@ func TestReportDialTimeout(t *testing.T) {
 
 		for i := 1; i < dialTimeoutStrikeLimit; i++ {
 			assert.Falsef(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "strike %d must not quarantine", i)
-			_, release, result := ix.Admit("default", "fn-a", 1)
+			_, release, result := ix.Admit("default", "fn-a", 1, "")
 			require.Equalf(t, Admitted, result, "endpoint must stay admissible after strike %d", i)
 			release()
 		}
 		assert.True(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "the limit-th strike escalates")
-		_, _, result := ix.Admit("default", "fn-a", 1)
+		_, _, result := ix.Admit("default", "fn-a", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
 

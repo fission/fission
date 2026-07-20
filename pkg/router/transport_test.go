@@ -37,7 +37,7 @@ type scriptedResolver struct {
 	invalidated atomic.Int64
 }
 
-func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
+func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function, _ string) (ResolvedEntry, error) {
 	n := int(s.calls.Add(1)) - 1
 	if n >= len(s.answers) {
 		n = len(s.answers) - 1
@@ -199,7 +199,7 @@ type releaseTrackingResolver struct {
 	mu          sync.Mutex
 }
 
-func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
+func (s *releaseTrackingResolver) Resolve(_ context.Context, _ *fv1.Function, _ string) (ResolvedEntry, error) {
 	n := int(s.calls.Add(1)) - 1
 	if n >= len(s.answers) {
 		n = len(s.answers) - 1
@@ -519,7 +519,7 @@ type reasonRecordingResolver struct {
 	hard   atomic.Int64
 }
 
-func (s *reasonRecordingResolver) Resolve(_ context.Context, _ *fv1.Function) (ResolvedEntry, error) {
+func (s *reasonRecordingResolver) Resolve(_ context.Context, _ *fv1.Function, _ string) (ResolvedEntry, error) {
 	return ResolvedEntry{SvcURL: s.answer, FromCache: true, Release: func() {}}, nil
 }
 

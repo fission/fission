@@ -106,7 +106,7 @@ func TestFallbackPoolmgrWarmHitAdmitsFromIndex(t *testing.T) {
 	exec := &stubExecutor{addr: "10.9.9.9:8888"}
 	f := newFallbackForTest(t, ix, exec, nil)
 
-	entry, err := f.Resolve(t.Context(), poolFn("fn-a"))
+	entry, err := f.Resolve(t.Context(), poolFn("fn-a"), "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:8888", entry.SvcURL.Host)
 	assert.True(t, entry.FromCache)
@@ -121,7 +121,7 @@ func TestFallbackPoolmgrColdStartUsesExecutor(t *testing.T) {
 	exec := &stubExecutor{addr: "10.9.9.9:8888"}
 	f := newFallbackForTest(t, ix, exec, nil)
 
-	entry, err := f.Resolve(t.Context(), poolFn("fn-cold"))
+	entry, err := f.Resolve(t.Context(), poolFn("fn-cold"), "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host)
 	assert.Nil(t, entry.Release, "executor-side accounting — no local release")
@@ -137,7 +137,7 @@ func TestFallbackStrictAnnotationBypassesIndex(t *testing.T) {
 
 	fn := poolFn("fn-strict")
 	fn.Annotations = map[string]string{fv1.ConcurrencyEnforcementAnnotation: fv1.ConcurrencyEnforcementStrict}
-	entry, err := f.Resolve(t.Context(), fn)
+	entry, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host, "strict mode must take the legacy RPC path")
 	assert.Equal(t, 1, exec.calls)
@@ -154,12 +154,12 @@ func TestFallbackSaturatedUsesEnsureCapacity(t *testing.T) {
 	fn := poolFn("fn-busy") // requestsPerPod defaults to 1
 
 	// First request takes the only slot.
-	first, err := f.Resolve(t.Context(), fn)
+	first, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	require.NotNil(t, first.Release)
 
 	// Second request finds the endpoint saturated → ensureCapacity.
-	second, err := f.Resolve(t.Context(), fn)
+	second, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.2:8888", second.SvcURL.Host)
 	assert.Nil(t, second.Release, "capacity pod is executor-accounted")
@@ -168,7 +168,7 @@ func TestFallbackSaturatedUsesEnsureCapacity(t *testing.T) {
 
 	// Releasing the first slot makes the endpoint admissible again.
 	first.Release()
-	third, err := f.Resolve(t.Context(), fn)
+	third, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:8888", third.SvcURL.Host)
 	third.Release()
@@ -183,12 +183,12 @@ func TestFallbackSaturatedDegradesWhenCapacityUnsupported(t *testing.T) {
 	f := newFallbackForTest(t, ix, exec, capacity)
 
 	fn := poolFn("fn-busy2")
-	first, err := f.Resolve(t.Context(), fn)
+	first, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	defer first.Release()
 
 	// Saturated + 404 from ensureCapacity → legacy RPC (old executor).
-	second, err := f.Resolve(t.Context(), fn)
+	second, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", second.SvcURL.Host)
 	assert.Equal(t, 1, exec.calls)
@@ -202,11 +202,11 @@ func TestFallbackSaturatedRelays429(t *testing.T) {
 	f := newFallbackForTest(t, ix, &stubExecutor{}, capacity)
 
 	fn := poolFn("fn-capped")
-	first, err := f.Resolve(t.Context(), fn)
+	first, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	defer first.Release()
 
-	_, err = f.Resolve(t.Context(), fn)
+	_, err = f.Resolve(t.Context(), fn, "")
 	require.Error(t, err)
 	code, _ := ferror.GetHTTPError(err)
 	assert.Equal(t, http.StatusTooManyRequests, code)
@@ -222,12 +222,12 @@ func TestFallbackNewdeployScaledUpUsesCachePath(t *testing.T) {
 	fn := poolFn("fn-nd")
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypeNewdeploy
 
-	entry, err := f.Resolve(t.Context(), fn)
+	entry, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "svc-fn-nd.default", entry.SvcURL.Host)
 	assert.Equal(t, 1, exec.calls, "first call populates the address cache")
 
-	entry2, err := f.Resolve(t.Context(), fn)
+	entry2, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.True(t, entry2.FromCache)
 	assert.Equal(t, 1, exec.calls, "second call is a cache hit")
@@ -245,7 +245,7 @@ func TestFallbackNewdeployScaleFromZeroBypassesCache(t *testing.T) {
 	// Two sequential calls: both must RPC (the cached DNS would dial into a
 	// backendless Service), proving the cache bypass while endpoints are zero.
 	for want := 1; want <= 2; want++ {
-		entry, err := f.Resolve(t.Context(), fn)
+		entry, err := f.Resolve(t.Context(), fn, "")
 		require.NoError(t, err)
 		assert.Equal(t, "svc-fn-zero.default", entry.SvcURL.Host)
 		assert.Equal(t, want, exec.calls)
@@ -266,13 +266,13 @@ func TestFallbackInvalidateQuarantinesEndpoint(t *testing.T) {
 	// The quarantined endpoint is unadmissible. With one ready-but-quarantined
 	// endpoint this takes the saturated-fallback branch (ready > 0, nil
 	// capacity client → legacy RPC), not the ready==0 cold-start branch.
-	entry, err := f.Resolve(t.Context(), fn)
+	entry, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host)
 
 	// A slice event lifts the quarantine.
 	ix.ApplySlice(fnSlice("s1", "fn-q", "default", "10.0.0.1"))
-	entry2, err := f.Resolve(t.Context(), fn)
+	entry2, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.1:8888", entry2.SvcURL.Host)
 	entry2.Release()
@@ -289,7 +289,7 @@ func TestFallbackOnceOnlyBypassesIndex(t *testing.T) {
 
 	fn := poolFn("fn-once")
 	fn.Spec.OnceOnly = true
-	entry, err := f.Resolve(t.Context(), fn)
+	entry, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	assert.Equal(t, "10.9.9.9:8888", entry.SvcURL.Host, "OnceOnly must never be admitted from slices")
 	assert.Equal(t, 1, exec.calls)
@@ -325,13 +325,13 @@ func TestFallbackEndpointLBDialsPodsDirectly(t *testing.T) {
 
 	// Two held admissions spread across the two pods (least outstanding),
 	// while taps stay keyed on the Service address the executor knows.
-	first, err := f.Resolve(t.Context(), fn)
+	first, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	require.NotNil(t, first.Release, "endpoint-LB entries carry router-local accounting")
 	require.NotNil(t, first.TapURL)
 	assert.Equal(t, "svc-fn-lb.default", first.TapURL.Host, "taps must target the Service, not the pod")
 
-	second, err := f.Resolve(t.Context(), fn)
+	second, err := f.Resolve(t.Context(), fn, "")
 	require.NoError(t, err)
 	require.NotNil(t, second.Release)
 	assert.NotEqual(t, first.SvcURL.Host, second.SvcURL.Host,
@@ -351,8 +351,33 @@ func TestFallbackEndpointLBFallsBackToVIPWhenQuarantined(t *testing.T) {
 	exec := &stubExecutor{addr: "svc-fn-lbq.default"}
 	f := newEndpointLBForTest(t, ix, exec)
 
-	entry, err := f.Resolve(t.Context(), newdeployFn("fn-lbq"))
+	entry, err := f.Resolve(t.Context(), newdeployFn("fn-lbq"), "")
 	require.NoError(t, err)
 	assert.Equal(t, "svc-fn-lbq.default", entry.SvcURL.Host, "quarantined endpoints degrade to the Service VIP")
 	assert.Nil(t, entry.Release)
+}
+
+// TestFallbackStickyKeyReachesAdmit pins the RFC-0023 threading: the sticky
+// key handed to Resolve drives the index pick deterministically (same key,
+// same endpoint across repeated resolves and load skew), while the empty key
+// keeps least-outstanding, and the Release accounting seam is unchanged.
+func TestFallbackStickyKeyReachesAdmit(t *testing.T) {
+	t.Parallel()
+	ix := endpointcache.NewIndex()
+	ix.ApplySlice(fnSlice("s1", "fn-a", "default", "10.0.0.1", "10.0.0.2", "10.0.0.3"))
+	f := newFallbackForTest(t, ix, &stubExecutor{addr: "10.9.9.9:8888"}, nil)
+
+	fn := poolFn("fn-a")
+	fn.Spec.RequestsPerPod = 10
+
+	first, err := f.Resolve(t.Context(), fn, "session-42")
+	require.NoError(t, err)
+	require.NotNil(t, first.Release)
+	for range 5 {
+		again, err := f.Resolve(t.Context(), fn, "session-42")
+		require.NoError(t, err)
+		assert.Equal(t, first.SvcURL.Host, again.SvcURL.Host, "same key must keep landing on its owner")
+		again.Release()
+	}
+	first.Release()
 }
