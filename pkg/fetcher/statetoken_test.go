@@ -5,6 +5,7 @@
 package fetcher
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,22 +25,30 @@ func TestWriteStateTokenFile(t *testing.T) {
 		StateKeyspace:    "carts",
 	}
 
-	t.Run("derives the exact keyspace token", func(t *testing.T) {
+	readCreds := func(t *testing.T) StateCredentials {
+		t.Helper()
+		got, err := os.ReadFile(filepath.Join(dir, StateTokenFileName))
+		require.NoError(t, err)
+		var creds StateCredentials
+		require.NoError(t, json.Unmarshal(got, &creds))
+		return creds
+	}
+
+	t.Run("derives the exact keyspace token with its claims", func(t *testing.T) {
 		t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "test-master")
 		require.NoError(t, f.writeStateTokenFile(loadReq))
 
-		got, err := os.ReadFile(filepath.Join(dir, StateTokenFileName))
-		require.NoError(t, err)
+		creds := readCreds(t)
+		assert.Equal(t, "user-ns", creds.Namespace)
+		assert.Equal(t, "carts", creds.Keyspace)
 		want := hmacauth.EncodeKeyForEnv(hmacauth.DeriveStateKeyspaceKey([]byte("test-master"), "user-ns", "carts"))
-		assert.Equal(t, want, string(got))
+		assert.Equal(t, want, creds.Token)
 	})
 
-	t.Run("no master secret: dev placeholder", func(t *testing.T) {
+	t.Run("no master secret: dev placeholder (overwrites read-only file)", func(t *testing.T) {
 		t.Setenv("FISSION_INTERNAL_AUTH_SECRET", "")
 		require.NoError(t, f.writeStateTokenFile(loadReq))
-		got, err := os.ReadFile(filepath.Join(dir, StateTokenFileName))
-		require.NoError(t, err)
-		assert.Equal(t, "dev-unauthenticated", string(got))
+		assert.Equal(t, "dev-unauthenticated", readCreds(t).Token)
 	})
 
 	t.Run("missing metadata is an error", func(t *testing.T) {
