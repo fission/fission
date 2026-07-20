@@ -48,6 +48,11 @@ const (
 	// (RFC-0022): run I/O may contain user data, so reads are signed like
 	// every other internal channel.
 	ServiceWorkflow Service = "workflow"
+	// ServiceStateAPI gates the statesvc function-facing keyed-state head
+	// (RFC-0023): DeriveServiceKey on it signs the CLI/operator admin path,
+	// and DeriveStateKeyspaceKey extends the channel with a per-(namespace,
+	// keyspace) bearer token injected into function pods at specialization.
+	ServiceStateAPI Service = "stateapi"
 )
 
 // derivedKeyLength is the size of every per-service signing key. 32
@@ -175,6 +180,18 @@ func VerifierFromKeyOrMaster(key, keyOld, master, masterOld []byte, service Serv
 		return VerifierFromKey(key, keyOld, opts)
 	}
 	return ServiceVerifier(master, masterOld, service, opts)
+}
+
+// DeriveStateKeyspaceKey derives the RFC-0023 per-keyspace state token:
+// the ServiceStateAPI channel extended with "<namespace>:<keyspace>". The
+// info string cannot collide with DeriveServiceKey/DeriveServiceKeyNS on any
+// channel: Kubernetes namespaces cannot contain ':' and the validated
+// keyspace charset (^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$) excludes it too, so
+// the two-colon tail is unambiguous. statesvc re-derives and compares —
+// stateless verification, no token storage, the same family as every other
+// internal channel. Transport to a pod must go through EncodeKeyForEnv.
+func DeriveStateKeyspaceKey(master []byte, namespace, keyspace string) []byte {
+	return deriveKey(master, KeyVersion+":"+string(ServiceStateAPI)+":"+namespace+":"+keyspace)
 }
 
 // EncodeKeyForEnv encodes a derived key for transport through a Kubernetes Secret
