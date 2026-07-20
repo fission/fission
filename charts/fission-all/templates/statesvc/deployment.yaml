@@ -84,6 +84,7 @@ spec:
           name: pprof
         {{- end }}
         {{- if .Values.coverage.enabled }}
+        volumeMounts:
         {{- include "coverage.volumemount" . | indent 8 }}
         {{- end }}
         {{- if .Values.terminationMessagePath }}

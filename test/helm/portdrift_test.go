@@ -379,6 +379,25 @@ func TestStateSvcChart(t *testing.T) {
 			"function pods reach statesvc across namespaces; the policy must render with the head")
 	})
 
+	t.Run("renders with coverage enabled (CI profile)", func(t *testing.T) {
+		// The kind-ci profile sets coverage.enabled=true; a stray coverage
+		// volumeMount without its own volumeMounts key lands under ports and
+		// fails the server-side apply (containerPort=0 + mountPath). Render the
+		// exact CI shape and assert no port carries a mountPath.
+		docs := render(t,
+			"--set", "functionState.enabled=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+			"--set", "coverage.enabled=true")
+		deploy := find(docs, "Deployment", svcinfo.SvcStateSvc)
+		require.NotNil(t, deploy)
+		containers := deploy["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)
+		ports, _ := containers[0].(map[string]any)["ports"].([]any)
+		for _, p := range ports {
+			_, hasMount := p.(map[string]any)["mountPath"]
+			assert.False(t, hasMount, "a port carries a mountPath — coverage volumeMount leaked into ports")
+		}
+	})
+
 	t.Run("disabled by default", func(t *testing.T) {
 		docs := render(t)
 		assert.Nil(t, find(docs, "Deployment", svcinfo.SvcStateSvc))
