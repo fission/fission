@@ -92,20 +92,30 @@ type Provisioner struct {
 	inflight sync.Map // map[types.UID]*atomic.Int32
 }
 
-// ProvisionerConfigFromEnv build ProvisionerConfig from
+// ProvisionerConfigFromEnv builds ProvisionerConfig from
 // EXECUTOR_PROVISIONED_* env vars.
-// Returns zero ProvisionerConfig when EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED is unset/false
-func ProvisionerConfigFromEnv() (ProvisionerConfig, bool) {
-	enabled, err := strconv.ParseBool(os.Getenv("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED"))
-	if !enabled || err != nil {
-		return ProvisionerConfig{}, false
+// Returns (zero, false, nil) when EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED is
+// unset or explicitly false. Returns (zero, false, err) when the env var is set
+// to an unparseable value (e.g. "yes", "on", "1-with-typo") so the caller can
+// log the silent-disable cause rather than treating it as "feature off".
+func ProvisionerConfigFromEnv() (ProvisionerConfig, bool, error) {
+	v := os.Getenv("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED")
+	if v == "" {
+		return ProvisionerConfig{}, false, nil
+	}
+	enabled, err := strconv.ParseBool(v)
+	if err != nil {
+		return ProvisionerConfig{}, false, fmt.Errorf("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED=%q: %w", v, err)
+	}
+	if !enabled {
+		return ProvisionerConfig{}, false, nil
 	}
 	cfg := ProvisionerConfig{
 		MaxPerFunction:         util.AtoiOr("EXECUTOR_PROVISIONED_MAX_PER_FUNCTION", 20),
 		MaxInflightPerFunction: util.AtoiOr("EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION", 4),
 		ReconcileInterval:      util.DurOr("EXECUTOR_PROVISIONED_RECONCILE_INTERVAL", 30*time.Second),
 	}
-	return cfg, true
+	return cfg, true, nil
 }
 
 func NewProvisioner(
@@ -116,6 +126,18 @@ func NewProvisioner(
 	crClient client.Client,
 	config ProvisionerConfig,
 ) *Provisioner {
+	// Warn on silent-disable footguns: MaxPerFunction=0 makes
+	// effectiveTarget always 0 (no function ever warms); MaxInflightPerFunction=0
+	// makes tryAcquire always reject (no eager specialization ever admitted).
+	// Both leave the feature nominally "on" but actuating nothing.
+	if config.MaxPerFunction <= 0 {
+		logger.Info("EXECUTOR_PROVISIONED_MAX_PER_FUNCTION is non-positive; provisioned concurrency will never warm any function",
+			"maxPerFunction", config.MaxPerFunction)
+	}
+	if config.MaxInflightPerFunction <= 0 {
+		logger.Info("EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION is non-positive; tryAcquire will reject every eager specialization",
+			"maxInflightPerFunction", config.MaxInflightPerFunction)
+	}
 	return &Provisioner{
 		logger:           logger,
 		gpm:              gpm,

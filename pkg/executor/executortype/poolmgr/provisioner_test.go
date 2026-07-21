@@ -283,26 +283,27 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 		envs   map[string]string
 		want   ProvisionerConfig
 		wantOk bool
+		wantErr bool
 	}{
 		{
 			"unset = off",
 			nil,
-			ProvisionerConfig{}, false,
+			ProvisionerConfig{}, false, false,
 		},
 		{
 			"false = off",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "false"},
-			ProvisionerConfig{}, false,
+			ProvisionerConfig{}, false, false,
 		},
 		{
-			"garbage bool = off",
+			"garbage bool = off with error",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "yes"},
-			ProvisionerConfig{}, false,
+			ProvisionerConfig{}, false, true,
 		},
 		{
 			"enabled, defaults",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "true"},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
 		},
 		{
 			"enabled, overrides",
@@ -312,7 +313,7 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "8",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "1m",
 			},
-			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute}, true,
+			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute}, true, false,
 		},
 		{
 			"enabled, garbage ints fall back to defaults",
@@ -322,7 +323,7 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "notaduration",
 			},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
 		},
 	}
 	for _, tt := range tests {
@@ -336,9 +337,14 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 			for k, v := range tt.envs {
 				t.Setenv(k, v)
 			}
-			got, ok := ProvisionerConfigFromEnv()
+			got, ok, err := ProvisionerConfigFromEnv()
 			assert.Equal(t, tt.wantOk, ok, "enabled flag")
 			assert.Equal(t, tt.want, got, "config")
+			if tt.wantErr {
+				assert.Error(t, err, "expected parse error")
+			} else {
+				assert.NoError(t, err, "expected no error")
+			}
 		})
 	}
 }

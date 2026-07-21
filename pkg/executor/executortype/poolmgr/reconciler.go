@@ -259,8 +259,11 @@ func (gpm *GenericPoolManager) RegisterReconcilers(mgr ctrl.Manager) error {
 	// RFC-0026 provisioner: construct after crClient is set so it can
 	// list Functions and Pods from the shared cache. Env-var config is
 	// wired in Step 9; defaults are applied in NewProvisioner.
-	cfg, ok := ProvisionerConfigFromEnv()
-	if !ok {
+	cfg, ok, err := ProvisionerConfigFromEnv()
+	if err != nil {
+		gpm.logger.Error(err, "EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED is set but unparseable; provisioned concurrency disabled")
+		gpm.provisioner = nil
+	} else if !ok {
 		gpm.provisioner = nil // feature off
 	} else {
 		gpm.provisioner = NewProvisioner(gpm.logger.WithName("provisioner"), gpm, gpm.fissionClient, gpm.kubernetesClient, gpm.crClient, cfg)
