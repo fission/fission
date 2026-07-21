@@ -369,7 +369,7 @@ func TestProvisioner_clearExcessProvisionedLabels(t *testing.T) {
 
 	t.Run("clears oldest excess pods, keeps newest", func(t *testing.T) {
 		p := newTestProvisionerWithPods(t, pods...)
-		p.clearExcessProvisionedLabels(t.Context(), fn, 2)
+		p.clearProvisionedLabels(t.Context(), fn, 2)
 
 		oldest := getPod(t, p, "oldest")
 		middle := getPod(t, p, "middle")
@@ -381,7 +381,7 @@ func TestProvisioner_clearExcessProvisionedLabels(t *testing.T) {
 
 	t.Run("excess > pod count all pods are cleared", func(t *testing.T) {
 		p := newTestProvisionerWithPods(t, pods...)
-		p.clearExcessProvisionedLabels(t.Context(), fn, 10)
+		p.clearProvisionedLabels(t.Context(), fn, 10)
 		for _, name := range []string{"oldest", "middle", "newest"} {
 			got := getPod(t, p, name)
 			assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared", name)
@@ -390,7 +390,7 @@ func TestProvisioner_clearExcessProvisionedLabels(t *testing.T) {
 
 	t.Run("excess=0 clears none", func(t *testing.T) {
 		p := newTestProvisionerWithPods(t, pods...)
-		p.clearExcessProvisionedLabels(t.Context(), fn, 0)
+		p.clearProvisionedLabels(t.Context(), fn, 0)
 		for _, name := range []string{"oldest", "middle", "newest"} {
 			got := getPod(t, p, name)
 			assert.Contains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s kept", name)
@@ -410,7 +410,7 @@ func TestProvisioner_clearAllProvisionedLabels(t *testing.T) {
 		readyPod("b", uid),
 	}
 	p := newTestProvisionerWithPods(t, pods...)
-	p.clearAllProvisionedLabels(t.Context(), fn)
+	p.clearProvisionedLabels(t.Context(), fn, -1)
 
 	for _, name := range []string{"a", "b"} {
 		got := getPod(t, p, name)

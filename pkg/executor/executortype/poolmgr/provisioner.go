@@ -184,7 +184,7 @@ func (p *Provisioner) reconcileAll(ctx context.Context) {
 func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 	target := p.effectiveTarget(fn)
 	if target == 0 {
-		p.clearAllProvisionedLabels(ctx, fn)
+		p.clearProvisionedLabels(ctx, fn, -1)
 		err := p.updateFunctionStatus(ctx, fn, 0, 0)
 		if err != nil {
 			p.logger.Error(err, "Unable to update function status", "function", fn.Name, "namespace", fn.Namespace)
@@ -202,7 +202,7 @@ func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 		p.fireEagerSpecializations(ctx, fn, delta)
 	} else if ready > target {
 		excess := ready - target
-		p.clearExcessProvisionedLabels(ctx, fn, excess)
+		p.clearProvisionedLabels(ctx, fn, excess)
 	}
 
 	// Publish observed status on every pass so ProvisionedReady and the
@@ -236,20 +236,29 @@ func (p *Provisioner) clearProvisionedLabel(ctx context.Context, pod *corev1.Pod
 	return err
 }
 
-func (p *Provisioner) clearExcessProvisionedLabels(ctx context.Context, fn *fv1.Function, excess int) {
+// clearProvisionedLabels removes the "max" number of provisioned label from the oldest pods of the given function.
+// to clear all provisioned labels, set max to -1.
+func (p *Provisioner) clearProvisionedLabels(ctx context.Context, fn *fv1.Function, max int) {
 	podList, err := p.listPods(ctx, fn)
 	if err != nil {
 		p.logger.Error(err, "Unable to list pods", "function", fn.Name, "namespace", fn.Namespace)
 		return
 	}
-	// sort pods by creation time and delete the oldest ones
+	if len(podList.Items) == 0 {
+		return
+	}
 	sort.Slice(podList.Items, func(i, j int) bool {
 		return podList.Items[i].CreationTimestamp.Before(&podList.Items[j].CreationTimestamp)
 	})
-	for i := 0; i < excess && i < len(podList.Items); i++ {
-		err := p.clearProvisionedLabel(ctx, &podList.Items[i])
-		if err != nil {
-			p.logger.Error(err, "unable to clear provisioned label", "pod", podList.Items[i].Name)
+	if max < 0 {
+		max = len(podList.Items)
+	}
+	if max > len(podList.Items) {
+		max = len(podList.Items)
+	}
+	for i := 0; i < max; i++ {
+		if err := p.clearProvisionedLabel(ctx, &podList.Items[i]); err != nil {
+			p.logger.Error(err, "Unable to clear provisioned label", "pod", podList.Items[i].Name, "namespace", podList.Items[i].Namespace)
 		}
 	}
 }
@@ -377,24 +386,6 @@ func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function
 	})
 }
 
-func (p *Provisioner) clearAllProvisionedLabels(ctx context.Context, fn *fv1.Function) {
-	podList, err := p.listPods(ctx, fn)
-	if err != nil {
-		p.logger.Error(err, "Unable to list pods", "function", fn.Name, "namespace", fn.Namespace)
-		return
-	}
-	if len(podList.Items) == 0 {
-		return
-	}
-
-	for _, pod := range podList.Items {
-		err := p.clearProvisionedLabel(ctx, &pod)
-		if err != nil {
-			p.logger.Error(err, "unable to clear provisioned label", "pod", pod.Name)
-		}
-	}
-}
-
 // computes the effectiveTarget: minimum of provisioned concurreny target
 // and max per function. The schedule will be added in PR2
 func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
@@ -402,7 +393,7 @@ func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
 }
 
 func (p *Provisioner) StopProvisioning(ctx context.Context, fn *fv1.Function) {
-	p.clearAllProvisionedLabels(ctx, fn)
+	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
 }
 
