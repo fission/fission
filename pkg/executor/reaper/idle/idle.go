@@ -247,6 +247,17 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	// GetFuncSvc returning and the provisioner's label patch completing
 	// is accepted (design §5j) — the provisioner re-specializes on the
 	// next tick.
+	//
+	// PR1 LIMITATION: this function-level exemption skips ALL specialized
+	// pods of an opted-in function, not just the provisioned floor (target).
+	// An opted-in function (target=2) that bursts to N on-demand pods (up
+	// to Concurrency, default 500) keeps all N pods forever while PC is
+	// enabled — the reaper never retires the overflow, and unlike the
+	// label-patch race this does NOT self-heal (no per-pod signal
+	// distinguishes floor from overflow). PR2 replaces this with a
+	// per-pod-label check (fission.io/provisioned=true) so only floor pods
+	// are exempt and overflow pods are reaped normally. Until then, the
+	// overflow-retention cost is a known PR1 trade-off.
 	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok {
 		if fn.Spec.ProvisionedConcurrency != nil {
 			return nil

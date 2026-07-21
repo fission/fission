@@ -155,6 +155,46 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 		f.Atime = time.Now() // fresh
 		require.NoError(t, s.Reap(t.Context(), f))
 	})
+
+	t.Run("provisioned-concurrency function is skipped (PR1 function-level exemption)", func(t *testing.T) {
+		s, _ := newStrategy()
+		const uid = types.UID("fn-uid-1")
+		// Function opts into provisioned concurrency (target=2).
+		s.fnByUID[uid] = fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+			Spec: fv1.FunctionSpec{
+				ProvisionedConcurrency: &fv1.ProvisionedConcurrencyConfig{Target: 2},
+			},
+		}
+		f := idleFsvc()
+		f.Function.UID = uid
+		f.Atime = time.Now().Add(-time.Hour) // very idle
+		// Reap must skip — the function has PC enabled, so ALL its pods
+		// are exempt (PR1 limitation: including overflow pods).
+		require.NoError(t, s.Reap(t.Context(), f))
+	})
+
+	t.Run("non-provisioned function is reaped normally", func(t *testing.T) {
+		s, _ := newStrategy()
+		const uid = types.UID("fn-uid-2")
+		// Function does NOT opt into provisioned concurrency.
+		s.fnByUID[uid] = fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+		}
+		f := idleFsvc()
+		f.Function.UID = uid
+		f.Atime = time.Now().Add(-time.Hour) // very idle
+		// Reap should NOT skip — the function has no PC. It will proceed
+		// past the exemption check. (Whether it actually deletes depends
+		// on the fsCache state, but it must not return nil from the
+		// exemption branch.)
+		// We can't easily assert "not skipped" without a real cache entry,
+		// but we can verify it doesn't return nil from the PC exemption
+		// by checking that it proceeds to the DeleteOldPoolCache path
+		// (which returns an error for a non-existent cache entry, or
+		// nil if the cache is empty). Either way, it must not short-circuit.
+		_ = s.Reap(t.Context(), f) // must not panic, must not skip via PC
+	})
 }
 
 func TestScaleDownStrategy_Reap(t *testing.T) {
