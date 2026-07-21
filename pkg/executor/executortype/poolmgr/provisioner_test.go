@@ -6,15 +6,17 @@ package poolmgr
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	"sync/atomic"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apiv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,8 +27,61 @@ import (
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/fscache"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
+
+// fakeGPM is a unit-test stub for funcSvcGetter. It returns a queued
+// FuncSvc (or error) per call, optionally blocking to let tests observe
+// concurrency.
+type fakeGPM struct {
+	calls      atomic.Int64
+	concurrent atomic.Int64
+	peakConc   atomic.Int64
+	block      chan struct{} // if non-nil, each call blocks until this is closed
+	svc        *fscache.FuncSvc
+	err        error
+}
+
+func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
+	f.calls.Add(1)
+	cur := f.concurrent.Add(1)
+	for {
+		peak := f.peakConc.Load()
+		if cur <= peak || f.peakConc.CompareAndSwap(peak, cur) {
+			break
+		}
+	}
+	defer f.concurrent.Add(-1)
+	if f.block != nil {
+		select {
+		case <-f.block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return f.svc, f.err
+}
+
+// podRef builds an ObjectReference for a pod in the given namespace.
+func podRef(name, ns string) apiv1.ObjectReference {
+	return apiv1.ObjectReference{Kind: "Pod", Name: name, Namespace: ns}
+}
+
+// newTestProvisionerWithGPM wires a Provisioner with a fake gpm, a fake
+// kubernetes clientset pre-seeded with the given pods, and the function
+// in both the crClient and fissionClient so updateFunctionStatus works.
+func newTestProvisionerWithGPM(t *testing.T, gpm funcSvcGetter, fn *fv1.Function, pods ...*corev1.Pod) *Provisioner {
+	t.Helper()
+	p := newTestProvisionerWithPods(t, pods...)
+	p.gpm = gpm
+	if fn != nil {
+		p.crClient = crfake.NewClientBuilder().WithScheme(scheme()).
+			WithObjects(toClientObjects(pods...)...).WithObjects(fn).Build()
+		p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
+	}
+	return p
+}
 
 // scheme registers both kubernetes and fission types so the fake crClient
 // can list/patch Pods and Functions in the same cache.
@@ -447,6 +502,200 @@ func TestProvisioner_tryAcquire_release(t *testing.T) {
 	t.Run("release of unknown UID is a no-op", func(t *testing.T) {
 		p.release(types.UID("never-acquired")) // must not panic
 	})
+}
+
+// ---------------------------------------------------------------------------
+// tryAcquire — concurrent/race (invariant P3: rollback on reject)
+// ---------------------------------------------------------------------------
+
+func TestProvisioner_tryAcquire_concurrent(t *testing.T) {
+	// Hammer tryAcquire/release from many goroutines. Under -race this
+	// catches any non-atomic read/modify of the per-UID counter; the
+	// invariant is that count never exceeds MaxInflightPerFunction and
+	// never goes negative.
+	const uid = types.UID("u1")
+	const goroutines = 32
+	const iters = 200
+
+	p := newTestProvisioner(t)
+	p.config.MaxInflightPerFunction = 4
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			for range iters {
+				if p.tryAcquire(uid) {
+					// simulate work, then release
+					p.release(uid)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+
+	// After all goroutines finish, the counter must be back to zero.
+	v, ok := p.inflight.Load(uid)
+	require.True(t, ok, "uid entry should exist")
+	count := v.(*atomic.Int32)
+	assert.Equal(t, int32(0), count.Load(), "inflight must drain to zero")
+}
+
+// ---------------------------------------------------------------------------
+// eagerSpecialize
+// ---------------------------------------------------------------------------
+
+func TestProvisioner_eagerSpecialize(t *testing.T) {
+	const uid = "u1"
+	fn := provisionedFnWithUID("fn", uid, 3)
+
+	t.Run("success patches provisioned label on pod", func(t *testing.T) {
+		// Seed a pod WITHOUT the provisioned label; eagerSpecialize must
+		// patch it in via the fake kubernetes clientset.
+		pod := readyPod("warm-pod", uid)
+		delete(pod.Labels, fv1.PROVISIONED_LABEL)
+		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			KubernetesObjects: []apiv1.ObjectReference{podRef("warm-pod", "default")},
+		}}
+		p := newTestProvisionerWithGPM(t, gpm, fn, pod)
+
+		err := p.eagerSpecialize(t.Context(), fn)
+		require.NoError(t, err)
+
+		got := getPod(t, p, "warm-pod")
+		assert.Equal(t, fv1.PROVISIONED_VALUE, got.Labels[fv1.PROVISIONED_LABEL],
+			"provisioned label must be patched in")
+		assert.Equal(t, int64(1), gpm.calls.Load(), "GetFuncSvc called once")
+	})
+
+	t.Run("GetFuncSvc error returns early, no patch", func(t *testing.T) {
+		pod := readyPod("warm-pod", uid)
+		delete(pod.Labels, fv1.PROVISIONED_LABEL)
+		gpm := &fakeGPM{err: errors.New("pool exhausted")}
+		p := newTestProvisionerWithGPM(t, gpm, fn, pod)
+
+		err := p.eagerSpecialize(t.Context(), fn)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "pool exhausted")
+
+		got := getPod(t, p, "warm-pod")
+		_, hasLabel := got.Labels[fv1.PROVISIONED_LABEL]
+		assert.False(t, hasLabel, "no patch on GetFuncSvc failure")
+	})
+
+	t.Run("patch failure (pod missing) does not panic", func(t *testing.T) {
+		// No pod in the clientset; the patch will 404. eagerSpecialize
+		// logs the error but must not panic and must not return an error
+		// (the pod is serving, just not labeled — design §5j race).
+		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			KubernetesObjects: []apiv1.ObjectReference{podRef("ghost-pod", "default")},
+		}}
+		p := newTestProvisionerWithGPM(t, gpm, fn) // no pods seeded
+
+		err := p.eagerSpecialize(t.Context(), fn)
+		// eagerSpecialize returns nil even on patch failure (the error is
+		// only logged) — the pod is specialized and serving.
+		assert.NoError(t, err)
+	})
+
+	t.Run("non-pod KubernetesObjects are skipped", func(t *testing.T) {
+		// A Service ref (Kind=Service) must not trigger a pod patch.
+		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			KubernetesObjects: []apiv1.ObjectReference{
+				{Kind: "Service", Name: "fn-svc", Namespace: "default"},
+			},
+		}}
+		p := newTestProvisionerWithGPM(t, gpm, fn)
+
+		err := p.eagerSpecialize(t.Context(), fn)
+		assert.NoError(t, err, "non-pod refs are skipped, no error")
+	})
+}
+
+// ---------------------------------------------------------------------------
+// fireEagerSpecializations — pacing (invariant P5: MaxInflightPerFunction)
+// ---------------------------------------------------------------------------
+
+func TestProvisioner_fireEagerSpecializations_pacing(t *testing.T) {
+	const uid = "u1"
+	fn := provisionedFnWithUID("fn", uid, 10)
+
+	// fakeGPM blocks every call until we close the channel. This lets us
+	// observe peak concurrency while delta goroutines are launched.
+	block := make(chan struct{})
+	gpm := &fakeGPM{
+		block: block,
+		svc: &fscache.FuncSvc{
+			KubernetesObjects: []apiv1.ObjectReference{podRef("p", "default")},
+		},
+	}
+
+	p := newTestProvisionerWithGPM(t, gpm, fn)
+	p.config.MaxInflightPerFunction = 2
+
+	// delta=5 but MaxInflight=2: only 2 calls should be in-flight at once.
+	p.fireEagerSpecializations(t.Context(), fn, 5)
+
+	// Wait long enough for the 2 admitted goroutines to enter GetFuncSvc.
+	// tryAcquire is synchronous in fireEagerSpecializations' loop, so the
+	// 3rd acquire fails immediately and the loop breaks — only 2 calls
+	// reach GetFuncSvc.
+	require.Eventually(t, func() bool {
+		return gpm.calls.Load() == 2
+	}, 2*time.Second, 10*time.Millisecond, "exactly MaxInflight calls admitted")
+	assert.Equal(t, int64(2), gpm.peakConc.Load(),
+		"peak concurrency must not exceed MaxInflightPerFunction")
+
+	// Release the blocked calls; the remaining 3 are NOT queued (the loop
+	// broke on the 3rd rejected tryAcquire). Verify no further calls.
+	close(block)
+	require.Eventually(t, func() bool {
+		return gpm.concurrent.Load() == 0
+	}, 2*time.Second, 10*time.Millisecond, "all admitted calls drain")
+	assert.Equal(t, int64(2), gpm.calls.Load(),
+		"rejected acquires must not retry — only MaxInflight calls total")
+}
+
+// ---------------------------------------------------------------------------
+// reconcileFunction — warming branch (ready < target)
+// ---------------------------------------------------------------------------
+
+func TestProvisioner_reconcileFunction_warming(t *testing.T) {
+	const uid = "u1"
+	fn := provisionedFnWithUID("fn", uid, 3)
+
+	// No provisioned pods yet (ready=0), target=3 → delta=3 eager calls.
+	// Use a blocking fakeGPM so we can observe that fireEagerSpecializations
+	// was invoked with delta=3 before status is published.
+	block := make(chan struct{})
+	gpm := &fakeGPM{
+		block: block,
+		svc: &fscache.FuncSvc{
+			KubernetesObjects: []apiv1.ObjectReference{podRef("p", "default")},
+		},
+	}
+	p := newTestProvisionerWithGPM(t, gpm, fn)
+	p.config.MaxInflightPerFunction = 4 // >= delta so all 3 are admitted
+
+	p.reconcileFunction(t.Context(), fn)
+
+	// All 3 eager specializations were admitted (MaxInflight=4 >= delta=3).
+	require.Eventually(t, func() bool {
+		return gpm.calls.Load() == 3
+	}, 2*time.Second, 10*time.Millisecond, "delta=3 eager calls fired")
+
+	// Status must be published with ready=0, target=3 (warming, not yet
+	// ready — the pods are still blocking in GetFuncSvc).
+	st := getFnStatus(t, p, "fn")
+	assert.Equal(t, 3, st.ProvisionedTarget, "target published")
+	assert.Equal(t, 0, st.ProvisionedReady, "ready is 0 during warm-up")
+
+	// Unblock and let the goroutines drain so they don't leak.
+	close(block)
+	require.Eventually(t, func() bool {
+		return gpm.concurrent.Load() == 0
+	}, 2*time.Second, 10*time.Millisecond, "eager calls drain after unblock")
 }
 
 // ---------------------------------------------------------------------------

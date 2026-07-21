@@ -25,11 +25,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/fscache"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// funcSvcGetter is the subset of *GenericPoolManager that the provisioner
+// needs. Declared as an interface so unit tests can stub GetFuncSvc without
+// constructing a real GenericPoolManager (which needs a live fsCache, env
+// cache, request channel, etc.). *GenericPoolManager satisfies this
+// interface implicitly.
+type funcSvcGetter interface {
+	GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error)
+}
 
 // ProvisionerConfig configures the RFC-0026 provisioner.
 type ProvisionerConfig struct {
@@ -70,7 +80,7 @@ type ProvisionerConfig struct {
 // Service membership, same router EndpointSlice visibility. Zero router changes.
 type Provisioner struct {
 	logger           logr.Logger
-	gpm              *GenericPoolManager
+	gpm              funcSvcGetter
 	fissionClient    versioned.Interface
 	kubernetesClient kubernetes.Interface
 	crClient         client.Client
@@ -100,7 +110,7 @@ func ProvisionerConfigFromEnv() (ProvisionerConfig, bool) {
 
 func NewProvisioner(
 	logger logr.Logger,
-	gpm *GenericPoolManager,
+	gpm funcSvcGetter,
 	fissionClient versioned.Interface,
 	kubernetesClient kubernetes.Interface,
 	crClient client.Client,
