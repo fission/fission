@@ -194,18 +194,15 @@ func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 	if ready < target {
 		delta := target - ready
 		p.fireEagerSpecializations(ctx, fn, delta)
-		// returning here cause the pods will take time to provision, status will be updated on the next tick
-		return
 	} else if ready > target {
 		excess := ready - target
 		p.clearExcessProvisionedLabels(ctx, fn, excess)
-		// returning here cause the pods will take time to provision, status will be updated on the next tick
-		return
 	}
 
-	// if the code reaches here, ready = target, update Target
-	err = p.updateFunctionStatus(ctx, fn, ready, target)
-	if err != nil {
+	// Publish observed status on every pass so ProvisionedReady and the
+	// Provisioned=Warming condition surface during warm-up/drain, not only
+	// once ready == target.
+	if err := p.updateFunctionStatus(ctx, fn, ready, target); err != nil {
 		p.logger.Error(err, "Unable to update status of the function", "function", fn.Name, "namespace", fn.Namespace, "ready", ready, "target", target)
 	}
 }
