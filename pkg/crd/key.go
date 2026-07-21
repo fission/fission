@@ -62,7 +62,7 @@ func CacheKeyURFromObject(obj metav1.Object) CacheKeyUR {
 // intentionally excluded: it changes on status updates (not just spec
 // changes), and the router's informer cache may lag the executor's
 // view, causing UnTapService to miss the cache entry and leak
-// activeRequests. See ci-29472717703 v1.36.1 analysis.
+// activeRequests.
 func CacheKeyURGFromMeta(metadata *metav1.ObjectMeta) CacheKeyURG {
 	return CacheKeyURG{
 		UID:        metadata.UID,

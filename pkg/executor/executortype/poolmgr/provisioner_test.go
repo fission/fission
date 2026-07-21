@@ -593,7 +593,7 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 	t.Run("patch failure (pod missing) does not panic", func(t *testing.T) {
 		// No pod in the clientset; the patch will 404. eagerSpecialize
 		// logs the error but must not panic and must not return an error
-		// (the pod is serving, just not labeled — design §5j race).
+		// (the pod is serving, just not labeled — accepted race).
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
 			KubernetesObjects: []apiv1.ObjectReference{podRef("ghost-pod", "default")},
 		}}

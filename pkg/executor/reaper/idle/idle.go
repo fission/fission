@@ -245,7 +245,7 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	// function opts into provisioned concurrency, all its specialized
 	// pods are provisioner-managed. The narrow race between
 	// GetFuncSvc returning and the provisioner's label patch completing
-	// is accepted (design §5j) — the provisioner re-specializes on the
+	// is accepted — the provisioner re-specializes on the
 	// next tick.
 	//
 	// PR1 LIMITATION: this function-level exemption skips ALL specialized

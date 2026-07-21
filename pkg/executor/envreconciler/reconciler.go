@@ -49,7 +49,6 @@ func (r *environmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// the readyPodQueue), verify against the API server — a stale cache
 			// (e.g. watch reconnect on k8s 1.36 ConsistentListFromCache) can
 			// transiently return NotFound for an object that still exists.
-			// See ci-29487828565 v1.36.1 PCL Phase 3 analysis.
 			liveEnv := &fv1.Environment{}
 			if apiErr := r.apiReader.Get(ctx, req.NamespacedName, liveEnv); apiErr == nil {
 				// Environment still exists — cache is stale. Re-store lastSeen

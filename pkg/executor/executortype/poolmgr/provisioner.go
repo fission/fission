@@ -366,7 +366,8 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 			if err != nil {
 				// Pod is specialized and serving, just not reaper-exempt.
 				// Next tick will see it as a non-provisioned served pod and
-				// may re-specialize. Accept the race (design §5j).
+				// may re-specialize. Accept the race — the provisioner
+				// re-specializes on the next tick.
 				p.logger.Error(err, "provisioned label patch failed (pod is serving, not exempt)", "pod", obj.Name)
 				metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "error")
 			}

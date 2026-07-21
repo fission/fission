@@ -119,7 +119,7 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// fetcher i/o timeouts — kubelet has not reported container status
 			// so the fetcher HTTP server may not be listening) from "container
 			// reported but not Ready" (normal warmup) so the log line is
-			// actionable when debugging. See ci-29472717703 v1.32.11 analysis.
+			// actionable when debugging.
 			if len(pod.Status.ContainerStatuses) == 0 {
 				logger.Info("pod not ready: containerStatuses empty (kubelet has not reported yet)",
 					"key", key, "pod", pod.Name, "podIP", pod.Status.PodIP,
