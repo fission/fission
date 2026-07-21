@@ -90,6 +90,13 @@ type Provisioner struct {
 	// function UID. Used by tryAcquire/release to pace warm-up and prevent
 	// head-of-line blocking (invariant P5).
 	inflight sync.Map // map[types.UID]*atomic.Int32
+
+	reconcileLocks sync.Map // map[types.UID]*sync.Mutex
+}
+
+func (p *Provisioner) lockFor(fnUID types.UID) *sync.Mutex {
+	lock, _ := p.reconcileLocks.LoadOrStore(fnUID, &sync.Mutex{})
+	return lock.(*sync.Mutex)
 }
 
 // ProvisionerConfigFromEnv builds ProvisionerConfig from
@@ -146,6 +153,7 @@ func NewProvisioner(
 		crClient:         crClient,
 		config:           config,
 		inflight:         sync.Map{},
+		reconcileLocks:   sync.Map{},
 	}
 }
 
@@ -219,9 +227,17 @@ func (p *Provisioner) reconcileAll(ctx context.Context) {
 }
 
 func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
+	p.lockFor(fn.UID).Lock()
+	defer p.lockFor(fn.UID).Unlock()
+	p.reconcileFunctionLocked(ctx, fn)
+}
+
+// reconcileFunctionLocked is the body of reconcileFunction. The caller
+// MUST hold the per-function reconcile lock (lockFor(fn.UID)).
+func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Function) {
 	target := p.effectiveTarget(fn)
 	if target == 0 {
-		p.disableProvisioning(ctx, fn)
+		p.disableProvisioningLocked(ctx, fn)
 		return
 	}
 
@@ -427,11 +443,19 @@ func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
 
 // disableProvisioning clears all provisioned labels, zeroes the function's
 // provisioned status, and drops the in-flight specialization counter. Called
-// when target drops to 0 (reconcile loop) and when PC is removed from the
-// spec (reconciler.go event path). Not called on Function delete — there the
+// when PC is removed from the spec (reconciler.go event path). Takes the
+// per-function reconcile lock. Not called on Function delete — there the
 // status write would race the delete, so DeleteFunction calls
 // clearProvisionedLabels directly.
 func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function) {
+	p.lockFor(fn.UID).Lock()
+	defer p.lockFor(fn.UID).Unlock()
+	p.disableProvisioningLocked(ctx, fn)
+}
+
+// disableProvisioningLocked is the body of disableProvisioning. The caller
+// MUST hold the per-function reconcile lock (lockFor(fn.UID)).
+func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
 	if err := p.updateFunctionStatus(ctx, fn, 0, 0); err != nil {
