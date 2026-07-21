@@ -199,6 +199,9 @@ type PoolDeleteStrategy struct {
 	// (wait.UntilWithContext), and Reap goroutines only read these maps.
 	envUIDs map[k8sTypes.UID]struct{}
 	fnByUID map[k8sTypes.UID]fv1.Function
+
+	// provisionedPods is a map of pod names to struct{}, keyed by namespace which have the fission.io/provisioned label.
+	provisionedPods map[string]struct{}
 }
 
 func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface, fsCache *fscache.FunctionServiceCache, kubeClient kubernetes.Interface, reapTime, interval time.Duration, drainBeforeDelete bool) *PoolDeleteStrategy {
@@ -231,7 +234,37 @@ func (s *PoolDeleteStrategy) Prepare(ctx context.Context) error {
 		return err
 	}
 	s.envUIDs, s.fnByUID = envUIDs, fnByUID
+	s.provisionedPods, err = listPodsbyNamespace(ctx, s.kubeClient)
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+// listPodsbyNamespace returns a map of pod names to struct{}, keyed by namespace which have the fission.io/provisioned label.
+func listPodsbyNamespace(ctx context.Context, kubeClient kubernetes.Interface) (map[string]struct{}, error) {
+	result := make(map[string]struct{})
+	for _, namespace := range utils.DefaultNSResolver().FunctionNamespaces() {
+		pods, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", fv1.PROVISIONED_LABEL, fv1.PROVISIONED_VALUE),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, pod := range pods.Items {
+			result[pod.Namespace+"/"+pod.Name] = struct{}{}
+		}
+	}
+	return result, nil
+}
+
+func podKeyFromFsvc(fsvc *fscache.FuncSvc) string {
+	for _, obj := range fsvc.KubernetesObjects {
+		if strings.EqualFold(obj.Kind, "Pod") {
+			return obj.Namespace + "/" + obj.Name
+		}
+	}
+	return ""
 }
 
 func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) error {
@@ -241,29 +274,17 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	// Skip provisioned pods — the provisioner (RFC-0026) is actively
 	// maintaining them. The provisioner clears fission.io/provisioned
 	// before letting the reaper retire them (target drop, window close,
-	// generation bump, spec deletion). Function-level check: if the
-	// function opts into provisioned concurrency, all its specialized
-	// pods are provisioner-managed. The narrow race between
-	// GetFuncSvc returning and the provisioner's label patch completing
-	// is accepted — the provisioner re-specializes on the
-	// next tick.
-	//
-	// PR1 LIMITATION: this function-level exemption skips ALL specialized
-	// pods of an opted-in function, not just the provisioned floor (target).
-	// An opted-in function (target=2) that bursts to N on-demand pods (up
-	// to Concurrency, default 500) keeps all N pods forever while PC is
-	// enabled — the reaper never retires the overflow, and unlike the
-	// label-patch race this does NOT self-heal (no per-pod signal
-	// distinguishes floor from overflow). PR2 replaces this with a
-	// per-pod-label check (fission.io/provisioned=true) so only floor pods
-	// are exempt and overflow pods are reaped normally. Until then, the
-	// overflow-retention cost is a known PR1 trade-off.
-	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok {
-		if fn.Spec.ProvisionedConcurrency != nil {
-			return nil
+	// generation bump, spec deletion). Per-pod-label check: only pods
+	// carrying fission.io/provisioned=true are exempt, so overflow pods
+	// (target drop, window close) are reaped normally.
+	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok && fn.Spec.ProvisionedConcurrency != nil {
+		key := podKeyFromFsvc(fsvc)
+		if key != "" {
+			if _, provisioned := s.provisionedPods[key]; provisioned {
+				return nil
+			}
 		}
 	}
-
 	// For a function whose environment no longer exists, reap the idle pod as
 	// usual but log to notify the user.
 	if _, ok := s.envUIDs[fsvc.Environment.UID]; !ok {
