@@ -5,6 +5,7 @@
 package poolmgr
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -378,12 +379,12 @@ func TestProvisioner_clearExcessProvisionedLabels(t *testing.T) {
 		assert.Contains(t, newest.Labels, fv1.PROVISIONED_LABEL, "newest kept")
 	})
 
-	t.Run("excess > pod count is a no-op", func(t *testing.T) {
+	t.Run("excess > pod count all pods are cleared", func(t *testing.T) {
 		p := newTestProvisionerWithPods(t, pods...)
 		p.clearExcessProvisionedLabels(t.Context(), fn, 10)
 		for _, name := range []string{"oldest", "middle", "newest"} {
 			got := getPod(t, p, name)
-			assert.Contains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s kept", name)
+			assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared", name)
 		}
 	})
 
@@ -638,6 +639,24 @@ func TestFilterOptedFunctions(t *testing.T) {
 		got := filterOptedFunctions(list)
 		assert.Empty(t, got)
 	})
+	t.Run("empty executor type treated as poolmgr", func(t *testing.T) {
+		fn := provisionedFn("e", 3)
+		fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = ""
+		list := &fv1.FunctionList{Items: []fv1.Function{*fn}}
+		got := filterOptedFunctions(list)
+		assert.Len(t, got, 1)
+		assert.Equal(t, "e", got[0].Name)
+	})
+}
+
+func TestProvisioner_RunZeroIntervalNoPanic(t *testing.T) {
+	p := newTestProvisioner(t)
+	p.config.ReconcileInterval = 0
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // exit immediately after first reconcileAll
+
+	assert.NotPanics(t, func() { p.Run(ctx) })
 }
 
 // ---------------------------------------------------------------------------

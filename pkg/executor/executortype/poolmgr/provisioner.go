@@ -17,11 +17,11 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -97,8 +97,6 @@ func ProvisionerConfigFromEnv() (ProvisionerConfig, bool) {
 	return cfg, true
 }
 
-// NewProvisioner creates a new Provisioner. If any fields in config is missing/zero, default values
-// are applied.
 func NewProvisioner(
 	logger logr.Logger,
 	gpm *GenericPoolManager,
@@ -118,8 +116,14 @@ func NewProvisioner(
 	}
 }
 
+// Run starts the provisioner's reconcile loop. A non-positive
+// ReconcileInterval is clamped to 30s to avoid time.NewTicker panic.
 func (p *Provisioner) Run(ctx context.Context) {
-	ticker := time.NewTicker(p.config.ReconcileInterval)
+	interval := p.config.ReconcileInterval
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	p.reconcileAll(ctx)
@@ -136,7 +140,8 @@ func (p *Provisioner) Run(ctx context.Context) {
 func filterOptedFunctions(fnlist *fv1.FunctionList) []fv1.Function {
 	var opted []fv1.Function
 	for _, fn := range fnlist.Items {
-		if fn.Spec.ProvisionedConcurrency != nil && fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
+		et := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+		if fn.Spec.ProvisionedConcurrency != nil && (et == fv1.ExecutorTypePoolmgr || et == "") {
 			opted = append(opted, fn)
 		}
 	}
@@ -234,9 +239,6 @@ func (p *Provisioner) clearExcessProvisionedLabels(ctx context.Context, fn *fv1.
 	podList, err := p.listPods(ctx, fn)
 	if err != nil {
 		p.logger.Error(err, "Unable to list pods", "function", fn.Name, "namespace", fn.Namespace)
-		return
-	}
-	if len(podList.Items) < excess {
 		return
 	}
 	// sort pods by creation time and delete the oldest ones
@@ -355,26 +357,16 @@ func statusSet(latestFunc *fv1.Function, ready, target int) {
 }
 
 func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function, ready, target int) error {
-	var latestFunc fv1.Function
-
-	err := p.crClient.Get(ctx, client.ObjectKey{Name: fn.Name, Namespace: fn.Namespace}, &latestFunc)
-	if err != nil {
-		return err
-	}
-
-	statusSet(&latestFunc, ready, target)
-	_, err = p.fissionClient.CoreV1().Functions(fn.Namespace).UpdateStatus(ctx, &latestFunc, metav1.UpdateOptions{})
-
-	if err != nil && apierrors.IsConflict(err) {
-		// retry one with fresh version
-		if err2 := p.crClient.Get(ctx, client.ObjectKey{Name: fn.Name, Namespace: fn.Namespace}, &latestFunc); err2 != nil {
+	backoff := retry.DefaultRetry
+	return retry.RetryOnConflict(backoff, func() error {
+		latestFunc, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(ctx, fn.Name, metav1.GetOptions{})
+		if err != nil {
 			return err
 		}
-		statusSet(&latestFunc, ready, target)
-		_, err = p.fissionClient.CoreV1().Functions(fn.Namespace).UpdateStatus(ctx, &latestFunc, metav1.UpdateOptions{})
-	}
-
-	return err
+		statusSet(latestFunc, ready, target)
+		_, err = p.fissionClient.CoreV1().Functions(fn.Namespace).UpdateStatus(ctx, latestFunc, metav1.UpdateOptions{})
+		return err
+	})
 }
 
 func (p *Provisioner) clearAllProvisionedLabels(ctx context.Context, fn *fv1.Function) {
