@@ -257,7 +257,8 @@ func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Funct
 	// Publish observed status on every pass so ProvisionedReady and the
 	// Provisioned=Warming condition surface during warm-up/drain, not only
 	// once ready == target.
-	if err := p.updateFunctionStatus(ctx, fn, ready, target); err != nil {
+	specTarget := fn.Spec.ProvisionedConcurrency.Target
+	if err := p.updateFunctionStatus(ctx, fn, ready, target, specTarget); err != nil {
 		p.logger.Error(err, "Unable to update status of the function", "function", fn.Name, "namespace", fn.Namespace, "ready", ready, "target", target)
 	}
 }
@@ -389,9 +390,10 @@ func (p *Provisioner) countProvisionedPods(ctx context.Context, fn *fv1.Function
 	return len(readyAndRunningPods), nil
 }
 
-func statusSet(latestFunc *fv1.Function, ready, target int) {
+func statusSet(latestFunc *fv1.Function, ready, target, specTarget int) {
 	latestFunc.Status.ProvisionedReady = ready
 	latestFunc.Status.ProvisionedTarget = target
+	latestFunc.Status.ProvisionedSpecTarget = specTarget
 	if target == 0 {
 		// Provisioned concurrency is off (target=0): condition False,
 		// regardless of ready count (which should also be 0).
@@ -403,24 +405,45 @@ func statusSet(latestFunc *fv1.Function, ready, target int) {
 		})
 		return
 	}
+	// Determine the reason: clamped takes precedence (surfaces the
+	// spec-vs-effective divergence), then satisfied/warming.
+	clamped := specTarget > target
+	msg := ""
+	if clamped {
+		msg = fmt.Sprintf("spec target %d exceeds the namespace cap; effective target clamped to %d", specTarget, target)
+	}
 	if ready >= target {
 		meta.SetStatusCondition(&latestFunc.Status.Conditions, metav1.Condition{
 			Type:               fv1.FunctionConditionProvisioned,
 			Status:             metav1.ConditionTrue,
-			Reason:             fv1.FunctionReasonProvisionedSatisfied,
+			Reason:             reasonForProvisioned(clamped, fv1.FunctionReasonProvisionedSatisfied),
+			Message:            msg,
 			ObservedGeneration: latestFunc.Generation,
 		})
 	} else {
 		meta.SetStatusCondition(&latestFunc.Status.Conditions, metav1.Condition{
 			Type:               fv1.FunctionConditionProvisioned,
 			Status:             metav1.ConditionFalse,
-			Reason:             fv1.FunctionReasonProvisionedWarming,
+			Reason:             reasonForProvisioned(clamped, fv1.FunctionReasonProvisionedWarming),
+			Message:            msg,
 			ObservedGeneration: latestFunc.Generation,
 		})
 	}
 }
 
-func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function, ready, target int) error {
+// reasonForProvisioned returns ProvisionedClamped when the target was
+// clamped by the namespace cap, otherwise the base reason (Satisfied or
+// Warming). The condition Status (True/False) still reflects
+// ready-vs-target; the Reason surfaces the clamp so `fission fn get`
+// can show why spec says 50 but status says 20.
+func reasonForProvisioned(clamped bool, base string) string {
+	if clamped {
+		return fv1.FunctionReasonProvisionedClamped
+	}
+	return base
+}
+
+func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function, ready, target, specTarget int) error {
 	metrics.RecordProvisionedTarget(ctx, fn.Name, fn.Namespace, int64(target))
 	metrics.RecordProvisionedReady(ctx, fn.Name, fn.Namespace, int64(ready))
 	backoff := retry.DefaultRetry
@@ -429,7 +452,7 @@ func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function
 		if err != nil {
 			return err
 		}
-		statusSet(latestFunc, ready, target)
+		statusSet(latestFunc, ready, target, specTarget)
 		_, err = p.fissionClient.CoreV1().Functions(fn.Namespace).UpdateStatus(ctx, latestFunc, metav1.UpdateOptions{})
 		return err
 	})
@@ -458,7 +481,7 @@ func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function)
 func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
-	if err := p.updateFunctionStatus(ctx, fn, 0, 0); err != nil {
+	if err := p.updateFunctionStatus(ctx, fn, 0, 0, 0); err != nil {
 		p.logger.Error(err, "Unable to update status of the function",
 			"function", fn.Name, "namespace", fn.Namespace)
 	}

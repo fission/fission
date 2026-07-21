@@ -2038,6 +2038,15 @@ type (
 		// +optional
 		ProvisionedTarget int `json:"provisionedTarget,omitempty"`
 
+		// ProvisionedSpecTarget is the raw Target from spec (before the namespace
+		// cap clamp). When ProvisionedSpecTarget > ProvisionedTarget, the
+		// provisioner clamped the target to the namespace cap
+		// (executor.provisionedConcurrency.maxPerFunction) and the Provisioned
+		// condition carries reason ProvisionedClamped. Lets `fission fn get`
+		// show the spec-vs-effective divergence.
+		// +optional
+		ProvisionedSpecTarget int `json:"provisionedSpecTarget,omitempty"`
+
 		// Conditions represent the latest observations of the function's state.
 		// +optional
 		// +patchMergeKey=type

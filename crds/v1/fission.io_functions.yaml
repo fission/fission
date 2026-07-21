@@ -9860,6 +9860,15 @@ spec:
                   when Spec.ProvisionedConcurrency is non-nil. Reported by the executor's
                   provisioner on each reconcile pass.
                 type: integer
+              provisionedSpecTarget:
+                description: |-
+                  ProvisionedSpecTarget is the raw Target from spec (before the namespace
+                  cap clamp). When ProvisionedSpecTarget > ProvisionedTarget, the
+                  provisioner clamped the target to the namespace cap
+                  (executor.provisionedConcurrency.maxPerFunction) and the Provisioned
+                  condition carries reason ProvisionedClamped. Lets `fission fn get`
+                  show the spec-vs-effective divergence.
+                type: integer
               provisionedTarget:
                 description: |-
                   ProvisionedTarget is the effective target the provisioner is currently

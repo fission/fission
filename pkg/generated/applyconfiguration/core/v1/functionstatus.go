@@ -27,6 +27,13 @@ type FunctionStatusApplyConfiguration struct {
 	// aiming for (base Target, or a schedule-window override in PR 2). Lets
 	// `fission fn get` show "3/5 provisioned pods ready".
 	ProvisionedTarget *int `json:"provisionedTarget,omitempty"`
+	// ProvisionedSpecTarget is the raw Target from spec (before the namespace
+	// cap clamp). When ProvisionedSpecTarget > ProvisionedTarget, the
+	// provisioner clamped the target to the namespace cap
+	// (executor.provisionedConcurrency.maxPerFunction) and the Provisioned
+	// condition carries reason ProvisionedClamped. Lets `fission fn get`
+	// show the spec-vs-effective divergence.
+	ProvisionedSpecTarget *int `json:"provisionedSpecTarget,omitempty"`
 	// Conditions represent the latest observations of the function's state.
 	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 }
@@ -58,6 +65,14 @@ func (b *FunctionStatusApplyConfiguration) WithProvisionedReady(value int) *Func
 // If called multiple times, the ProvisionedTarget field is set to the value of the last call.
 func (b *FunctionStatusApplyConfiguration) WithProvisionedTarget(value int) *FunctionStatusApplyConfiguration {
 	b.ProvisionedTarget = &value
+	return b
+}
+
+// WithProvisionedSpecTarget sets the ProvisionedSpecTarget field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProvisionedSpecTarget field is set to the value of the last call.
+func (b *FunctionStatusApplyConfiguration) WithProvisionedSpecTarget(value int) *FunctionStatusApplyConfiguration {
+	b.ProvisionedSpecTarget = &value
 	return b
 }
 

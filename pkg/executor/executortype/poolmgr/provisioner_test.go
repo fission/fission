@@ -715,10 +715,11 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 	p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
 
 	t.Run("warming: ready < target", func(t *testing.T) {
-		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 2, 5))
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 2, 5, 5))
 		st := getFnStatus(t, p, "fn")
 		assert.Equal(t, 2, st.ProvisionedReady)
 		assert.Equal(t, 5, st.ProvisionedTarget)
+		assert.Equal(t, 5, st.ProvisionedSpecTarget)
 		cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
@@ -726,7 +727,7 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 	})
 
 	t.Run("satisfied: ready >= target", func(t *testing.T) {
-		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 5, 5))
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 5, 5, 5))
 		st := getFnStatus(t, p, "fn")
 		assert.Equal(t, 5, st.ProvisionedReady)
 		assert.Equal(t, 5, st.ProvisionedTarget)
@@ -737,7 +738,7 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 	})
 
 	t.Run("oversatisfied: ready > target still True", func(t *testing.T) {
-		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 7, 5))
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 7, 5, 5))
 		st := getFnStatus(t, p, "fn")
 		cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
 		require.NotNil(t, cond)
@@ -745,7 +746,7 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 	})
 
 	t.Run("disabled: target=0 sets False/ProvisionedDisabled", func(t *testing.T) {
-		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 0, 0))
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 0, 0, 0))
 		st := getFnStatus(t, p, "fn")
 		assert.Equal(t, 0, st.ProvisionedReady)
 		assert.Equal(t, 0, st.ProvisionedTarget)
@@ -753,6 +754,34 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 		require.NotNil(t, cond)
 		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, fv1.FunctionReasonProvisionedDisabled, cond.Reason)
+	})
+
+	t.Run("clamped: specTarget > target sets ProvisionedClamped reason", func(t *testing.T) {
+		// spec target=50, effective target=20 (clamped by MaxPerFunction).
+		// Warming: ready=5 < target=20 → False/ProvisionedClamped.
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 5, 20, 50))
+		st := getFnStatus(t, p, "fn")
+		assert.Equal(t, 5, st.ProvisionedReady)
+		assert.Equal(t, 20, st.ProvisionedTarget, "effective target clamped")
+		assert.Equal(t, 50, st.ProvisionedSpecTarget, "spec target preserved")
+		cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
+		assert.Equal(t, fv1.FunctionReasonProvisionedClamped, cond.Reason)
+		assert.Contains(t, cond.Message, "spec target 50 exceeds the namespace cap")
+		assert.Contains(t, cond.Message, "clamped to 20")
+	})
+
+	t.Run("clamped and satisfied: ready >= target still True but reason Clamped", func(t *testing.T) {
+		// spec target=50, effective=20, ready=20 → True/ProvisionedClamped.
+		require.NoError(t, p.updateFunctionStatus(t.Context(), fn, 20, 20, 50))
+		st := getFnStatus(t, p, "fn")
+		cond := metaFindCondition(st, fv1.FunctionConditionProvisioned)
+		require.NotNil(t, cond)
+		assert.Equal(t, metav1.ConditionTrue, cond.Status)
+		assert.Equal(t, fv1.FunctionReasonProvisionedClamped, cond.Reason)
+		assert.Contains(t, cond.Message, "spec target 50 exceeds the namespace cap")
+		assert.Contains(t, cond.Message, "clamped to 20")
 	})
 }
 
