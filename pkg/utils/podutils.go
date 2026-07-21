@@ -73,9 +73,10 @@ func IsPodRunning(pod *v1.Pod) bool {
 
 func ReadyAndRunningPodsFilter(podList *v1.PodList) []v1.Pod {
 	output := []v1.Pod{}
-	for _, pod := range podList.Items {
-		if IsReadyPod(&pod) && IsPodRunning(&pod) {
-			output = append(output, pod)
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if IsReadyPod(pod) && IsPodRunning(pod) {
+			output = append(output, *pod)
 		}
 	}
 	return output
