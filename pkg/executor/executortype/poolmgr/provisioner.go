@@ -199,11 +199,7 @@ func (p *Provisioner) reconcileAll(ctx context.Context) {
 func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 	target := p.effectiveTarget(fn)
 	if target == 0 {
-		p.clearProvisionedLabels(ctx, fn, -1)
-		err := p.updateFunctionStatus(ctx, fn, 0, 0)
-		if err != nil {
-			p.logger.Error(err, "Unable to update function status", "function", fn.Name, "namespace", fn.Namespace)
-		}
+		p.disableProvisioning(ctx, fn)
 		return
 	}
 
@@ -407,14 +403,17 @@ func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
 	return min(fn.Spec.ProvisionedConcurrency.Target, p.config.MaxPerFunction)
 }
 
-func (p *Provisioner) StopProvisioning(ctx context.Context, fn *fv1.Function) {
+// disableProvisioning clears all provisioned labels, zeroes the function's
+// provisioned status, and drops the in-flight specialization counter. Called
+// when target drops to 0 (reconcile loop) and when PC is removed from the
+// spec (reconciler.go event path). Not called on Function delete — there the
+// status write would race the delete, so DeleteFunction calls
+// clearProvisionedLabels directly.
+func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
-}
-
-// UpdateFunctionStatusZero resets the provisioned status fields to 0 and
-// marks the Provisioned condition False. Called when provisioned concurrency
-// is removed from the spec (target set to 0 / field nil).
-func (p *Provisioner) UpdateFunctionStatusZero(ctx context.Context, fn *fv1.Function) error {
-	return p.updateFunctionStatus(ctx, fn, 0, 0)
+	if err := p.updateFunctionStatus(ctx, fn, 0, 0); err != nil {
+		p.logger.Error(err, "Unable to update status of the function",
+			"function", fn.Name, "namespace", fn.Namespace)
+	}
 }

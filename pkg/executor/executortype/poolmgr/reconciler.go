@@ -152,10 +152,7 @@ func (gpm *GenericPoolManager) ReconcileFunction(ctx context.Context, old, fn *f
 		} else {
 			// Provisioned concurrency was removed (e.g. --provisioned-concurrency 0):
 			// clear labels on any previously-provisioned pods and reset status.
-			gpm.provisioner.StopProvisioning(ctx, fn)
-			if err := gpm.provisioner.UpdateFunctionStatusZero(ctx, fn); err != nil {
-				gpm.logger.Error(err, "failed to reset provisioned status", "function", fn.Name, "namespace", fn.Namespace)
-			}
+			gpm.provisioner.disableProvisioning(ctx, fn)
 		}
 	}
 	return nil
@@ -166,7 +163,11 @@ func (gpm *GenericPoolManager) ReconcileFunction(ctx context.Context, old, fn *f
 // Service (when enabled) or its headless function Service (RFC-0002, when enabled).
 func (gpm *GenericPoolManager) DeleteFunction(ctx context.Context, fn *fv1.Function) error {
 	if gpm.provisioner != nil {
-		gpm.provisioner.StopProvisioning(ctx, fn)
+		// Function is being deleted: clear provisioned labels so the reaper
+		// can recycle the pods. No status write — the Function object is
+		// being removed, so a status update would race with the delete and
+		// is pointless.
+		gpm.provisioner.clearProvisionedLabels(ctx, fn, -1)
 	}
 	return cleanupPoolmgrFunc(ctx, gpm, gpm.enableIstio, gpm.functionServicesEnabled, fn)
 }

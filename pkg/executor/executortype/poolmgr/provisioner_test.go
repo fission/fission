@@ -15,8 +15,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
 	apiv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -750,12 +750,33 @@ func TestProvisioner_updateFunctionStatus(t *testing.T) {
 	})
 }
 
-func TestProvisioner_UpdateFunctionStatusZero(t *testing.T) {
-	fn := provisionedFn("fn", 5)
-	p := newTestProvisioner(t, fn)
-	p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
+// ---------------------------------------------------------------------------
+// disableProvisioning (collapsed StopProvisioning + UpdateFunctionStatusZero)
+// ---------------------------------------------------------------------------
 
-	require.NoError(t, p.UpdateFunctionStatusZero(t.Context(), fn))
+func TestProvisioner_disableProvisioning(t *testing.T) {
+	const uid = "u1"
+	fn := provisionedFnWithUID("fn", uid, 2)
+	pods := []*corev1.Pod{readyPod("a", uid), readyPod("b", uid)}
+	p := newTestProvisionerWithPods(t, pods...)
+	// Seed fn in both clients so updateFunctionStatus can Get+Update.
+	p.crClient = crfake.NewClientBuilder().WithScheme(scheme()).
+		WithObjects(toClientObjects(pods...)...).WithObjects(fn).Build()
+	p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
+	// Pre-seed inflight counter to verify it's deleted.
+	_, _ = p.inflight.LoadOrStore(types.UID(uid), new(atomic.Int32))
+
+	p.disableProvisioning(t.Context(), fn)
+
+	// Labels cleared on all pods.
+	for _, name := range []string{"a", "b"} {
+		got := getPod(t, p, name)
+		assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared", name)
+	}
+	// Inflight counter deleted.
+	_, ok := p.inflight.Load(types.UID(uid))
+	assert.False(t, ok, "inflight entry deleted")
+	// Status zeroed and condition False/Disabled.
 	st := getFnStatus(t, p, "fn")
 	assert.Equal(t, 0, st.ProvisionedReady)
 	assert.Equal(t, 0, st.ProvisionedTarget)
@@ -763,28 +784,6 @@ func TestProvisioner_UpdateFunctionStatusZero(t *testing.T) {
 	require.NotNil(t, cond)
 	assert.Equal(t, metav1.ConditionFalse, cond.Status)
 	assert.Equal(t, fv1.FunctionReasonProvisionedDisabled, cond.Reason)
-}
-
-// ---------------------------------------------------------------------------
-// StopProvisioning
-// ---------------------------------------------------------------------------
-
-func TestProvisioner_StopProvisioning(t *testing.T) {
-	const uid = "u1"
-	fn := provisionedFnWithUID("fn", uid, 2)
-	pods := []*corev1.Pod{readyPod("a", uid), readyPod("b", uid)}
-	p := newTestProvisionerWithPods(t, pods...)
-	// Pre-seed inflight counter to verify it's deleted.
-	_, _ = p.inflight.LoadOrStore(types.UID(uid), new(atomic.Int32))
-
-	p.StopProvisioning(t.Context(), fn)
-
-	for _, name := range []string{"a", "b"} {
-		got := getPod(t, p, name)
-		assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared", name)
-	}
-	_, ok := p.inflight.Load(types.UID(uid))
-	assert.False(t, ok, "inflight entry deleted")
 }
 
 // ---------------------------------------------------------------------------
