@@ -387,13 +387,6 @@ func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *meta
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
 	key := crd.CacheKeyUGFromMeta(fnMeta)
-	if gpm.logger.V(1).Enabled() {
-		gpm.logger.V(1).Info("UnTapService",
-			"key", key.String(),
-			"svcHost", svcHost,
-			"uid", fnMeta.UID,
-			"generation", fnMeta.Generation)
-	}
 	otelUtils.SpanTrackEvent(ctx, "UnTapService",
 		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())},
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
@@ -421,7 +414,7 @@ func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fn
 	span.SetStatus(codes.Error, ferror.ReasonSpecializationFailed)
 	span.SetAttributes(attribute.String("coldstart.failure_reason", ferror.ReasonSpecializationFailed))
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
-	logger.Info("marking specialization failure", "key", key.String(), "uid", fnMeta.UID, "generation", fnMeta.Generation)
+	logger.Info("marking specialization failure", "key", key.String())
 	gpm.fsCache.MarkSpecializationFailure(key)
 }
 
@@ -433,11 +426,6 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 		if strings.ToLower(obj.Kind) == "pod" {
 			pod := &apiv1.Pod{}
 			err := gpm.crClient.Get(ctx, client.ObjectKey{Namespace: obj.Namespace, Name: obj.Name}, pod)
-			if err == nil && !utils.IsReadyPod(pod) {
-				gpm.logger.V(1).Info("IsValid: pod not ready",
-					"pod", pod.Name, "address", fsvc.Address,
-					"containerStatuses", len(pod.Status.ContainerStatuses))
-			}
 			if err == nil && utils.IsReadyPod(pod) {
 				// Normally, the address format is http://[pod-ip]:[port], however, if the
 				// Istio is enabled the address format changes to http://[svc-name]:[port].
@@ -636,7 +624,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 			pod := &podList.Items[i]
 			if !utils.IsReadyPod(pod) {
 				if len(pod.Status.ContainerStatuses) == 0 {
-					gpm.logger.Info("adopt: skipping pod, containerStatuses empty",
+					gpm.logger.V(1).Info("adopt: skipping pod, containerStatuses empty",
 						"pod", pod.Name, "namespace", pod.Namespace,
 						"phase", pod.Status.Phase, "podIP", pod.Status.PodIP)
 				}
