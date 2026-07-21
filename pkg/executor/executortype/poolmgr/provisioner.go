@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -288,6 +289,7 @@ func (p *Provisioner) fireEagerSpecializations(ctx context.Context, fn *fv1.Func
 func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) error {
 	funSvc, err := p.gpm.GetFuncSvc(ctx, fn)
 	if err != nil {
+		metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "error")
 		return err
 	}
 	for _, obj := range funSvc.KubernetesObjects {
@@ -299,11 +301,15 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 			_, err := p.kubernetesClient.CoreV1().Pods(obj.Namespace).Patch(
 				ctx, obj.Name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{},
 			)
+			if err == nil {
+				metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "success")
+			}
 			if err != nil {
 				// Pod is specialized and serving, just not reaper-exempt.
 				// Next tick will see it as a non-provisioned served pod and
 				// may re-specialize. Accept the race (design §5j).
 				p.logger.Error(err, "provisioned label patch failed (pod is serving, not exempt)", "pod", obj.Name)
+				metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "error")
 			}
 		}
 	}
@@ -357,6 +363,8 @@ func statusSet(latestFunc *fv1.Function, ready, target int) {
 }
 
 func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function, ready, target int) error {
+	metrics.RecordProvisionedTarget(ctx, fn.Name, fn.Namespace, int64(target))
+	metrics.RecordProvisionedReady(ctx, fn.Name, fn.Namespace, int64(ready))
 	backoff := retry.DefaultRetry
 	return retry.RetryOnConflict(backoff, func() error {
 		latestFunc, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(ctx, fn.Name, metav1.GetOptions{})

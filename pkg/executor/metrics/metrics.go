@@ -64,7 +64,37 @@ var (
 		"fission_executor_oci_pool_reap_failures_total",
 		"Idle-pool reap attempts whose deployment delete failed (deployment orphaned until adoption or restart cleanup).",
 	)
+
+	fissionProvisionedTarget = metrics.Int64Gauge(
+		"fission_provisioned_target",
+		"Desired provisioned-concurrency warm-pod count, by function_name, function_namespace.",
+	)
+
+	fissionProvisionedReady = metrics.Int64Gauge(
+		"fission_provisioned_ready",
+		"Current provisioned-concurrency warm-pod count, by function_name, function_namespace.",
+	)
+
+	fissionEagerSpecializations = metrics.Int64Counter(
+		"fission_provisioned_eager_specializations_total",
+		"The number of provisioned eager specializations attempts by outcome (success|error) for each function, function_namespace.",
+	)
 )
+
+func RecordEagerSpecialization(ctx context.Context, fnName, fnNamespace string, outcome string) {
+	fissionEagerSpecializations.Add(ctx, 1, functionLabels(fnName, fnNamespace), metric.WithAttributes(
+		attribute.String("outcome", outcome),
+	))
+
+}
+
+func RecordProvisionedTarget(ctx context.Context, fnName, fnNamespace string, target int64) {
+	fissionProvisionedTarget.Record(ctx, target, functionLabels(fnName, fnNamespace))
+}
+
+func RecordProvisionedReady(ctx context.Context, fnName, fnNamespace string, ready int64) {
+	fissionProvisionedReady.Record(ctx, ready, functionLabels(fnName, fnNamespace))
+}
 
 // RecordSpecializationRejected counts one capacity-gated specialization
 // rejection (concurrency cap or in-flight-specialization bound); the router
