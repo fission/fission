@@ -168,7 +168,12 @@ func (p *Provisioner) reconcileAll(ctx context.Context) {
 		return
 	}
 
-	const maxConcurrentReconciles = 10 // TODO: make this configurable
+	// maxConcurrentReconciles bounds per-pass parallelism of reconcileFunction.
+	// 10 is a fixed sanity cap chosen to keep the provisioner's burst load on
+	// the API server (eagerSpecialize pod patches + status writes) predictable
+	// at the default 30s ReconcileInterval; raising it is a future tuning knob
+	// once we have metrics-driven evidence it's too low.
+	const maxConcurrentReconciles = 10
 	sem := make(chan struct{}, maxConcurrentReconciles)
 	var wg sync.WaitGroup
 	for _, fn := range opted {
