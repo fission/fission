@@ -40,8 +40,9 @@ func (r *FunctionVersion) SetupWebhookWithManager(mgr ctrl.Manager) error {
 }
 
 // user change verbs to add "create" if creation-time defaulting/validation
-// beyond the type's own Validate() is ever needed here; today Validate covers
-// create via ValidateCreate too (GenericWebhook wires Validator into both).
+// beyond the CEL/schema rules is ever needed here; the webhook rule below
+// registers only update;delete, so ValidateCreate never fires for this
+// resource today — create-time enforcement is CEL/schema-only.
 //
 //+kubebuilder:webhook:path=/validate-fission-io-v1-functionversion,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functionversions,verbs=update;delete,versions=v1,name=vfunctionversion.fission.io,admissionReviewVersions=v1
 
@@ -79,11 +80,14 @@ var _ DeleteValidator[*v1.FunctionVersion] = &FunctionVersion{}
 // Function, so blocking on a sibling that is about to be GC'd anyway would
 // just make the cascade delete fail.
 //
-// Scope honesty (RFC-0025 L246): this is defense-in-depth for user-initiated
-// deletes only. Two in-flight admissions are unordered, so it does NOT close
-// the GC-vs-alias-create race; phase-4 retention GC must still re-List
-// aliases immediately before each delete (the aliasgc.tla recheck-inside-
-// delete) and treat this webhook as a second net, not the guard.
+// Scope honesty (RFC-0025 L246): this is defense-in-depth for the
+// GC-vs-alias-create admission race only — two in-flight admissions are
+// unordered, so this guard does NOT close that race; phase-4 retention GC
+// must still re-List aliases immediately before each delete (the
+// aliasgc.tla recheck-inside-delete) and treat this webhook as a second net,
+// not the guard. That framing does not extend to reader errors: a failed
+// alias List below means the guard cannot confirm safety, so it fails
+// closed rather than silently allowing a possibly-referenced delete.
 func (r *FunctionVersion) ValidateDeletion(ctx context.Context, fv *v1.FunctionVersion) error {
 	if r.reader == nil {
 		return nil
@@ -108,11 +112,13 @@ func (r *FunctionVersion) ValidateDeletion(ctx context.Context, fv *v1.FunctionV
 
 	var aliases v1.FunctionAliasList
 	if err := r.reader.List(ctx, &aliases, client.InNamespace(fv.Namespace)); err != nil {
-		// Fail open: this is a second net (see scope-honesty note above), not
-		// the sole guard, and an infra failure on delete must not wedge a
-		// legitimate cleanup.
-		r.Logger.V(1).Info("could not list FunctionAliases for delete guard; allowing delete", "functionVersion", fv.Name, "error", err)
-		return nil
+		// Fail closed: unlike the GC-vs-alias-create race this guard
+		// deliberately doesn't claim to close (see scope-honesty note above),
+		// a failed List means we cannot confirm this version is unreferenced
+		// at all, so the safe default is to reject the delete and let the
+		// caller retry rather than silently allow a possibly-referenced one
+		// through.
+		return fmt.Errorf("could not list FunctionAliases in namespace %q to verify FunctionVersion %q is unreferenced: %w", fv.Namespace, fv.Name, err)
 	}
 
 	for _, a := range aliases.Items {
