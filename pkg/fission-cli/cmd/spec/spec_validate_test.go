@@ -180,6 +180,31 @@ func TestValidate(t *testing.T) {
 		assert.Contains(t, warnings, "Environment env is referenced in function fn but not declared in specs")
 	})
 
+	t.Run("FunctionAlias references an unknown function warns, not errors", func(t *testing.T) {
+		fr := newFissionResources()
+		fr.FunctionAliases = []fv1.FunctionAlias{{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+			Spec:       fv1.FunctionAliasSpec{FunctionName: "ghost", Version: "ghost-v1"},
+		}}
+		warnings, err := validateWith(t, fr)
+		require.NoError(t, err, "a dangling alias->function ref is informational (eventual consistency), not a hard error")
+		require.Len(t, warnings, 1)
+		assert.Contains(t, warnings[0], "FunctionAlias 'prod' references unknown function 'ghost' in the spec set")
+	})
+
+	t.Run("FunctionAlias with invalid spec errors", func(t *testing.T) {
+		fr := newFissionResources()
+		fr.Functions = []fv1.Function{poolmgrFunction("hello", "pkg", "default")}
+		fr.Packages = []fv1.Package{{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "default"}}}
+		fr.FunctionAliases = []fv1.FunctionAlias{{
+			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+			// Neither Version nor PackageDigest set: invalid per FunctionAliasSpec.Validate.
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello"},
+		}}
+		_, err := validateWith(t, fr)
+		require.ErrorContains(t, err, "exactly one of version or packageDigest must be set")
+	})
+
 	t.Run("environment with both container and pod spec warns", func(t *testing.T) {
 		fr := newFissionResources()
 		env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env", Namespace: "default"}}
@@ -228,6 +253,7 @@ func TestExistsInSpecs(t *testing.T) {
 	fr.KubernetesWatchTriggers = []fv1.KubernetesWatchTrigger{{ObjectMeta: meta}}
 	fr.MessageQueueTriggers = []fv1.MessageQueueTrigger{{ObjectMeta: meta}}
 	fr.TimeTriggers = []fv1.TimeTrigger{{ObjectMeta: meta}}
+	fr.FunctionAliases = []fv1.FunctionAlias{{ObjectMeta: meta}}
 
 	present := []any{
 		types.ArchiveUploadSpec{Name: "x"},
@@ -238,6 +264,7 @@ func TestExistsInSpecs(t *testing.T) {
 		fv1.KubernetesWatchTrigger{ObjectMeta: meta},
 		fv1.MessageQueueTrigger{ObjectMeta: meta},
 		fv1.TimeTrigger{ObjectMeta: meta},
+		fv1.FunctionAlias{ObjectMeta: meta},
 	}
 	for _, res := range present {
 		exists, err := fr.ExistsInSpecs(res)
