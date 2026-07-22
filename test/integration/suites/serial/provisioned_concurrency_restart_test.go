@@ -71,12 +71,21 @@ func TestProvisionedConcurrencyExecutorRestart(t *testing.T) {
 	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
 	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 5*time.Minute)
 
-	// Delete BOTH provisioned pods. Restart alone doesn't touch them
+	// Delete ALL provisioned pods. Restart alone doesn't touch them
 	// (they're independent of the executor rollout), so deletion is what
-	// forces the fresh executor to re-derive.
-	t.Log("deleting both provisioned pods")
+	// forces the fresh executor to re-derive. We delete every pod returned
+	// by the at-least waiter rather than requiring an exact count — a
+	// transient double-fire overshoot can produce >2 pods, and an exact
+	// assert would flake.
+	//
+	// NOTE: this test is best-effort. The old executor's 10s reconcile tick
+	// can re-warm the floor in the gap between pod deletion and SIGTERM
+	// landing, so the post-rollout waits may pass even if the fresh executor
+	// never re-derives. A fully discriminating variant would scale the
+	// executor to 0, delete pods while nothing is running, then restore —
+	// deferred as a follow-up.
+	t.Log("deleting all provisioned pods")
 	pods := ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 5*time.Minute)
-	require.Len(t, pods, 2, "expected exactly 2 provisioned pods to delete")
 	for _, p := range pods {
 		require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, p.Name, metav1.DeleteOptions{}),
 			"delete provisioned pod %q", p.Name)

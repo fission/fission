@@ -375,12 +375,10 @@ func (spec FunctionSpec) Validate() error {
 		}
 	}
 
-	if spec.ProvisionedConcurrency != nil {
-		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
-	}
-
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
+	// validateForAdmission also runs ProvisionedConcurrency.Validate(), so the
+	// Target/Windows checks are covered without a duplicate call here.
 	errs = errors.Join(errs, spec.validateForAdmission())
 
 	// TODO Add below validation warning

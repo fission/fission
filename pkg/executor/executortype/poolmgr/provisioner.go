@@ -43,10 +43,12 @@ type funcSvcGetter interface {
 
 // ProvisionerConfig configures the RFC-0026 provisioner.
 type ProvisionerConfig struct {
-	// MaxPerFunction is the namespace-wide cap on ProvisionedConcurrencyConfig.Target.
-	// The webhook (or CEL, if we add a namespace-scoped cap later) enforces it;
-	// the provisioner also clamps the effective target to this value as
-	// defense-in-depth.
+	// MaxPerFunction is the namespace-wide cap on the effective provisioned
+	// target. The webhook cannot enforce it — MaxPerFunction comes from an
+	// executor env var the webhook never sees — so the provisioner's clamp
+	// in effectiveTarget is the sole enforcement point. The clamped value
+	// is surfaced in status via ProvisionedSpecTarget + the ProvisionedClamped
+	// condition so users know the spec target was reduced.
 	MaxPerFunction int
 
 	// MaxInflightPerFunction bounds the number of concurrent eager
@@ -486,4 +488,12 @@ func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Fun
 		p.logger.Error(err, "Unable to update status of the function",
 			"function", fn.Name, "namespace", fn.Namespace)
 	}
+}
+
+// forget frees the per-function map entries (reconcileLocks, inflight) for a
+// deleted function. Called from DeleteFunction to prevent unbounded growth
+// under function churn. No status write — the Function object is being removed.
+func (p *Provisioner) forget(fnUID types.UID) {
+	p.reconcileLocks.Delete(fnUID)
+	p.inflight.Delete(fnUID)
 }
