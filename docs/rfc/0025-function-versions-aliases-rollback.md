@@ -48,6 +48,10 @@ type FunctionVersionSpec struct {
     // PackageDigest pins content: the OCI digest (RFC-0001/0012) or the
     // storagesvc archive checksum for legacy packages.
     PackageDigest string      `json:"packageDigest"`
+    // Environment observation at publish time (observational, not pinning —
+    // see "Environment & Package changes across the version boundary").
+    EnvObservedGeneration int64  `json:"envObservedGeneration,omitempty"`
+    EnvRuntimeImage       string `json:"envRuntimeImage,omitempty"`
     PublishedAt   metav1.Time `json:"publishedAt"`
 }
 ```
@@ -138,6 +142,16 @@ The envelope (`pkg/router/asyncinvoke/envelope.go`) stamps policy and destinatio
 A rollback between enqueue and a retry silently changes which code runs the retry.
 Design element: when the enqueue-time reference is an alias, stamp the *resolved FunctionVersion* into the envelope so retries are deterministic across repoints (bare-name references keep live resolution, consistent with `$LATEST` semantics).
 `DestinationRef` (onSuccess/onFailure) gains the same optional alias/version fields as `FunctionReference`.
+
+**Environment & Package changes across the version boundary (added 2026-07-22).**
+The two dependency axes behave asymmetrically, and the RFC must say so.
+*Packages are already inside the boundary:* `PackageRef` carries `ResourceVersion` (`types.go`), and `fission pkg update` fans out `UpdateFunctionPackageResourceVersion` to every referencing function (`pkg/fission-cli/cmd/package/update.go`) — a package content change IS a function spec change, so the runtime-affecting classifier sees it and auto-publish mints one version per dependent function (correct: each dependent's runtime changed), all sharing the new `PackageDigest` as the cross-correlation key.
+The version-owned snapshot Package CR / OCI digest makes published versions immune to later rebuilds.
+*Environments bypass the boundary:* `FunctionSpec` references the env by name only, and an env update drives `reconcileEnvPool` → `updatePoolDeployment` (`gpm.go`), recycling pools and specialized pods with the new runtime image under **every version** of every dependent function — no Generation bump anywhere, so no auto-publish, no version-history entry, and rollback cannot restore the old runtime.
+"Instant rollback" is therefore scoped to code+config, not runtime, unless the design accounts for it.
+Design elements (phase 4): the publish path records an **environment observation** in `FunctionVersionSpec` — `EnvObservedGeneration` + the resolved runtime image — purely observational, not enforcement; `fn versions` and the alias status surface **env drift** (`EnvDrift` condition when the live env's Generation ≠ the target version's observation), and `fn rollback` warns on a drifted target; `fission env impact --name <env>` lists dependent functions/aliases and which alias targets were published under older env generations — the cross-correlation query, answerable entirely from recorded observations.
+Full env *pinning* (per-version runtime images) stays a non-goal: it requires per-env-generation pools, which is environment versioning through the back door — Lambda solves this by making runtimes/layers themselves immutable-versioned objects, a separate future RFC if ever warranted.
+Whether env changes should additionally fan out auto-publish (minting new versions for opted-in dependents so env upgrades appear in version history) is an open question below.
 
 **Workflow steps invoke live by name (RFC-0022).**
 A run pins its step *graph* (spec snapshot in the event stream at RunStarted) but each step calls its target function by name at execution time (`pkg/workflow/invoker.go`), so a mid-run rollback means later steps run different code than earlier steps.
@@ -234,7 +248,7 @@ CanaryConfig unaffected until the opt-in shim phase.
 1. `FunctionVersion` + `FunctionAlias` CRDs, codegen, webhook immutability + reference validation, `fn publish` / `fn versions` / `alias` CLI (no router integration — versions are inert but inspectable).
 2. Resolver + router: `name:alias` references, weighted alias via the HandlerRef path, the `/fission-function/<ns>/<name>:<alias>` internal-listener route grammar (covers MQ/timer/kubewatcher/MCP publishers uniformly), the deterministic sticky-key version pick for weighted aliases, async-envelope version stamping for alias-referenced enqueues, `fn rollback`; integration tests.
 3. Executor version-keyed caching (including migrating the remaining `CacheKeyUR` caches — `byFunction`, `functionEnv`, the router dispatch dedup key — to UG/version keying), the per-version endpoint-index dimension (per-version Services or a versioned `FnKey`), and the **reaper retention change** (retain warm pods for alias-referenced non-latest generations, not just the latest — the `ListAvailableValue`/`latestFuncGen` policy); rollback-warmth integration test asserting no cold start on rollback to an alias-retained version.
-4. Auto-publish on runtime-affecting update + retention GC.
+4. Auto-publish on runtime-affecting update + retention GC + environment observation at publish (`EnvObservedGeneration`/`EnvRuntimeImage`), env-drift surfacing (`fn versions`, alias `EnvDrift` condition, rollback warning), and `fission env impact`.
 5. Canary-on-aliases shim + deprecation docs.
 6. (Optional, post-deprecation-window) Alias-native rollout policy (`FunctionAliasSpec.Rollout`) + CanaryConfig freeze — see CanaryConfig absorption.
 
@@ -247,6 +261,7 @@ CanaryConfig unaffected until the opt-in shim phase.
 - GC: `aliasgc.tla` (V2/V3 model) plus an envtest retain-N sweep that never deletes an aliased version and survives the modeled alias-create-vs-delete interleaving.
 - Shipped-feature interactions (2026-07-22 additions): sticky-session stability under a weighted split — a fixed sticky key lands on one version for the lifetime of a 90/10 split, and a weight change migrates only hash-crossing sessions; async retry determinism — enqueue via alias, roll back, assert the retry ran the enqueue-time version (envelope stamp) while a bare-name enqueue tracks live; keyed-state continuity — rollback preserves state (same keyspace serves both versions).
 - CI/CD surface: publish idempotence (double `fn publish` with unchanged spec yields one version), digest-pinned alias resolution (`packageDigest` → correct version, unknown digest → admission rejection), `--wait` exit-code contracts, and alias `History` round-trip through `fn rollback`.
+- Dependency axes: `pkg update` on a shared package mints one version per dependent function, each recording the new digest; env update flips the alias `EnvDrift` condition and `fn rollback` to a drifted target prints the warning (assert on CLI output + condition, not pod internals).
 
 ## Open questions
 
@@ -255,6 +270,7 @@ CanaryConfig unaffected until the opt-in shim phase.
   Weighted aliases then work uniformly on all trigger types for free, because the weighted pick happens router-side — no per-publisher weighted-resolution code exists or is needed.
   MCP (`pkg/mcp/proxy.go`) rides the same URL path.
   Decision: all trigger types in v1, via the URL grammar, not via per-publisher resolvers.
+- Whether runtime-affecting Environment changes (image/builder) should fan out auto-publish to opted-in dependent functions, so env upgrades appear in each function's version history with a fresh env observation — versus observation-plus-drift-warning only (as drafted); fan-out gives auditability but mints versions the user never asked for, and a busy shared env multiplies that across every dependent.
 - Whether a workflow run (RFC-0022) should resolve alias→version at RunStarted and pin all step targets for the run's lifetime — version-consistent runs vs live-tracking steps changes replay semantics; deferred to a workflows follow-up, but `WorkflowState.Function` must not grow alias fields until it is decided.
 - Auto-publish default: opt-in (`versioning.mode: auto` required, as drafted) vs on-by-default with retain-N; opt-in first, flip later with data.
 - ~~Interaction with `fission spec apply` pruning when versions are auto-created objects the spec never declared.~~ **Resolved by review:** `spec apply --delete` only prunes objects carrying the spec's `FISSION_DEPLOYMENT_UID_KEY` annotation and absent from the desired set (`ownedByDeployment`, `pkg/fission-cli/cmd/spec/resourcetype.go`). Controller-created `FunctionVersion`s carry no such annotation, so they are never pruned. The design requirement is therefore simply: the auto-publish controller must **not** stamp the deployment-UID annotation on versions it creates (and there is no `applyFunctionVersions` closure, so versions are not a spec-managed kind). Aliases, if made spec-first for GitOps, *would* get an `applyFunctionAliases` closure and be pruned normally — which is the intended GitOps behavior.
