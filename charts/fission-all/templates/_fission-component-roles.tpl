@@ -251,7 +251,9 @@ rules:
   resources:
   - canaryconfigs
   - environments
+  - functionaliases
   - functions
+  - functionversions
   - httptriggers
   - kuberneteswatchtriggers
   - messagequeuetriggers
