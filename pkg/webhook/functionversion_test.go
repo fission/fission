@@ -5,13 +5,17 @@
 package webhook
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
@@ -184,6 +188,19 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 		r := &FunctionVersion{}
 		if err := r.ValidateDeletion(t.Context(), fv); err != nil {
 			t.Fatalf("nil reader must not block: %v", err)
+		}
+	})
+
+	t.Run("alias List error: rejected (fail closed)", func(t *testing.T) {
+		r := &FunctionVersion{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+					return fmt.Errorf("injected list failure")
+				},
+			}).Build()}
+		err := r.ValidateDeletion(t.Context(), fv)
+		if err == nil {
+			t.Fatalf("a failed alias List must reject the delete (fail closed), got nil")
 		}
 	})
 

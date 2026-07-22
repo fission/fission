@@ -393,6 +393,40 @@ func TestCELFunctionVersionAndAliasInstall(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.wantErr)
 		})
 	}
+
+	// Function.Spec.Versioning.Retain has a GC floor of 1 (CRD Minimum=1):
+	// a Function cannot opt into retaining zero unaliased versions.
+	retainFn := func(name string, retain int) *fv1.Function {
+		return &fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: fv1.FunctionSpec{
+				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
+				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},
+				Versioning:     &fv1.VersioningConfig{Retain: &retain},
+			},
+		}
+	}
+
+	retainCases := []struct {
+		name    string
+		fn      *fv1.Function
+		wantErr string // empty => expect accept
+	}{
+		{"retain below minimum rejected", retainFn("f-retain-zero", 0), "retain"},
+		{"retain at valid value accepted", retainFn("f-retain-ten", 10), ""},
+	}
+
+	for _, tc := range retainCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fc.CoreV1().Functions(ns).Create(t.Context(), tc.fn, metav1.CreateOptions{})
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err, "apiserver should reject")
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
 }
 
 func TestCELHTTPTriggerRouteConfig(t *testing.T) {
