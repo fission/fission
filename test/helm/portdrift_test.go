@@ -211,6 +211,42 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 	})
 }
 
+// countByKindName returns how many docs have the given kind and metadata.name.
+func countByKindName(docs []map[string]any, kind, name string) int {
+	n := 0
+	for _, d := range docs {
+		if d["kind"] == kind {
+			if md, ok := d["metadata"].(map[string]any); ok && md["name"] == name {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// TestWebhookEnvReaderRBACScopesByTenancy pins the RFC-0023 webhook
+// environment-read RBAC to the same tenancy posture as every other Fission-CRD
+// read (review feedback on #3593): a namespaced Role per Fission namespace in
+// static mode (a cluster-wide grant would be over-privileged), and a
+// cluster-wide ClusterRole added only in dynamic/cluster mode.
+func TestWebhookEnvReaderRBACScopesByTenancy(t *testing.T) {
+	const roleName = "fission-webhook-env-reader" // render() uses release name "fission"
+
+	t.Run("static: namespaced Roles, no ClusterRole", func(t *testing.T) {
+		docs := render(t, "--set", "additionalFissionNamespaces={fission-fn}")
+		assert.GreaterOrEqual(t, countByKindName(docs, "Role", roleName), 2,
+			"a Role in defaultNamespace + each additionalFissionNamespaces")
+		assert.Zero(t, countByKindName(docs, "ClusterRole", roleName),
+			"static tenancy must not grant cluster-wide environment read")
+	})
+
+	t.Run("dynamic: adds the ClusterRole", func(t *testing.T) {
+		docs := render(t, "--set", "tenancy.mode=dynamic")
+		assert.Equal(t, 1, countByKindName(docs, "ClusterRole", roleName),
+			"dynamic tenancy onboards namespaces at runtime, so the read is cluster-wide")
+	})
+}
+
 // npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
 // given svc label via a podSelector.
 func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {

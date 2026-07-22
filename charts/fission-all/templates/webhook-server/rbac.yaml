@@ -2,13 +2,61 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The validating webhook reads Environments (get only) to enforce env-dependent
-# Function invariants CEL cannot express — currently that RFC-0023 state opt-in
-# is refused on an allowedFunctionsPerContainer: infinite environment (one
-# shared mount cannot deliver a per-function scoped state token). Functions may
-# reference an environment in any Fission-watched namespace, so the read is
-# cluster-scoped; it is get-only (uncached API reader), the minimum for a
-# point lookup.
+# The validating webhook reads Environments (get only, uncached API reader) to
+# enforce env-dependent Function invariants CEL cannot express — currently that
+# RFC-0023 state opt-in is refused on an allowedFunctionsPerContainer: infinite
+# environment (one shared mount cannot deliver a per-function scoped state
+# token).
+#
+# The read is scoped to match the tenancy posture, exactly like every other
+# Fission-CRD read (fission-role-generator / dynamic-cluster-roles.yaml):
+#   * static  — a namespaced Role in each Fission resource namespace
+#               (defaultNamespace + additionalFissionNamespaces); functions can
+#               only reference an environment in those namespaces, so a
+#               cluster-wide grant would be over-privileged.
+#   * dynamic / cluster — a cluster-wide ClusterRole, since namespaces are
+#               onboarded at runtime and a function may reference an environment
+#               in any of them.
+{{- $namespaces := list .Values.defaultNamespace }}
+{{- range $ns := .Values.additionalFissionNamespaces }}
+{{-   if not (has $ns $namespaces) }}
+{{-     $namespaces = append $namespaces $ns }}
+{{-   end }}
+{{- end }}
+{{- range $ns := $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "{{ $.Release.Name }}-webhook-env-reader"
+  namespace: {{ $ns }}
+  labels:
+    application: fission-webhook
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+rules:
+  - apiGroups: ["fission.io"]
+    resources: ["environments"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: "{{ $.Release.Name }}-webhook-env-reader"
+  namespace: {{ $ns }}
+  labels:
+    application: fission-webhook
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: fission-webhook
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: "{{ $.Release.Name }}-webhook-env-reader"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- if include "fission.tenancyControllerEnabled" . }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -17,12 +65,9 @@ metadata:
     application: fission-webhook
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
 rules:
-  - apiGroups:
-      - fission.io
-    resources:
-      - environments
-    verbs:
-      - get
+  - apiGroups: ["fission.io"]
+    resources: ["environments"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -39,3 +84,4 @@ roleRef:
   kind: ClusterRole
   name: "{{ .Release.Name }}-webhook-env-reader"
   apiGroup: rbac.authorization.k8s.io
+{{- end }}
