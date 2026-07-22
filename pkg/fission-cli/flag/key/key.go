@@ -258,5 +258,18 @@ const (
 	TenantBuilderNamespace  = "builder-namespace"
 	TenantForce             = "force"
 
+	// RFC-0025 `fission fn publish`.
+	PublishDescription = "description"
+	PublishWait        = "wait"
+
+	// RFC-0025 `fission alias` (FunctionAlias) commands.
+	AliasName             = resourceName
+	AliasFunction         = "function"
+	AliasVersion          = "version"
+	AliasPackageDigest    = "package-digest"
+	AliasWeight           = "weight"
+	AliasSecondaryVersion = "secondary-version"
+	AliasClearWeight      = "clear-weight"
+
 	DefaultSpecOutputDir = "fission-dump"
 )
