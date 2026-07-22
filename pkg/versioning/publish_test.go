@@ -348,6 +348,43 @@ func TestPublish_SnapshotPackageNameCollisionRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "fn-v1-pkg", "error must name the colliding snapshot package")
 }
 
+func TestPublish_SnapshotPackageNameCollisionRejectedOnEveryRetry(t *testing.T) {
+	t.Parallel()
+	ns := "default"
+	pkg := makeDeployPackage("pkg", ns)
+	env := makeEnv("env", ns, "example.com/env:v1")
+	fn := makeFunction("fn", ns, "pkg")
+
+	// Same setup as the fresh-create collision case above, but this test
+	// drives Publish a second time to prove the resting state stays
+	// rejected: the first call's error leaves the FunctionVersion "fn-v1"
+	// behind (created before the snapshot-package step), so the second call
+	// takes the idempotence/self-heal path instead of the fresh-create path
+	// — that path must re-validate ownership too, or the foreign package
+	// would be silently treated as healthy on every subsequent publish.
+	foreign := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1-pkg", Namespace: ns},
+		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
+	}
+
+	cl := fakeversioned.NewSimpleClientset(pkg, env, fn, foreign)
+
+	first, err := Publish(t.Context(), cl, fn, "v1")
+	require.Error(t, err)
+	assert.Nil(t, first)
+	assert.Contains(t, err.Error(), "fn-v1-pkg")
+
+	// Sanity check the premise: the FunctionVersion did get created despite
+	// the error, which is what routes the retry through self-heal.
+	_, err = cl.CoreV1().FunctionVersions(ns).Get(t.Context(), "fn-v1", metav1.GetOptions{})
+	require.NoError(t, err, "test premise: FunctionVersion must survive the snapshot-package collision error")
+
+	second, err := Publish(t.Context(), cl, fn, "v1 retry")
+	require.Error(t, err, "self-heal must re-validate ownership and keep rejecting the foreign package")
+	assert.Nil(t, second)
+	assert.Contains(t, err.Error(), "fn-v1-pkg", "error must name the colliding snapshot package")
+}
+
 func TestEnsureSnapshotPackage_AlreadyExistsWithMatchingOwnerAdopts(t *testing.T) {
 	t.Parallel()
 	ns := "default"
