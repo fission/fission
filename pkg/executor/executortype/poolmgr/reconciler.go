@@ -152,7 +152,11 @@ func (gpm *GenericPoolManager) ReconcileFunction(ctx context.Context, old, fn *f
 		} else {
 			// Provisioned concurrency was removed (e.g. --provisioned-concurrency 0):
 			// clear labels on any previously-provisioned pods and reset status.
+		} else if old != nil && old.Spec.ProvisionedConcurrency != nil {
+			// Provisioned concurrency was removed (e.g. --provisioned-concurrency 0):
+			// clear labels on any previously-provisioned pods and reset status.
 			gpm.provisioner.disableProvisioning(ctx, fn)
+		}
 		}
 	}
 	return nil
