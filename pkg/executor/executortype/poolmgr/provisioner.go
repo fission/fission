@@ -461,10 +461,18 @@ func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function
 	})
 }
 
-// computes the effectiveTarget: minimum of provisioned concurreny target
-// and max per function. The schedule will be added in PR2
+// effectiveTarget resolves the function's effective provisioned target via
+// effectiveTargetAt (base Target, overridden by any active schedule window),
+// logs any windows that failed to evaluate, and clamps to the namespace-wide
+// MaxPerFunction cap.
 func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
-	return min(fn.Spec.ProvisionedConcurrency.Target, p.config.MaxPerFunction)
+	target, errs := effectiveTargetAt(fn.Spec.ProvisionedConcurrency, time.Now())
+	if len(errs) > 0 {
+		for _, e := range errs {
+			p.logger.Error(e, e.Error())
+		}
+	}
+	return min(target, p.config.MaxPerFunction)
 }
 
 // disableProvisioning clears all provisioned labels, zeroes the function's
