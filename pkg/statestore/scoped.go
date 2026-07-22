@@ -110,22 +110,33 @@ func (k *scopedKV) Set(ctx context.Context, s Scope, key string, val []byte, o S
 		return ErrQuotaExceeded
 	}
 	if q.MaxKeys > 0 {
-		// Only a write that creates a new key can grow the count. Query live
-		// state so expired keys (which the driver filters) never count. This is a
-		// best-effort soft cap: the Get, countKeys, and Set are separate lock
-		// acquisitions, so concurrent creates of distinct new keys can overshoot
-		// by one. The authoritative bound belongs to the driver / RFC-0023
-		// accountant; this catches the common single-writer case.
-		if _, gerr := k.inner.Get(ctx, s, key); errors.Is(gerr, ErrNotFound) {
-			n, cerr := k.countKeys(ctx, s)
-			if cerr == nil && n >= q.MaxKeys {
-				recordOp(ctx, "kv", "set")
-				recordQuotaRejection(ctx, "keys")
-				return ErrQuotaExceeded
-			}
-		}
+		// MaxKeys must be atomic with the write (RFC-0023 S3; the quota.tla
+		// AtomicQuota=FALSE config traces exactly the read-check-then-write
+		// overshoot). SetCounted is the single enforcement path — Set and the
+		// direct SetCounted entry point must behave identically at the budget.
+		return k.SetCounted(ctx, s, key, val, o, q.MaxKeys)
 	}
 	err := k.inner.Set(ctx, s, key, val, o)
+	observe(ctx, "kv", "set", err)
+	return err
+}
+
+// SetCounted implements CountedKV so a scoped store still satisfies the
+// capability when it wraps a counted driver — the statestoresvc HTTP head
+// wraps its driver in NewScoped, and its handler type-asserts CountedKV to
+// serve the wire maxKeys. The caller's maxKeys is authoritative here (it is
+// the budget the originating scoped store already resolved); this layer only
+// re-adds metrics and forwards.
+func (k *scopedKV) SetCounted(ctx context.Context, s Scope, key string, val []byte, o SetOptions, maxKeys int64) error {
+	ck, ok := k.inner.(CountedKV)
+	if !ok {
+		recordOp(ctx, "kv", "set")
+		return ErrCapabilityUnavailable
+	}
+	err := ck.SetCounted(ctx, s, key, val, o, maxKeys)
+	if errors.Is(err, ErrQuotaExceeded) {
+		recordQuotaRejection(ctx, "keys")
+	}
 	observe(ctx, "kv", "set", err)
 	return err
 }
@@ -140,23 +151,6 @@ func (k *scopedKV) List(ctx context.Context, s Scope, prefix string, page Page) 
 	kp, err := k.inner.List(ctx, s, prefix, page)
 	observe(ctx, "kv", "list", err)
 	return kp, err
-}
-
-// countKeys returns the number of live keys in scope, paging through List.
-func (k *scopedKV) countKeys(ctx context.Context, s Scope) (int64, error) {
-	var n int64
-	page := Page{}
-	for {
-		kp, err := k.inner.List(ctx, s, "", page)
-		if err != nil {
-			return 0, err
-		}
-		n += int64(len(kp.Keys))
-		if kp.Next == "" {
-			return n, nil
-		}
-		page.Token = kp.Next
-	}
 }
 
 // meteredEventLog adds metrics to an EventLog.

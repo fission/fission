@@ -1027,6 +1027,14 @@ type (
 		// +optional
 		Tool *ToolConfig `json:"tool,omitempty"`
 
+		// State, when non-nil, opts this function into the RFC-0023 keyed-state
+		// API: a scoped statesvc keyspace backed by the RFC-0021 statestore, with
+		// a per-function token injected at specialization time. Presence is the
+		// on switch (like Streaming and Tool): nil (the default) means exactly
+		// today's behavior. Additive and backward compatible.
+		// +optional
+		State *StateConfig `json:"state,omitempty"`
+
 		// Invocation, when non-nil, tunes RFC-0024 asynchronous invocation
 		// (X-Fission-Invoke-Mode: async) for this function: the durable retry policy
 		// and the maximum event age before an undelivered invocation is
@@ -1116,6 +1124,71 @@ type (
 		// +optional
 		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]{1,64}$`
 		ToolName string `json:"toolName,omitempty"`
+	}
+
+	// StateConfig declares a function's keyed-state keyspace and quotas
+	// (RFC-0023). Presence of the enclosing FunctionSpec.State is the on switch —
+	// there is no separate enabled flag, so the in-memory zero value and the
+	// stored object never disagree (the same rationale as StreamingConfig).
+	StateConfig struct {
+		// Keyspace names the durable keyspace this function reads and writes.
+		// Defaults to the function name; explicit so a function can be renamed
+		// without orphaning its data. The charset deliberately excludes ':' and
+		// '#' — ':' is a token-derivation info-string separator and '#' marks the
+		// platform-reserved "<keyspace>#meta" quota-accounting sibling.
+		// +optional
+		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`
+		// +kubebuilder:validation:MaxLength=63
+		Keyspace string `json:"keyspace,omitempty"`
+
+		// DefaultTTL, when set, is applied to writes that carry no explicit TTL.
+		// Must be >= 0; zero (or nil) means keys do not expire by default.
+		// +optional
+		DefaultTTL *metav1.Duration `json:"defaultTTL,omitempty"`
+
+		// MaxValueBytes caps a single value's size. 0 means the platform default
+		// (DefaultStateMaxValueBytes, 256KiB). Blobs belong in object storage.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxValueBytes int64 `json:"maxValueBytes,omitempty"`
+
+		// MaxKeys caps the number of live keys in the keyspace, enforced
+		// atomically with each write (quota.tla S3). 0 means the platform
+		// default (DefaultStateMaxKeys).
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxKeys int64 `json:"maxKeys,omitempty"`
+
+		// Backend selects a named statestore driver for this keyspace. Accepted
+		// and validated in v1 but not yet acted on: statesvc serves every
+		// keyspace from its single configured driver (per-function backend
+		// selection is a documented deferral).
+		// +optional
+		Backend string `json:"backend,omitempty"`
+
+		// Sticky, when non-nil, opts the function into sticky routing: the
+		// router consistent-hashes the declared request key onto the ready-pod
+		// set so one key's requests land on one pod while the pod set is stable.
+		// Best-effort (an optimization, never a correctness dependency — S6):
+		// durable truth stays behind the state API.
+		// +optional
+		Sticky *StickyConfig `json:"sticky,omitempty"`
+	}
+
+	// StickySource selects where the router extracts the sticky routing key
+	// from an incoming request.
+	// +kubebuilder:validation:Enum=header;queryparam
+	StickySource string
+
+	// StickyConfig declares how the sticky routing key is extracted from a
+	// request. Requests missing the key fall back to the default endpoint pick.
+	StickyConfig struct {
+		// Source is where to look for the key.
+		Source StickySource `json:"source"`
+
+		// Name is the header or query-parameter name holding the key,
+		// e.g. "X-Session-Id".
+		Name string `json:"name"`
 	}
 
 	// InvocationConfig tunes RFC-0024 asynchronous invocation for a function.

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
 	"sync"
 	"testing"
 	"time"
@@ -50,6 +51,9 @@ const (
 	// MCPName resolves to svc/mcp (RFC-0011). MCP tests skip when it is
 	// unreachable (MCP disabled in this install).
 	MCPName = "mcp.fission"
+	// StateSvcName resolves to svc/statesvc (RFC-0023 keyed state). State
+	// tests skip when it is unreachable (functionState disabled).
+	StateSvcName = "statesvc.fission"
 )
 
 // Framework is a process-wide singleton built from KUBECONFIG once and reused
@@ -169,6 +173,7 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 		// carrying Host: mcp.fission looks like. Present a loopback Host
 		// instead of weakening the server's protection.
 		{MCPName, "FISSION_MCP_BASE_URL", "mcp", []portless.RouteOption{portless.RouteWithHostRewrite("127.0.0.1")}},
+		{StateSvcName, "FISSION_STATESVC", "statesvc", nil},
 	} {
 		var b portless.Backend
 		var err error
@@ -220,6 +225,13 @@ func (f *Framework) HTTPClient() *http.Client { return f.httpClient }
 // resolvable only by clients built from this framework (HTTPClient, Router).
 func (f *Framework) RouterInternalBaseURL() string {
 	return portless.URL(RouterInternalName, 0, "")
+}
+
+// StateSvcBaseURL returns the framework's URL for the statesvc keyed-state
+// head (RFC-0023). The host is a portless route name, resolvable only by
+// clients built from this framework.
+func (f *Framework) StateSvcBaseURL() string {
+	return portless.URL(StateSvcName, 0, "")
 }
 
 // IsTargetMissing reports whether a client/dial error means the route's

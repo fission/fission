@@ -65,7 +65,14 @@ func (s *Store) Get(_ context.Context, scope statestore.Scope, key string) (stat
 
 // Set implements statestore.KVStore, honoring the IfVersion CAS semantics and
 // TTL from o. An expired key counts as absent.
-func (s *Store) Set(_ context.Context, scope statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
+func (s *Store) Set(ctx context.Context, scope statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
+	return s.SetCounted(ctx, scope, key, val, o, 0)
+}
+
+// SetCounted implements statestore.CountedKV. The store mutex makes the
+// live-key count and the write one atomic step (RFC-0023 S3), and counting
+// live entries directly makes the budget TTL-exact.
+func (s *Store) SetCounted(_ context.Context, scope statestore.Scope, key string, val []byte, o statestore.SetOptions, maxKeys int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -77,7 +84,9 @@ func (s *Store) Set(_ context.Context, scope statestore.Scope, key string, val [
 
 	// IfVersion is a compare-and-swap on the current version, treating an absent
 	// key as version 0. So IfVersion==0 is create-only, IfVersion==N requires the
-	// key to exist at version N, and nil skips the check entirely.
+	// key to exist at version N, and nil skips the check entirely. The CAS check
+	// runs before the budget check: a write that could never apply is a version
+	// conflict, not a quota rejection.
 	if o.IfVersion != nil {
 		curVersion := int64(0)
 		if exists {
@@ -85,6 +94,19 @@ func (s *Store) Set(_ context.Context, scope statestore.Scope, key string, val [
 		}
 		if curVersion != *o.IfVersion {
 			return statestore.ErrVersionConflict
+		}
+	}
+
+	if maxKeys > 0 && !exists {
+		var live int64
+		for ek, e := range s.kv {
+			if ek.ns == scope.Namespace && ek.owner == scope.Owner && ek.keyspace == scope.Keyspace &&
+				ek != k && !e.expired(now) {
+				live++
+			}
+		}
+		if live >= maxKeys {
+			return statestore.ErrQuotaExceeded
 		}
 	}
 

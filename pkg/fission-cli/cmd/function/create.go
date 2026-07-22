@@ -57,6 +57,44 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 	}
 }
 
+// getStateConfig builds the RFC-0023 StateConfig from the --state* flags,
+// merging onto existing (the function's current config, or nil on create) so
+// an `fn update --state` that sets only one field keeps the rest. nil when
+// --state is not set. Bounds/charset are validated server-side.
+func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig {
+	if !input.Bool(flagkey.FnState) {
+		return nil
+	}
+	sc := &fv1.StateConfig{}
+	if existing != nil {
+		sc = existing.DeepCopy()
+	}
+	if input.IsSet(flagkey.FnStateKeyspace) {
+		sc.Keyspace = input.String(flagkey.FnStateKeyspace)
+	}
+	if input.IsSet(flagkey.FnStateMaxKeys) {
+		sc.MaxKeys = int64(input.Int(flagkey.FnStateMaxKeys))
+	}
+	if input.IsSet(flagkey.FnStateMaxValueBytes) {
+		sc.MaxValueBytes = int64(input.Int(flagkey.FnStateMaxValueBytes))
+	}
+	if input.IsSet(flagkey.FnStateTTL) {
+		sc.DefaultTTL = &metav1.Duration{Duration: input.Duration(flagkey.FnStateTTL)}
+	}
+	if input.IsSet(flagkey.FnStateStickySource) || input.IsSet(flagkey.FnStateStickyName) {
+		if sc.Sticky == nil {
+			sc.Sticky = &fv1.StickyConfig{}
+		}
+		if input.IsSet(flagkey.FnStateStickySource) {
+			sc.Sticky.Source = fv1.StickySource(input.String(flagkey.FnStateStickySource))
+		}
+		if input.IsSet(flagkey.FnStateStickyName) {
+			sc.Sticky.Name = input.String(flagkey.FnStateStickyName)
+		}
+	}
+	return sc
+}
+
 // getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
 // or nil when --expose-as-mcp is not set (the function is not advertised as an
 // MCP tool). It merges onto existing (the function's current Tool, or nil on
@@ -368,6 +406,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:     &fnIdleTimeout,
 			Streaming:       getStreamingConfig(input),
 			Tool:            toolConfig,
+			State:           getStateConfig(input, nil),
 			Invocation:      invocation,
 			Concurrency:     fnConcurrency,
 			RequestsPerPod:  requestsPerPod,

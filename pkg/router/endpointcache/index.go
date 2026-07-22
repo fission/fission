@@ -11,6 +11,7 @@ package endpointcache
 
 import (
 	"fmt"
+	"hash/fnv"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -354,17 +355,38 @@ const (
 	AdmitContention AdmitResult = "cas_contention"
 )
 
-// Admit picks the ready, non-quarantined endpoint with the most free capacity
-// (least outstanding requests below requestsPerPod), increments its in-flight
-// counter, and returns it with a release func that the caller MUST invoke when
-// the request completes (response done / stream drained). A non-Admitted
-// result names why no endpoint was admissible.
+// hrwScore is the rendezvous (highest-random-weight) hash of (key, endpoint):
+// a pure function, so every router replica ranks endpoints identically with
+// no shared ring state (RFC-0023 S4), and removing an endpoint moves only the
+// keys that ranked it first (S5).
+func hrwScore(key, address string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(key))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(address))
+	return h.Sum64()
+}
+
+// Admit picks a ready, non-quarantined endpoint with free capacity (below
+// requestsPerPod), increments its in-flight counter, and returns it with a
+// release func that the caller MUST invoke when the request completes
+// (response done / stream drained). A non-Admitted result names why no
+// endpoint was admissible.
+//
+// The pick: least-outstanding by default; with a non-empty stickyKey
+// (RFC-0023 sticky routing) the highest HRW-ranked ADMISSIBLE endpoint
+// instead — a branch in this scan, not a strategy object, so the fused
+// pick+admit atomicity and the release-closure accounting seam are
+// untouched. A saturated sticky winner is simply not admissible: the key
+// overflows to its next-ranked endpoint rather than queueing (stickiness is
+// an optimization, never a correctness dependency — durable truth lives
+// behind the state API).
 //
 // Enforcement is per-router-replica by design (RFC-0002): worst-case
 // over-admission is (replicas-1)×requestsPerPod per pod, degrading to brief
 // queueing at the pod. Functions needing exact global accounting use the
 // strict-mode annotation, which bypasses this path entirely.
-func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, func(), AdmitResult) {
+func (ix *Index) Admit(namespace, name string, requestsPerPod int, stickyKey string) (Endpoint, func(), AdmitResult) {
 	if requestsPerPod <= 0 {
 		requestsPerPod = 1
 	}
@@ -387,12 +409,13 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 		now = time.Now()
 	}
 
-	// Least-outstanding selection with a bounded CAS retry: the snapshot is
+	// Endpoint selection with a bounded CAS retry: the snapshot is
 	// immutable, only the counters move.
 	result := NoEntry
 	for range 4 {
 		var best *Endpoint
 		var bestLoad int64
+		var bestScore uint64
 		counted, quarantinedN, busy := 0, 0, 0
 		for i := range *epsp {
 			ep := &(*epsp)[i]
@@ -409,6 +432,12 @@ func (ix *Index) Admit(namespace, name string, requestsPerPod int) (Endpoint, fu
 			load := ep.inflight.Load()
 			if load >= int64(requestsPerPod) {
 				busy++
+				continue
+			}
+			if stickyKey != "" {
+				if score := hrwScore(stickyKey, ep.Address); best == nil || score > bestScore {
+					best, bestLoad, bestScore = ep, load, score
+				}
 				continue
 			}
 			if best == nil || load < bestLoad {

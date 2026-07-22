@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.functionState.enabled }}
+# statesvc (RFC-0023) is the SCOPED function-facing keyed-state head. It talks
+# to the statestore like any control-plane consumer (client driver in embedded
+# mode); the raw statestore stays unreachable from function pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: statesvc
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: statesvc
+    application: fission-statesvc
+spec:
+  replicas: {{ .Values.functionState.replicas }}
+  selector:
+    matchLabels:
+      svc: statesvc
+  template:
+    metadata:
+      labels:
+        svc: statesvc
+        application: fission-statesvc
+    spec:
+      containers:
+      - name: statesvc
+        image: {{ include "fission-bundleImage" . | quote }}
+        imagePullPolicy: {{ .Values.pullPolicy }}
+        command: ["/fission-bundle"]
+        args: ["--stateApiPort", "{{ include "fission.statesvcPort" . }}"]
+        env:
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
+        - name: DEBUG_ENV
+          value: {{ .Values.debugEnv | quote }}
+        - name: PPROF_ENABLED
+          value: {{ .Values.pprof.enabled | quote }}
+        # Keyed state lives in the statestore (render-gated: the statestore
+        # validate template fails render when functionState.enabled &&
+        # !statestore.enabled).
+        {{- if eq .Values.statestore.mode "embedded" }}
+        - name: STATESTORE_DRIVER
+          value: "client"
+        - name: STATESTORE_DSN
+          value: "http://statestore.{{ .Release.Namespace }}:{{ include "fission.statestorePort" . }}"
+        {{- else if eq .Values.statestore.mode "external" }}
+        - name: STATESTORE_DRIVER
+          value: "postgres"
+        - name: STATESTORE_DSN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.statestore.external.existingSecret | default "statestore-postgres" }}
+              key: dsn
+        {{- end }}
+        {{- include "fission-resource-namespace.envs" . | indent 8 }}
+        {{- include "kube_client.envs" . | indent 8 }}
+        {{- include "opentelemtry.envs" . | indent 8 }}
+        # internalAuth.envs supplies FISSION_INTERNAL_AUTH_SECRET: keyspace
+        # bearer tokens and the ServiceStateAPI admin channel both derive from
+        # it (empty secret = dev pass-through, loudly logged).
+        {{- include "internalAuth.envs" . | indent 8 }}
+        {{- include "coverage.envs" . | indent 8 }}
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: {{ include "fission.statesvcPort" . }}
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: {{ include "fission.statesvcPort" . }}
+          periodSeconds: 30
+        resources:
+          {{- toYaml .Values.functionState.resources | nindent 10 }}
+        ports:
+        - containerPort: {{ include "fission.statesvcPort" . }}
+          name: statesvc
+        - containerPort: 8080
+          name: metrics
+        {{- if .Values.pprof.enabled }}
+        - containerPort: 6060
+          name: pprof
+        {{- end }}
+        {{- if .Values.coverage.enabled }}
+        volumeMounts:
+        {{- include "coverage.volumemount" . | indent 8 }}
+        {{- end }}
+        {{- if .Values.terminationMessagePath }}
+        terminationMessagePath: {{ .Values.terminationMessagePath }}
+        {{- end }}
+        {{- if .Values.terminationMessagePolicy }}
+        terminationMessagePolicy: {{ .Values.terminationMessagePolicy }}
+        {{- end }}
+      serviceAccountName: fission-statesvc
+      {{- if .Values.coverage.enabled }}
+      volumes:
+      {{- include "coverage.volume" . | indent 6 }}
+      {{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

@@ -28,6 +28,7 @@ import (
 	mqt "github.com/fission/fission/pkg/mqtrigger"
 	"github.com/fission/fission/pkg/router"
 	"github.com/fission/fission/pkg/statestore/statestoresvc"
+	"github.com/fission/fission/pkg/statesvc"
 	"github.com/fission/fission/pkg/storagesvc"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -63,6 +64,7 @@ type CommandLineArgs struct {
 	mcpPort            int
 	statestorePort     int
 	workflowPort       int
+	stateAPIPort       int
 
 	// URL values — empty means "not set": the resolver derives the
 	// in-cluster default from POD_NAMESPACE (see svcinfo.AddressResolver)
@@ -208,6 +210,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.mcpPort, "mcpPort", 0, "Port that the MCP tool server should listen on")
 	flag.IntVar(&args.statestorePort, "statestorePort", 0, "Port that the embedded statestore should listen on (RFC-0021 embedded mode)")
 	flag.IntVar(&args.workflowPort, "workflowPort", 0, "Port that the workflow engine should listen on (RFC-0022)")
+	flag.IntVar(&args.stateAPIPort, "stateApiPort", 0, "Port that the statesvc function-facing state API should listen on (RFC-0023)")
 
 	// URL flags
 	flag.StringVar(&args.executorUrl, "executorUrl", "", "Executor URL (default http://executor.<POD_NAMESPACE>)")
@@ -358,6 +361,17 @@ func bundleServices() []bundleService {
 			selected: func(a *CommandLineArgs) bool { return a.statestorePort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
 				return statestoresvc.Start(ctx, d.clientGen, d.logger, d.mgr, statestoresvc.Options{Port: d.args.statestorePort})
+			},
+		},
+		{
+			// statesvc (RFC-0023) is the SCOPED function-facing keyed-state head:
+			// per-keyspace token auth over the statestore via the scoped wrapper.
+			// Deliberately separate from the raw statestore head above, which must
+			// never be reachable from function pods.
+			name:     "Fission-StateSvc",
+			selected: func(a *CommandLineArgs) bool { return a.stateAPIPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return statesvc.Start(ctx, d.clientGen, d.logger, d.mgr, statesvc.Options{Port: d.args.stateAPIPort})
 			},
 		},
 		{

@@ -27,6 +27,9 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnState, flag.FnStateKeyspace, flag.FnStateMaxKeys,
+			flag.FnStateMaxValueBytes, flag.FnStateTTL,
+			flag.FnStateStickySource, flag.FnStateStickyName,
 			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
@@ -88,6 +91,9 @@ func Commands() *cobra.Command {
 			flag.FnStreamingIdleTimeout, flag.FnStreamingMaxDuration,
 			flag.FnExposeAsMCP, flag.FnToolDescription,
 			flag.FnToolInputSchema, flag.FnToolName,
+			flag.FnState, flag.FnStateKeyspace, flag.FnStateMaxKeys,
+			flag.FnStateMaxValueBytes, flag.FnStateTTL,
+			flag.FnStateStickySource, flag.FnStateStickyName,
 			flag.FnAsyncMaxAttempts, flag.FnAsyncMaxAge,
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
@@ -250,7 +256,7 @@ func Commands() *cobra.Command {
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, DLQCommands())
+		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, DLQCommands(), StateCommands())
 
 	return command
 }

@@ -52,6 +52,15 @@ type (
 		FunctionMetadata *metav1.ObjectMeta
 
 		EnvVersion int `json:"envVersion"`
+
+		// StateKeyspace, when non-empty, is the RFC-0023 keyspace this
+		// function is entitled to: before specializing, the fetcher derives
+		// the scoped state token from its own master secret and writes it to
+		// StateTokenFileName under the shared mount for the user container's
+		// SDK to read. Only the NON-SECRET keyspace name rides this request
+		// (it appears in the pod-visible -specialize-request arg); the token
+		// itself never does.
+		StateKeyspace string `json:"stateKeyspace,omitempty"`
 	}
 
 	// ArchiveUploadRequest send from builder manager describes which

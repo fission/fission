@@ -5,9 +5,13 @@
 package webhook
 
 import (
+	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -16,12 +20,17 @@ import (
 
 type Function struct {
 	GenericWebhook[*v1.Function]
+	// reader is the uncached API reader used to fetch the referenced
+	// Environment when validating RFC-0023 state opt-in (get-only, so no cache
+	// warm-up or list/watch RBAC needed).
+	reader client.Reader
 }
 
 func (r *Function) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	r.Logger = loggerfactory.GetLogger().WithName("function-resource")
 	r.Validator = r
 	r.Warner = r
+	r.reader = mgr.GetAPIReader()
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.Function{})
 }
 
@@ -81,11 +90,53 @@ func (r *Function) Validate(new *v1.Function) error {
 		return v1.AggregateValidationErrors("Function", err)
 	}
 
+	// RFC-0023 state opt-in is incompatible with an AllowedFunctionsPerContainer:
+	// infinite environment: those pods serve many functions from ONE shared
+	// mount, and the scoped state token is written to a single per-pod file —
+	// a second function specializing onto the pod would overwrite the first's
+	// token, breaking cross-function scope isolation (S1). CEL cannot express
+	// this (it needs the referenced Environment), so it lives here. Fails open
+	// on a lookup miss (env not yet created / transiently unreadable): the
+	// function-agnostic checks already passed, and a confirmed-Infinite env is
+	// the only rejection.
+	if new.Spec.State != nil {
+		if err := r.rejectStateOnInfiniteEnv(new); err != nil {
+			return v1.AggregateValidationErrors("Function", err)
+		}
+	}
+
 	// Field rules (executor enums, scale bounds, reference-name DNS, etc.) are
 	// enforced by the API server via CEL; the webhook runs only the non-CEL
 	// checks (pod-spec security) plus the cross-namespace checks above.
 	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("Function", err)
+	}
+	return nil
+}
+
+func (r *Function) rejectStateOnInfiniteEnv(fn *v1.Function) error {
+	if r.reader == nil {
+		return nil
+	}
+	envNS := fn.Spec.Environment.Namespace
+	if envNS == "" {
+		envNS = fn.Namespace
+	}
+	var env v1.Environment
+	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: fn.Spec.Environment.Name, Namespace: envNS}, &env); err != nil {
+		// Fail open for early UX feedback only: the authoritative enforcement is
+		// at specialize time (pkg/fetcher/config.stateKeyspace refuses to mint a
+		// token on an infinite env), which also covers what this admission check
+		// cannot — a function created before its environment (NotFound here), a
+		// transient lookup failure, or an environment mutated to infinite after
+		// functions opted in (no Function write to re-trigger this webhook).
+		if !apierrors.IsNotFound(err) {
+			r.Logger.V(1).Info("could not read environment to validate state opt-in; deferring to specialize-time enforcement", "function", fn.Name, "environment", fn.Spec.Environment.Name, "error", err)
+		}
+		return nil
+	}
+	if env.Spec.AllowedFunctionsPerContainer == v1.AllowedFunctionsPerContainerInfinite {
+		return fmt.Errorf("the state API (spec.state) is incompatible with environment %q (allowedFunctionsPerContainer: infinite): its pods serve multiple functions from one shared mount, which cannot deliver a per-function scoped state token", env.Name)
 	}
 	return nil
 }

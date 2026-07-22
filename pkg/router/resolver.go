@@ -63,8 +63,12 @@ const (
 // resolver serves the warm path from the EndpointSlice index when the cache
 // mode is on (the default).
 type AddressResolver interface {
-	// Resolve returns the service entry for fn.
-	Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error)
+	// Resolve returns the service entry for fn. stickyKey, when non-empty, is
+	// the RFC-0023 sticky routing key extracted from the request per the
+	// function's StickyConfig; the index-fed resolver ranks ready endpoints
+	// by rendezvous hash of it, and the executor-RPC resolver ignores it
+	// (the legacy data plane does not support stickiness).
+	Resolve(ctx context.Context, fn *fv1.Function, stickyKey string) (ResolvedEntry, error)
 	// Invalidate drops any cached state for fn's address. The transport calls
 	// it on dial failure of an index-admitted endpoint (hard -> immediate
 	// quarantine, soft -> strike-counted) and after the retry ladder for

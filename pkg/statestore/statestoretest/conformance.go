@@ -112,6 +112,70 @@ func runKV(t *testing.T, newCaps Factory) {
 		require.ErrorIs(t, err, statestore.ErrNotFound)
 	})
 
+	t.Run("CountedQuota", func(t *testing.T) {
+		// statestore.CountedKV (RFC-0023 S3): the MaxKeys budget check is
+		// atomic with the write. Every in-repo driver implements it.
+		kv := kvOrSkip(t, newCaps)
+		ck, ok := kv.(statestore.CountedKV)
+		require.True(t, ok, "driver must implement statestore.CountedKV")
+		ctx := t.Context()
+		const maxKeys = 2
+
+		// Fill the budget.
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q1", []byte("v"), statestore.SetOptions{}, maxKeys))
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q2", []byte("v"), statestore.SetOptions{}, maxKeys))
+		// A third live key is rejected; overwriting a live key is not a create.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{}, maxKeys), statestore.ErrQuotaExceeded)
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q1", []byte("v2"), statestore.SetOptions{}, maxKeys))
+		// CAS precedence: an impossible CAS is a version conflict even at the
+		// budget boundary, and it consumes nothing.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{IfVersion: new(int64(7))}, maxKeys), statestore.ErrVersionConflict)
+		// Deleting frees the slot.
+		require.NoError(t, kv.Delete(ctx, confScope, "q2", 0))
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q3", []byte("v"), statestore.SetOptions{}, maxKeys))
+		// Create-only semantics still hold through the counted path.
+		require.ErrorIs(t, ck.SetCounted(ctx, confScope, "q3", []byte("x"), statestore.SetOptions{IfVersion: new(int64(0))}, maxKeys), statestore.ErrVersionConflict)
+		// maxKeys <= 0 means no budget.
+		require.NoError(t, ck.SetCounted(ctx, confScope, "q4", []byte("v"), statestore.SetOptions{}, 0))
+	})
+
+	t.Run("CountedQuotaConcurrent", func(t *testing.T) {
+		// The direct Go analogue of quota.tla's QuotaNeverExceeded under
+		// AtomicQuota=TRUE, run against THIS driver (not just memory): N racing
+		// creators of distinct keys against MaxKeys=K must end with exactly K
+		// live keys. This is what proves the sqlstore state_quota row-lock (and
+		// the Postgres READ COMMITTED assumption behind it) actually serializes
+		// counted writers — a claim a sequential test cannot make.
+		kv := kvOrSkip(t, newCaps)
+		ck, ok := kv.(statestore.CountedKV)
+		require.True(t, ok)
+		ctx := t.Context()
+		const maxKeys, writers = 4, 16
+		scope := statestore.Scope{Namespace: "ns", Owner: "function/conc", Keyspace: "ks"}
+
+		var wg sync.WaitGroup
+		for i := range writers {
+			wg.Go(func() {
+				_ = ck.SetCounted(ctx, scope, fmt.Sprintf("k-%02d", i), []byte("v"), statestore.SetOptions{}, maxKeys)
+			})
+		}
+		wg.Wait()
+
+		var live int64
+		page := statestore.Page{}
+		for {
+			kp, err := kv.List(ctx, scope, "", page)
+			require.NoError(t, err)
+			live += int64(len(kp.Keys))
+			if kp.Next == "" {
+				break
+			}
+			page.Token = kp.Next
+		}
+		assert.LessOrEqual(t, live, int64(maxKeys), "S3: live keys exceed MaxKeys under contention")
+		assert.Equal(t, int64(maxKeys), live, "all slots should be fillable")
+	})
+
 	t.Run("ListPrefixPaging", func(t *testing.T) {
 		kv := kvOrSkip(t, newCaps)
 		ctx := t.Context()

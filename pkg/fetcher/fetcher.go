@@ -811,6 +811,16 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		return code, fmt.Errorf("error fetching secrets/configs: %w", err)
 	}
 
+	// RFC-0023: materialize the scoped state token BEFORE specializing, so
+	// the SDK can read it the moment user code starts. Derived pod-locally
+	// from the fetcher's own master secret — the secret and the token never
+	// ride the (pod-visible) specialize request.
+	if loadReq.StateKeyspace != "" {
+		if err := fetcher.writeStateTokenFile(loadReq); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error writing state token file: %w", err)
+		}
+	}
+
 	// Specialize the pod
 
 	var contentType string

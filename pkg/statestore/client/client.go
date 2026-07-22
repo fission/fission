@@ -172,6 +172,14 @@ func (c *Client) Set(ctx context.Context, s statestore.Scope, key string, val []
 	}, nil)
 }
 
+// SetCounted implements statestore.CountedKV by forwarding the budget to the
+// server, whose backing driver performs the atomic counted set.
+func (c *Client) SetCounted(ctx context.Context, s statestore.Scope, key string, val []byte, o statestore.SetOptions, maxKeys int64) error {
+	return c.post(ctx, httpapi.PathKVSet, httpapi.KVSetReq{
+		Scope: s, Key: key, Value: val, IfVersion: o.IfVersion, TTLNanos: o.TTL.Nanoseconds(), MaxKeys: maxKeys,
+	}, nil)
+}
+
 func (c *Client) Delete(ctx context.Context, s statestore.Scope, key string, ifVersion int64) error {
 	return c.post(ctx, httpapi.PathKVDelete, httpapi.KVDeleteReq{Scope: s, Key: key, IfVersion: ifVersion}, nil)
 }

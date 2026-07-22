@@ -151,6 +151,14 @@ func (ns *TestNamespace) CLICaptureStdoutWithEnv(t *testing.T, ctx context.Conte
 	return out
 }
 
+// CLICaptureStdoutWithEnvBestEffort is the error-returning variant of
+// CLICaptureStdoutWithEnv, for calls that are EXPECTED to fail (e.g. a state
+// write past its quota) where the test asserts on the returned error.
+func (ns *TestNamespace) CLICaptureStdoutWithEnvBestEffort(t *testing.T, ctx context.Context, env map[string]string, args ...string) (string, error) {
+	t.Helper()
+	return ns.cliCaptureStdoutBothWithEnv(t, ctx, env, args...)
+}
+
 func (ns *TestNamespace) cliCaptureStdoutBoth(t *testing.T, ctx context.Context, args ...string) (string, error) {
 	t.Helper()
 	return ns.cliCaptureStdoutBothWithEnv(t, ctx, nil, args...)

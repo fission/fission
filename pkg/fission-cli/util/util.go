@@ -239,6 +239,20 @@ func GetRouterInternalURL(ctx context.Context, cmdClient cmd.Client) (*url.URL, 
 	return url.Parse(fmt.Sprintf("%s%s", localhostURL, localPort))
 }
 
+// GetStateSvcURL locates the RFC-0023 statesvc head for the `fn state` admin
+// commands: env override first (hand-managed forwards / tests), else an
+// in-process port-forward to a statesvc pod.
+func GetStateSvcURL(ctx context.Context, cmdClient cmd.Client) (*url.URL, error) {
+	if u := os.Getenv("FISSION_STATESVC_URL"); u != "" {
+		return url.Parse(u)
+	}
+	localPort, err := SetupPortForwardToPort(ctx, cmdClient, GetFissionNamespace(), "application=fission-statesvc", svcinfo.PortStateSvc)
+	if err != nil {
+		return nil, err
+	}
+	return url.Parse(fmt.Sprintf("%s%s", localhostURL, localPort))
+}
+
 func GetResourceReqs(input cli.Input, resReqs *v1.ResourceRequirements) (*v1.ResourceRequirements, error) {
 	r := &v1.ResourceRequirements{}
 

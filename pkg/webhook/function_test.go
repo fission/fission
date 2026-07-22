@@ -11,7 +11,10 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 // makeValidFunction returns a Function object that satisfies v1.Function.Validate()
@@ -251,4 +254,55 @@ func TestWarningsSurfaceThroughValidate(t *testing.T) {
 			t.Fatalf("warnings must not be gated on Validator, got %v", warnings)
 		}
 	})
+}
+
+func TestFunctionWebhook_Validate_StateOnInfiniteEnv(t *testing.T) {
+	t.Parallel()
+
+	envInfinite := &v1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
+		Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerInfinite},
+	}
+	envSingle := &v1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
+		Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerSingle},
+	}
+	stateFn := func() *v1.Function {
+		fn := makeValidFunction("default", "default", "default")
+		fn.Spec.State = &v1.StateConfig{}
+		return fn
+	}
+
+	tests := []struct {
+		name    string
+		env     *v1.Environment // nil => reader returns NotFound
+		reader  bool            // false => nil reader (fail-open)
+		wantErr bool
+	}{
+		{"infinite env rejected", envInfinite, true, true},
+		{"single env allowed", envSingle, true, false},
+		{"env not found: fail open", nil, true, false},
+		{"no reader: fail open", nil, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b := fake.NewClientBuilder().WithScheme(scheme.Scheme)
+			if tc.env != nil {
+				b = b.WithObjects(tc.env)
+			}
+			r := &Function{}
+			if tc.reader {
+				r.reader = b.Build()
+			}
+			err := r.Validate(stateFn())
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "infinite") {
+					t.Fatalf("expected infinite-env rejection, got: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

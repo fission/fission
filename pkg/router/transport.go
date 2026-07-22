@@ -21,6 +21,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -149,6 +151,10 @@ func (roundTripper *RetryingRoundTripper) settle(release func(), tapURL *url.URL
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
+	// RFC-0023 sticky routing: extract the declared key once — it is stable
+	// across the retry loop, and every re-resolve should rank the same owner.
+	stickyKey := stickyKeyFromRequest(roundTripper.fn, req)
+
 	// set the timeout for transport context
 	addForwardedHostHeader(req)
 	transport, otelTransport := roundTripper.params.sharedTransport()
@@ -202,7 +208,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 			}
 			// get function service url from cache or executor
 			var entry ResolvedEntry
-			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn)
+			entry, err = roundTripper.resolver.Resolve(ctx, roundTripper.fn, stickyKey)
 			// Return any previously-admitted slot this re-resolve abandons. The
 			// per-resolve defers below cover the classic path at exit, but a
 			// streaming request defers its release to the handler, which only
@@ -594,4 +600,33 @@ func debugDumpResponse(logger logr.Logger, response *http.Response) {
 	} else {
 		logger.V(1).Info("round tripper response", "response", string(respMsg))
 	}
+}
+
+// stickyKeyFromRequest extracts the RFC-0023 sticky routing key declared by
+// the function's StickyConfig from req ("" = not sticky-declared or the key
+// is absent — the resolver then uses the default least-outstanding pick,
+// documented as a silent fallback, not an error). Also the metrics seam: a
+// declared-but-missing key is what fission_router_sticky_key_missing_total
+// surfaces to operators.
+func stickyKeyFromRequest(fn *fv1.Function, req *http.Request) string {
+	if fn == nil || fn.Spec.State == nil || fn.Spec.State.Sticky == nil {
+		return ""
+	}
+	var key string
+	switch fn.Spec.State.Sticky.Source {
+	case fv1.StickySourceHeader:
+		key = req.Header.Get(fn.Spec.State.Sticky.Name)
+	case fv1.StickySourceQueryParam:
+		key = req.URL.Query().Get(fn.Spec.State.Sticky.Name)
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("function_namespace", fn.Namespace),
+		attribute.String("function_name", fn.Name),
+	}
+	if key == "" {
+		stickyKeyMissing.Add(req.Context(), 1, metric.WithAttributes(attrs...))
+		return ""
+	}
+	stickyKeyRequests.Add(req.Context(), 1, metric.WithAttributes(attrs...))
+	return key
 }

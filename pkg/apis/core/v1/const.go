@@ -115,6 +115,21 @@ const (
 	ExecutorTypeContainer ExecutorType = "container"
 )
 
+// RFC-0023 keyed-state defaults and sticky-routing sources.
+const (
+	StickySourceHeader     StickySource = "header"
+	StickySourceQueryParam StickySource = "queryparam"
+
+	// DefaultStateMaxValueBytes caps a single state value when
+	// StateConfig.MaxValueBytes is unset (256KiB; blobs belong in object
+	// storage).
+	DefaultStateMaxValueBytes int64 = 262144
+
+	// DefaultStateMaxKeys caps a keyspace's live keys when
+	// StateConfig.MaxKeys is unset.
+	DefaultStateMaxKeys int64 = 10000
+)
+
 const (
 	StrategyTypeExecution = "execution"
 )

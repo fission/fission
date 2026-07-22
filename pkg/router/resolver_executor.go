@@ -47,8 +47,10 @@ type svcEntryRecord struct {
 }
 
 // Resolve implements AddressResolver with the historical getServiceEntry
-// semantics.
-func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function) (ResolvedEntry, error) {
+// semantics. The sticky key is ignored: the executor-RPC data plane has no
+// endpoint choice to make (documented — legacy mode does not support
+// stickiness).
+func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ string) (ResolvedEntry, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypePoolmgr {
 		svcURL, err := r.fromExecutor(ctx, fn)
 		return ResolvedEntry{SvcURL: svcURL}, err

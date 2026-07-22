@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if and .Values.networkPolicy.enabled .Values.functionState.enabled }}
+# Function pods are statesvc's clients — they live OUTSIDE the release
+# namespace, so the from-selector pairs an any-namespace namespaceSelector
+# with the executor-managed executorType pod label (poolmgr/newdeploy pods
+# carry it; container-executor functions cannot opt into state). Requests are
+# authenticated per keyspace above this layer; the policy just keeps the port
+# off everything that is not a function pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: statesvc
+  labels:
+    svc: statesvc
+    application: fission-statesvc
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  podSelector:
+    matchLabels:
+      svc: statesvc
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchExpressions:
+              - key: executorType
+                operator: In
+                values: ["poolmgr", "newdeploy"]
+      ports:
+        - port: {{ include "fission.statesvcPort" . }}
+          protocol: TCP
+{{- end }}

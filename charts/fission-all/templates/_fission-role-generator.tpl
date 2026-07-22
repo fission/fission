@@ -26,6 +26,9 @@ metadata:
 {{- if eq "workflow" .component }}
 {{- include "workflow-rules" . }}
 {{- end }}
+{{- if eq "statesvc" .component }}
+{{- include "statesvc-rules" . }}
+{{- end }}
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}
 {{- end }}
@@ -99,6 +102,9 @@ metadata:
 {{- end }}
 {{- if eq "workflow" .component }}
 {{- include "workflow-rules" . }}
+{{- end }}
+{{- if eq "statesvc" .component }}
+{{- include "statesvc-rules" . }}
 {{- end }}
 {{- if eq "kafka" .component }}
 {{- include "kafka-rules" . }}

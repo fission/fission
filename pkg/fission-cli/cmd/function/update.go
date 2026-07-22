@@ -122,6 +122,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.Tool = toolConfig
 	}
 
+	// --state toggles the keyed-state config; when off it clears it (opt-out
+	// retains the keyspace data — see statesvc's reconciler). The other
+	// --state-* flags merge onto the existing config (only set fields change).
+	if input.IsSet(flagkey.FnState) {
+		function.Spec.State = getStateConfig(input, function.Spec.State)
+	}
+
 	// The --async-* flags merge onto the existing InvocationConfig (only set fields
 	// change); an empty --async-on-success/--async-on-failure (or -topic variant)
 	// clears that destination.

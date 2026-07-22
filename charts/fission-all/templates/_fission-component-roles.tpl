@@ -104,6 +104,24 @@ rules:
   - update
   - patch
 {{- end }}
+{{- define "statesvc-rules" }}
+rules:
+# statesvc watches Functions to index StateConfigs (quota/keyspace resolution,
+# token defense-in-depth) and updates ONLY metadata.finalizers for the
+# fission.io/state-cleanup keyspace-lifecycle finalizer. It never mutates
+# function specs and touches no other resource.
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+{{- end }}
+
 {{- define "workflow-rules" }}
 rules:
 # The workflow engine reads Workflows (spec snapshots) and Functions (the

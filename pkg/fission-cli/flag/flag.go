@@ -153,6 +153,22 @@ var (
 	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
 	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}
 
+	// RFC-0023 keyed-state config (fn create/update).
+	FnState              = Flag{Type: Bool, Name: flagkey.FnState, Usage: "Opt the function into the keyed-state API (RFC-0023)"}
+	FnStateKeyspace      = Flag{Type: String, Name: flagkey.FnStateKeyspace, Usage: "State keyspace name (defaults to the function name; explicit so a rename keeps the data)"}
+	FnStateMaxKeys       = Flag{Type: Int, Name: flagkey.FnStateMaxKeys, Usage: "Max live keys in the keyspace (0 = platform default)"}
+	FnStateMaxValueBytes = Flag{Type: Int, Name: flagkey.FnStateMaxValueBytes, Usage: "Max size of one state value in bytes (0 = platform default)"}
+	FnStateTTL           = Flag{Type: Duration, Name: flagkey.FnStateTTL, Usage: "Default TTL applied to state writes without an explicit TTL (0 = keys do not expire)"}
+	FnStateStickySource  = Flag{Type: String, Name: flagkey.FnStateStickySource, Usage: "Sticky routing key source: header or queryparam"}
+	FnStateStickyName    = Flag{Type: String, Name: flagkey.FnStateStickyName, Usage: "Header or query-parameter name holding the sticky routing key"}
+
+	// RFC-0023 `fission fn state` admin flags.
+	StateKey       = Flag{Type: String, Name: flagkey.StateKey, Usage: "State key to operate on"}
+	StateValue     = Flag{Type: String, Name: flagkey.StateValue, Usage: "Value to store"}
+	StatePrefix    = Flag{Type: String, Name: flagkey.StatePrefix, Usage: "Key prefix to list"}
+	StateTTL       = Flag{Type: Duration, Name: flagkey.StateTTL, Usage: "Time-to-live for the written key (e.g. 300s, 1h); 0 uses the keyspace default"}
+	StateIfVersion = Flag{Type: Int, Name: flagkey.StateIfVersion, Usage: "Compare-and-swap version precondition (0 = create-only for set; unset = unconditional)"}
+
 	// RFC-0024 async invocation config (fn create/update).
 	FnAsyncMaxAttempts = Flag{Type: Int, Name: flagkey.FnAsyncMaxAttempts, Usage: "Async delivery attempt budget before dead-lettering (RFC-0024)"}
 	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered (RFC-0024)"}

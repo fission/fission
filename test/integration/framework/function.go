@@ -92,6 +92,17 @@ type FunctionOptions struct {
 	// function pods (CLI: `--configmap` / `--secret`, both repeatable).
 	ConfigMaps []string
 	Secrets    []string
+	// State, when true, opts the function into the RFC-0023 keyed-state API
+	// (CLI: `--state`), with the optional knobs below.
+	State bool
+	// StateKeyspace passes `--state-keyspace` (default: the function name).
+	StateKeyspace string
+	// StateMaxKeys passes `--state-max-keys` when > 0.
+	StateMaxKeys int
+	// StateStickySource/StateStickyName pass `--state-sticky-source` /
+	// `--state-sticky-name` (sticky routing, RFC-0023 phase 3).
+	StateStickySource string
+	StateStickyName   string
 }
 
 // CreateFunction creates a Function via the CLI from either Code or Src. The
@@ -153,6 +164,21 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 		}
 		if opts.StreamingMaxDuration > 0 {
 			args = append(args, "--streamingmaxduration", strconv.Itoa(opts.StreamingMaxDuration))
+		}
+	}
+	if opts.State {
+		args = append(args, "--state")
+		if opts.StateKeyspace != "" {
+			args = append(args, "--state-keyspace", opts.StateKeyspace)
+		}
+		if opts.StateMaxKeys > 0 {
+			args = append(args, "--state-max-keys", strconv.Itoa(opts.StateMaxKeys))
+		}
+		if opts.StateStickySource != "" {
+			args = append(args, "--state-sticky-source", opts.StateStickySource)
+		}
+		if opts.StateStickyName != "" {
+			args = append(args, "--state-sticky-name", opts.StateStickyName)
 		}
 	}
 	if opts.ExposeAsMCP {

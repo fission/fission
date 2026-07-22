@@ -211,8 +211,31 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 			FunctionName:     fn.Spec.Package.FunctionName,
 			FunctionMetadata: &fn.ObjectMeta,
 			EnvVersion:       env.Spec.Version,
+			StateKeyspace:    stateKeyspace(fn, env),
 		},
 	}
+}
+
+// stateKeyspace resolves the RFC-0023 keyspace for a stateful function
+// ("" = no token is delivered). Only this non-secret name travels in the
+// specialize request; the fetcher derives the actual token pod-locally.
+//
+// This is the single specialize-time enforcement point for the "no state on
+// an allowedFunctionsPerContainer: infinite environment" invariant (S1): such
+// pods serve many functions from one shared mount, so a single per-pod token
+// file cannot isolate them. The webhook rejects the combination at admission,
+// but this closes the three cases it cannot (a function created before its
+// environment, a transient admission lookup failure, and an environment
+// mutated to infinite after functions opted in) by refusing to mint the
+// token — state calls then fail closed for want of a token, never leak.
+func stateKeyspace(fn *fv1.Function, env *fv1.Environment) string {
+	if fn.Spec.State == nil {
+		return ""
+	}
+	if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
+		return ""
+	}
+	return fn.Spec.State.EffectiveKeyspace(fn.Name)
 }
 
 // AddFetcherToPodSpec adds the fetcher sidecar to podSpec. namespace is where the
