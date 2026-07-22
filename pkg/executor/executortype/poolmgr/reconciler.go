@@ -30,7 +30,7 @@ const envResyncPeriod = 30 * time.Minute
 // funcManager is the subset of *GenericPoolManager the Function handlers drive.
 // An interface so the reconcile routing is unit-testable with a fake.
 type funcManager interface {
-	markFuncDeleted(crd.CacheKeyURG)
+	markFuncDeleted(crd.CacheKeyUG)
 	refreshFuncPods(ctx context.Context, fn *fv1.Function) error
 	createIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error
 	deleteIstioServiceForFunction(ctx context.Context, fn *fv1.Function) error
@@ -166,7 +166,7 @@ func reconcilePoolmgrFunc(ctx context.Context, mgr funcManager, enableIstio bool
 
 // cleanupPoolmgrFunc holds the teardown routing, split out for unit testing.
 func cleanupPoolmgrFunc(ctx context.Context, mgr funcManager, enableIstio, functionServices bool, fn *fv1.Function) error {
-	mgr.markFuncDeleted(crd.CacheKeyURGFromMeta(&fn.ObjectMeta))
+	mgr.markFuncDeleted(crd.CacheKeyUGFromMeta(&fn.ObjectMeta))
 	if enableIstio {
 		return mgr.deleteIstioServiceForFunction(ctx, fn)
 	}

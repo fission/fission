@@ -49,7 +49,7 @@ type (
 	// or the channel round-trip on the tap/specialization hot path.
 	PoolCache struct {
 		lock   sync.Mutex
-		cache  map[crd.CacheKeyURG]*funcSvcGroup
+		cache  map[crd.CacheKeyUG]*funcSvcGroup
 		logger logr.Logger
 	}
 
@@ -62,7 +62,7 @@ type (
 // NewPoolCache create a Cache object
 func NewPoolCache(logger logr.Logger) *PoolCache {
 	return &PoolCache{
-		cache:  make(map[crd.CacheKeyURG]*funcSvcGroup),
+		cache:  make(map[crd.CacheKeyUG]*funcSvcGroup),
 		logger: logger,
 	}
 }
@@ -74,7 +74,7 @@ func NewFuncSvcGroup() *funcSvcGroup {
 	}
 }
 
-func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
+func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyUG) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -90,7 +90,7 @@ func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyURG) {
 // request is parked for capacity it returns a non-nil svcWait; the caller waits
 // on its channel *after* the lock is released (the matching setValue send must
 // be able to acquire the lock).
-func (c *PoolCache) getSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, *svcWait, error) {
+func (c *PoolCache) getSvcValue(ctx context.Context, function crd.CacheKeyUG, requestsPerPod int, concurrency int) (*FuncSvc, *svcWait, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -145,7 +145,7 @@ func (c *PoolCache) getSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 }
 
 // GetSvcValue returns a function service with status in Active else return error
-func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
+func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyUG, requestsPerPod int, concurrency int) (*FuncSvc, error) {
 	value, svcWaitValue, err := c.getSvcValue(ctx, function, requestsPerPod, concurrency)
 	if svcWaitValue != nil {
 		select {
@@ -175,7 +175,7 @@ func (c *PoolCache) GetSvcValue(ctx context.Context, function crd.CacheKeyURG, r
 // Exceeding either bound returns ErrorTooManyRequests, which the router
 // relays to the client as a fast 429. Sizing rationale lives on
 // poolmgr.defaultMaxPendingSpecializations.
-func (c *PoolCache) ReserveCapacity(function crd.CacheKeyURG, concurrency, maxPending int) error {
+func (c *PoolCache) ReserveCapacity(function crd.CacheKeyUG, concurrency, maxPending int) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -266,7 +266,7 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 }
 
 // SetSvcValue marks the value at key [function][address] as active(begin used)
-func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
+func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyUG, address string, value *FuncSvc, cpuLimit resource.Quantity, requestsPerPod, svcsRetain int) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -316,7 +316,7 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyURG, a
 }
 
 // SetCPUUtilization updates/sets the CPU utilization limit for the pod
-func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyURG, address string, cpuUsage resource.Quantity) {
+func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyUG, address string, cpuUsage resource.Quantity) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -329,7 +329,7 @@ func (c *PoolCache) SetCPUUtilization(function crd.CacheKeyURG, address string, 
 }
 
 // MarkAvailable marks the value at key [function][address] as available
-func (c *PoolCache) MarkAvailable(function crd.CacheKeyURG, address string) {
+func (c *PoolCache) MarkAvailable(function crd.CacheKeyUG, address string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -348,7 +348,7 @@ func (c *PoolCache) MarkAvailable(function crd.CacheKeyURG, address string) {
 }
 
 // DeleteValue deletes the value at key composed of [function][address]
-func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyURG, address string) error {
+func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyUG, address string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -362,7 +362,7 @@ func (c *PoolCache) DeleteValue(ctx context.Context, function crd.CacheKeyURG, a
 }
 
 // MarkSpecializationFailure reduces the svcWaiting count
-func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyURG) {
+func (c *PoolCache) MarkSpecializationFailure(function crd.CacheKeyUG) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

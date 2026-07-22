@@ -363,7 +363,7 @@ func maxPendingSpecializationsFromEnv(logger logr.Logger) int {
 // by the specialization's setValue on success or MarkSpecializationFailure on
 // failure. Rejections surface to the router (and client) as 429s.
 func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *metav1.ObjectMeta, concurrency int) error {
-	err := gpm.fsCache.ReserveCapacity(crd.CacheKeyURGFromMeta(fnMeta), concurrency, gpm.maxPendingSpecializations)
+	err := gpm.fsCache.ReserveCapacity(crd.CacheKeyUGFromMeta(fnMeta), concurrency, gpm.maxPendingSpecializations)
 	if err != nil {
 		metrics.RecordSpecializationRejected(ctx, fnMeta.Name, fnMeta.Namespace)
 	}
@@ -371,7 +371,7 @@ func (gpm *GenericPoolManager) ReserveCapacity(ctx context.Context, fnMeta *meta
 }
 
 func (gpm *GenericPoolManager) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
-	key := crd.CacheKeyURGFromMeta(fnMeta)
+	key := crd.CacheKeyUGFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "UnTapService",
 		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())},
 		attribute.KeyValue{Key: "svcHost", Value: attribute.StringValue(svcHost)})
@@ -389,7 +389,7 @@ func (gpm *GenericPoolManager) TapService(ctx context.Context, svcHost string) e
 }
 
 func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
-	key := crd.CacheKeyURGFromMeta(fnMeta)
+	key := crd.CacheKeyUGFromMeta(fnMeta)
 	otelUtils.SpanTrackEvent(ctx, "MarkSpecializationFailure",
 		attribute.KeyValue{Key: "key", Value: attribute.StringValue(key.String())})
 	// Mark the active cold-start span errored so a failed specialization shows
@@ -874,7 +874,7 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // markFuncDeleted marks a function's pool service entries deleted in the fsCache
 // so the idle reaper recycles its specialized pods. Driven by the Function
 // reconciler on delete.
-func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyURG) {
+func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyUG) {
 	gpm.fsCache.MarkFuncDeleted(key)
 	gpm.fnSvcEnsured.Delete(key.UID)
 }

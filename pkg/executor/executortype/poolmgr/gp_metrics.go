@@ -52,7 +52,7 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 			}
 			if value, ok := gp.podFSVCMap.Load(val.Name); ok {
 				if valArray, ok1 := value.([]any); ok1 {
-					function, ok2 := valArray[0].(crd.CacheKeyURG)
+					function, ok2 := valArray[0].(crd.CacheKeyUG)
 					if !ok2 {
 						gp.logger.Error(nil, "failed to convert function to type", "function", function)
 						return

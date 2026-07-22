@@ -200,7 +200,7 @@ const (
 	// FUNCTION_GENERATION labels a specialized pool pod with the Function
 	// generation it was specialized from. The per-function Service selector
 	// includes it so stale-generation pods drop out of the EndpointSlices on a
-	// function update (the executor-side equivalent is CacheKeyURG keying).
+	// function update (the executor-side equivalent is CacheKeyUG keying).
 	FUNCTION_GENERATION = "fission.io/function-generation"
 	// SERVED_LABEL gates a specialized pod's membership in its function
 	// Service: pool pods pass readiness probes before specialization, so the

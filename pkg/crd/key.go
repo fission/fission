@@ -20,14 +20,13 @@ func (ck CacheKeyUR) String() string {
 	return fmt.Sprintf("%v_%v", ck.UID, ck.ResourceVersion)
 }
 
-type CacheKeyURG struct {
-	UID             types.UID
-	ResourceVersion string
-	Generation      int64
+type CacheKeyUG struct {
+	UID        types.UID
+	Generation int64
 }
 
-func (ck CacheKeyURG) String() string {
-	return fmt.Sprintf("%v_%v_%v", ck.UID, ck.ResourceVersion, ck.Generation)
+func (ck CacheKeyUG) String() string {
+	return fmt.Sprintf("%v_%v", ck.UID, ck.Generation)
 }
 
 // CacheKeyUIDFromMeta create a key that uniquely identifies the
@@ -57,15 +56,16 @@ func CacheKeyURFromObject(obj metav1.Object) CacheKeyUR {
 	}
 }
 
-// CacheKeyURGFromMeta : Given metadata, create a key that uniquely identifies the contents
-// of the object. Since resourceVersion changes on every update and
-// UIDs are unique, uid+resourceVersion identifies the
-// content.
-// Generation is also included to identify latest generation of the object.
-func CacheKeyURGFromMeta(metadata *metav1.ObjectMeta) CacheKeyURG {
-	return CacheKeyURG{
-		UID:             metadata.UID,
-		ResourceVersion: metadata.ResourceVersion,
-		Generation:      metadata.Generation,
+// CacheKeyUGFromMeta creates a cache key that uniquely identifies the
+// function's content version. UID is stable for the function's
+// lifetime; Generation increments on spec changes. ResourceVersion is
+// intentionally excluded: it changes on status updates (not just spec
+// changes), and the router's informer cache may lag the executor's
+// view, causing UnTapService to miss the cache entry and leak
+// activeRequests.
+func CacheKeyUGFromMeta(metadata *metav1.ObjectMeta) CacheKeyUG {
+	return CacheKeyUG{
+		UID:        metadata.UID,
+		Generation: metadata.Generation,
 	}
 }
