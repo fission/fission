@@ -48,7 +48,7 @@ func TestFunctionVersionTypesRegistered(t *testing.T) {
 
 // sample64 is a syntactically valid 64-hex-char digest suffix reused across
 // test cases that need `sha256:<64 hex>`.
-const sample64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
+const sample64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 // TestFunctionVersionDeepCopy proves FunctionVersion/FunctionAlias (and their
 // List types) round-trip through DeepCopy with independent backing storage —
