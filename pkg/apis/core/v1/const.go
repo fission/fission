@@ -115,6 +115,12 @@ const (
 	ExecutorTypeContainer ExecutorType = "container"
 )
 
+// RFC-0025 function versioning modes.
+const (
+	VersioningModeAuto   VersioningMode = "auto"
+	VersioningModeManual VersioningMode = "manual"
+)
+
 // RFC-0023 keyed-state defaults and sticky-routing sources.
 const (
 	StickySourceHeader     StickySource = "header"
@@ -246,6 +252,14 @@ const (
 	// See Function.StrictConcurrencyEnforcement.
 	ConcurrencyEnforcementAnnotation = "fission.io/concurrency-enforcement"
 	ConcurrencyEnforcementStrict     = "strict"
+
+	// RFC-0025 function version/alias ownership labels. VersionFunctionNameLabel
+	// and VersionFunctionUIDLabel are stamped on every FunctionVersion and
+	// FunctionAlias by the version-control loop (and by `alias create` /
+	// `spec apply`'s create closure), letting controllers and CLI list/filter
+	// a Function's versions and aliases without an owning-reference lookup.
+	VersionFunctionNameLabel = "fission.io/function-name"
+	VersionFunctionUIDLabel  = "fission.io/function-uid"
 )
 
 const (

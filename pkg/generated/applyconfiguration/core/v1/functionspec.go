@@ -91,6 +91,11 @@ type FunctionSpecApplyConfiguration struct {
 	// backward compatible. Only valid when
 	// InvokeStrategy.ExecutionStrategy.ExecutorType is poolmgr.
 	ProvisionedConcurrency *ProvisionedConcurrencyConfigApplyConfiguration `json:"provisionedConcurrency,omitempty"`
+	// Versioning, when non-nil, opts this function into RFC-0025 immutable
+	// version snapshots and named aliases. Presence is the on switch (like
+	// Streaming and Tool): nil (the default) means exactly today's mutable
+	// in-place behavior. Additive and backward compatible.
+	Versioning *VersioningConfigApplyConfiguration `json:"versioning,omitempty"`
 	// Podspec specifies podspec to use for executor type container based functions
 	// Different arguments mentioned for container based function are populated inside a pod.
 	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
@@ -245,6 +250,14 @@ func (b *FunctionSpecApplyConfiguration) WithRetainPods(value int) *FunctionSpec
 // If called multiple times, the ProvisionedConcurrency field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithProvisionedConcurrency(value *ProvisionedConcurrencyConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
 	b.ProvisionedConcurrency = value
+	return b
+}
+
+// WithVersioning sets the Versioning field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Versioning field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithVersioning(value *VersioningConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.Versioning = value
 	return b
 }
 

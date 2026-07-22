@@ -14,6 +14,10 @@ type FissionTenantExpansion interface{}
 
 type FunctionExpansion interface{}
 
+type FunctionAliasExpansion interface{}
+
+type FunctionVersionExpansion interface{}
+
 type HTTPTriggerExpansion interface{}
 
 type KubernetesWatchTriggerExpansion interface{}

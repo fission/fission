@@ -83,6 +83,15 @@ const (
 	// workflows.enabled, so a run created with the head disabled must be
 	// distinguishable from one that is merely queued.
 	WorkflowRunConditionAccepted = "Accepted"
+
+	// FunctionAlias conditions (RFC-0025). Resolved reports whether the
+	// alias's spec target (Version or PackageDigest) currently resolves to a
+	// FunctionVersion: True with reason FunctionAliasReasonResolved once
+	// Status.ResolvedVersion is populated; False with reason
+	// FunctionAliasReasonVersionNotFound (name-pinned target missing) or
+	// FunctionAliasReasonDigestUnmatched (digest-pinned target not yet — or
+	// no longer — recorded by any FunctionVersion) otherwise.
+	FunctionAliasConditionResolved = "Resolved"
 )
 
 // Standard Reason values written alongside each condition. PascalCase per
@@ -161,4 +170,9 @@ const (
 	// WorkflowRun condition reasons
 	WorkflowRunReasonAccepted     = "AcceptedByController"
 	WorkflowRunReasonNoController = "NoWorkflowController"
+
+	// FunctionAlias condition reasons (RFC-0025)
+	FunctionAliasReasonResolved        = "Resolved"
+	FunctionAliasReasonVersionNotFound = "VersionNotFound"
+	FunctionAliasReasonDigestUnmatched = "DigestUnmatched"
 )

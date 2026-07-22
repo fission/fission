@@ -9721,6 +9721,30 @@ spec:
                     pattern: ^[a-zA-Z0-9_-]{1,64}$
                     type: string
                 type: object
+              versioning:
+                description: |-
+                  Versioning, when non-nil, opts this function into RFC-0025 immutable
+                  version snapshots and named aliases. Presence is the on switch (like
+                  Streaming and Tool): nil (the default) means exactly today's mutable
+                  in-place behavior. Additive and backward compatible.
+                properties:
+                  mode:
+                    default: auto
+                    description: |-
+                      Mode auto (default) mints a version on every runtime-affecting
+                      update once the referenced package build succeeds; manual mints
+                      only on explicit `fission fn publish`.
+                    enum:
+                    - auto
+                    - manual
+                    type: string
+                  retain:
+                    description: |-
+                      Retain bounds unaliased version history per function (GC floor 1).
+                      Defaults to 10. Alias-referenced versions are never GC'd.
+                    minimum: 1
+                    type: integer
+                type: object
             required:
             - InvokeStrategy
             - environment
