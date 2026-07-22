@@ -268,15 +268,25 @@ func versionOwnerRef(v *fv1.FunctionVersion) metav1.OwnerReference {
 // decide whether it is a legacy version: SourcePackageAnnotation is only
 // ever set on the legacy path, so its presence is definitive regardless of
 // whether the live package has since gained an OCI digest.
+//
+// When a Package is already present at the snapshot name, its ownership is
+// re-validated (ownedByVersion) on every call, not just the first: without
+// this, a foreign Package planted at the name after a fresh-create collision
+// error (which leaves the FunctionVersion behind) would be treated as
+// healthy by every subsequent idempotent Publish, silently re-opening the
+// same collision the fresh-create path rejects.
 func selfHealSnapshotPackage(ctx context.Context, cl versioned.Interface, fn *fv1.Function, version *fv1.FunctionVersion, pkg *fv1.Package) error {
 	if _, ok := version.Annotations[SourcePackageAnnotation]; !ok {
 		return nil
 	}
 
 	snapPkgName := version.Spec.Snapshot.Package.PackageRef.Name
-	_, err := cl.CoreV1().Packages(fn.Namespace).Get(ctx, snapPkgName, metav1.GetOptions{})
+	existing, err := cl.CoreV1().Packages(fn.Namespace).Get(ctx, snapPkgName, metav1.GetOptions{})
 	switch {
 	case err == nil:
+		if !ownedByVersion(existing, version) {
+			return fmt.Errorf("versioning: a name-collision Package occupies the snapshot name %s/%s for version %s (not owned by it); remove the conflicting Package manually before publishing", fn.Namespace, snapPkgName, version.Name)
+		}
 		return nil
 	case apierrors.IsNotFound(err):
 		_, err := ensureSnapshotPackage(ctx, cl, fn, version, pkg)
