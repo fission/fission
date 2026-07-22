@@ -299,6 +299,9 @@ func TestApplyFunctionAliasesCreateSetsOwnerRefWhenFunctionExists(t *testing.T) 
 	// The generic reconciler stamps the deployment-UID annotation on every
 	// spec-applied object; that's what makes the alias prunable later.
 	assert.Equal(t, testDeployUID, got.Annotations[FISSION_DEPLOYMENT_UID_KEY])
+	// applyFunctionAliases stamps the function-name label on the desired
+	// object before create, mirroring `fission alias create`.
+	assert.Equal(t, "hello", got.Labels[fv1.VersionFunctionNameLabel])
 }
 
 // TestApplyFunctionAliasesCreateWithoutFunctionIsUnowned covers the
@@ -372,6 +375,11 @@ func TestApplyFunctionAliasesUpdateInPlacePreservesStatus(t *testing.T) {
 	assert.Equal(t, types.UID("alias-uid-1"), got.UID, "identity must survive: never delete-recreate")
 	require.Len(t, got.OwnerReferences, 1, "ownerRef set at create time must survive an unrelated spec update")
 	assert.Equal(t, "hello", got.OwnerReferences[0].Name)
+	// The function-name label is stamped on the desired object every apply,
+	// so it comes through *cur = *d on the update-in-place path too, and
+	// stays stable across the resulting no-op re-apply (both sides of
+	// isObjectMetaEqual now see it).
+	assert.Equal(t, "hello", got.Labels[fv1.VersionFunctionNameLabel])
 }
 
 // TestApplyFunctionAliasesPruneOnlyWithDeploymentUID proves --delete only

@@ -66,33 +66,32 @@ func sortedBySequence(items []fv1.FunctionVersion) []fv1.FunctionVersion {
 	return out
 }
 
-// printVersionsList renders versions per format. json/yaml marshal the full
-// slice (untruncated digests); the table format truncates DIGEST to
-// digestTableWidth characters so the row fits a terminal, wide prints it in
-// full.
+// printVersionsList renders versions per format, in the shared shape
+// util.PrintObjects gives every list command (see functionalias/list.go).
+// json/yaml marshal the full slice (untruncated digests); the table format
+// truncates DIGEST to digestTableWidth characters so the row fits a
+// terminal, wide prints it in full. There are no wide-only extra columns
+// here, so row itself closes over truncate (fixed for the whole call, from
+// format) rather than the headers/wideExtra split list.go uses for its
+// NAMESPACE/AGE columns.
 func printVersionsList(versions []fv1.FunctionVersion, format util.OutputFormat) error {
-	if handled, err := util.PrintStructured(format, versions); err != nil || handled {
-		return err
-	}
-
 	truncate := format != util.OutputWide
 	headers := []string{"NAME", "SEQUENCE", "DIGEST", "PUBLISHED", "AGE"}
-	rows := make([][]string, 0, len(versions))
-	for _, v := range versions {
+	row := func(v fv1.FunctionVersion) []string {
 		digest := v.Spec.PackageDigest
 		if truncate {
 			digest = truncateDigest(digest)
 		}
-		rows = append(rows, []string{
+		return []string{
 			v.Name,
 			fmt.Sprintf("%d", v.Spec.Sequence),
 			digest,
 			v.Spec.PublishedAt.Format(time.RFC3339),
 			util.AgeOf(v.CreationTimestamp),
-		})
+		}
 	}
-	util.PrintTable(headers, rows)
-	return nil
+	wideRow := func(v fv1.FunctionVersion) []string { return nil }
+	return util.PrintObjects(format, versions, headers, row, nil, wideRow)
 }
 
 // truncateDigest shortens d to at most digestTableWidth characters for the

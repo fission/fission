@@ -176,12 +176,12 @@ func TestHTTPTriggerCorsConfig_Validate(t *testing.T) {
 	}
 }
 
-// versionSample64 is a genuinely 64-hex-char digest suffix (unlike the
-// same-purpose sample64 in functionversion_types_test.go, which is 62
-// characters and so never exercises the sha256 Pattern this package's
-// validation now enforces on FunctionAliasSpec.PackageDigest). That file
-// lives in package v1_test, so its unexported const is not visible here
-// regardless.
+// versionSample64 duplicates the same-purpose sample64 in
+// functionversion_types_test.go (both are genuinely 64-hex-char digest
+// suffixes). The duplication is necessary, not accidental: that file lives in
+// package v1_test (external test package), so its unexported const is not
+// visible from this file's package v1 (internal test package) regardless of
+// value.
 const versionSample64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" // 64 hex chars, see comment above
 
 func TestVersioningConfigValidate(t *testing.T) {

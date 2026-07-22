@@ -839,7 +839,24 @@ func applyFunctionAliases(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return fclient.FissionClientSet.CoreV1().Functions(ns)
 	}
 	return applyResourceType(ctx, fr, resourceOps[fv1.FunctionAlias, *fv1.FunctionAlias]{
-		items: func(fr *FissionResources) []fv1.FunctionAlias { return fr.FunctionAliases },
+		items: func(fr *FissionResources) []fv1.FunctionAlias {
+			// Stamp the function-name label on every desired alias (mirrors
+			// `fission alias create`, functionalias/create.go) so both sides
+			// of the equality check in `equal` below see it, and it survives
+			// update-in-place. Only the name label: it is deterministic from
+			// spec.FunctionName and always known ahead of the target
+			// Function existing, unlike the UID label FunctionVersion carries
+			// (see const.go's VersionFunctionNameLabel doc).
+			items := make([]fv1.FunctionAlias, len(fr.FunctionAliases))
+			for i, a := range fr.FunctionAliases {
+				if a.Labels == nil {
+					a.Labels = make(map[string]string, 1)
+				}
+				a.Labels[fv1.VersionFunctionNameLabel] = a.Spec.FunctionName
+				items[i] = a
+			}
+			return items
+		},
 		list: func(ctx context.Context) ([]fv1.FunctionAlias, error) {
 			l, err := aliases(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 			if err != nil {
@@ -860,12 +877,7 @@ func applyFunctionAliases(ctx context.Context, fclient cmd.Client, fr *FissionRe
 			// consistency); the webhook does not require an ownerRef, so create
 			// unowned in that case rather than failing the apply.
 			if fn, err := functions(a.Namespace).Get(ctx, a.Spec.FunctionName, metav1.GetOptions{}); err == nil {
-				a.OwnerReferences = []metav1.OwnerReference{{
-					APIVersion: fv1.SchemeGroupVersion.String(),
-					Kind:       "Function",
-					Name:       fn.Name,
-					UID:        fn.UID,
-				}}
+				a.OwnerReferences = []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)}
 			}
 			n, err := aliases(a.Namespace).Create(ctx, a, metav1.CreateOptions{})
 			if err != nil {
@@ -888,13 +900,10 @@ func applyFunctionAliases(ctx context.Context, fclient cmd.Client, fr *FissionRe
 				// there), but the fake clientset used in tests does not
 				// enforce that either, so preserve it too — this is the
 				// concrete proof that update is in place, not delete-recreate.
-				status := cur.Status
-				ownerRefs := cur.OwnerReferences
-				uid := cur.UID
+				d.Status = cur.Status
+				d.OwnerReferences = cur.OwnerReferences
+				d.UID = cur.UID
 				*cur = *d
-				cur.Status = status
-				cur.OwnerReferences = ownerRefs
-				cur.UID = uid
 			})
 			if err != nil {
 				return nil, err
