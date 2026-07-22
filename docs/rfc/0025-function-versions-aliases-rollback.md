@@ -1,6 +1,6 @@
 # RFC-0025: Function versions, aliases, and instant rollback
 
-- Status: Proposed (revised 2026-07-19, pre-implementation: design review against the shipped `pkg/router/routetable`, `functionReferenceResolver`, `pkg/executor/fscache`, `pkg/canaryconfigmgr`, and `pkg/webhook` code — the resolver no longer caches, the warm-pool reaper drains non-latest generations, the zero-drift "CI bar" is documentation-only, and a TLA+-checked alias/GC-race spec)
+- Status: Proposed (revised 2026-07-19, pre-implementation: design review against the shipped `pkg/router/routetable`, `functionReferenceResolver`, `pkg/executor/fscache`, `pkg/canaryconfigmgr`, and `pkg/webhook` code — the resolver no longer caches, the warm-pool reaper drains non-latest generations, the zero-drift "CI bar" is documentation-only, and a TLA+-checked alias/GC-race spec; re-revised 2026-07-22 after RFC-0023 stateful functions (#3593) and the `CacheKeyUG` re-key (#3596) merged — adds the shipped-feature interaction matrix (name-scoped keyed state, sticky-vs-weighted pick, version-blind async/workflow targets), corrects the executor keying facts, resolves the trigger-coverage open question, and grounds the CanaryConfig deprecation path)
 - Tracking issue: TBD
 - Supersedes: — (long-term it absorbs `CanaryConfig`, kept working via a shim through a deprecation window)
 - Targets: Fission v1.N+1
@@ -60,11 +60,14 @@ Aliases live in a separate small CRD rather than inside `FunctionSpec` — separ
 ```go
 type FunctionAliasSpec struct {
     FunctionName string  `json:"functionName"`
-    Version      string  `json:"version"`               // FunctionVersion name
+    Version      string  `json:"version,omitempty"`       // FunctionVersion name; XOR with PackageDigest
+    PackageDigest string `json:"packageDigest,omitempty"` // declarative/GitOps pinning: resolved to the version that pinned this digest
     Weight       *int    `json:"weight,omitempty"`      // nil = 100%
     SecondaryVersion string `json:"secondaryVersion,omitempty"` // receives 100-Weight
 }
 ```
+
+`FunctionAliasStatus` records `ResolvedVersion` (the digest→version resolution result) and a bounded `History` of previous targets — the substrate for `fn rollback` and pipeline audit (see the CI/CD section).
 
 ### Publishing
 
@@ -81,18 +84,77 @@ The resolver **does not cache** (its trigger-RV-keyed result cache was removed i
 An alias is a **separate CRD**, so moving it does not bump the referencing trigger's Generation. The router therefore adds a `FunctionAlias` informer that, on an alias change, enqueues the triggers referencing it for re-resolution and re-apply. The repoint then rides the shipped `routetable.ApplyTrigger` path: the new alias target resolves to a different FunctionVersion whose snapshot Generation lands in `RouteSpec.FnGens` (the per-backend `name → Generation` map RFC-0013 already keys handler swaps on), so `ApplyTrigger` finds the route **shape-equal** with changed `FnGens` and returns `HandlerSwapped` — one atomic `HandlerRef.Swap`, explicitly **not** a `ShapeChanged`, so the debounced materializer never runs.
 Weighted aliases resolve to the same two-target `resolveResultMultipleFunctions` shape the canary path produces today (`FunctionWeights` prefix-sum distribution), so the per-request weighted pick reuses that machinery unchanged.
 
+### Per-trigger versioning semantics (added 2026-07-22)
+
+Every trigger type's versioning behavior is determined by one question — **when is the alias pointer read** — plus whether per-invocation weighted randomness suits that invocation shape.
+Because all invokers ultimately resolve through the router (see the resolved trigger-coverage question below), the mechanism is uniform; only the timing and the recommended usage differ.
+
+| Trigger | Pointer read at | Weighted alias | The friendliness story |
+|---|---|---|---|
+| HTTP | route-apply (RFC-0013 swap) | yes; sticky = deterministic hash pick | Blue/green + canary + instant rollback per route; different routes can target different aliases of the *same* function (`/api`→`prod`, `/beta`→`staging`) — no more function cloning |
+| MQ | per delivery | yes, with an at-least-once caveat | Rollback retroactively fixes poison-message handling (redeliveries hit rolled-back code); consumers upgrade without topic re-subscription |
+| Timer | per firing | legal but discouraged | Deploys land atomically *between* firings, never mid-job; a version-pinned timer freezes a scheduled job until explicit promotion |
+| Kubewatcher | per event | legal but discouraged | Cluster-event handlers ride aliases: a bad deploy during an event burst is one repoint away from recovery |
+| MCP tools | per `tools/call` | discouraged (agent-visible variance) | Alias-addressed tools = stable tool names with upgradeable backends; version pins = reproducible agent behavior |
+| Async destinations | stamped at enqueue (alias refs) | n/a per envelope | Retries are deterministic across repoints; each pipeline hop (onSuccess/onFailure) is independently rollback-able |
+| Workflows | per step today; run-start pinning is the open question | no — incoherent within a run | Once pinned at RunStarted, a long-running run is version-consistent: no Frankenstein runs spanning a deploy |
+
+Semantics this table encodes:
+
+- **Delivery-time readers (MQ/timer/kubewatcher/MCP) get upgrade-without-redeploy for free** — the publisher never changes, only the pointer moves; this is the payoff of resolving in the router rather than per publisher.
+- **Weighted aliases are mechanically available everywhere the router resolves, but recommended only where per-invocation variance is harmless** (HTTP request/response).
+  For MQ the docs must state that an at-least-once redelivery may hit a different version than the first attempt during a split; for timer/kubewatcher/MCP a split is a per-firing coin flip and the guidance is "use repoint, not weights".
+- **MCP needs one extra hook:** `FunctionSpec.Tool` (including `InputSchema`) lives in the snapshot, so an alias repoint can change the advertised tool schema — the MCP registry must watch `FunctionAlias` and emit `tools/list_changed` on repoint, and reconcile the tool entry from the *resolved version's* snapshot rather than the live Function.
+
 ### Executor
 
-- Cache keying: poolmgr's cache already keys by `crd.CacheKeyURG` = `(UID, ResourceVersion, Generation)` (`pkg/executor/fscache/poolcache.go`), and pods carry `fission.io/function-generation` (`gp_pod.go`, also on the headless Service selector); the router's `functionServiceMap`, by contrast, keys by `metadataKey{Name, Namespace, ResourceVersion}` (`pkg/router/functionServiceMap.go`) with no Generation and must gain a version dimension.
-  A specialize request for `orders-v3` carries the snapshot spec, and its pods are labeled with that generation, so two versions can key side by side.
+- Cache keying: poolmgr's cache keys by `crd.CacheKeyUG` = `(UID, Generation)` (`pkg/executor/fscache/poolcache.go`) — #3596 dropped ResourceVersion and renamed the type from `CacheKeyURG`, precisely because RV churns on status-only writes while Generation moves only on spec changes; that fix independently confirms Generation is the right change-detection axis for versions.
+  Two executor caches still key by `crd.CacheKeyUR` = `(UID, ResourceVersion)` — `FunctionServiceCache.byFunction` (`functionServiceCache.go`) and gpm's `functionEnv` env cache (`gpm.go`) — and the router's executor-dispatch dedup key (`resolver_executor.go`, `CacheKeyURFromMeta`) is UR-keyed too; phase 3 should migrate these to UG/version keying for the same status-churn reason #3596 fixed.
+  The router's `functionServiceMap` still keys by `metadataKey{Name, Namespace, ResourceVersion}` (`pkg/router/functionServiceMap.go`) with no Generation and must gain a version dimension (unchanged by #3596, which only re-keyed the executor side).
+  Pods carry `fission.io/function-generation` (`gp_pod.go`), so a specialize request for `orders-v3` carries the snapshot spec and its pods key side by side.
+- **The generation gate lives in the Service selector, not the endpoint index.** `functionServiceSelector` (`gp_service.go`) includes `fission.io/function-generation`, so the per-function headless Service's EndpointSlices only ever select ONE generation's pods; the router's endpoint index (`pkg/router/endpointcache`) keys `FnKey{Namespace, Name}` and never reads the generation label.
+  Side-by-side warm pools therefore need either (a) per-version headless Services with distinct names surfacing as distinct index entries, or (b) a version dimension added to `FnKey` and the slice-label contract — a phase-3 design element alongside the reaper change, not a free property of the shipped index.
 - **Warm rollback needs a reaper-policy change — this is the load-bearing correction.** The RFC's "instant rollback when the old version's pods still exist" does **not** hold against the shipped idle reaper: `poolcache.ListAvailableValue` computes `latestFuncGen` per UID and sets `svcRetain = 0` for **every non-latest generation**, so only the newest generation keeps warm idle pods — an older version's pool is drained to zero even while an alias could still need it. Warm rollback therefore requires teaching the reaper that "referenced by a live alias" is an independent retain reason: retain `minPoolSize` warm pods for any generation an alias (primary or weighted secondary) currently points at, not just the latest. Without this change, "rollback to the previous version" always pays a cold start. This is a new phase-3 design element, not a free property of the existing pools.
 - Rollback to a version with no alias-retained pods pays one ordinary cold start (~100ms poolmgr budget), still incomparably better than re-deploying.
 - Newdeploy versions map to per-version Deployments with the version label; the known live-object reconcile race on `fn update` (coalesced specialization) actually *shrinks*, because versioned specs never mutate.
+
+### Interactions with shipped stateful/async/workflow features (added 2026-07-22)
+
+RFC-0022 (durable workflows), RFC-0023 (keyed state + sticky routing), and RFC-0024 (async invocation) all merged after this RFC was drafted; each intersects the version model.
+
+**Keyed state is name-scoped, not version-scoped (RFC-0023).**
+`StateConfig.EffectiveKeyspace(fnName)` defaults the keyspace to the function *name*, and the state token is derived from `(namespace, keyspace)` only (`pkg/auth/hmac/keys.go` `DeriveStateKeyspaceKey`) — no UID, Generation, or version appears anywhere in the key.
+Two side-by-side versions therefore share one keyspace and one derived token.
+This is the **intended default**: state must outlive deploys (the whole point of RFC-0023), and rollback rolls back *code, never state* — docs must say this explicitly.
+Two consequences the design must own: (a) the `FunctionVersion.Snapshot` zeroes only *versioning* config, never `spec.state`, so both versions inherit the same keyspace deliberately; (b) a weighted split runs two code versions against one keyspace, so state-schema-incompatible releases must either use an explicit per-version `StateConfig.Keyspace` (the escape hatch, at the cost of starting cold on state) or not use weighted rollout — a documented operational rule, not a mechanism.
+
+**Sticky routing vs weighted alias needs a deterministic pick (RFC-0023).**
+The weighted pick (`getCanaryBackend`, random per request) runs *upstream* of the endpoint index's `Admit` sticky-HRW pick, and per-version pools surface as distinct index entries — so a random per-request version pick would bounce a sticky session between version pools on every request.
+Design element: when the resolved backend is a weighted alias AND the trigger has sticky routing, derive the version pick deterministically from the sticky key (hash the sticky key into `[0,100)` and compare against the weight split) so a given session stays on one version for the lifetime of the split; a weight change migrates only the bounded fraction of sessions whose hash crosses the new boundary.
+Unkeyed requests keep the random pick.
+
+**Async invocations are version-blind at delivery (RFC-0024).**
+The envelope (`pkg/router/asyncinvoke/envelope.go`) stamps policy and destinations at enqueue but records the target as bare `(namespace, name)`; the deliverer re-resolves by name at delivery time.
+A rollback between enqueue and a retry silently changes which code runs the retry.
+Design element: when the enqueue-time reference is an alias, stamp the *resolved FunctionVersion* into the envelope so retries are deterministic across repoints (bare-name references keep live resolution, consistent with `$LATEST` semantics).
+`DestinationRef` (onSuccess/onFailure) gains the same optional alias/version fields as `FunctionReference`.
+
+**Workflow steps invoke live by name (RFC-0022).**
+A run pins its step *graph* (spec snapshot in the event stream at RunStarted) but each step calls its target function by name at execution time (`pkg/workflow/invoker.go`), so a mid-run rollback means later steps run different code than earlier steps.
+Whether a run should resolve alias→version at RunStarted and pin all step targets for the run's lifetime is an open question below — it changes replay/determinism semantics and is separable from this RFC's phases.
 
 ### CanaryConfig absorption
 
 Phase-gated: the canary controller learns to operate on a weighted alias (increment `Weight`, watch the same Prometheus failure signal, roll back by repointing) when its HTTPTrigger references an alias; existing function-pair canaries keep working unchanged through the deprecation window.
 Docs steer new users to aliases; removal is a separate future decision.
+
+**Grounded deprecation path (2026-07-22 survey of the shipped canary machinery).**
+The canary controller is already modern — controller-runtime + workqueue + `RequeueAfter`, opt-in leader election, `/status` conditions (`pkg/canaryconfigmgr/`) — so the shim reuses a healthy reconcile loop, not legacy code.
+Its failure signal is a hard Prometheus coupling (`fission_function_calls_total` / `fission_function_errors_total` with offset-window math; the controller refuses to start without a Prometheus URL) — the shim keeps this unchanged, only retargeting the weight writes from `HTTPTrigger.FunctionWeights` to `FunctionAlias.Weight`.
+The router's weighted-pick path (`function-weights`, `pkg/router/canary.go`) is independent of CanaryConfig and is exactly what weighted aliases reuse — router code is re-targeted, not removed.
+What full deprecation removes: the `CanaryConfig` CRD + generated clients, `pkg/canaryconfigmgr`, the `--canaryConfig` fission-bundle head, the Helm `canaryDeployment.*` surface, and the `fission canary` CLI; nothing in preupgradechecks or conversion webhooks references CanaryConfig, so no migration machinery is needed beyond the shim.
+End state (a future phase, kept out of this RFC's non-goals): fold the rollout policy into the alias itself — `FunctionAliasSpec.Rollout {Step, Interval, FailureThreshold}` — so the canary controller's loop drives `Weight` from the alias's own spec and `CanaryConfig` becomes a deprecated alias-generating shim; at that point the CRD can be frozen (webhook warning on create), then removed a release later.
+Notably CanaryConfig today has essentially no server-side validation (no webhook, minimal CRD schema — guardrails live in the reconciler and CLI), so alias-native rollout with webhook validation is a strict UX upgrade, not just parity.
 
 ### CLI
 
@@ -106,6 +168,28 @@ fission fn gc-versions --name orders --keep 10          # manual; auto policy in
 ```
 
 `fission spec` (declarative apply) treats aliases as first-class objects so GitOps flows pin versions explicitly.
+
+### CI/CD & declarative spec experience (added 2026-07-22)
+
+The version/alias model is only a CI/CD upgrade if a pipeline can drive it without scraping output or keeping external state; five design points make it spec-friendly:
+
+- **Aliases are spec-first; versions are controller-owned.**
+  `fission spec` gains an `applyFunctionAliases` closure so aliases live in the Git repo, carry the deployment-UID annotation, and prune normally; `FunctionVersion`s are never spec-declared (see the resolved pruning question below) — the repo declares *pointers*, the cluster owns *history*.
+- **The GitOps naming tension is solved by digest pinning, not by guessing sequence numbers.**
+  A Git repo cannot know the cluster-assigned `orders-v12` name at commit time.
+  `FunctionAliasSpec` therefore also accepts `packageDigest` as the target selector (mutually exclusive with `version`): the pipeline computes the OCI digest at build time (RFC-0001/0012 — content-addressed already), commits `prod → sha256:…`, and the alias controller resolves digest → the FunctionVersion that pinned it.
+  Name-based pinning stays for imperative use; digest-based pinning is the declarative path.
+- **Publish is idempotent, and its output is machine-readable.**
+  Retried pipelines must not mint duplicate versions: `fn publish` (and auto-publish) is a no-op returning the existing version when the live spec already equals the newest snapshot (V4's classifier gives this for free — `classify(spec, spec) = false`).
+  `fission fn publish -o name` / `-o json` emits the version name/digest on stdout so a pipeline captures it in one line and feeds the alias step without parsing human text.
+- **Alias status carries its own history, so rollback needs no external bookkeeping.**
+  `FunctionAliasStatus.History` records the last K targets with timestamps (bounded ring); `fn rollback` reads it, pipelines audit it, and `kubectl get functionalias` shows current + previous at a glance.
+  This is also what makes rollback safe to run from CI: the pipeline does not need to remember what it deployed last.
+- **One waitable gate per step.**
+  `fn publish --wait` returns only after the referenced package is `succeeded` and the version exists; `alias update --wait` / `fn rollback --wait` return after the repoint has propagated to serving routes (first 2xx via the new target, bounded by the < 1s repoint-latency bar in the test plan).
+  A pipeline is then three synchronous commands — apply, publish, repoint — each with a meaningful exit code, and the progressive-shift variant swaps the repoint for an `alias update --weight` sequence (or, with phase 6, a single rollout-policy alias the platform drives).
+
+Environment promotion falls out of the same primitives: staging → prod is repointing a second alias at the *same* version (same digest, same artifact, no rebuild) — the property CI/CD teams actually want from "promote what you tested".
 
 ### GC
 
@@ -148,10 +232,11 @@ CanaryConfig unaffected until the opt-in shim phase.
 ## Rollout phases (one PR each, bisectable)
 
 1. `FunctionVersion` + `FunctionAlias` CRDs, codegen, webhook immutability + reference validation, `fn publish` / `fn versions` / `alias` CLI (no router integration — versions are inert but inspectable).
-2. Resolver + router: `name:alias` references, weighted alias via the HandlerRef path, `fn rollback`; integration tests.
-3. Executor version-keyed caching + the **reaper retention change** (retain warm pods for alias-referenced non-latest generations, not just the latest — the `ListAvailableValue`/`latestFuncGen` policy); rollback-warmth integration test asserting no cold start on rollback to an alias-retained version.
+2. Resolver + router: `name:alias` references, weighted alias via the HandlerRef path, the `/fission-function/<ns>/<name>:<alias>` internal-listener route grammar (covers MQ/timer/kubewatcher/MCP publishers uniformly), the deterministic sticky-key version pick for weighted aliases, async-envelope version stamping for alias-referenced enqueues, `fn rollback`; integration tests.
+3. Executor version-keyed caching (including migrating the remaining `CacheKeyUR` caches — `byFunction`, `functionEnv`, the router dispatch dedup key — to UG/version keying), the per-version endpoint-index dimension (per-version Services or a versioned `FnKey`), and the **reaper retention change** (retain warm pods for alias-referenced non-latest generations, not just the latest — the `ListAvailableValue`/`latestFuncGen` policy); rollback-warmth integration test asserting no cold start on rollback to an alias-retained version.
 4. Auto-publish on runtime-affecting update + retention GC.
 5. Canary-on-aliases shim + deprecation docs.
+6. (Optional, post-deprecation-window) Alias-native rollout policy (`FunctionAliasSpec.Rollout`) + CanaryConfig freeze — see CanaryConfig absorption.
 
 ## Verification / test plan
 
@@ -160,9 +245,16 @@ CanaryConfig unaffected until the opt-in shim phase.
   Respect the known coalesced-specialization race: assert on served responses, not live Deployment specs.
 - Route-table: alias weight tick and repoint produce zero `fission_router_route_resync_drift_total` and no materializer runs. This test must **assert** the metric (the "bar" is documentation-only today — see Verification), turning the RFC-0013 convention into an enforced gate for alias ops.
 - GC: `aliasgc.tla` (V2/V3 model) plus an envtest retain-N sweep that never deletes an aliased version and survives the modeled alias-create-vs-delete interleaving.
+- Shipped-feature interactions (2026-07-22 additions): sticky-session stability under a weighted split — a fixed sticky key lands on one version for the lifetime of a 90/10 split, and a weight change migrates only hash-crossing sessions; async retry determinism — enqueue via alias, roll back, assert the retry ran the enqueue-time version (envelope stamp) while a bare-name enqueue tracks live; keyed-state continuity — rollback preserves state (same keyspace serves both versions).
+- CI/CD surface: publish idempotence (double `fn publish` with unchanged spec yields one version), digest-pinned alias resolution (`packageDigest` → correct version, unknown digest → admission rejection), `--wait` exit-code contracts, and alias `History` round-trip through `fn rollback`.
 
 ## Open questions
 
-- Whether `mqtrigger`/`timer`/`kubewatcher` references support aliases in v1 or phase 2 ships HTTP-only first (leaning: all trigger types at once — the resolver is shared, and partial support confuses).
+- ~~Whether `mqtrigger`/`timer`/`kubewatcher` references support aliases in v1 or phase 2 ships HTTP-only first.~~ **Resolved by review (2026-07-22):** the premise "the resolver is shared" is false — MQ (`kafka/consumer.go`, `statestore/subscription.go`), timer (`timer.go`), and kubewatcher (`kubewatcher.go`) never resolve specs at all; they hard-reject non-`name` reference types and just build `UrlForFunction(name, ns)` URLs POSTed to the router's internal `/fission-function/` listener, where the router does the real resolution.
+  So alias support for every non-HTTP trigger reduces to ONE change: the router registers `/fission-function/<ns>/<name>:<alias>` routes (driven by the same FunctionAlias informer phase 2 adds), and each publisher appends `:<alias>` when its `FunctionReference` carries one.
+  Weighted aliases then work uniformly on all trigger types for free, because the weighted pick happens router-side — no per-publisher weighted-resolution code exists or is needed.
+  MCP (`pkg/mcp/proxy.go`) rides the same URL path.
+  Decision: all trigger types in v1, via the URL grammar, not via per-publisher resolvers.
+- Whether a workflow run (RFC-0022) should resolve alias→version at RunStarted and pin all step targets for the run's lifetime — version-consistent runs vs live-tracking steps changes replay semantics; deferred to a workflows follow-up, but `WorkflowState.Function` must not grow alias fields until it is decided.
 - Auto-publish default: opt-in (`versioning.mode: auto` required, as drafted) vs on-by-default with retain-N; opt-in first, flip later with data.
 - ~~Interaction with `fission spec apply` pruning when versions are auto-created objects the spec never declared.~~ **Resolved by review:** `spec apply --delete` only prunes objects carrying the spec's `FISSION_DEPLOYMENT_UID_KEY` annotation and absent from the desired set (`ownedByDeployment`, `pkg/fission-cli/cmd/spec/resourcetype.go`). Controller-created `FunctionVersion`s carry no such annotation, so they are never pruned. The design requirement is therefore simply: the auto-publish controller must **not** stamp the deployment-UID annotation on versions it creates (and there is no `applyFunctionVersions` closure, so versions are not a spec-managed kind). Aliases, if made spec-first for GitOps, *would* get an `applyFunctionAliases` closure and be pruned normally — which is the intended GitOps behavior.
