@@ -18,9 +18,9 @@ import (
 
 // TestForceDeleteResourcesRemovesFunctionAliases proves `spec destroy
 // --force-delete` (which calls forceDeleteResources with an emptied desired
-// state, deleteStale=true) prunes a deployment-UID-annotated FunctionAlias —
-// the gap flagged in review: FunctionAlias was missing from all three
-// destroy.go call sites.
+// state, deleteStale=true) prunes a deployment-UID-annotated FunctionAlias:
+// FunctionAlias must be wired into all three destroy.go call sites like every
+// other spec-managed kind.
 func TestForceDeleteResourcesRemovesFunctionAliases(t *testing.T) {
 	owned := &fv1.FunctionAlias{
 		ObjectMeta: metav1.ObjectMeta{
