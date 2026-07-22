@@ -64,9 +64,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	opts.alias = &fv1.FunctionAlias{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       ns,
-			OwnerReferences: []metav1.OwnerReference{functionOwnerRef(fn)},
+			Name:      name,
+			Namespace: ns,
+			Labels: map[string]string{
+				fv1.VersionFunctionNameLabel: fn.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
 		},
 		Spec: spec,
 	}
@@ -82,17 +85,4 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	fmt.Printf("function alias '%v' created\n", opts.alias.Name)
 	return nil
-}
-
-// functionOwnerRef is the ownerRef a FunctionAlias carries back to the
-// Function it targets, mirroring the FunctionVersion ownerRef minted by
-// versioning.Publish (pkg/versioning/publish.go's functionOwnerRef) so both
-// RFC-0025 objects are garbage collected the same way when the Function goes.
-func functionOwnerRef(fn *fv1.Function) metav1.OwnerReference {
-	return metav1.OwnerReference{
-		APIVersion: fv1.SchemeGroupVersion.String(),
-		Kind:       "Function",
-		Name:       fn.Name,
-		UID:        fn.UID,
-	}
 }

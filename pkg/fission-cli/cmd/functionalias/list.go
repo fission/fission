@@ -50,10 +50,15 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 	return util.PrintObjects(format, items, headers, row, wideExtra, wideRow)
 }
 
-// filterByFunction returns the subset of aliases targeting fnName. FunctionAlias
-// carries no function-name label (unlike FunctionVersion's
-// fv1.VersionFunctionNameLabel), so the filter is applied client-side on
-// Spec.FunctionName. An empty fnName returns items unchanged.
+// filterByFunction returns the subset of aliases targeting fnName. Newly
+// created aliases now carry fv1.VersionFunctionNameLabel (stamped by `fission
+// alias create` and `spec apply`), but the filter still runs client-side on
+// Spec.FunctionName rather than a server-side label selector: aliases created
+// before that label existed, or by hand, would silently be dropped from a
+// selector-based List. Filtering stays client-side until a phase-3
+// reconciler backfills the label onto every legacy FunctionAlias, at which
+// point this can flip to a label selector like function/versions.go's.
+// An empty fnName returns items unchanged.
 func filterByFunction(items []fv1.FunctionAlias, fnName string) []fv1.FunctionAlias {
 	if fnName == "" {
 		return items

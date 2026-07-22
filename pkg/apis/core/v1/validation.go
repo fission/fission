@@ -1410,12 +1410,6 @@ func (spec FunctionVersionSpec) Validate() error {
 	return errs
 }
 
-// aliasDigestRegexp matches the only digest form FunctionAliasSpec.PackageDigest
-// accepts; it mirrors the field's kubebuilder Pattern marker in types.go (the
-// same grammar as OCIArchive.Digest, kept as a separate var since the two
-// fields validate independent objects).
-var aliasDigestRegexp = ociDigestRegexp
-
 // Validate checks a FunctionAliasSpec: FunctionName is a kube name, exactly
 // one of Version (name-pinned) or PackageDigest (declarative, eventually
 // resolved) targets the alias — mirroring the CRD's CEL XOR rule so the CLI
@@ -1439,7 +1433,10 @@ func (spec FunctionAliasSpec) Validate() error {
 	if hasVersion {
 		errs = errors.Join(errs, ValidateKubeName("FunctionAliasSpec.Version", spec.Version))
 	}
-	if hasDigest && !aliasDigestRegexp.MatchString(spec.PackageDigest) {
+	// ociDigestRegexp mirrors FunctionAliasSpec.PackageDigest's kubebuilder
+	// Pattern marker in types.go — the same grammar as OCIArchive.Digest,
+	// since both fields accept a "sha256:" + 64-hex-char digest.
+	if hasDigest && !ociDigestRegexp.MatchString(spec.PackageDigest) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAliasSpec.PackageDigest", spec.PackageDigest, "must be 'sha256:' followed by 64 hex characters"))
 	}
 

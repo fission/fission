@@ -143,7 +143,7 @@ func publish(ctx context.Context, cl versioned.Interface, fn *fv1.Function, desc
 				fv1.VersionFunctionUIDLabel:  string(fn.UID),
 			},
 			Annotations:     versionAnnotations(description, legacy, origPkgName),
-			OwnerReferences: []metav1.OwnerReference{functionOwnerRef(fn)},
+			OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
 		},
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:          fn.Name,
@@ -234,19 +234,6 @@ func versionAnnotations(description string, legacy bool, origPkgName string) map
 		return nil
 	}
 	return ann
-}
-
-// functionOwnerRef is the ownerRef a FunctionVersion carries back to its
-// owning Function (mirrors the CR-owns-CR pattern in pkg/tenant/reconciler.go
-// and pkg/webhook/functionversion.go's ownerFunctionRef, which reads Kind
-// "Function" back off this reference).
-func functionOwnerRef(fn *fv1.Function) metav1.OwnerReference {
-	return metav1.OwnerReference{
-		APIVersion: fv1.SchemeGroupVersion.String(),
-		Kind:       "Function",
-		Name:       fn.Name,
-		UID:        fn.UID,
-	}
 }
 
 // versionOwnerRef is the ownerRef a legacy snapshot Package carries back to

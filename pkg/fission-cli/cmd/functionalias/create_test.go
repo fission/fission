@@ -42,6 +42,7 @@ func TestAliasCreateSetsOwnerRefToFunction(t *testing.T) {
 	assert.Equal(t, "Function", got.OwnerReferences[0].Kind)
 	assert.Equal(t, "hello", got.OwnerReferences[0].Name)
 	assert.Equal(t, types.UID("fn-uid"), got.OwnerReferences[0].UID)
+	assert.Equal(t, "hello", got.Labels[fv1.VersionFunctionNameLabel])
 }
 
 func TestAliasCreateMissingFunctionErrors(t *testing.T) {

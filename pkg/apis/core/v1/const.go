@@ -254,10 +254,20 @@ const (
 	ConcurrencyEnforcementStrict     = "strict"
 
 	// RFC-0025 function version/alias ownership labels. VersionFunctionNameLabel
-	// and VersionFunctionUIDLabel are stamped on every FunctionVersion by the
-	// publish engine (pkg/versioning). FunctionAlias objects do NOT carry them
-	// today — alias→function filtering is client-side (see functionalias/list.go);
-	// a phase-3 reconciler may stamp them server-side later.
+	// and VersionFunctionUIDLabel are both stamped on every FunctionVersion by
+	// the publish engine (pkg/versioning). FunctionAlias objects get
+	// VersionFunctionNameLabel only — stamped by `fission alias create` and
+	// `spec apply` — never VersionFunctionUIDLabel: an alias's target Function
+	// UID is only known when the create call can Get() the Function, and
+	// stamping it conditionally would make the label's presence differ between
+	// the desired (spec-applied) and live object, defeating equality checks and
+	// causing a perpetual update loop. Name is deterministic from
+	// spec.FunctionName and always stampable, so it is the only label aliases
+	// carry. alias→function filtering stays client-side today regardless (see
+	// functionalias/list.go) because aliases created before this label existed,
+	// or by hand, would be silently dropped from a selector-based List; a
+	// phase-3 reconciler backfilling the label onto every legacy FunctionAlias
+	// is what lets that filter flip to a label selector.
 	VersionFunctionNameLabel = "fission.io/function-name"
 	VersionFunctionUIDLabel  = "fission.io/function-uid"
 )
