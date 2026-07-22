@@ -33,16 +33,32 @@ import (
 // still hand the gone object to the handlers' cleanup), matching the per-type
 // reconcilers it replaces.
 type environmentReconciler struct {
-	logger   logr.Logger
-	client   client.Client
-	handlers []executortype.EnvReconciler
-	lastSeen sync.Map // client.ObjectKey -> *fv1.Environment
+	logger    logr.Logger
+	client    client.Client
+	apiReader client.Reader // uncached reader for IsNotFound verification
+	handlers  []executortype.EnvReconciler
+	lastSeen  sync.Map // client.ObjectKey -> *fv1.Environment
 }
 
 func (r *environmentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	env := &fv1.Environment{}
 	if err := r.client.Get(ctx, req.NamespacedName, env); err != nil {
 		if apierrors.IsNotFound(err) {
+			// The informer cache reported NotFound. Before destructive cleanup
+			// (which destroys the pool, reaps specialized pods, and shuts down
+			// the readyPodQueue), verify against the API server — a stale cache
+			// (e.g. watch reconnect on k8s 1.36 ConsistentListFromCache) can
+			// transiently return NotFound for an object that still exists.
+			// See ci-29487828565 v1.36.1 PCL Phase 3 analysis.
+			liveEnv := &fv1.Environment{}
+			if apiErr := r.apiReader.Get(ctx, req.NamespacedName, liveEnv); apiErr == nil {
+				// Environment still exists — cache is stale. Re-store lastSeen
+				// and requeue so a future reconcile sees the cached version.
+				r.lastSeen.Store(req.NamespacedName, liveEnv.DeepCopy())
+				r.logger.V(1).Info("environment IsNotFound from cache but exists in API server, skipping cleanup",
+					"namespace", req.Namespace, "name", req.Name)
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			}
 			if old, ok := r.lastSeen.LoadAndDelete(req.NamespacedName); ok {
 				for _, h := range r.handlers {
 					h.CleanupEnvironment(ctx, old.(*fv1.Environment))
@@ -107,9 +123,10 @@ func RegisterReconciler(mgr ctrl.Manager, logger logr.Logger, executorTypes map[
 	}
 
 	r := &environmentReconciler{
-		logger:   logger.WithName("environment_reconciler"),
-		client:   mgr.GetClient(),
-		handlers: handlers,
+		logger:    logger.WithName("environment_reconciler"),
+		client:    mgr.GetClient(),
+		apiReader: mgr.GetAPIReader(),
+		handlers:  handlers,
 	}
 	// RegisterTenantScoped adds controller.MembershipPredicate when dynamic
 	// tenancy is on (no-op otherwise), so the cluster-wide cache only reconciles
