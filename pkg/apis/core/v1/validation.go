@@ -648,6 +648,25 @@ func (sc *StateConfig) Validate() error {
 	return errs
 }
 
+// Validate checks the provisioned concurrency config. In PR 1 only the base
+// Target is meaningful — Windows is accepted in the CRD schema (for PR 2
+// stability) but rejected here until the schedule parser is implemented.
+// CEL already enforces Target >= 1 and the poolmgr-only constraint; this is
+// defense-in-depth and the one check CEL cannot express (Windows empty).
+func (pc *ProvisionedConcurrencyConfig) Validate() error {
+	var errs error
+	if pc.Target < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Target", pc.Target, "must be >= 1"))
+	}
+
+	if len(pc.Windows) > 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", len(pc.Windows),
+			"scheduled windows are not yet supported (RFC-0026 PR 2)"))
+	}
+
+	return errs
+}
+
 // EffectiveKeyspace resolves the keyspace, defaulting to the function name.
 func (sc *StateConfig) EffectiveKeyspace(fnName string) string {
 	if sc.Keyspace != "" {
