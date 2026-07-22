@@ -132,13 +132,13 @@ func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, 
 // ReserveCapacity atomically checks the function's concurrency cap and
 // reserves one in-flight specialization in the pool cache (RFC-0002
 // ensureCapacity); returns a TooManyRequests ferror at the cap.
-func (fsc *FunctionServiceCache) ReserveCapacity(key crd.CacheKeyURG, concurrency, maxPending int) error {
+func (fsc *FunctionServiceCache) ReserveCapacity(key crd.CacheKeyUG, concurrency, maxPending int) error {
 	return fsc.connFunctionCache.ReserveCapacity(key, concurrency, maxPending)
 }
 
 // GetFuncSvc gets a function service from pool cache using function key and returns number of active instances of function pod
 func (fsc *FunctionServiceCache) GetFuncSvc(ctx context.Context, m *metav1.ObjectMeta, requestsPerPod int, concurrency int) (*FuncSvc, error) {
-	key := crd.CacheKeyURGFromMeta(m)
+	key := crd.CacheKeyUGFromMeta(m)
 
 	fsvc, err := fsc.connFunctionCache.GetSvcValue(ctx, key, requestsPerPod, concurrency)
 	if err != nil {
@@ -174,27 +174,27 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 
 // AddFunc adds a function service to pool cache.
 func (fsc *FunctionServiceCache) AddFunc(ctx context.Context, fsvc FuncSvc, requestsPerPod, svcsRetain int) {
-	fsc.connFunctionCache.SetSvcValue(ctx, crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit, requestsPerPod, svcsRetain)
+	fsc.connFunctionCache.SetSvcValue(ctx, crd.CacheKeyUGFromMeta(fsvc.Function), fsvc.Address, &fsvc, fsvc.CPULimit, requestsPerPod, svcsRetain)
 	now := time.Now()
 	fsvc.Ctime = now
 	fsvc.Atime = now
 }
 
-func (fsc *FunctionServiceCache) MarkFuncDeleted(key crd.CacheKeyURG) {
+func (fsc *FunctionServiceCache) MarkFuncDeleted(key crd.CacheKeyUG) {
 	fsc.connFunctionCache.MarkFuncDeleted(key)
 }
 
 // SetCPUUtilizaton updates/sets CPUutilization in the pool cache
-func (fsc *FunctionServiceCache) SetCPUUtilizaton(key crd.CacheKeyURG, svcHost string, cpuUsage resource.Quantity) {
+func (fsc *FunctionServiceCache) SetCPUUtilizaton(key crd.CacheKeyUG, svcHost string, cpuUsage resource.Quantity) {
 	fsc.connFunctionCache.SetCPUUtilization(key, svcHost, cpuUsage)
 }
 
 // MarkAvailable marks the value at key [function][address] as available.
-func (fsc *FunctionServiceCache) MarkAvailable(key crd.CacheKeyURG, svcHost string) {
+func (fsc *FunctionServiceCache) MarkAvailable(key crd.CacheKeyUG, svcHost string) {
 	fsc.connFunctionCache.MarkAvailable(key, svcHost)
 }
 
-func (fsc *FunctionServiceCache) MarkSpecializationFailure(key crd.CacheKeyURG) {
+func (fsc *FunctionServiceCache) MarkSpecializationFailure(key crd.CacheKeyUG) {
 	fsc.connFunctionCache.MarkSpecializationFailure(key)
 }
 
@@ -273,7 +273,7 @@ func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
 
 // DeleteFunctionSvc deletes a function service at key composed of [function][address].
 func (fsc *FunctionServiceCache) DeleteFunctionSvc(ctx context.Context, fsvc *FuncSvc) {
-	err := fsc.connFunctionCache.DeleteValue(ctx, crd.CacheKeyURGFromMeta(fsvc.Function), fsvc.Address)
+	err := fsc.connFunctionCache.DeleteValue(ctx, crd.CacheKeyUGFromMeta(fsvc.Function), fsvc.Address)
 	if err != nil {
 		fsc.logger.Error(err,
 			"error deleting function service", "function", fsvc.Function.Name,

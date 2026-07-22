@@ -36,10 +36,10 @@ func TestPoolCache(t *testing.T) {
 	concurrency := 5
 	requestsPerPod := 2
 
-	keyFunc := crd.CacheKeyURG{
+	keyFunc := crd.CacheKeyUG{
 		UID: "func",
 	}
-	keyFunc2 := crd.CacheKeyURG{
+	keyFunc2 := crd.CacheKeyUG{
 		UID: "func2",
 	}
 
@@ -142,7 +142,7 @@ func TestPoolCache(t *testing.T) {
 }
 
 func TestPoolCacheRequests(t *testing.T) {
-	key := crd.CacheKeyURG{
+	key := crd.CacheKeyUG{
 		UID:        "func",
 		Generation: 1,
 	}
@@ -279,7 +279,7 @@ func TestPoolCacheRequests(t *testing.T) {
 			}
 			wg.Wait()
 			if tt.generationUpdate {
-				newKey := crd.CacheKeyURG{
+				newKey := crd.CacheKeyUG{
 					UID:        "func",
 					Generation: 2,
 				}
@@ -302,7 +302,7 @@ func TestPoolCacheRequests(t *testing.T) {
 // concurrency cap, and the reservation is symmetric with SetSvcValue /
 // MarkSpecializationFailure.
 func TestReserveCapacity(t *testing.T) {
-	key := crd.CacheKeyURG{UID: "reserve-fn", Generation: 1}
+	key := crd.CacheKeyUG{UID: "reserve-fn", Generation: 1}
 	c := NewPoolCache(logr.Discard())
 
 	// concurrency=2: two reservations succeed, the third hits the cap.
@@ -329,7 +329,7 @@ func TestReserveCapacity(t *testing.T) {
 // specializations are capped independently of (and far below) the concurrency
 // cap, released symmetrically, and 0 disables the bound (legacy behavior).
 func TestReserveCapacityMaxPending(t *testing.T) {
-	key := crd.CacheKeyURG{UID: "pending-fn", Generation: 1}
+	key := crd.CacheKeyUG{UID: "pending-fn", Generation: 1}
 	c := NewPoolCache(logr.Discard())
 
 	// concurrency far above the pending bound: the pending bound must fire
@@ -353,7 +353,7 @@ func TestReserveCapacityMaxPending(t *testing.T) {
 	require.NoError(t, c.ReserveCapacity(key, 500, 2))
 
 	// 0 disables the bound.
-	free := crd.CacheKeyURG{UID: "unbounded-fn", Generation: 1}
+	free := crd.CacheKeyUG{UID: "unbounded-fn", Generation: 1}
 	for range 50 {
 		require.NoError(t, c.ReserveCapacity(free, 0, 0))
 	}
@@ -364,16 +364,16 @@ func TestReserveCapacityMaxPending(t *testing.T) {
 // be a no-op, not a nil-map panic that takes the executor down.
 func TestMarkSpecializationFailureUnknownKey(t *testing.T) {
 	c := NewPoolCache(logr.Discard())
-	c.MarkSpecializationFailure(crd.CacheKeyURG{UID: "never-seen", Generation: 1})
+	c.MarkSpecializationFailure(crd.CacheKeyUG{UID: "never-seen", Generation: 1})
 	// The cache survives: a follow-up request still gets served.
-	require.NoError(t, c.ReserveCapacity(crd.CacheKeyURG{UID: "never-seen", Generation: 1}, 0, 0))
+	require.NoError(t, c.ReserveCapacity(crd.CacheKeyUG{UID: "never-seen", Generation: 1}, 0, 0))
 }
 
 // TestPoolCacheTouchByAddress locks the RFC-0002 tap-liveness fix: the
 // router's batched taps must refresh the Atime of pool-cache entries (the
 // idle reaper ages on it once the warm path stops calling the executor).
 func TestPoolCacheTouchByAddress(t *testing.T) {
-	key := crd.CacheKeyURG{UID: "touch-fn", Generation: 1}
+	key := crd.CacheKeyUG{UID: "touch-fn", Generation: 1}
 	c := NewPoolCache(logr.Discard())
 
 	old := time.Now().Add(-time.Hour)

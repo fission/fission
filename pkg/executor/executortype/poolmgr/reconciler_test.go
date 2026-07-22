@@ -25,14 +25,14 @@ import (
 )
 
 type fakeFuncMgr struct {
-	deleted      []crd.CacheKeyURG
+	deleted      []crd.CacheKeyUG
 	refreshed    []string
 	istioCreated []string
 	istioDeleted []string
 	fnSvcDeleted []string
 }
 
-func (f *fakeFuncMgr) markFuncDeleted(k crd.CacheKeyURG) { f.deleted = append(f.deleted, k) }
+func (f *fakeFuncMgr) markFuncDeleted(k crd.CacheKeyUG) { f.deleted = append(f.deleted, k) }
 func (f *fakeFuncMgr) refreshFuncPods(_ context.Context, fn *fv1.Function) error {
 	f.refreshed = append(f.refreshed, fn.Name)
 	return nil
@@ -107,7 +107,7 @@ func TestCleanupPoolmgrFunc(t *testing.T) {
 		m := &fakeFuncMgr{}
 		require.NoError(t, cleanupPoolmgrFunc(t.Context(), m, true, false, fn))
 		require.Len(t, m.deleted, 1)
-		assert.Equal(t, crd.CacheKeyURGFromMeta(&fn.ObjectMeta), m.deleted[0])
+		assert.Equal(t, crd.CacheKeyUGFromMeta(&fn.ObjectMeta), m.deleted[0])
 		assert.Equal(t, []string{"fn"}, m.istioDeleted)
 		assert.Empty(t, m.fnSvcDeleted)
 	})

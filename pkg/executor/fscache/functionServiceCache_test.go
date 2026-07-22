@@ -158,7 +158,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	_, err := fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
 	require.NoError(t, err)
 
-	key := crd.CacheKeyURGFromMeta(&fn.ObjectMeta)
+	key := crd.CacheKeyUGFromMeta(&fn.ObjectMeta)
 	fsc.MarkAvailable(key, fsvc.Address)
 
 	_, err = fsc.GetFuncSvc(ctx, fsvc.Function, 5, concurrency)
@@ -205,7 +205,7 @@ func TestFunctionServiceCacheConcurrentTouchAndList(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		poolKey := crd.CacheKeyURG{UID: types.UID(fmt.Sprintf("pool-%d", i)), Generation: 1}
+		poolKey := crd.CacheKeyUG{UID: types.UID(fmt.Sprintf("pool-%d", i)), Generation: 1}
 		poolAddr := fmt.Sprintf("10.1.0.%d:8888", i)
 		fsc.connFunctionCache.SetSvcValue(t.Context(), poolKey, poolAddr,
 			&FuncSvc{Function: &metav1.ObjectMeta{Name: fmt.Sprintf("pool-fn-%d", i)}, Address: poolAddr, Atime: now},
@@ -276,7 +276,7 @@ func TestTouchByAddressPoolCacheFallback(t *testing.T) {
 	fsc := MakeFunctionServiceCache(loggerfactory.GetLogger())
 	require.NotNil(t, fsc)
 
-	key := crd.CacheKeyURG{UID: "pool-only-fn", Generation: 1}
+	key := crd.CacheKeyUG{UID: "pool-only-fn", Generation: 1}
 	old := time.Now().Add(-time.Hour)
 	fsvc := &FuncSvc{Function: &metav1.ObjectMeta{Name: "fn"}, Address: "10.3.4.5:8888", Atime: old}
 	fsc.connFunctionCache.SetSvcValue(t.Context(), key, fsvc.Address, fsvc, resource.MustParse("45m"), 10, 0)
