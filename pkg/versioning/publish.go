@@ -290,7 +290,10 @@ func selfHealSnapshotPackage(ctx context.Context, cl versioned.Interface, fn *fv
 // by version's (already repointed) Snapshot.Package.PackageRef, owned by
 // version from the moment it exists. Tolerates AlreadyExists (the create
 // path and the self-heal path can both reach here for the same object under
-// concurrent publishers) by fetching and returning the existing object.
+// concurrent publishers) by fetching the existing object — but only adopts
+// it after confirming its OwnerReferences already name this exact version
+// (Kind+Name+UID); an object at the snapshot name owned by anything else is
+// a name collision, not a race, and must not be silently adopted.
 func ensureSnapshotPackage(ctx context.Context, cl versioned.Interface, fn *fv1.Function, version *fv1.FunctionVersion, pkg *fv1.Package) (*fv1.Package, error) {
 	snapPkgName := version.Spec.Snapshot.Package.PackageRef.Name
 
@@ -314,9 +317,26 @@ func ensureSnapshotPackage(ctx context.Context, cl versioned.Interface, fn *fv1.
 			if gerr != nil {
 				return nil, fmt.Errorf("versioning: snapshot package %s/%s create raced and the follow-up get also failed: %w", fn.Namespace, snapPkgName, gerr)
 			}
+			if !ownedByVersion(existing, version) {
+				return nil, fmt.Errorf("versioning: a name-collision Package occupies the snapshot name %s/%s for version %s (not owned by it); remove the conflicting Package manually before publishing", fn.Namespace, snapPkgName, version.Name)
+			}
 			return existing, nil
 		}
 		return nil, fmt.Errorf("versioning: creating snapshot package %s/%s for version %s: %w", fn.Namespace, snapPkgName, version.Name, err)
 	}
 	return created, nil
+}
+
+// ownedByVersion reports whether pkg's OwnerReferences already contain a
+// reference to version — Kind "FunctionVersion", matching Name and UID —
+// the check ensureSnapshotPackage runs before adopting a Package it did not
+// itself create, so a pre-existing, foreign-owned (or ownerless) Package
+// squatting on the snapshot name is rejected instead of silently adopted.
+func ownedByVersion(pkg *fv1.Package, version *fv1.FunctionVersion) bool {
+	for _, ref := range pkg.OwnerReferences {
+		if ref.Kind == "FunctionVersion" && ref.Name == version.Name && ref.UID == version.UID {
+			return true
+		}
+	}
+	return false
 }

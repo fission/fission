@@ -325,6 +325,62 @@ func TestPublish_LegacyPackageMissingSnapshotSelfHeals(t *testing.T) {
 	assert.Equal(t, "fn-v1", snapPkg.OwnerReferences[0].Name)
 }
 
+func TestPublish_SnapshotPackageNameCollisionRejected(t *testing.T) {
+	t.Parallel()
+	ns := "default"
+	pkg := makeDeployPackage("pkg", ns)
+	env := makeEnv("env", ns, "example.com/env:v1")
+	fn := makeFunction("fn", ns, "pkg")
+
+	// A foreign Package with no owner reference already occupies the name
+	// Publish will pick for fn's v1 snapshot copy ("fn-v1-pkg") — a plain
+	// name collision, not a Fission-owned object left behind by a crash.
+	foreign := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1-pkg", Namespace: ns},
+		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
+	}
+
+	cl := fakeversioned.NewSimpleClientset(pkg, env, fn, foreign)
+
+	res, err := Publish(t.Context(), cl, fn, "v1")
+	require.Error(t, err)
+	assert.Nil(t, res)
+	assert.Contains(t, err.Error(), "fn-v1-pkg", "error must name the colliding snapshot package")
+}
+
+func TestEnsureSnapshotPackage_AlreadyExistsWithMatchingOwnerAdopts(t *testing.T) {
+	t.Parallel()
+	ns := "default"
+	pkg := makeDeployPackage("pkg", ns)
+	env := makeEnv("env", ns, "example.com/env:v1")
+	fn := makeFunction("fn", ns, "pkg")
+
+	cl := fakeversioned.NewSimpleClientset(pkg, env, fn)
+
+	version := &fv1.FunctionVersion{
+		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1", Namespace: ns, UID: types.UID("fn-v1-uid")},
+		Spec: fv1.FunctionVersionSpec{
+			Snapshot: fv1.FunctionSpec{
+				Package: fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "fn-v1-pkg", Namespace: ns}},
+			},
+		},
+	}
+
+	first, err := ensureSnapshotPackage(t.Context(), cl, fn, version, pkg)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+
+	// Crash-recovery re-publish: the caller re-drives ensureSnapshotPackage
+	// for the same version (e.g. the first Create's response was lost). The
+	// object already exists and is already owned by this exact version, so
+	// it must be adopted, not rejected as a collision.
+	second, err := ensureSnapshotPackage(t.Context(), cl, fn, version, pkg)
+	require.NoError(t, err, "a package already owned by this exact version must be adopted")
+	assert.Equal(t, first.Name, second.Name)
+	require.Len(t, second.OwnerReferences, 1)
+	assert.Equal(t, "fn-v1", second.OwnerReferences[0].Name)
+}
+
 func TestPublish_ConcurrentAlreadyExistsRetriesOnce(t *testing.T) {
 	t.Parallel()
 	ns := "default"
@@ -397,5 +453,5 @@ func TestPublish_ConcurrentAlreadyExistsTwiceReturnsError(t *testing.T) {
 	res, err := Publish(t.Context(), cl, fn, "")
 	require.Error(t, err)
 	assert.Nil(t, res)
-	assert.True(t, apierrors.IsAlreadyExists(err) || errors.Unwrap(err) != nil, "error must surface the AlreadyExists failure: %v", err)
+	assert.True(t, apierrors.IsAlreadyExists(err), "error must surface the AlreadyExists failure: %v", err)
 }
