@@ -29,6 +29,10 @@ func effectiveTargetAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (in
 			e := fmt.Errorf("window %s failed: %w", window.Name, err)
 			badWindows = append(badWindows, e)
 		} else if windowActive {
+			if window.Target == 0 {
+				target = 0
+				continue
+			}
 			target = max(target, window.Target)
 		}
 	}
