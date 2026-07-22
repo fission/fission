@@ -15,7 +15,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	apiv1 "k8s.io/api/core/v1"
 	corev1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,8 +63,8 @@ func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.Fu
 }
 
 // podRef builds an ObjectReference for a pod in the given namespace.
-func podRef(name, ns string) apiv1.ObjectReference {
-	return apiv1.ObjectReference{Kind: "Pod", Name: name, Namespace: ns}
+func podRef(name, ns string) corev1.ObjectReference {
+	return corev1.ObjectReference{Kind: "Pod", Name: name, Namespace: ns}
 }
 
 // newTestProvisionerWithGPM wires a Provisioner with a fake gpm, a fake
@@ -279,10 +278,10 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		envs   map[string]string
-		want   ProvisionerConfig
-		wantOk bool
+		name    string
+		envs    map[string]string
+		want    ProvisionerConfig
+		wantOk  bool
 		wantErr bool
 	}{
 		{
@@ -562,7 +561,7 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		pod := readyPod("warm-pod", uid)
 		delete(pod.Labels, fv1.PROVISIONED_LABEL)
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
-			KubernetesObjects: []apiv1.ObjectReference{podRef("warm-pod", "default")},
+			KubernetesObjects: []corev1.ObjectReference{podRef("warm-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn, pod)
 
@@ -595,7 +594,7 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		// logs the error but must not panic and must not return an error
 		// (the pod is serving, just not labeled — accepted race).
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
-			KubernetesObjects: []apiv1.ObjectReference{podRef("ghost-pod", "default")},
+			KubernetesObjects: []corev1.ObjectReference{podRef("ghost-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn) // no pods seeded
 
@@ -608,7 +607,7 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 	t.Run("non-pod KubernetesObjects are skipped", func(t *testing.T) {
 		// A Service ref (Kind=Service) must not trigger a pod patch.
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
-			KubernetesObjects: []apiv1.ObjectReference{
+			KubernetesObjects: []corev1.ObjectReference{
 				{Kind: "Service", Name: "fn-svc", Namespace: "default"},
 			},
 		}}
@@ -633,7 +632,7 @@ func TestProvisioner_fireEagerSpecializations_pacing(t *testing.T) {
 	gpm := &fakeGPM{
 		block: block,
 		svc: &fscache.FuncSvc{
-			KubernetesObjects: []apiv1.ObjectReference{podRef("p", "default")},
+			KubernetesObjects: []corev1.ObjectReference{podRef("p", "default")},
 		},
 	}
 
@@ -678,7 +677,7 @@ func TestProvisioner_reconcileFunction_warming(t *testing.T) {
 	gpm := &fakeGPM{
 		block: block,
 		svc: &fscache.FuncSvc{
-			KubernetesObjects: []apiv1.ObjectReference{podRef("p", "default")},
+			KubernetesObjects: []corev1.ObjectReference{podRef("p", "default")},
 		},
 	}
 	p := newTestProvisionerWithGPM(t, gpm, fn)
