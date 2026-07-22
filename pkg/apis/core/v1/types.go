@@ -966,6 +966,7 @@ type (
 	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.hostIPC) || !self.podspec.hostIPC",message="spec.podspec.hostIPC is not allowed"
 	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccountName) || self.podspec.serviceAccountName == ''",message="spec.podspec.serviceAccountName override is not allowed"
 	// +kubebuilder:validation:XValidation:rule="!has(self.podspec) || !has(self.podspec.serviceAccount) || self.podspec.serviceAccount == ''",message="spec.podspec.serviceAccount override is not allowed"
+	// +kubebuilder:validation:XValidation:rule="!has(self.provisionedConcurrency) || !has(self.InvokeStrategy.ExecutionStrategy) || !has(self.InvokeStrategy.ExecutionStrategy.ExecutorType) || self.InvokeStrategy.ExecutionStrategy.ExecutorType == '' || self.InvokeStrategy.ExecutionStrategy.ExecutorType == 'poolmgr'",message="provisionedConcurrency is only supported with executortype poolmgr"
 	FunctionSpec struct {
 		// Environment is the build and runtime environment that this function is
 		// associated with. An Environment with this name should exist, otherwise the
@@ -1062,6 +1063,16 @@ type (
 		// This is optional. If not specified default value will be taken as 0
 		// +optional
 		RetainPods int `json:"retainPods,omitempty"`
+
+		// ProvisionedConcurrency, when non-nil, opts this function into eager
+		// pre-warming of specialized pods (RFC-0026). The executor's provisioner
+		// keeps at least the configured Target specialized pods warm, published to
+		// the function's headless Service, and exempt from the idle reaper. nil
+		// (the default) is the classic on-demand cold-start path. Additive and
+		// backward compatible. Only valid when
+		// InvokeStrategy.ExecutionStrategy.ExecutorType is poolmgr.
+		// +optional
+		ProvisionedConcurrency *ProvisionedConcurrencyConfig `json:"provisionedConcurrency,omitempty"`
 
 		// Podspec specifies podspec to use for executor type container based functions
 		// Different arguments mentioned for container based function are populated inside a pod.
@@ -1281,6 +1292,60 @@ type (
 		Jitter *bool `json:"jitter,omitempty"`
 	}
 
+	// ProvisionedConcurrencyConfig opts this function into eager pre-warming of
+	// specialized pods (RFC-0026). Presence is the on switch: nil (the default)
+	// means the function uses the classic on-demand cold-start path. When non-nil,
+	// the executor's provisioner keeps at least Target specialized pods warm and
+	// published to the function's headless Service, exempt from the idle reaper.
+	// Additive and backward compatible.
+	// +optional
+	ProvisionedConcurrencyConfig struct {
+		// Target is the base number of warm specialized pods to maintain outside
+		// any schedule window. Must be >= 1. Schedule windows may override this
+		// (see Windows). Bounded by the namespace cap
+		// (executor.provisionedConcurrency.maxPerFunction, default 20).
+		// +kubebuilder:validation:Minimum=1
+		Target int `json:"target"`
+
+		// Windows is an optional list of schedule windows that override Target
+		// during specific time ranges (RFC-0026 PR 2). Empty in PR 1 — base Target
+		// is always in effect. Each window: a cron start expression, a duration,
+		// and a window-local target (0 means "un-warm" for the window's duration).
+		// +optional
+		// +listType=map
+		// +listMapKey=name
+		Windows []ProvisionedWindow `json:"windows,omitempty"`
+	}
+
+	// ProvisionedWindow describes a schedule window that overrides the base
+	// ProvisionedConcurrencyConfig.Target during a time range. The window is
+	// active from the cron-triggered start for Duration; while active, the
+	// effective target is the window's Target (overlapping windows take the max).
+	// +optional
+	ProvisionedWindow struct {
+		// Name identifies this window within the function's
+		// ProvisionedConcurrencyConfig.Windows list. Must be unique within the
+		// list (listMapKey=name).
+		// +kubebuilder:validation:MinLength=1
+		// +kubebuilder:validation:MaxLength=63
+		Name string `json:"name"`
+
+		// Start is a cron expression (5-field, robfig/cron, same parser as
+		// TimeTrigger) marking when each window instance opens.
+		// +kubebuilder:validation:MinLength=1
+		Start string `json:"start"`
+
+		// Duration is how long each window instance stays open. Format is Go
+		// time.ParseDuration (e.g. "12h", "30m"). Must be > 0.
+		// +kubebuilder:validation:Pattern=`^[0-9]+(ns|us|µs|ms|s|m|h)$`
+		Duration string `json:"duration"`
+
+		// Target is the effective target while the window is open. 0 means
+		// "un-warm" — provisioned pods are drained for the window's duration.
+		// +kubebuilder:validation:Minimum=0
+		Target int `json:"target"`
+	}
+
 	// InvokeStrategy is a set of controls over how the function executes.
 	// It affects the performance and resource usage of the function.
 	//
@@ -1290,7 +1355,6 @@ type (
 	// supported; this strategy would specify the target request rate of the function,
 	// the target latency statistics, and the target cost (in terms of compute resources).
 	InvokeStrategy struct {
-
 		// ExecutionStrategy specifies low-level parameters for function execution,
 		// such as the number of instances.
 		// +optional
@@ -1314,7 +1378,6 @@ type (
 	// MaxScale is the maximum number of pods that function will scale to based on TargetCPUPercent
 	// and resources allocated to the function pod.
 	ExecutionStrategy struct {
-
 		// ExecutorType is the executor type of function used. Defaults to "poolmgr".
 		//
 		// Available value:
@@ -1961,6 +2024,28 @@ type (
 		// controller observed when it last updated the status.
 		// +optional
 		ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+		// ProvisionedReady is the number of warm specialized pods the provisioner
+		// is currently maintaining for this function (RFC-0026). Only meaningful
+		// when Spec.ProvisionedConcurrency is non-nil. Reported by the executor's
+		// provisioner on each reconcile pass.
+		// +optional
+		ProvisionedReady int `json:"provisionedReady,omitempty"`
+
+		// ProvisionedTarget is the effective target the provisioner is currently
+		// aiming for (base Target, or a schedule-window override in PR 2). Lets
+		// `fission fn get` show "3/5 provisioned pods ready".
+		// +optional
+		ProvisionedTarget int `json:"provisionedTarget,omitempty"`
+
+		// ProvisionedSpecTarget is the raw Target from spec (before the namespace
+		// cap clamp). When ProvisionedSpecTarget > ProvisionedTarget, the
+		// provisioner clamped the target to the namespace cap
+		// (executor.provisionedConcurrency.maxPerFunction) and the Provisioned
+		// condition carries reason ProvisionedClamped. Lets `fission fn get`
+		// show the spec-vs-effective divergence.
+		// +optional
+		ProvisionedSpecTarget int `json:"provisionedSpecTarget,omitempty"`
 
 		// Conditions represent the latest observations of the function's state.
 		// +optional

@@ -101,7 +101,6 @@ func AggregateValidationErrors(objName string, err error) error {
 			}
 		} else {
 			if level > 0 {
-
 				errMsg.WriteString(strings.Repeat("  ", level-1))
 			}
 			fmt.Fprintf(&errMsg, "* %v\n", err.Error())
@@ -378,6 +377,8 @@ func (spec FunctionSpec) Validate() error {
 
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
+	// validateForAdmission also runs ProvisionedConcurrency.Validate(), so the
+	// Target/Windows checks are covered without a duplicate call here.
 	errs = errors.Join(errs, spec.validateForAdmission())
 
 	// TODO Add below validation warning
@@ -392,11 +393,16 @@ func (spec FunctionSpec) Validate() error {
 // enforce via CEL and the admission webhook must still run: pod-spec security
 // (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92)
 // and the RFC-0024 async invocation bounds (metav1.Duration CEL rules are unproven
-// in this CRD, so the ordering/positivity checks live in Go and run at admission).
+// in this CRD, so the ordering/positivity checks live in Go and run at admission)
+// and provisioned-concurrency Windows-emptiness (RFC-0026 PR 1 limitation).
 func (spec FunctionSpec) validateForAdmission() error {
-	errs := ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec)
+	var errs error
+	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
 	if spec.Invocation != nil {
 		errs = errors.Join(errs, spec.Invocation.Validate())
+	}
+	if spec.ProvisionedConcurrency != nil {
+		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
 	}
 	return errs
 }
@@ -635,6 +641,25 @@ func (sc *StateConfig) Validate() error {
 		if sc.Sticky.Name == "" {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Sticky.Name", sc.Sticky.Name, "a header or query-parameter name is required"))
 		}
+	}
+
+	return errs
+}
+
+// Validate checks the provisioned concurrency config. In PR 1 only the base
+// Target is meaningful — Windows is accepted in the CRD schema (for PR 2
+// stability) but rejected here until the schedule parser is implemented.
+// CEL already enforces Target >= 1 and the poolmgr-only constraint; this is
+// defense-in-depth and the one check CEL cannot express (Windows empty).
+func (pc *ProvisionedConcurrencyConfig) Validate() error {
+	var errs error
+	if pc.Target < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Target", pc.Target, "must be >= 1"))
+	}
+
+	if len(pc.Windows) > 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", len(pc.Windows),
+			"scheduled windows are not yet supported (RFC-0026 PR 2)"))
 	}
 
 	return errs
@@ -978,9 +1003,9 @@ func (config IngressConfig) Validate() error {
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.key", k, msg))
 		}
-		totalSize += (int64)(len(k)) + (int64)(len(v))
+		totalSize += int64(len(k)) + int64(len(v))
 	}
-	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+	if totalSize > int64(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.IngressConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
@@ -1030,9 +1055,9 @@ func (config RouteConfig) Validate() error {
 		for _, msg := range validation.IsQualifiedName(strings.ToLower(k)) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.key", k, msg))
 		}
-		totalSize += (int64)(len(k)) + (int64)(len(v))
+		totalSize += int64(len(k)) + int64(len(v))
 	}
-	if totalSize > (int64)(totalAnnotationSizeLimitB) {
+	if totalSize > int64(totalAnnotationSizeLimitB) {
 		msg := fmt.Sprintf("must have at most %v characters", totalSize)
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "HTTPTriggerSpec.RouteConfig.Annotations.value", totalAnnotationSizeLimitB, msg))
 	}
@@ -1087,14 +1112,14 @@ func (spec MessageQueueTriggerSpec) Validate() error {
 func (spec MessageQueueTriggerSpec) validateForAdmission() error {
 	var errs error
 
-	if !validator.IsValidMessageQueue((string)(spec.MessageQueueType), spec.MqtKind) {
+	if !validator.IsValidMessageQueue(string(spec.MessageQueueType), spec.MqtKind) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "MessageQueueTriggerSpec.MessageQueueType", spec.MessageQueueType, "not a supported message queue type"))
 	} else {
-		if !validator.IsValidTopic((string)(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
+		if !validator.IsValidTopic(string(spec.MessageQueueType), spec.Topic, spec.MqtKind) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.Topic", spec.Topic, "not a valid topic"))
 		}
 
-		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic((string)(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
+		if len(spec.ResponseTopic) > 0 && !validator.IsValidTopic(string(spec.MessageQueueType), spec.ResponseTopic, spec.MqtKind) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "MessageQueueTriggerSpec.ResponseTopic", spec.ResponseTopic, "not a valid topic"))
 		}
 

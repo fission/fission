@@ -14,6 +14,12 @@ const (
 	// FunctionConditionToolExposed reports whether the MCP server is advertising
 	// this function as a tool (set by pkg/mcp's reconciler).
 	FunctionConditionToolExposed = "ToolExposed"
+	// FunctionConditionProvisioned reports whether the executor's provisioner
+	// (RFC-0026) has reached the requested warm-pod floor for this function.
+	// True = ProvisionedReady >= ProvisionedTarget; False with reason
+	// ProvisionedWarming = still warming or draining; False with reason
+	// ProvisionedDisabled = provisioned concurrency off (target=0 / spec nil).
+	FunctionConditionProvisioned = "Provisioned"
 
 	// Package conditions
 	PackageConditionBuildSucceeded = "BuildSucceeded"
@@ -95,6 +101,12 @@ const (
 	FunctionReasonPackageFailed    = "PackageBuildFailed" // buildermgr: package build failed
 	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
 	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
+
+	// Provisioned condition reasons (RFC-0026 provisioner).
+	FunctionReasonProvisionedSatisfied = "ProvisionedSatisfied" // ProvisionedReady >= ProvisionedTarget
+	FunctionReasonProvisionedWarming   = "ProvisionedWarming"   // ProvisionedReady < ProvisionedTarget (still warming or draining)
+	FunctionReasonProvisionedDisabled  = "ProvisionedDisabled"  // provisioned concurrency off (target=0 / spec field nil)
+	FunctionReasonProvisionedClamped   = "ProvisionedClamped"   // spec.Target exceeded the namespace cap; effective target was clamped
 
 	// Package condition reasons (mirror BuildStatus enum + composites)
 	PackageReasonBuildSucceeded  = "BuildSucceeded"

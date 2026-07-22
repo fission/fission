@@ -83,6 +83,14 @@ type FunctionSpecApplyConfiguration struct {
 	// RetainPods specifies the number of specialized pods that should be retained after serving requests
 	// This is optional. If not specified default value will be taken as 0
 	RetainPods *int `json:"retainPods,omitempty"`
+	// ProvisionedConcurrency, when non-nil, opts this function into eager
+	// pre-warming of specialized pods (RFC-0026). The executor's provisioner
+	// keeps at least the configured Target specialized pods warm, published to
+	// the function's headless Service, and exempt from the idle reaper. nil
+	// (the default) is the classic on-demand cold-start path. Additive and
+	// backward compatible. Only valid when
+	// InvokeStrategy.ExecutionStrategy.ExecutorType is poolmgr.
+	ProvisionedConcurrency *ProvisionedConcurrencyConfigApplyConfiguration `json:"provisionedConcurrency,omitempty"`
 	// Podspec specifies podspec to use for executor type container based functions
 	// Different arguments mentioned for container based function are populated inside a pod.
 	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
@@ -229,6 +237,14 @@ func (b *FunctionSpecApplyConfiguration) WithOnceOnly(value bool) *FunctionSpecA
 // If called multiple times, the RetainPods field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithRetainPods(value int) *FunctionSpecApplyConfiguration {
 	b.RetainPods = &value
+	return b
+}
+
+// WithProvisionedConcurrency sets the ProvisionedConcurrency field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProvisionedConcurrency field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithProvisionedConcurrency(value *ProvisionedConcurrencyConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.ProvisionedConcurrency = value
 	return b
 }
 

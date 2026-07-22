@@ -102,6 +102,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.PackageSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("PackageStatus"):
 		return &corev1.PackageStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ProvisionedConcurrencyConfig"):
+		return &corev1.ProvisionedConcurrencyConfigApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("ProvisionedWindow"):
+		return &corev1.ProvisionedWindowApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("RetryPolicy"):
 		return &corev1.RetryPolicyApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("RouteConfig"):

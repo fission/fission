@@ -165,6 +165,18 @@ func executorEnvValue(dep *appsv1.Deployment, key string) (string, bool) {
 	return "", false
 }
 
+// ExecutorEnvEnabled reports whether the named environment variable on the
+// executor container is set to "true". Use for feature gates that the
+// Helm chart controls via executor env vars (e.g.
+// EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED, ENABLE_FUNCTION_SERVICES).
+func (f *Framework) ExecutorEnvEnabled(t *testing.T, ctx context.Context, name string) bool {
+	t.Helper()
+	dep, err := f.kubeClient.AppsV1().Deployments(f.FissionNamespace()).Get(ctx, executorDeploymentName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "ExecutorEnvEnabled: get executor Deployment %s/%s", f.FissionNamespace(), executorDeploymentName)
+	v, _ := executorEnvValue(dep, name)
+	return v == "true"
+}
+
 // WaitForExecutorRollout blocks until the executor Deployment has fully rolled
 // out at generation atLeast or newer: the controller has observed the new
 // generation, every replica is updated and available, and no old pods remain.

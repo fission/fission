@@ -130,10 +130,7 @@ func (f *Framework) RouterEndpointSliceMode(t *testing.T, ctx context.Context) s
 // ENABLE_FUNCTION_SERVICES gate.
 func (f *Framework) ExecutorFunctionServicesEnabled(t *testing.T, ctx context.Context) bool {
 	t.Helper()
-	dep, err := f.kubeClient.AppsV1().Deployments(f.FissionNamespace()).Get(ctx, executorDeploymentName, metav1.GetOptions{})
-	require.NoError(t, err, "get executor Deployment")
-	v, _ := executorEnvValue(dep, "ENABLE_FUNCTION_SERVICES")
-	return v == "true"
+	return f.ExecutorEnvEnabled(t, ctx, "ENABLE_FUNCTION_SERVICES")
 }
 
 // ScaleExecutor scales the executor Deployment to the given replica count and

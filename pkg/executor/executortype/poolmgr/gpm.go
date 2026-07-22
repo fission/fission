@@ -133,6 +133,12 @@ type (
 		// successful-or-in-flight ensure. Entries are dropped on function
 		// delete and on ensure failure (so the next request retries).
 		fnSvcEnsured sync.Map
+
+		// provisioner maintains warm specialized pods for functions opted
+		// into ProvisionedConcurrency (RFC-0026). nil if the feature is
+		// disabled (no env var config — see Step 9). Set in
+		// RegisterReconcilers after crClient is available.
+		provisioner *Provisioner
 	}
 	request struct {
 		requestType
@@ -239,6 +245,15 @@ func (gpm *GenericPoolManager) Run(ctx context.Context, mgr *errgroup.Group) {
 		gpm.reapIdlePoolsLoop(ctx)
 		return nil
 	})
+
+	// RFC-0026 provisioned-concurrency warmer. No-op when nil (feature
+	// disabled: no env var config provided at startup).
+	if gpm.provisioner != nil {
+		mgr.Go(func() error {
+			gpm.provisioner.Run(ctx)
+			return nil
+		})
+	}
 }
 
 func (gpm *GenericPoolManager) GetTypeName(ctx context.Context) fv1.ExecutorType {
@@ -399,7 +414,7 @@ func (gpm *GenericPoolManager) MarkSpecializationFailure(ctx context.Context, fn
 	span.SetStatus(codes.Error, ferror.ReasonSpecializationFailed)
 	span.SetAttributes(attribute.String("coldstart.failure_reason", ferror.ReasonSpecializationFailed))
 	logger := otelUtils.LoggerWithTraceID(ctx, gpm.logger)
-	logger.Info("marking specialization failure", "key", key)
+	logger.Info("marking specialization failure", "key", key.String())
 	gpm.fsCache.MarkSpecializationFailure(key)
 }
 
@@ -608,6 +623,11 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 		for i := range podList.Items {
 			pod := &podList.Items[i]
 			if !utils.IsReadyPod(pod) {
+				if len(pod.Status.ContainerStatuses) == 0 {
+					gpm.logger.V(1).Info("adopt: skipping pod, containerStatuses empty",
+						"pod", pod.Name, "namespace", pod.Namespace,
+						"phase", pod.Status.Phase, "podIP", pod.Status.PodIP)
+				}
 				continue
 			}
 

@@ -34,6 +34,7 @@ func Commands() *cobra.Command {
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
+			flag.FnProvisionedConcurrency,
 
 			// TODO retired pkg & trigger related flags from function cmd
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -98,6 +99,7 @@ func Commands() *cobra.Command {
 			flag.FnAsyncOnSuccess, flag.FnAsyncOnFailure,
 			flag.FnAsyncOnSuccessTopic, flag.FnAsyncOnFailureTopic,
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
+			flag.FnProvisionedConcurrency,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,

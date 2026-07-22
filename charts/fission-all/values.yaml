@@ -287,6 +287,27 @@ executor:
   ## nodes, and size it generously.
   ##
   specializationConcurrency: 0
+  ## provisionedConcurrency configures the RFC-0026 provisioned-concurrency
+  ## warmer in the poolmgr executor. When enabled, the executor runs a
+  ## periodic loop that keeps N warm specialized pods for each Function that
+  ## sets spec.provisionedConcurrency.target (CLI: --provisioned-concurrency).
+  ## Off by default in PR 1; opt-in per cluster. poolmgr-only.
+  ##
+  provisionedConcurrency:
+    enabled: false
+    ## maxPerFunction is the namespace-wide cap on
+    ## spec.provisionedConcurrency.target (defense-in-depth on top of the
+    ## webhook/CEL bound). Default 20.
+    maxPerFunction: 20
+    ## maxInflightPerFunction bounds concurrent eager specializations per
+    ## function so a warm-up burst cannot saturate the shared
+    ## EXECUTOR_SPECIALIZATION_CONCURRENCY and starve on-demand cold starts
+    ## for other functions (RFC-0026 invariant P5). Default 4.
+    maxInflightPerFunction: 4
+    ## reconcileInterval is how often the warmer scans opted-in functions
+    ## and reconciles their warm-pod count toward the effective target.
+    ## Default 30s.
+    reconcileInterval: "30s"
   ## maxPendingSpecializations bounds specializations IN FLIGHT per function on
   ## the router's ensureCapacity path (EXECUTOR_MAX_PENDING_SPECIALIZATIONS_PER_FUNCTION).
   ## Unlike the function Concurrency cap (a total-pods budget, default 500), this

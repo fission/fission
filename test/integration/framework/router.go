@@ -122,14 +122,14 @@ func (r *RouterClient) do(ctx context.Context, method, path, contentType string,
 
 // routerPollTimeout is the budget GetEventually/PostEventually give for the
 // router to converge to the expected response. It must cover the slowest
-// reasonable case: function-update propagation under parallel CI load, which
-// requires the poolmgr to observe the Function CRD update, invalidate its
-// functionServiceMap entry, take a fresh pod from the pool, and re-specialize
-// it with the new package. The previous 60s was tight on k8s 1.32/1.34 with a
-// pool size of 3 and many concurrent tests competing for pool slots; 120s
-// gives ~2× headroom while remaining short enough that genuinely broken
-// tests still fail fast.
-const routerPollTimeout = 120 * time.Second
+// reasonable case: JVM (Spring Boot) cold starts under parallel CI load, where
+// WebApplicationContext init alone can take 18-26s, and poolmgr pod recycling
+// (specialize → killed → re-specialize) can consume multiple cycles before a
+// pod survives long enough to serve. 180s gives ~3× headroom over the
+// typical ~60s convergence while remaining short enough that genuinely broken
+// tests still fail fast. EventuallyWithT returns on first success, so the
+// extra budget only costs wall time on actual failures.
+const routerPollTimeout = 180 * time.Second
 
 // GetEventually polls a GET until the response satisfies `check` or the
 // timeout elapses. Use this in place of bash's `curl --retry` after creating

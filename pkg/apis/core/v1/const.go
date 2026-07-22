@@ -228,6 +228,12 @@ const (
 	// different files and MUST agree byte-for-byte — drift means specialized
 	// pods silently never join their Service.
 	SERVED_VALUE = "true"
+	// PROVISIONED_LABEL marks a served pod the provisioner (RFC-0026) is
+	// actively keeping warm. The idle reaper exempts these pods; the
+	// provisioner counts them toward the function's floor.
+	PROVISIONED_LABEL = "fission.io/provisioned"
+	// PROVISIONED_VALUE is PROVISIONED_LABEL's only valid value.
+	PROVISIONED_VALUE = "true"
 	// MANAGED_BY_LABEL marks the Services Fission's data plane owns; the
 	// EndpointSlice controller mirrors Service labels onto slices, and the
 	// router's slice informer filters on it.

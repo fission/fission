@@ -80,6 +80,13 @@ type FunctionOptions struct {
 	// MinScale / MaxScale, when > 0, control newdeploy autoscaler bounds.
 	MinScale int
 	MaxScale int
+	// ProvisionedConcurrency, when > 0, passes `--provisioned-concurrency <n>`
+	// (RFC-0026: keep N poolmgr pods warm). Poolmgr-only; webhook rejects
+	// other executor types.
+	ProvisionedConcurrency int
+	// IdleTimeout, when > 0, passes `--idletimeout <n>` (seconds before an
+	// idle poolmgr pod is reaped).
+	IdleTimeout int
 	// TargetCPU is the CPU utilization (%) the autoscaler targets.
 	TargetCPU int
 	// MinCPU / MaxCPU are millicores (CLI: `--mincpu` / `--maxcpu`).
@@ -195,6 +202,12 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	if opts.ExecutorType != "" {
 		args = append(args, "--executortype", opts.ExecutorType)
+	}
+	if opts.ProvisionedConcurrency > 0 {
+		args = append(args, "--provisioned-concurrency", strconv.Itoa(opts.ProvisionedConcurrency))
+	}
+	if opts.IdleTimeout > 0 {
+		args = append(args, "--idletimeout", strconv.Itoa(opts.IdleTimeout))
 	}
 	if opts.MinScale > 0 {
 		args = append(args, "--minscale", strconv.Itoa(opts.MinScale))

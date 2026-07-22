@@ -155,6 +155,48 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 		f.Atime = time.Now() // fresh
 		require.NoError(t, s.Reap(t.Context(), f))
 	})
+
+	t.Run("provisioned-concurrency function is skipped (PR1 function-level exemption)", func(t *testing.T) {
+		s, fc := newStrategy()
+		const uid = types.UID("fn-uid-1")
+		// Function opts into provisioned concurrency (target=2).
+		s.fnByUID[uid] = fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+			Spec: fv1.FunctionSpec{
+				ProvisionedConcurrency: &fv1.ProvisionedConcurrencyConfig{Target: 2},
+			},
+		}
+		f := idleFsvc()
+		f.Function.UID = uid
+		f.Atime = time.Now().Add(-time.Hour) // very idle
+		// Seed PodToFsvc so we can assert the entry survives Reap.
+		fc.PodToFsvc.Store(f.Name, f)
+		require.NoError(t, s.Reap(t.Context(), f))
+		// PodToFsvc entry must survive — the PC exemption prevented reaping
+		// (DeleteFunctionSvc would have removed it).
+		_, ok := fc.PodToFsvc.Load(f.Name)
+		assert.True(t, ok, "PodToFsvc entry must survive Reap when PC is enabled")
+	})
+
+	t.Run("non-provisioned function is reaped normally", func(t *testing.T) {
+		s, fc := newStrategy()
+		const uid = types.UID("fn-uid-2")
+		// Function does NOT opt into provisioned concurrency.
+		s.fnByUID[uid] = fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+		}
+		f := idleFsvc()
+		f.Function.UID = uid
+		f.Atime = time.Now().Add(-time.Hour) // very idle
+		// Seed PodToFsvc so we can assert the entry is removed by Reap.
+		fc.PodToFsvc.Store(f.Name, f)
+		require.NoError(t, s.Reap(t.Context(), f))
+		// PodToFsvc entry must be gone — Reap proceeded past the PC
+		// exemption and called DeleteOldPoolCache → DeleteFunctionSvc,
+		// which removes the PodToFsvc entry.
+		_, ok := fc.PodToFsvc.Load(f.Name)
+		assert.False(t, ok, "PodToFsvc entry must be removed by Reap when PC is not enabled")
+	})
 }
 
 func TestScaleDownStrategy_Reap(t *testing.T) {

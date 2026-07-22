@@ -360,3 +360,48 @@ func TestGetInvokeStrategy(t *testing.T) {
 		})
 	}
 }
+
+func TestGetProvisionedConcurrencyConfig(t *testing.T) {
+	cases := []struct {
+		name     string
+		testArgs map[string]any
+		expected *fv1.ProvisionedConcurrencyConfig
+	}{
+		{
+			name:     "flag not set returns nil",
+			testArgs: map[string]any{},
+			expected: nil,
+		},
+		{
+			name:     "target positive builds config",
+			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 5},
+			expected: &fv1.ProvisionedConcurrencyConfig{Target: 5},
+		},
+		{
+			name:     "target zero returns nil (off switch)",
+			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 0},
+			expected: nil,
+		},
+		{
+			name:     "target negative returns nil",
+			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: -1},
+			expected: nil,
+		},
+		{
+			name:     "large target builds config",
+			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 100},
+			expected: &fv1.ProvisionedConcurrencyConfig{Target: 100},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			flags := dummy.TestFlagSet()
+			for k, v := range c.testArgs {
+				flags.Set(k, v)
+			}
+			got := getProvisionedConcurrencyConfig(flags)
+			require.Equal(t, c.expected, got)
+		})
+	}
+}

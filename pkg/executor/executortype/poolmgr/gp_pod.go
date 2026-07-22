@@ -114,7 +114,22 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// requeued with exponential backoff and re-checked, so this is an
 			// expected retry, not an error (it was logged at Error with a nil
 			// error, which flooded the executor log during pool warm-up).
-			logger.V(1).Info("pod not ready, pod will be checked again", "key", key, "delay", expoDelay)
+			//
+			// Distinguish "no container statuses yet" (the race that causes
+			// fetcher i/o timeouts — kubelet has not reported container status
+			// so the fetcher HTTP server may not be listening) from "container
+			// reported but not Ready" (normal warmup) so the log line is
+			// actionable when debugging.
+			if len(pod.Status.ContainerStatuses) == 0 {
+				logger.Info("pod not ready: containerStatuses empty (kubelet has not reported yet)",
+					"key", key, "pod", pod.Name, "podIP", pod.Status.PodIP,
+					"phase", pod.Status.Phase, "delay", expoDelay)
+			} else {
+				ready, total := utils.PodContainerReadyStatus(pod)
+				logger.V(1).Info("pod not ready, pod will be checked again",
+					"key", key, "delay", expoDelay,
+					"readyContainers", ready, "totalContainers", total)
+			}
 			gp.readyPodQueue.Done(key)
 			gp.readyPodQueue.AddAfter(key, expoDelay)
 			expoDelay *= 2

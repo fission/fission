@@ -27,6 +27,16 @@ func IsReadyPod(pod *v1.Pod) bool {
 		return false
 	}
 
+	// kubelet populates containerStatuses asynchronously after setting
+	// phase=Running. An empty slice means the status report has not
+	// arrived yet — the pod is NOT ready (the fetcher HTTP server may
+	// not be listening). Returning true here causes the executor to
+	// dial a port that is not bound yet, resulting in a 30s i/o
+	// timeout and pod cleanup.
+	if len(pod.Status.ContainerStatuses) == 0 {
+		return false
+	}
+
 	for _, cStatus := range pod.Status.ContainerStatuses {
 		if !cStatus.Ready {
 			return false
@@ -45,7 +55,6 @@ func IsPodTerminated(pod *v1.Pod) bool {
 
 // PodContainerReadyStatus returns the number of ready containers and total containers present in pod
 func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) {
-
 	noOfContainers = len(pod.Status.ContainerStatuses)
 	readyContainers = 0
 
@@ -56,4 +65,19 @@ func PodContainerReadyStatus(pod *v1.Pod) (readyContainers, noOfContainers int) 
 	}
 
 	return
+}
+
+func IsPodRunning(pod *v1.Pod) bool {
+	return pod.Status.Phase == v1.PodRunning
+}
+
+func ReadyAndRunningPodsFilter(podList *v1.PodList) []v1.Pod {
+	output := []v1.Pod{}
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if IsReadyPod(pod) && IsPodRunning(pod) {
+			output = append(output, *pod)
+		}
+	}
+	return output
 }

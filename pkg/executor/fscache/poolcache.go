@@ -310,7 +310,12 @@ func (c *PoolCache) SetSvcValue(ctx context.Context, function crd.CacheKeyUG, ad
 		}
 	}
 	if c.logger.V(1).Enabled() {
-		otelUtils.LoggerWithTraceID(ctx, c.logger).V(1).Info("Increase active requests with setValue", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
+		otelUtils.LoggerWithTraceID(ctx, c.logger).V(1).Info("SetSvcValue",
+			"function", function.String(),
+			"address", address,
+			"uid", function.UID,
+			"generation", function.Generation,
+			"activeRequests", c.cache[function].svcs[address].activeRequests)
 	}
 	c.cache[function].svcs[address].cpuLimit = cpuLimit
 }
@@ -333,17 +338,25 @@ func (c *PoolCache) MarkAvailable(function crd.CacheKeyUG, address string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if _, ok := c.cache[function]; ok {
-		if _, ok = c.cache[function].svcs[address]; ok {
-			if c.cache[function].svcs[address].activeRequests > 0 {
-				c.cache[function].svcs[address].activeRequests--
-				if c.logger.V(1).Enabled() {
-					otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("Decrease active requests", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
-				}
-			} else {
-				otelUtils.LoggerWithTraceID(context.Background(), c.logger).Error(nil, "Invalid request to decrease active requests", "function", function.String(), "address", address, "activeRequests", c.cache[function].svcs[address].activeRequests)
-			}
+	funcSvcGroup, ok := c.cache[function]
+	if !ok {
+		return
+	}
+	svcInfo, ok := funcSvcGroup.svcs[address]
+	if !ok {
+		return
+	}
+	if svcInfo.activeRequests > 0 {
+		svcInfo.activeRequests--
+		if c.logger.V(1).Enabled() {
+			otelUtils.LoggerWithTraceID(context.Background(), c.logger).V(1).Info("MarkAvailable: decreased active requests",
+				"function", function.String(),
+				"address", address,
+				"activeRequests", svcInfo.activeRequests)
 		}
+	} else {
+		otelUtils.LoggerWithTraceID(context.Background(), c.logger).Error(nil, "MarkAvailable: invalid request to decrease active requests (already 0)",
+			"function", function.String(), "address", address)
 	}
 }
 

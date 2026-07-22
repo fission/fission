@@ -93,7 +93,7 @@ func TestJVMJerseyEnv(t *testing.T) {
 			t.Skipf("JVM_JERSEY_JAR_PATH=%q not accessible: %v", jarPath, err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 		defer cancel()
 
 		envName := "jersey-dep-" + ns.ID

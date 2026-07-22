@@ -81,6 +81,33 @@ func (ns *TestNamespace) CLI(t *testing.T, ctx context.Context, args ...string) 
 	return buf.String()
 }
 
+// CLIExpectError runs an in-process CLI command expected to fail. Returns
+// combined stdout+stderr + the CLI error. Use for negative tests asserting
+// webhook/CEL rejection (e.g. provisionedConcurrency on newdeploy). Fatals
+// if the command unexpectedly succeeds; caller asserts the error message.
+func (ns *TestNamespace) CLIExpectError(t *testing.T, ctx context.Context, args ...string) (string, error) {
+	t.Helper()
+	ns.f.logger.Info("CLIExpectError", "ns", ns.Name, "args", args)
+	cliMu.RLock()
+	defer cliMu.RUnlock()
+	args = withNamespaceFlag(args, ns.Name)
+	c := app.App(cmd.ClientOptions{
+		RestConfig: ns.f.restConfig,
+		Namespace:  ns.Name,
+	})
+	c.SilenceErrors = true
+	c.SilenceUsage = true
+	c.SetArgs(args)
+	buf := new(bytes.Buffer)
+	c.SetOut(buf)
+	c.SetErr(buf)
+	err := c.ExecuteContext(ctx)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	return buf.String(), err
+}
+
 // CLIWithEnv runs an in-process CLI command with extra environment
 // variables set for the duration of the call. Used by tests that exercise
 // CLI flags resolved from the process environment (e.g.

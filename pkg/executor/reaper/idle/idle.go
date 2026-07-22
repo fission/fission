@@ -238,6 +238,32 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	if _, ok := s.fsCache.WebsocketFsvc.Load(fsvc.Name); ok {
 		return nil
 	}
+	// Skip provisioned pods — the provisioner (RFC-0026) is actively
+	// maintaining them. The provisioner clears fission.io/provisioned
+	// before letting the reaper retire them (target drop, window close,
+	// generation bump, spec deletion). Function-level check: if the
+	// function opts into provisioned concurrency, all its specialized
+	// pods are provisioner-managed. The narrow race between
+	// GetFuncSvc returning and the provisioner's label patch completing
+	// is accepted — the provisioner re-specializes on the
+	// next tick.
+	//
+	// PR1 LIMITATION: this function-level exemption skips ALL specialized
+	// pods of an opted-in function, not just the provisioned floor (target).
+	// An opted-in function (target=2) that bursts to N on-demand pods (up
+	// to Concurrency, default 500) keeps all N pods forever while PC is
+	// enabled — the reaper never retires the overflow, and unlike the
+	// label-patch race this does NOT self-heal (no per-pod signal
+	// distinguishes floor from overflow). PR2 replaces this with a
+	// per-pod-label check (fission.io/provisioned=true) so only floor pods
+	// are exempt and overflow pods are reaped normally. Until then, the
+	// overflow-retention cost is a known PR1 trade-off.
+	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok {
+		if fn.Spec.ProvisionedConcurrency != nil {
+			return nil
+		}
+	}
+
 	// For a function whose environment no longer exists, reap the idle pod as
 	// usual but log to notify the user.
 	if _, ok := s.envUIDs[fsvc.Environment.UID]; !ok {
@@ -265,7 +291,8 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 			return nil
 		}
 		for i := range fsvc.KubernetesObjects {
-			s.logger.Info("release idle function resources",
+			s.logger.Info(
+				"release idle function resources",
 				"function", fsvc.Function.Name,
 				"address", fsvc.Address,
 				"executor", string(fsvc.Executor),
@@ -316,7 +343,8 @@ func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.
 			s.logger.Error(err, "error unlabeling idle pod for drain", "pod", obj.Name, "ns", obj.Namespace)
 		}
 	}
-	s.logger.Info("draining idle function resources before delete",
+	s.logger.Info(
+		"draining idle function resources before delete",
 		"function", fsvc.Function.Name,
 		"address", fsvc.Address,
 		"pod", fsvc.Name,
@@ -330,7 +358,8 @@ func (s *PoolDeleteStrategy) drainThenDelete(ctx context.Context, fsvc *fscache.
 		dctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		for i := range objs {
-			logger.Info("release drained idle function resources",
+			logger.Info(
+				"release drained idle function resources",
 				"function", fsvc.Function.Name,
 				"address", fsvc.Address,
 				"pod", fsvc.Name,

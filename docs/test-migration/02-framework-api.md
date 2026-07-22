@@ -406,6 +406,47 @@ ns.WithCWD(t, workdir, func() { ns.CLI(t, ctx, "spec", "apply") })
 Fresh RFC-4122 v4 UUID for the spec `DeploymentConfig.uid`.
 Each test's `spec destroy` is a label-selector by `uid`, so per-test UIDs ensure cleanup only removes that test's resources.
 
+## Helpers (Phase 6)
+
+Helpers added by RFC-0026 PR1 (provisioned concurrency integration tests).
+
+### `FunctionOptions.ProvisionedConcurrency` / `FunctionOptions.IdleTimeout`
+
+Two new `FunctionOptions` fields wired to CLI flags:
+
+- `ProvisionedConcurrency int` → `--provisioned-concurrency <n>` (RFC-0026: keep N poolmgr pods warm; poolmgr-only, webhook rejects other executor types).
+- `IdleTimeout int` → `--idletimeout <n>` (seconds before an idle poolmgr pod is reaped).
+
+Both default to 0 (flag omitted, CLI default applies). Set `ProvisionedConcurrency >= 1` on a poolmgr function to opt into the provisioner; set `IdleTimeout` to a small value (e.g. 30) when a test needs the reaper to retire a control function quickly.
+
+### `ns.CLIExpectError(t, ctx, args...)` → `(string, error)`
+
+Runs an in-process CLI command expected to fail. Returns combined stdout+stderr + the CLI error. Fatals if the command unexpectedly succeeds; the caller asserts the error is non-nil and checks the message fragment (e.g. CEL/webhook rejection text). Use for negative tests like `TestProvisionedConcurrencyRejectsNewdeploy`.
+
+### `f.ExecutorEnvEnabled(t, ctx, name)` → `bool`
+
+Reports whether the named environment variable on the executor container is set to `"true"`. Generic gate for feature flags the Helm chart controls via executor env vars (e.g. `EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED`, `ENABLE_FUNCTION_SERVICES`). `ExecutorFunctionServicesEnabled` is now a thin wrapper over this helper.
+
+### `ns.ReadyProvisionedPods(ctx, fnName)` → `([]corev1.Pod, error)`
+
+Lists ready+running pods for `fnName` carrying `fission.io/served=true` AND `fission.io/provisioned=true`. These are the pods the RFC-0026 provisioner keeps warm and the idle reaper exempts. No `t.Fatal` — callers (waiters) decide what to assert.
+
+### `ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, want, timeout)` → `[]corev1.Pod`
+
+Polls `ReadyProvisionedPods` every 2s until the count is `>= want` (FLOOR check) or timeout fires, then returns the final pod list. Use when asserting the provisioner keeps N pods warm — floor is stable because the provisioner may overshoot briefly during reconciliation.
+
+### `ns.WaitForNoProvisionedPods(t, ctx, fnName, timeout)`
+
+Polls `ReadyProvisionedPods` every 2s until the count is exactly 0. Use after disabling provisioned concurrency (`--provisioned-concurrency 0`) to assert labels cleared and pods gone.
+
+### `ns.WaitForProvisionedStatus(t, ctx, fnName, wantReady, wantTarget, timeout)`
+
+Polls the Function CR's status until `ProvisionedReady == wantReady` AND `ProvisionedTarget == wantTarget` (exact match). Proves the provisioner converged on the desired target — not just that pods exist. Polls every 2s.
+
+### `ns.RunningFunctionPodCount(ctx, fnName)` → `(int, error)`
+
+Returns the count of ready+running pods backing `fnName` (any specialized pod, provisioned or not — selects on `fission.io/served=true` without the provisioned label). Use for reaper-liveness checks (control function reaped → count 0) and total-pod convergence after a target drop or disable. No `t.Fatal` so callers can wrap in `EventuallyWithT`.
+
 ## Builder pre-wait (since Phase 4)
 
 `CreateEnv` automatically waits for the env's builder pod **and** the EndpointSlice for its Service to publish, when `EnvOptions.Builder` is set.
