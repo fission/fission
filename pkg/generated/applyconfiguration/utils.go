@@ -20,6 +20,8 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=fission.io, Version=v1
+	case v1.SchemeGroupVersion.WithKind("AliasTargetRecord"):
+		return &corev1.AliasTargetRecordApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Archive"):
 		return &corev1.ArchiveApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Builder"):
@@ -54,6 +56,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.FissionTenantStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Function"):
 		return &corev1.FunctionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionAlias"):
+		return &corev1.FunctionAliasApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionAliasSpec"):
+		return &corev1.FunctionAliasSpecApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionAliasStatus"):
+		return &corev1.FunctionAliasStatusApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionPackageRef"):
 		return &corev1.FunctionPackageRefApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionReference"):
@@ -62,6 +70,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.FunctionSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("FunctionStatus"):
 		return &corev1.FunctionStatusApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionVersion"):
+		return &corev1.FunctionVersionApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("FunctionVersionSpec"):
+		return &corev1.FunctionVersionSpecApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("GatewayParentRef"):
 		return &corev1.GatewayParentRefApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("GatewayRouteConfig"):
@@ -130,6 +142,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &corev1.ToolConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("TopicRef"):
 		return &corev1.TopicRefApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("VersioningConfig"):
+		return &corev1.VersioningConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Workflow"):
 		return &corev1.WorkflowApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("WorkflowBranch"):
