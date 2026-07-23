@@ -96,6 +96,16 @@ type Provisioner struct {
 	reconcileLocks sync.Map // map[types.UID]*sync.Mutex
 }
 
+// lockFor returns the per-function reconcile lock for fnUID, creating it on
+// first use. Callers MUST resolve it exactly once per critical section and
+// reuse the returned *sync.Mutex for both Lock and the deferred Unlock —
+// e.g. `lock := p.lockFor(fn.UID); lock.Lock(); defer lock.Unlock()`.
+//
+// A second lookup (such as calling lockFor again for the Unlock) is unsafe:
+// forget(fnUID) deletes the map entry on the Function-delete path, and a
+// concurrent lockFor after that delete LoadOrStores a brand-new, never-locked
+// mutex. Unlocking that fresh mutex is a fatal "sync: unlock of unlocked
+// mutex" — this crashed the executor process (see provisioner.go history).
 func (p *Provisioner) lockFor(fnUID types.UID) *sync.Mutex {
 	lock, _ := p.reconcileLocks.LoadOrStore(fnUID, &sync.Mutex{})
 	return lock.(*sync.Mutex)
@@ -229,8 +239,9 @@ func (p *Provisioner) reconcileAll(ctx context.Context) {
 }
 
 func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
-	p.lockFor(fn.UID).Lock()
-	defer p.lockFor(fn.UID).Unlock()
+	lock := p.lockFor(fn.UID)
+	lock.Lock()
+	defer lock.Unlock()
 	p.reconcileFunctionLocked(ctx, fn)
 }
 
@@ -474,8 +485,9 @@ func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
 // status write would race the delete, so DeleteFunction calls
 // clearProvisionedLabels directly.
 func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function) {
-	p.lockFor(fn.UID).Lock()
-	defer p.lockFor(fn.UID).Unlock()
+	lock := p.lockFor(fn.UID)
+	lock.Lock()
+	defer lock.Unlock()
 	p.disableProvisioningLocked(ctx, fn)
 }
 

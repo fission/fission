@@ -931,6 +931,68 @@ func TestFilterOptedFunctions(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------------
+// lockFor / forget race (regression: fatal "sync: unlock of unlocked mutex")
+// ---------------------------------------------------------------------------
+
+// TestProvisioner_lockForget_race exercises the race that used to crash the
+// executor process: reconcileFunction and disableProvisioning each resolved
+// p.lockFor(fn.UID) twice — once to Lock, once (in the deferred call) to
+// Unlock. A concurrent forget(fn.UID) (the Function-delete path) can Delete
+// the reconcileLocks map entry between those two lookups, so the deferred
+// Unlock resolves a brand-new, never-locked mutex and hits Go's fatal "sync:
+// unlock of unlocked mutex" — not a recoverable panic, it kills the process
+// outright (this is exactly what CI observed at provisioner.go:248 under PC
+// create/delete churn). The fix resolves the lock once and reuses the same
+// *sync.Mutex for both Lock and Unlock, so a forget in between cannot swap
+// out the mutex from under an in-progress critical section.
+//
+// Must be run with -race: besides making any reintroduced unsynchronized
+// access visible, -race slows/serializes scheduling in a way that widens the
+// window for the old bug's interleaving. Run with -count=5 for coverage
+// across scheduling variance — the old code could not reliably survive even
+// one iteration of this loop; the new code must survive all of them.
+func TestProvisioner_lockForget_race(t *testing.T) {
+	const uid = types.UID("racy-fn-uid")
+	// target=0 drives reconcileFunction/disableProvisioning down the fast
+	// disableProvisioningLocked path (list 0 pods, zero the status) so the
+	// loop can run many iterations quickly while still taking the lock.
+	fn := provisionedFnWithUID("racy-fn", string(uid), 0)
+
+	p := newTestProvisionerWithPods(t)
+	p.crClient = crfake.NewClientBuilder().WithScheme(scheme()).WithObjects(fn).Build()
+	p.fissionClient = fClient.NewSimpleClientset(fn) //nolint:staticcheck
+
+	const iterations = 1000
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			p.reconcileFunction(t.Context(), fn)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			p.disableProvisioning(t.Context(), fn)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range iterations {
+			p.forget(uid)
+		}
+	}()
+
+	wg.Wait()
+	// Reaching this line is the assertion: the old two-lookup lockFor usage
+	// could fatally crash the test binary partway through this loop (no
+	// recover() catches a runtime fatal error); the fixed single-resolve
+	// usage survives every interleaving forget can produce.
+}
+
 func TestProvisioner_RunZeroIntervalNoPanic(t *testing.T) {
 	p := newTestProvisioner(t)
 	p.config.ReconcileInterval = 0
