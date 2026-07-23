@@ -6,6 +6,7 @@ package functionalias
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -156,6 +157,41 @@ func TestAliasUpdateMissingAliasErrors(t *testing.T) {
 	in.Set(flagkey.AliasName, "absent")
 
 	require.Error(t, Update(in))
+}
+
+func TestAliasUpdateWaitSucceedsWhenAlreadyResolved(t *testing.T) {
+	alias := newAlias() // version=hello-v1
+	alias.Status.Conditions = []metav1.Condition{
+		{Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionTrue, Reason: fv1.FunctionAliasReasonResolved},
+	}
+	alias.Status.ResolvedVersion = "hello-v1"
+	setAliasClient(alias)
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.AliasName, "prod")
+	in.Set(flagkey.AliasVersion, "hello-v1") // no-op change, resolver already converged
+	in.Set(flagkey.AliasWait, true)
+	in.Set(flagkey.WaitTimeout, time.Second)
+
+	require.NoError(t, Update(in))
+}
+
+func TestAliasUpdateWaitTimesOutWhenUnresolved(t *testing.T) {
+	alias := newAlias()
+	alias.Status.Conditions = []metav1.Condition{
+		{Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionFalse, Reason: fv1.FunctionAliasReasonVersionNotFound},
+	}
+	setAliasClient(alias)
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.AliasName, "prod")
+	in.Set(flagkey.AliasVersion, "hello-v2")
+	in.Set(flagkey.AliasWait, true)
+	in.Set(flagkey.WaitTimeout, 20*time.Millisecond)
+
+	err := Update(in)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "timed out")
 }
 
 func fixedDigest() string {

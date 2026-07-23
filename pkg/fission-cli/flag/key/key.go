@@ -270,6 +270,13 @@ const (
 	AliasWeight           = "weight"
 	AliasSecondaryVersion = "secondary-version"
 	AliasClearWeight      = "clear-weight"
+	AliasWait             = "wait"
+
+	// RFC-0025 `fission fn rollback`.
+	FnRollbackAlias  = "alias"
+	FnRollbackTo     = "to"
+	FnRollbackDetach = "detach"
+	FnRollbackWait   = "wait"
 
 	DefaultSpecOutputDir = "fission-dump"
 )

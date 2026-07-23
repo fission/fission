@@ -268,6 +268,19 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.Output},
 	})
 
+	rollbackCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "rollback",
+		Short: "Roll a function alias back to a previous FunctionVersion (RFC-0025)",
+		Long: "Repoint a FunctionAlias at a previously resolved FunctionVersion: by default the alias's " +
+			"previous target (Status.History's last entry), or an explicit --to version. Always a full " +
+			"repoint — clears Weight/SecondaryVersion, so a rollback issued mid-canary stops the traffic " +
+			"split rather than only rolling back the primary target. Refuses to touch an alias managed by " +
+			"`fission spec` (Git) unless --detach.",
+	}, Rollback, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName, flag.FnRollbackAlias},
+		Optional: []flag.Flag{flag.FnRollbackTo, flag.FnRollbackDetach, flag.FnRollbackWait, flag.WaitTimeout},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
@@ -275,7 +288,7 @@ func Commands() *cobra.Command {
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
 		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, publishCmd, versionsCmd,
-		DLQCommands(), StateCommands())
+		rollbackCmd, DLQCommands(), StateCommands())
 
 	return command
 }

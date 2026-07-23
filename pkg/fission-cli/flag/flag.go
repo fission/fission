@@ -321,4 +321,11 @@ var (
 	AliasWeight           = Flag{Type: Int, Name: flagkey.AliasWeight, Usage: "Percentage (0-100) of traffic served by the primary target; the remainder goes to --secondary-version"}
 	AliasSecondaryVersion = Flag{Type: String, Name: flagkey.AliasSecondaryVersion, Usage: "Secondary FunctionVersion name receiving the 100-minus-weight remainder of traffic"}
 	AliasClearWeight      = Flag{Type: Bool, Name: flagkey.AliasClearWeight, Usage: "Clear the weighted split (drop --weight and --secondary-version)"}
+	AliasWait             = Flag{Type: Bool, Name: flagkey.AliasWait, Usage: "Wait for the alias to resolve to its updated target (see --timeout)"}
+
+	// RFC-0025 `fission fn rollback`.
+	FnRollbackAlias  = Flag{Type: String, Name: flagkey.FnRollbackAlias, Usage: "FunctionAlias to roll back"}
+	FnRollbackTo     = Flag{Type: String, Name: flagkey.FnRollbackTo, Usage: "Explicit FunctionVersion name to roll back to (default: the alias's previous target, Status.History's last entry)"}
+	FnRollbackDetach = Flag{Type: Bool, Name: flagkey.FnRollbackDetach, Usage: "Strip `fission spec` (Git) ownership annotations from the alias so a future `spec apply` does not revert the rollback"}
+	FnRollbackWait   = Flag{Type: Bool, Name: flagkey.FnRollbackWait, Usage: "Wait for the alias to resolve to the rollback target (see --timeout)"}
 )
