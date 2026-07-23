@@ -373,7 +373,7 @@ func TestFnSvcEnsureKey(t *testing.T) {
 	v2 := fnForService("hello", 1)
 	v2.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v2"}
 
-	assert.Equal(t, "uid-1234/", fnSvcEnsureKey(unversioned), "unversioned key stays UID-equivalent")
+	assert.Equal(t, fnSvcKey{uid: "uid-1234", version: ""}, fnSvcEnsureKey(unversioned), "unversioned key stays UID-equivalent")
 	assert.NotEqual(t, fnSvcEnsureKey(unversioned), fnSvcEnsureKey(v1))
 	assert.NotEqual(t, fnSvcEnsureKey(v1), fnSvcEnsureKey(v2), "different versions of the same function get different keys")
 	assert.Equal(t, fnSvcEnsureKey(v1), fnSvcEnsureKey(v1), "the key is deterministic")
