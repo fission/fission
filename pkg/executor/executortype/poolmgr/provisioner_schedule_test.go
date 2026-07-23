@@ -440,3 +440,168 @@ func TestWindowActiveAt(t *testing.T) {
 		})
 	}
 }
+
+func TestNextTransitionAt(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		cfg           *fv1.ProvisionedConcurrencyConfig
+		now           time.Time
+		want          time.Time
+		wantErrSubStr []string
+	}{
+		{
+			name: "single inactive window returns next start time",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "0 1 * * *", // runs at 1AM
+						Duration: "30m",       // 30 minutes
+						Name:     "window1",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 1, 0, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "single active window returns next stop time",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "0 1 * * *", // runs at 1AM
+						Duration: "60m",       // 60 minutes
+						Name:     "window1",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 1, 10, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 2, 0, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "multiple windows, one active, stopping soon, other inactive starting sooner",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "0 1 * * *", // runs at 1AM
+						Duration: "60m",       // 30 minutes
+						Name:     "window1",
+					},
+					{
+						Start:    "30 1 * * *", // runs at 1:30AM
+						Duration: "60m",        // 60 minutes
+						Name:     "window2",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 1, 10, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 1, 30, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "multiple windows, one active, stopping sooner, other inactive starting soon",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "0 1 * * *", // runs at 1AM
+						Duration: "15m",       // 15 minutes
+						Name:     "window1",
+					},
+					{
+						Start:    "30 1 * * *", // runs at 1:30AM
+						Duration: "60m",        // 60 minutes
+						Name:     "window2",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 1, 10, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 1, 15, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "same window dense-cron edge case",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "* * * * *", // runs every minute
+						Duration: "5m",        // 5 minutes
+						Name:     "window1",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 0, 2, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 0, 7, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "iteration cap",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "* * * * * *",
+						Duration: "28h",
+						Name:     "window1",
+					},
+				},
+			},
+			now:           time.Date(2025, time.January, 1, 0, 2, 0, 0, time.UTC),
+			want:          time.Date(2025, time.January, 1, 0, 2, 0, 0, time.UTC),
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "empty cfg.window",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target:  4,
+				Windows: []fv1.ProvisionedWindow{},
+			},
+			now:           time.Date(2025, time.January, 1, 0, 2, 0, 0, time.UTC),
+			want:          time.Time{},
+			wantErrSubStr: []string{},
+		},
+		{
+			name: "one bad window, one good window",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 4,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "0 1 * * * ",
+						Duration: "10m",
+						Name:     "window1",
+					},
+					{
+						Start:    "01***",
+						Duration: "10m",
+						Name:     "window2",
+					},
+				},
+			},
+			now:  time.Date(2025, time.January, 1, 0, 2, 0, 0, time.UTC),
+			want: time.Date(2025, time.January, 1, 1, 0, 0, 0, time.UTC),
+			wantErrSubStr: []string{
+				"window window2 failed",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := nextTransitionAt(tt.cfg, tt.now)
+			require.Len(t, gotErr, len(tt.wantErrSubStr))
+			if len(tt.wantErrSubStr) > 0 {
+				for i, substr := range tt.wantErrSubStr {
+					require.Contains(t, gotErr[i].Error(), substr)
+				}
+			}
+			if !got.Equal(tt.want) {
+				t.Errorf("nextTransitionAt(%+v,%v) = %v, want %v", tt.cfg, tt.now, got, tt.want)
+			}
+		})
+	}
+}
