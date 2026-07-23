@@ -44,6 +44,7 @@ func TestVersionedSpecialize(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
+	acquireHeavySlot(t)
 
 	ns := f.NewTestNamespace(t)
 	fc := f.FissionClient().CoreV1()
