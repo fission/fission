@@ -432,4 +432,25 @@ rules:
   - get
   - update
   - patch
+# RFC-0025 phase 5 alias-mode shim: reads go through the manager's uncached
+# apiReader (m.apiReader.Get), not the cache-backed client, so — unlike
+# httptriggers/canaryconfigs above — no informer is started and list/watch
+# are not needed; get+update on functionaliases (validate then step
+# Weight/SecondaryVersion/Version) and get on functionversions (validate
+# CanaryConfigSpec.NewFunction/OldFunction are FunctionVersions of the
+# alias's function) are sufficient. See pkg/canaryconfigmgr's
+# validateAliasRollout/updateFunctionAliasWithRetries.
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - fission.io
+  resources:
+  - functionversions
+  verbs:
+  - get
 {{- end }}

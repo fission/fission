@@ -16,6 +16,29 @@ func Commands() *cobra.Command {
 	createCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "create",
 		Short: "Create a canary config",
+		Long: `Create a canary config that gradually shifts HTTP traffic from an old
+target to a new one, watching the new target's Prometheus error rate and
+rolling back automatically if it crosses --threshold.
+
+Two modes, selected by what --httptrigger references:
+
+  function-weights mode (classic): the trigger's function reference type is
+  "function-weights" and --newfn/--oldfn name two FUNCTIONS already present
+  in its weights map. The controller steps HTTPTrigger.FunctionWeights.
+
+  alias mode (RFC-0025): the trigger references a FunctionAlias (created via
+  'fission alias create'). --newfn/--oldfn then name two FunctionVersions
+  (see 'fission fn versions') of the alias's function — not functions. The
+  controller steps the FunctionAlias's Weight/SecondaryVersion instead,
+  leaving the alias's primary Version pinned at --oldfn until the rollout
+  either promotes (repoints the alias at --newfn) or rolls back.
+
+Example (alias mode):
+
+  fission alias create --function orders --name prod --version orders-v3
+  fission canary create --name orders-canary --httptrigger prod-route \
+    --newfn orders-v4 --oldfn orders-v3 --increment-step 20 --increment-interval 2m --failure-threshold 10
+`,
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.CanaryName, flag.CanaryTriggerName, flag.CanaryNewFunc, flag.CanaryOldFunc},
 		Optional: []flag.Flag{flag.CanaryWeightIncrement, flag.CanaryIncrementInterval, flag.CanaryFailureThreshold},
