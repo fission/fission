@@ -1281,6 +1281,7 @@ type (
 	// Presence of the enclosing FunctionSpec.Tool is the on switch — there is no
 	// separate enabled flag, so the in-memory zero value and the stored object
 	// never disagree (the same rationale as StreamingConfig).
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.alias.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="tool.alias must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
 	ToolConfig struct {
 		// Description is the human/agent-facing tool description surfaced in the MCP
 		// tools/list response. Required.
@@ -1601,6 +1602,8 @@ type (
 	// +kubebuilder:validation:XValidation:rule="!((has(self.alias) && self.alias != '') && (has(self.version) && self.version != ''))",message="functionref.alias and functionref.version are mutually exclusive"
 	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.type == 'name'",message="functionref.alias is only valid when type is 'name'"
 	// +kubebuilder:validation:XValidation:rule="!(has(self.version) && self.version != '') || self.type == 'name'",message="functionref.version is only valid when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.alias.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="functionref.alias must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.version) && self.version != '') || self.version.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="functionref.version must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:

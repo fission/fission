@@ -408,6 +408,16 @@ spec:
                                       type is 'name'
                                     rule: '!(has(self.version) && self.version !=
                                       '''') || self.type == ''name'''
+                                  - message: functionref.alias must be a valid DNS1123
+                                      label (lowercase alphanumeric or '-', start/end
+                                      alphanumeric, max 63 chars)
+                                    rule: '!(has(self.alias) && self.alias != '''')
+                                      || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
+                                  - message: functionref.version must be a valid DNS1123
+                                      label (lowercase alphanumeric or '-', start/end
+                                      alphanumeric, max 63 chars)
+                                    rule: '!(has(self.version) && self.version !=
+                                      '''') || self.version.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
                                 inputPath:
                                   type: string
                                 next:
@@ -770,6 +780,13 @@ spec:
                       - message: functionref.version is only valid when type is 'name'
                         rule: '!(has(self.version) && self.version != '''') || self.type
                           == ''name'''
+                      - message: functionref.alias must be a valid DNS1123 label (lowercase
+                          alphanumeric or '-', start/end alphanumeric, max 63 chars)
+                        rule: '!(has(self.alias) && self.alias != '''') || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
+                      - message: functionref.version must be a valid DNS1123 label
+                          (lowercase alphanumeric or '-', start/end alphanumeric,
+                          max 63 chars)
+                        rule: '!(has(self.version) && self.version != '''') || self.version.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
                     inputPath:
                       description: |-
                         InputPath/ResultPath/OutputPath shape step I/O with JSONPath

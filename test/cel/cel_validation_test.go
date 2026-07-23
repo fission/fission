@@ -490,11 +490,18 @@ func TestCELHTTPTriggerRouteConfig(t *testing.T) {
 }
 
 // TestCELFunctionReferenceAliasVersion verifies the RFC-0025 CEL rules on the
-// FunctionReference type — alias/version mutual exclusion and the
-// type=='name'-only gate — are enforced by the API server itself. HTTPTrigger
-// has no admission webhook (CEL is its only admission-time gate for
-// functionref shape, see pkg/webhook/service.go), so these cases exercise the
-// rule where it matters most.
+// FunctionReference type — alias/version mutual exclusion, the
+// type=='name'-only gate, AND the DNS-1123 label pattern on each (added as a
+// follow-up: MaxLength alone does not reject bad characters) — are enforced
+// by the API server itself. HTTPTrigger has no admission webhook (CEL is its
+// only admission-time gate for functionref shape, see
+// pkg/webhook/service.go), so these cases exercise the rule where it matters
+// most. A successful envtest install of every CRD (TestMain's env.Start(),
+// which fails the whole package if any CRD's CEL blows the apiserver cost
+// estimator's budget) is itself the empirical proof that the two new
+// self.alias.matches(...) / self.version.matches(...) rules stay in budget
+// even embedded under WorkflowSpec.States' map — the known cost-budget hot
+// spot flagged on FunctionReference.Name's own rule.
 func TestCELFunctionReferenceAliasVersion(t *testing.T) {
 	fc := client(t)
 
@@ -532,11 +539,65 @@ func TestCELFunctionReferenceAliasVersion(t *testing.T) {
 		{"neither alias nor version accepted", ht("fr-neither", fv1.FunctionReference{
 			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn",
 		}), ""},
+		{"malformed alias rejected", ht("fr-bad-alias", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "Bad_Alias!",
+		}), "must be a valid DNS1123 label"},
+		{"malformed version rejected", ht("fr-bad-version", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Version: "Bad_Version!",
+		}), "must be a valid DNS1123 label"},
+		{"valid kebab-case alias accepted", ht("fr-kebab-alias", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "prod-canary-2",
+		}), ""},
+		{"valid kebab-case version accepted", ht("fr-kebab-version", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Version: "fn-v1-2",
+		}), ""},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := fc.CoreV1().HTTPTriggers(ns).Create(t.Context(), tc.ht, metav1.CreateOptions{})
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err, "apiserver should reject")
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
+// TestCELToolConfigAlias verifies the RFC-0025 DNS-1123 pattern CEL rule on
+// ToolConfig.Alias (added as a follow-up: MaxLength alone does not reject bad
+// characters). Function's admission webhook does not reach ToolConfig.Validate
+// (it calls ValidateForAdmission, a deliberately narrower CEL-complementary
+// method — see pkg/webhook/function.go), so CEL is the only admission-time
+// gate for this field's format today.
+func TestCELToolConfigAlias(t *testing.T) {
+	fc := client(t)
+
+	fn := func(name string, alias string) *fv1.Function {
+		return &fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: fv1.FunctionSpec{
+				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
+				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},
+				Tool:           &fv1.ToolConfig{Description: "a tool", Alias: alias},
+			},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		fn      *fv1.Function
+		wantErr string // empty => expect accept
+	}{
+		{"malformed ToolConfig.Alias rejected", fn("tool-bad-alias", "Bad_Alias!"), "must be a valid DNS1123 label"},
+		{"valid kebab-case ToolConfig.Alias accepted", fn("tool-valid-alias", "prod-canary-2"), ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fc.CoreV1().Functions(ns).Create(t.Context(), tc.fn, metav1.CreateOptions{})
 			if tc.wantErr == "" {
 				assert.NoError(t, err)
 				return
