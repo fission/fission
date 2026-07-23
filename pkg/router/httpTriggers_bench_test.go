@@ -134,7 +134,7 @@ func BenchmarkIncrementalWeightTick(b *testing.B) {
 		objs = append(objs, &triggers[i])
 	}
 	ts, _ := newIncrementalTS(b, objs...)
-	if err := ts.resync(b.Context(), true); err != nil {
+	if _, err := ts.resync(b.Context(), true); err != nil {
 		b.Fatal(err)
 	}
 	ts.materialize(b.Context())

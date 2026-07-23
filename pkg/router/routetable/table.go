@@ -95,6 +95,15 @@ type RouteSpec struct {
 	// tiebreak for exact-duplicate shapes.
 	Created metav1.Time
 
+	// Aliases is the FunctionAlias names this route's resolution consumed
+	// (RFC-0025): populated from resolveResult.Aliases, which only
+	// resolveByAlias sets (a plain name, version-pinned, or FunctionWeights
+	// reference never references an alias). reindexLocked mirrors it into
+	// the table's aliasIndex, so a FunctionAlias event (a repoint) can find
+	// exactly the triggers to re-apply via TriggersForAlias — the same
+	// cascade fnIndex/FnGens gives function events.
+	Aliases []string
+
 	// Handler is the stable ref registered into the mux. Owned by the
 	// table: ApplyTrigger sets it on insert and preserves it across shape
 	// changes and handler swaps.
@@ -109,12 +118,27 @@ func (s *RouteSpec) shapeEqual(o *RouteSpec) bool {
 		slices.Equal(s.Methods, o.Methods)
 }
 
-// InternalSpec is one Function's internal-listener route
-// (/fission-function/...). Its shape is fully derived from the function's
-// namespace/name, so it never shape-changes in place — only insert and
-// delete touch the internal mux.
+// InternalKey identifies one internal-listener route
+// (/fission-function/...). Suffix is "" for a live Function's own route; a
+// non-empty Suffix materializes the RFC-0025 tag grammar the internal URL
+// carries after the function name — an alias's CR name for a `:<alias>`
+// route, or a FunctionVersion's CR name for a `:<version>` route (both
+// addressing that function's namespace). Suffix is part of the route's
+// identity, not its handler: two InternalSpecs sharing a NamespacedName but
+// differing Suffix are two independent routes (the plain function route and
+// its `:<alias>`/`:<version>` siblings all coexist and are applied,
+// swapped, and deleted independently).
+type InternalKey struct {
+	types.NamespacedName
+	Suffix string
+}
+
+// InternalSpec is one internal-listener route
+// (/fission-function/...[:<suffix>]). Its shape is fully derived from Key,
+// so it never shape-changes in place — only insert and delete touch the
+// internal mux.
 type InternalSpec struct {
-	Key         types.NamespacedName
+	Key         InternalKey
 	FunctionGen int64
 	Handler     *HandlerRef
 }
@@ -150,13 +174,19 @@ func (r ApplyResult) String() string {
 type Table struct {
 	mu       sync.Mutex
 	public   map[types.UID]*RouteSpec
-	internal map[types.NamespacedName]*InternalSpec
+	internal map[InternalKey]*InternalSpec
 	// fnIndex maps a function to the triggers whose routes resolve through
 	// it, so a function event can re-apply exactly the affected triggers.
 	fnIndex map[types.NamespacedName]map[types.UID]struct{}
 	// triggerFns is the reverse of fnIndex, kept so a trigger re-apply that
 	// changes its function set (or a delete) can clean its old index entries.
 	triggerFns map[types.UID][]types.NamespacedName
+	// aliasIndex maps a FunctionAlias to the triggers whose routes were
+	// resolved through it (RouteSpec.Aliases), mirroring fnIndex so an alias
+	// repoint can re-apply exactly the affected triggers via TriggersForAlias.
+	aliasIndex map[types.NamespacedName]map[types.UID]struct{}
+	// triggerAliases is the reverse of aliasIndex, mirroring triggerFns.
+	triggerAliases map[types.UID][]types.NamespacedName
 	// unresolved maps a function to the triggers that REFERENCE it but could
 	// not resolve (the function does not exist yet). It keeps the
 	// function-create cascade working for the trigger-before-function apply
@@ -165,16 +195,27 @@ type Table struct {
 	unresolved map[types.NamespacedName]map[types.NamespacedName]struct{}
 	// unresolvedFns is the reverse of unresolved, for cleanup.
 	unresolvedFns map[types.NamespacedName][]types.NamespacedName
+	// unresolvedAlias mirrors unresolved for FunctionAlias references: a
+	// trigger whose alias does not exist (or has not resolved) yet is
+	// indexed here so the alias's create/first-resolve event admits it
+	// immediately, the same guarantee unresolved gives function references.
+	unresolvedAlias map[types.NamespacedName]map[types.NamespacedName]struct{}
+	// unresolvedAliasFns is the reverse of unresolvedAlias, for cleanup.
+	unresolvedAliasFns map[types.NamespacedName][]types.NamespacedName
 }
 
 func New() *Table {
 	return &Table{
-		public:        make(map[types.UID]*RouteSpec),
-		internal:      make(map[types.NamespacedName]*InternalSpec),
-		fnIndex:       make(map[types.NamespacedName]map[types.UID]struct{}),
-		triggerFns:    make(map[types.UID][]types.NamespacedName),
-		unresolved:    make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
-		unresolvedFns: make(map[types.NamespacedName][]types.NamespacedName),
+		public:             make(map[types.UID]*RouteSpec),
+		internal:           make(map[InternalKey]*InternalSpec),
+		fnIndex:            make(map[types.NamespacedName]map[types.UID]struct{}),
+		triggerFns:         make(map[types.UID][]types.NamespacedName),
+		aliasIndex:         make(map[types.NamespacedName]map[types.UID]struct{}),
+		triggerAliases:     make(map[types.UID][]types.NamespacedName),
+		unresolved:         make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
+		unresolvedFns:      make(map[types.NamespacedName][]types.NamespacedName),
+		unresolvedAlias:    make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
+		unresolvedAliasFns: make(map[types.NamespacedName][]types.NamespacedName),
 	}
 }
 
@@ -205,6 +246,7 @@ func (t *Table) ApplyTrigger(spec *RouteSpec, build func() http.Handler) ApplyRe
 		old.Handler.Swap(build())
 		old.TriggerGen = spec.TriggerGen
 		old.FnGens = spec.FnGens
+		old.Aliases = spec.Aliases
 		old.Created = spec.Created
 		old.Namespace, old.Name = spec.Namespace, spec.Name
 		t.reindexLocked(old)
@@ -232,6 +274,7 @@ func (t *Table) DeleteTrigger(uid types.UID) ApplyResult {
 	t.clearUnresolvedLocked(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 	delete(t.public, uid)
 	t.dropFnIndexLocked(uid)
+	t.dropAliasIndexLocked(uid)
 	return ShapeChanged
 }
 
@@ -249,16 +292,25 @@ func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
 		if spec.Namespace == key.Namespace && spec.Name == key.Name {
 			delete(t.public, uid)
 			t.dropFnIndexLocked(uid)
+			t.dropAliasIndexLocked(uid)
 			res = ShapeChanged
 		}
 	}
 	return res
 }
 
-// ApplyFunction reconciles one function's internal-listener route. Insert is
-// a ShapeChanged (the internal mux gains the route pair); a generation
-// change is a pure handler swap; same generation is NoChange.
-func (t *Table) ApplyFunction(key types.NamespacedName, gen int64, build func() http.Handler) ApplyResult {
+// ApplyFunction reconciles one internal-listener route, keyed by an
+// InternalKey: the live function's own route (Suffix "", from
+// applyFunctionIncremental/resync) or a materialized `:<alias>`/`:<version>`
+// route (RFC-0025, from the alias/version reconcilers) — both share this one
+// insert/swap/delete contract, so an alias repoint is exactly the same
+// HandlerSwapped path a function spec change already takes. Insert is a
+// ShapeChanged (the internal mux gains the route pair); a generation change
+// (gen is the resolved backend Function's Generation — see
+// versioning.VersionedFunction, which makes each distinct
+// FunctionVersion's Generation unique) is a pure handler swap; same
+// generation is NoChange.
+func (t *Table) ApplyFunction(key InternalKey, gen int64, build func() http.Handler) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	old, ok := t.internal[key]
@@ -274,8 +326,8 @@ func (t *Table) ApplyFunction(key types.NamespacedName, gen int64, build func() 
 	return HandlerSwapped
 }
 
-// DeleteFunction removes a function's internal route.
-func (t *Table) DeleteFunction(key types.NamespacedName) ApplyResult {
+// DeleteFunction removes one internal-listener route by its exact key.
+func (t *Table) DeleteFunction(key InternalKey) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if _, ok := t.internal[key]; !ok {
@@ -285,12 +337,34 @@ func (t *Table) DeleteFunction(key types.NamespacedName) ApplyResult {
 	return ShapeChanged
 }
 
-// MarkUnresolved records that a trigger references the given functions but
-// could not resolve (function missing). The next ApplyTrigger or delete for
-// the trigger clears the entry; a function event for any referenced function
-// includes the trigger in TriggersForFunction so the cascade re-applies it
-// immediately instead of waiting for the resync.
-func (t *Table) MarkUnresolved(trigger types.NamespacedName, fns []types.NamespacedName) {
+// DeleteInternalBySuffix removes every internal route in namespace whose
+// Suffix matches — the form a FunctionAlias/FunctionVersion DELETE event
+// arrives in: the object (and with it the function name half of the
+// InternalKey) is already gone, so the route can only be found by its
+// namespace + suffix, mirroring DeleteTriggerByName's by-name lookup on the
+// public side. Linear over the internal table; deletes are rare, human- or
+// GC-driven events.
+func (t *Table) DeleteInternalBySuffix(namespace, suffix string) ApplyResult {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	res := NoChange
+	for key := range t.internal {
+		if key.Namespace == namespace && key.Suffix == suffix {
+			delete(t.internal, key)
+			res = ShapeChanged
+		}
+	}
+	return res
+}
+
+// MarkUnresolved records that a trigger references the given functions and/or
+// FunctionAliases but could not resolve (the referenced object is missing, or
+// an alias has not resolved to a version yet). The next ApplyTrigger or
+// delete for the trigger clears the entry; a function event for any
+// referenced function includes the trigger in TriggersForFunction, and an
+// alias event for any referenced alias includes it in TriggersForAlias, so
+// either cascade re-applies it immediately instead of waiting for the resync.
+func (t *Table) MarkUnresolved(trigger types.NamespacedName, fns []types.NamespacedName, aliases []types.NamespacedName) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.clearUnresolvedLocked(trigger)
@@ -303,9 +377,19 @@ func (t *Table) MarkUnresolved(trigger types.NamespacedName, fns []types.Namespa
 		set[trigger] = struct{}{}
 	}
 	t.unresolvedFns[trigger] = fns
+	for _, alias := range aliases {
+		set, ok := t.unresolvedAlias[alias]
+		if !ok {
+			set = make(map[types.NamespacedName]struct{})
+			t.unresolvedAlias[alias] = set
+		}
+		set[trigger] = struct{}{}
+	}
+	t.unresolvedAliasFns[trigger] = aliases
 }
 
-// clearUnresolvedLocked drops a trigger's unresolved edges. Caller holds t.mu.
+// clearUnresolvedLocked drops a trigger's unresolved edges (both function and
+// alias). Caller holds t.mu.
 func (t *Table) clearUnresolvedLocked(trigger types.NamespacedName) {
 	for _, fn := range t.unresolvedFns[trigger] {
 		if set, ok := t.unresolved[fn]; ok {
@@ -316,6 +400,15 @@ func (t *Table) clearUnresolvedLocked(trigger types.NamespacedName) {
 		}
 	}
 	delete(t.unresolvedFns, trigger)
+	for _, alias := range t.unresolvedAliasFns[trigger] {
+		if set, ok := t.unresolvedAlias[alias]; ok {
+			delete(set, trigger)
+			if len(set) == 0 {
+				delete(t.unresolvedAlias, alias)
+			}
+		}
+	}
+	delete(t.unresolvedAliasFns, trigger)
 }
 
 // TriggersForFunction returns the namespaced names of the triggers whose
@@ -348,6 +441,37 @@ func (t *Table) TriggersForFunction(key types.NamespacedName) []types.Namespaced
 	return out
 }
 
+// TriggersForAlias returns the namespaced names of the triggers whose routes
+// were resolved through the named FunctionAlias — plus the triggers that
+// reference it but could not resolve yet — mirroring TriggersForFunction so
+// an alias event (a repoint, or its first resolution) can re-apply exactly
+// the affected triggers.
+func (t *Table) TriggersForAlias(namespace, name string) []types.NamespacedName {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+	uids := t.aliasIndex[key]
+	seen := make(map[types.NamespacedName]struct{}, len(uids))
+	out := make([]types.NamespacedName, 0, len(uids))
+	for uid := range uids {
+		if spec, ok := t.public[uid]; ok {
+			k := types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name}
+			if _, dup := seen[k]; !dup {
+				seen[k] = struct{}{}
+				out = append(out, k)
+			}
+		}
+	}
+	for trigger := range t.unresolvedAlias[key] {
+		if _, dup := seen[trigger]; !dup {
+			seen[trigger] = struct{}{}
+			out = append(out, trigger)
+		}
+	}
+	slices.SortFunc(out, cmpNamespacedName)
+	return out
+}
+
 // PublicTriggers returns the UID → namespace/name of every trigger in the
 // public table — the resync loop diffs this against the live trigger list to
 // drop deleted routes whose delete events were missed (re-checking by name
@@ -362,12 +486,13 @@ func (t *Table) PublicTriggers() map[types.UID]types.NamespacedName {
 	return out
 }
 
-// InternalKeys returns the function keys currently in the internal table,
-// for the same resync diff on the function side.
-func (t *Table) InternalKeys() []types.NamespacedName {
+// InternalKeys returns the keys currently in the internal table, for the
+// resync diff: Suffix "" entries against the live Function list, non-empty
+// Suffix entries against the live FunctionAlias/FunctionVersion lists.
+func (t *Table) InternalKeys() []InternalKey {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	out := make([]types.NamespacedName, 0, len(t.internal))
+	out := make([]InternalKey, 0, len(t.internal))
 	for key := range t.internal {
 		out = append(out, key)
 	}
@@ -404,7 +529,7 @@ func (t *Table) InternalSnapshot() []InternalSpec {
 		out = append(out, *spec)
 	}
 	slices.SortFunc(out, func(a, b InternalSpec) int {
-		return cmpNamespacedName(a.Key, b.Key)
+		return cmpInternalKey(a.Key, b.Key)
 	})
 	return out
 }
@@ -444,6 +569,20 @@ func (t *Table) reindexLocked(spec *RouteSpec) {
 		set[spec.TriggerUID] = struct{}{}
 	}
 	t.triggerFns[spec.TriggerUID] = keys
+
+	t.dropAliasIndexLocked(spec.TriggerUID)
+	aliasKeys := make([]types.NamespacedName, 0, len(spec.Aliases))
+	for _, alias := range spec.Aliases {
+		key := types.NamespacedName{Namespace: spec.Namespace, Name: alias}
+		aliasKeys = append(aliasKeys, key)
+		set, ok := t.aliasIndex[key]
+		if !ok {
+			set = make(map[types.UID]struct{})
+			t.aliasIndex[key] = set
+		}
+		set[spec.TriggerUID] = struct{}{}
+	}
+	t.triggerAliases[spec.TriggerUID] = aliasKeys
 }
 
 // dropFnIndexLocked removes a trigger's fn index entries. Caller holds t.mu.
@@ -459,9 +598,33 @@ func (t *Table) dropFnIndexLocked(uid types.UID) {
 	delete(t.triggerFns, uid)
 }
 
+// dropAliasIndexLocked removes a trigger's alias index entries, mirroring
+// dropFnIndexLocked. Caller holds t.mu.
+func (t *Table) dropAliasIndexLocked(uid types.UID) {
+	for _, key := range t.triggerAliases[uid] {
+		if set, ok := t.aliasIndex[key]; ok {
+			delete(set, uid)
+			if len(set) == 0 {
+				delete(t.aliasIndex, key)
+			}
+		}
+	}
+	delete(t.triggerAliases, uid)
+}
+
 func cmpNamespacedName(a, b types.NamespacedName) int {
 	if c := strings.Compare(a.Namespace, b.Namespace); c != 0 {
 		return c
 	}
 	return strings.Compare(a.Name, b.Name)
+}
+
+// cmpInternalKey orders internal routes deterministically: namespace, then
+// function name, then suffix (so a function's own route sorts before its
+// `:<alias>`/`:<version>` siblings).
+func cmpInternalKey(a, b InternalKey) int {
+	if c := cmpNamespacedName(a.NamespacedName, b.NamespacedName); c != 0 {
+		return c
+	}
+	return strings.Compare(a.Suffix, b.Suffix)
 }

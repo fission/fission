@@ -347,7 +347,7 @@ func TestFallbackEndpointLBFallsBackToVIPWhenQuarantined(t *testing.T) {
 	t.Parallel()
 	ix := endpointcache.NewIndex()
 	ix.ApplySlice(fnSlice("s1", "fn-lbq", "default", "10.0.0.1"))
-	ix.Quarantine("default", "fn-lbq", "10.0.0.1:8888")
+	ix.Quarantine("default", "fn-lbq", "", "10.0.0.1:8888")
 	exec := &stubExecutor{addr: "svc-fn-lbq.default"}
 	f := newEndpointLBForTest(t, ix, exec)
 

@@ -158,7 +158,7 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 // TestApplyFunctionDecisionTable pins the internal-route contract: insert /
 // delete touch the internal mux, generation bumps are pure swaps.
 func TestApplyFunctionDecisionTable(t *testing.T) {
-	key := types.NamespacedName{Namespace: "default", Name: "fn"}
+	key := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "fn"}}
 	tbl := New()
 
 	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(key, 1, func() http.Handler { return tagHandler("v1") }),
@@ -205,6 +205,119 @@ func TestFnIndexMaintenance(t *testing.T) {
 	assert.Empty(t, tbl.TriggersForFunction(fnA))
 	require.Len(t, tbl.TriggersForFunction(fnB), 1)
 	assert.Equal(t, "trig-u1", tbl.TriggersForFunction(fnB)[0].Name)
+}
+
+// TestAliasIndexMaintenance pins the alias→triggers index (RFC-0025)
+// end-to-end: RouteSpec.Aliases is mirrored into aliasIndex by reindexLocked
+// exactly like FnGens is for fnIndex, TriggersForAlias finds the resolved
+// triggers, MarkUnresolved's alias half lets an unresolved reference be found
+// too, and both cascades clean up on delete — verifying the brief's "comes
+// free exactly like fnIndex" claim.
+func TestAliasIndexMaintenance(t *testing.T) {
+	tbl := New()
+	prodAlias := types.NamespacedName{Namespace: "default", Name: "prod"}
+	stagingAlias := types.NamespacedName{Namespace: "default", Name: "staging"}
+
+	u1 := spec("u1", 1, map[string]int64{"hello@hello-v1": 1}, func(s *RouteSpec) {
+		s.Aliases = []string{"prod"}
+	})
+	tbl.ApplyTrigger(u1, func() http.Handler { return tagHandler("t1") })
+	u2 := spec("u2", 1, map[string]int64{"hello@hello-v2": 1}, func(s *RouteSpec) {
+		s.ExactPath = "/two"
+		s.Aliases = []string{"prod", "staging"}
+	})
+	tbl.ApplyTrigger(u2, func() http.Handler { return tagHandler("t2") })
+
+	assert.Len(t, tbl.TriggersForAlias(prodAlias.Namespace, prodAlias.Name), 2, "both triggers resolve through prod")
+	assert.Len(t, tbl.TriggersForAlias(stagingAlias.Namespace, stagingAlias.Name), 1)
+
+	// Re-target u1 from prod to staging: the index must follow, mirroring
+	// TestFnIndexMaintenance's re-target case.
+	u1b := spec("u1", 2, map[string]int64{"hello@hello-v3": 1}, func(s *RouteSpec) {
+		s.Aliases = []string{"staging"}
+	})
+	tbl.ApplyTrigger(u1b, func() http.Handler { return tagHandler("t1b") })
+	assert.Len(t, tbl.TriggersForAlias(prodAlias.Namespace, prodAlias.Name), 1, "u1 no longer resolves through prod")
+	assert.Len(t, tbl.TriggersForAlias(stagingAlias.Namespace, stagingAlias.Name), 2)
+
+	// Delete u2: its entries drop out of both, exactly like fnIndex.
+	tbl.DeleteTrigger("u2")
+	assert.Empty(t, tbl.TriggersForAlias(prodAlias.Namespace, prodAlias.Name))
+	require.Len(t, tbl.TriggersForAlias(stagingAlias.Namespace, stagingAlias.Name), 1)
+	assert.Equal(t, "trig-u1", tbl.TriggersForAlias(stagingAlias.Namespace, stagingAlias.Name)[0].Name)
+
+	// Unresolved alias reference: a trigger whose alias does not exist yet
+	// must still be found by TriggersForAlias (mirroring the unresolved-fn
+	// cascade), and clearing it on a successful apply must remove it.
+	early := types.NamespacedName{Namespace: "default", Name: "early"}
+	tbl.MarkUnresolved(early, nil, []types.NamespacedName{{Namespace: "default", Name: "canary"}})
+	found := tbl.TriggersForAlias("default", "canary")
+	require.Len(t, found, 1)
+	assert.Equal(t, "early", found[0].Name)
+
+	tbl.DeleteTriggerByName(early)
+	assert.Empty(t, tbl.TriggersForAlias("default", "canary"), "delete-by-name clears unresolved alias edges too")
+}
+
+// TestInternalKeySuffixIsolation pins InternalKey's identity contract
+// (RFC-0025): a live function's own route (Suffix "") and its materialized
+// `:<alias>`/`:<version>` siblings share a NamespacedName but are
+// independent routes — applying, swapping, or deleting one must not touch
+// the others.
+func TestInternalKeySuffixIsolation(t *testing.T) {
+	tbl := New()
+	fn := types.NamespacedName{Namespace: "default", Name: "hello"}
+	plainKey := InternalKey{NamespacedName: fn}
+	aliasKey := InternalKey{NamespacedName: fn, Suffix: "prod"}
+	versionKey := InternalKey{NamespacedName: fn, Suffix: "hello-v1"}
+
+	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(plainKey, 1, func() http.Handler { return tagHandler("plain") }))
+	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(aliasKey, 1, func() http.Handler { return tagHandler("alias") }))
+	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(versionKey, 1, func() http.Handler { return tagHandler("version") }))
+	require.Len(t, tbl.InternalSnapshot(), 3)
+
+	// Swapping the alias route's generation must not touch the plain or
+	// version routes.
+	assert.Equal(t, HandlerSwapped, tbl.ApplyFunction(aliasKey, 2, func() http.Handler { return tagHandler("alias-v2") }))
+	byKey := map[InternalKey]InternalSpec{}
+	for _, s := range tbl.InternalSnapshot() {
+		byKey[s.Key] = s
+	}
+	assert.Equal(t, "plain", serve(t, byKey[plainKey].Handler))
+	assert.Equal(t, "alias-v2", serve(t, byKey[aliasKey].Handler))
+	assert.Equal(t, "version", serve(t, byKey[versionKey].Handler))
+
+	// Deleting the plain route must leave the alias/version siblings alone.
+	assert.Equal(t, ShapeChanged, tbl.DeleteFunction(plainKey))
+	require.Len(t, tbl.InternalSnapshot(), 2)
+}
+
+// TestDeleteInternalBySuffix pins the FunctionAlias/FunctionVersion DELETE
+// path: the object (and with it the function-name half of InternalKey) is
+// already gone, so cleanup can only key on namespace + suffix. Mirrors
+// DeleteTriggerByName's by-name lookup on the public side.
+func TestDeleteInternalBySuffix(t *testing.T) {
+	tbl := New()
+	prod := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello"}, Suffix: "prod"}
+	otherFnSameSuffix := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "world"}, Suffix: "prod"}
+	otherNS := InternalKey{NamespacedName: types.NamespacedName{Namespace: "other", Name: "hello"}, Suffix: "prod"}
+	plain := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello"}}
+
+	for _, k := range []InternalKey{prod, otherFnSameSuffix, otherNS, plain} {
+		tbl.ApplyFunction(k, 1, func() http.Handler { return tagHandler(k.Name + ":" + k.Suffix) })
+	}
+	require.Len(t, tbl.InternalSnapshot(), 4)
+
+	assert.Equal(t, ShapeChanged, tbl.DeleteInternalBySuffix("default", "prod"))
+	snap := tbl.InternalSnapshot()
+	require.Len(t, snap, 2, "both default-namespace :prod routes drop, regardless of function name")
+	remaining := map[InternalKey]struct{}{}
+	for _, s := range snap {
+		remaining[s.Key] = struct{}{}
+	}
+	assert.Contains(t, remaining, otherNS, "a same-suffix route in a DIFFERENT namespace is untouched")
+	assert.Contains(t, remaining, plain, "the function's own (Suffix-less) route is untouched")
+	assert.Equal(t, NoChange, tbl.DeleteInternalBySuffix("default", "prod"))
 }
 
 // TestHandlerRefSwapUnderConcurrentServe drives sustained traffic through a
