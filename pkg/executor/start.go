@@ -43,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/executor/funcreconciler"
 	"github.com/fission/fission/pkg/executor/reaper/idle"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/executor/versionretain"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -321,6 +322,17 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 		return fmt.Errorf("pool manager creation failed: %w", err)
 	}
 
+	// versionRetainView answers, for the poolmgr idle reaper, whether a live
+	// FunctionAlias still references a (function UID, generation) pin
+	// (RFC-0025 "warm rollback" correction). It starts empty and is fed by
+	// RegisterReconcilers below once the Manager exists; wiring it into gpm
+	// now (before the reaper ever runs) is safe regardless of registration
+	// order since the View itself needs no Manager.
+	versionRetainView := versionretain.New()
+	if gpmTyped, ok := gpm.(*poolmgr.GenericPoolManager); ok {
+		gpmTyped.SetVersionRetain(versionRetainView.Retained)
+	}
+
 	// newdeploy/container read Deployments/Services from the Manager cache (their
 	// IsValid path); the cache replaces the per-type SharedInformerFactory they
 	// used to run. The cache-backed client is wired in via RegisterReconcilers.
@@ -427,6 +439,14 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// + newdeploy image propagation), replacing the per-type Environment reconcilers
 	// with a single workqueue and last-seen cache.
 	if err := envreconciler.RegisterReconciler(crMgr, logger, executorTypes); err != nil {
+		return err
+	}
+
+	// versionRetainView's reconcilers (RFC-0025): watch FunctionAlias and
+	// FunctionVersion, rebuilding the retain set on any event so the poolmgr
+	// idle reaper (wired above via SetVersionRetain) does not drain a
+	// generation an alias still points at. See versionretain.RegisterReconcilers.
+	if err := versionretain.RegisterReconcilers(crMgr, versionRetainView); err != nil {
 		return err
 	}
 

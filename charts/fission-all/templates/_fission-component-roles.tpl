@@ -54,6 +54,20 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # Read-only, RFC-0025: the executor's versionretain.View watches these to
+  # know which (function UID, generation) pins a live FunctionAlias still
+  # references, so the idle reaper does not drain a warm pool an alias points
+  # at just because a newer generation exists. The executor never writes
+  # either type.
+  resources:
+  - functionversions
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "kubewatcher-rules" }}
 rules:

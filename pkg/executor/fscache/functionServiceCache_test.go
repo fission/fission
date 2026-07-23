@@ -167,11 +167,11 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	for range 2 {
 		fsc.MarkAvailable(key, fsvc.Address)
 	}
-	vals, err := fsc.ListOldForPool(30 * time.Second)
+	vals, err := fsc.ListOldForPool(30*time.Second, nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(vals))
 
-	vals, err = fsc.ListOldForPool(0)
+	vals, err = fsc.ListOldForPool(0, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(vals))
 
@@ -179,7 +179,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	fn.Spec.RetainPods = 2
 	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
 
-	vals, err = fsc.ListOldForPool(0)
+	vals, err = fsc.ListOldForPool(0, nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(vals))
 }
@@ -227,7 +227,7 @@ func TestFunctionServiceCacheConcurrentTouchAndList(t *testing.T) {
 				case 1:
 					_, _ = fsc.ListOld(time.Millisecond)
 				case 2:
-					_, _ = fsc.ListOldForPool(time.Millisecond)
+					_, _ = fsc.ListOldForPool(time.Millisecond, nil)
 				case 3:
 					fsc.Log()
 				}
