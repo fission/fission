@@ -347,24 +347,31 @@ func (t *Table) DeleteFunction(key InternalKey) ApplyResult {
 	return ShapeChanged
 }
 
-// DeleteInternalBySuffix removes every internal route in namespace whose
-// Suffix matches — the form a FunctionAlias/FunctionVersion DELETE event
-// arrives in: the object (and with it the function name half of the
-// InternalKey) is already gone, so the route can only be found by its
-// namespace + suffix, mirroring DeleteTriggerByName's by-name lookup on the
-// public side. Linear over the internal table; deletes are rare, human- or
+// InternalKeysBySuffix returns every internal route key in namespace whose
+// Suffix matches — the CANDIDATE set for a FunctionAlias/FunctionVersion
+// DELETE event, where the deleted object (and with it the specific function
+// it belonged to) is already gone. Suffix alone does not identify which
+// key.Name (function) it actually orphaned: an alias named "hello-v1" on
+// function "world" and a FunctionVersion named "hello-v1" on function
+// "hello" are two DISTINCT InternalKeys that both match
+// InternalKeysBySuffix(ns, "hello-v1") — deleting one must not remove the
+// other's still-live route. Callers (incremental.go's
+// deleteInternalRouteBySuffix) resolve each candidate against the live
+// FunctionAlias/FunctionVersion objects before deleting; this method is
+// deliberately READ-ONLY so that scoping decision cannot be skipped by
+// accident. Linear over the internal table; deletes are rare, human- or
 // GC-driven events.
-func (t *Table) DeleteInternalBySuffix(namespace, suffix string) ApplyResult {
+func (t *Table) InternalKeysBySuffix(namespace, suffix string) []InternalKey {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	res := NoChange
+	var out []InternalKey
 	for key := range t.internal {
 		if key.Namespace == namespace && key.Suffix == suffix {
-			delete(t.internal, key)
-			res = ShapeChanged
+			out = append(out, key)
 		}
 	}
-	return res
+	slices.SortFunc(out, cmpInternalKey)
+	return out
 }
 
 // MarkUnresolved records that a trigger references the given functions and/or

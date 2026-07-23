@@ -190,33 +190,49 @@ func validateRouteTemplate(shape routeShape) error {
 	return nil
 }
 
-// buildTriggerHandler constructs the proxy handler for one trigger from its
-// resolve result: the functionHandler with hoisted per-route state
-// (RFC-0014) plus the per-trigger CORS wrap. fnTimeoutMap may be the global
-// map (one-shot buildMuxes) or a per-trigger map derived from the resolved
-// functions (incremental path) — the handler only ever looks up its own backends.
-func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
+// newFunctionHandlerBase builds the functionHandler fields common to every
+// route flavor this file constructs (HTTPTrigger, internal function,
+// internal alias) — the injected resolver/tapper/async seams, hoisted
+// per-route policy (RFC-0014), and the resolved functionMap/
+// fnWeightDistributionList. Callers set whichever of httpTrigger/fh.function
+// distinguishes their flavor and wrap the result (CORS, http.HandlerFunc)
+// themselves; extracted so the one place that assembles a functionHandler's
+// dozen fields can't drift between the three builders.
+func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap map[string]*fv1.Function, fnWeightDistributionList []functionWeightDistribution, fnTimeoutMap map[crd.CacheKeyUG]int) *functionHandler {
 	var streamIdleDefault time.Duration
 	if ts.tsRoundTripperParams != nil {
 		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
 	}
-	routeLogger := ts.logger.WithName(trigger.Name)
-	fh := &functionHandler{
+	routeLogger := ts.logger.WithName(routeName)
+	return &functionHandler{
 		logger:                   routeLogger,
 		resolver:                 ts.addressResolver,
 		tapper:                   ts.tapper,
-		httpTrigger:              trigger,
-		functionMap:              rr.functionMap,
-		fnWeightDistributionList: rr.functionWtDistributionList,
+		functionMap:              functionMap,
+		fnWeightDistributionList: fnWeightDistributionList,
 		tsRoundTripperParams:     ts.tsRoundTripperParams,
 		isDebugEnv:               ts.isDebugEnv,
 		structuredErrors:         ts.structuredErrors,
 		accessLog:                ts.accessLog,
 		functionTimeoutMap:       fnTimeoutMap,
 		rtLogger:                 routeLogger.WithName("roundtripper"),
-		policyByUID:              precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
-		asyncInvoker:             ts.asyncInvoker,
+		policyByUID:              precomputePolicies(functionMap, fnTimeoutMap, streamIdleDefault),
+		// Direct callers can go async on any of these routes (RFC-0024); the
+		// dispatcher's own deliveries are gated out by the
+		// X-Fission-Invocation-Id guard in handler(), so they still proxy
+		// synchronously and never re-enqueue.
+		asyncInvoker: ts.asyncInvoker,
 	}
+}
+
+// buildTriggerHandler constructs the proxy handler for one trigger from its
+// resolve result: the functionHandler with hoisted per-route state
+// (RFC-0014) plus the per-trigger CORS wrap. fnTimeoutMap may be the global
+// map (one-shot buildMuxes) or a per-trigger map derived from the resolved
+// functions (incremental path) — the handler only ever looks up its own backends.
+func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
+	fh := ts.newFunctionHandlerBase(trigger.Name, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap)
+	fh.httpTrigger = trigger
 
 	// For FunctionReferenceTypeFunctionName the backend is fixed at build
 	// time; for FunctionReferenceTypeFunctionWeights (canary) the handler
@@ -240,29 +256,8 @@ func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *reso
 // handler for one function (the /fission-function/... target every non-HTTP
 // trigger publishes to).
 func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
-	var streamIdleDefault time.Duration
-	if ts.tsRoundTripperParams != nil {
-		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
-	}
-	routeLogger := ts.logger.WithName(fn.Name)
-	fh := &functionHandler{
-		logger:               routeLogger,
-		resolver:             ts.addressResolver,
-		tapper:               ts.tapper,
-		function:             fn,
-		tsRoundTripperParams: ts.tsRoundTripperParams,
-		isDebugEnv:           ts.isDebugEnv,
-		structuredErrors:     ts.structuredErrors,
-		accessLog:            ts.accessLog,
-		functionTimeoutMap:   fnTimeoutMap,
-		rtLogger:             routeLogger.WithName("roundtripper"),
-		policyByUID: precomputePolicies(map[string]*fv1.Function{fn.Name: fn},
-			fnTimeoutMap, streamIdleDefault),
-		// Direct callers can go async on this path too (RFC-0024); the dispatcher's
-		// own deliveries are gated out by the X-Fission-Invocation-Id guard in
-		// handler(), so they still proxy synchronously and never re-enqueue.
-		asyncInvoker: ts.asyncInvoker,
-	}
+	fh := ts.newFunctionHandlerBase(fn.Name, map[string]*fv1.Function{fn.Name: fn}, nil, fnTimeoutMap)
+	fh.function = fn
 	return http.HandlerFunc(fh.handler)
 }
 
@@ -277,26 +272,7 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 // path that reaches `:<alias>` — MQ/timer/kubewatcher/MCP publishers, and any
 // signed direct caller — not just HTTPTrigger routes.
 func (ts *HTTPTriggerSet) buildInternalAliasHandler(routeName string, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
-	var streamIdleDefault time.Duration
-	if ts.tsRoundTripperParams != nil {
-		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
-	}
-	routeLogger := ts.logger.WithName(routeName)
-	fh := &functionHandler{
-		logger:                   routeLogger,
-		resolver:                 ts.addressResolver,
-		tapper:                   ts.tapper,
-		functionMap:              rr.functionMap,
-		fnWeightDistributionList: rr.functionWtDistributionList,
-		tsRoundTripperParams:     ts.tsRoundTripperParams,
-		isDebugEnv:               ts.isDebugEnv,
-		structuredErrors:         ts.structuredErrors,
-		accessLog:                ts.accessLog,
-		functionTimeoutMap:       fnTimeoutMap,
-		rtLogger:                 routeLogger.WithName("roundtripper"),
-		policyByUID:              precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
-		asyncInvoker:             ts.asyncInvoker,
-	}
+	fh := ts.newFunctionHandlerBase(routeName, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap)
 	if rr.resolveResultType == resolveResultSingleFunction {
 		for _, fn := range fh.functionMap {
 			fh.function = fn

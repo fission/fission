@@ -5,6 +5,7 @@
 package router
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -25,12 +26,63 @@ const (
 	X_FORWARDED_HOST = "X-Forwarded-Host"
 )
 
+// trimFunctionPrefix strips the "/fission-function/[<ns>/]<name>[:<suffix>]"
+// prefix a direct internal invocation's path carries, leaving the
+// pod-visible path a plain invocation would see: "" (caller normalizes to
+// "/") or "/<subpath>". ok is false when path does not carry ANY form of
+// fnMeta's internal-listener prefix.
+//
+// It tries every URL form pkg/router/routeshape.go's internalRouteExactURLs
+// can register for fnMeta — the folded default-namespace form, plus, for the
+// default namespace, the qualified form too (a materialized `:<alias>`/
+// `:<version>` route registers both; a plain function route only ever
+// arrives via the folded one, so the extra candidate is simply never
+// matched for it) — so the caller need not know which grammar form the
+// request actually used.
+//
+// A plain strings.HasPrefix substring check is not enough here: it would
+// treat "/fission-function/hello" as a prefix of BOTH "/fission-function/
+// helloworld" (a different function) and "/fission-function/hello:prod"
+// (leaving a garbage "/:prod" leading segment instead of consuming the whole
+// tag) — the RFC-0025 bug this fixes. This checks what immediately follows
+// the matched base: end-of-path or "/" (a plain invocation, unchanged
+// behavior), or ":" (a tag) followed by everything up to the next "/" or
+// end-of-path — the WHOLE tag is consumed, not just the base, so a suffixed
+// route's pod-visible path is byte-identical to a plain invocation's.
+func trimFunctionPrefix(path string, fnMeta *metav1.ObjectMeta) (trimmed string, ok bool) {
+	bases := []string{utils.UrlForFunction(fnMeta.Name, fnMeta.Namespace)}
+	if fnMeta.Namespace == metav1.NamespaceDefault {
+		bases = append(bases, fmt.Sprintf("/fission-function/%s/%s", fnMeta.Namespace, fnMeta.Name))
+	}
+	for _, base := range bases {
+		rest, hasBase := strings.CutPrefix(path, base)
+		if !hasBase {
+			continue
+		}
+		switch {
+		case rest == "" || strings.HasPrefix(rest, "/"):
+			return rest, true
+		case strings.HasPrefix(rest, ":"):
+			if idx := strings.IndexByte(rest, '/'); idx >= 0 {
+				return rest[idx:], true
+			}
+			return "", true
+		}
+		// rest starts with neither "/" nor ":" (e.g. base "hello" matched
+		// inside "helloworld"): a false-positive substring match — keep
+		// trying the remaining candidate bases.
+	}
+	return "", false
+}
+
 // rewriteFunctionURL points the request at the resolved service URL and
 // rewrites its path per the HTTPTrigger specification:
 //  1. if the trigger declares a prefix, we trim it (unless KeepPrefix) and
 //     forward the request;
-//  2. otherwise, if the path carries the /fission-function/<ns>/<name> form
-//     (default namespace folded), that prefix is trimmed;
+//  2. otherwise, if the path carries the internal-listener
+//     /fission-function/[<ns>/]<name>[:<suffix>] form, that whole prefix
+//     (including any `:<alias>`/`:<version>` tag) is trimmed — see
+//     trimFunctionPrefix;
 //  3. otherwise the request is forwarded to the root path.
 //
 // The query string (req.URL.RawQuery) is left intact; only req.URL.Path is
@@ -43,23 +95,27 @@ func rewriteFunctionURL(logger logr.Logger, req *http.Request, trigger *fv1.HTTP
 	req.URL.Host = serviceURL.Host
 
 	prefixTrim := ""
-	functionURL := utils.UrlForFunction(fnMeta.Name, fnMeta.Namespace)
 	keepPrefix := false
-	if trigger != nil && trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+	switch {
+	case trigger != nil && trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "":
 		prefixTrim = *trigger.Spec.Prefix
 		keepPrefix = trigger.Spec.KeepPrefix
-	} else if strings.HasPrefix(req.URL.Path, functionURL) {
-		prefixTrim = functionURL
-	}
-	if prefixTrim != "" {
 		if !keepPrefix {
 			req.URL.Path = strings.TrimPrefix(req.URL.Path, prefixTrim)
 		}
 		if !strings.HasPrefix(req.URL.Path, "/") {
 			req.URL.Path = "/" + req.URL.Path
 		}
-	} else {
-		req.URL.Path = "/"
+	default:
+		if trimmed, ok := trimFunctionPrefix(req.URL.Path, fnMeta); ok {
+			prefixTrim = req.URL.Path[:len(req.URL.Path)-len(trimmed)]
+			req.URL.Path = trimmed
+			if req.URL.Path == "" {
+				req.URL.Path = "/"
+			}
+		} else {
+			req.URL.Path = "/"
+		}
 	}
 
 	logger.V(1).Info("function invoke url",
