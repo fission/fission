@@ -800,3 +800,98 @@ func TestMapEnvToAliasesEnqueuesCrossNamespaceMatch(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"prod-fallback"}, names)
 }
+
+// --- RFC-0025 phase 5 canary shim contract (pkg/canaryconfigmgr) ---
+//
+// pkg/canaryconfigmgr cannot be imported here (its canaryConfigMgr type and
+// step/rollForwardAlias/rollbackAlias methods are unexported), so these tests
+// walk the shim's WRITE SHAPES — reproduced from its documented contract —
+// directly through this reconciler's writeStatus, verifying the
+// History-append property the shim's role mapping depends on: resolve()
+// tracks only Spec.Version, never Weight/SecondaryVersion (the weighted
+// split is a router-side concern), so a write that leaves Version unchanged
+// in VALUE never appends, regardless of how many times it repeats.
+
+// updateAliasSpec re-Gets alias by name (picking up whatever a prior
+// reconcile wrote to Status, mirroring canaryconfigmgr's own re-read-before-write
+// pattern) and applies mutate to its Spec.
+func updateAliasSpec(t *testing.T, c client.Client, name string, mutate func(*fv1.FunctionAliasSpec)) {
+	t.Helper()
+	a := &fv1.FunctionAlias{}
+	require.NoError(t, c.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: name}, a))
+	mutate(&a.Spec)
+	require.NoError(t, c.Update(t.Context(), a))
+}
+
+func TestAliasReconcileCanaryShimProgressionThenPromotionWriteShapes(t *testing.T) {
+	oldVer := testVersion("orders", 1, "")
+	newVer := testVersion("orders", 2, "")
+	alias := testAliasNamePinned("prod", "orders", oldVer.Name)
+	r, c := newAliasReconciler(t, oldVer, newVer, alias)
+
+	// Establish ResolvedVersion=old, no History (first-ever resolution).
+	reconcileAlias(t, r, "prod")
+	got := getAlias(t, c, "prod")
+	assert.Equal(t, oldVer.Name, got.Status.ResolvedVersion)
+	assert.Empty(t, got.Status.History)
+
+	// Progression writes (rollForwardAlias's intermediate steps): Version
+	// stays OLD, only Weight/SecondaryVersion move.
+	for _, weight := range []int{70, 40, 10} {
+		w := weight
+		updateAliasSpec(t, c, "prod", func(s *fv1.FunctionAliasSpec) {
+			s.Version = oldVer.Name
+			s.Weight = &w
+			s.SecondaryVersion = newVer.Name
+		})
+		reconcileAlias(t, r, "prod")
+	}
+	got = getAlias(t, c, "prod")
+	assert.Equal(t, oldVer.Name, got.Status.ResolvedVersion, "progression writes must not move ResolvedVersion")
+	assert.Empty(t, got.Status.History, "progression writes must never append")
+
+	// Terminal SUCCESS write (rollForwardAlias's "done" path): Version flips
+	// OLD -> NEW, Weight/SecondaryVersion cleared — the shim's single
+	// value-changing write.
+	updateAliasSpec(t, c, "prod", func(s *fv1.FunctionAliasSpec) {
+		s.Version = newVer.Name
+		s.Weight = nil
+		s.SecondaryVersion = ""
+	})
+	reconcileAlias(t, r, "prod")
+
+	got = getAlias(t, c, "prod")
+	assert.Equal(t, newVer.Name, got.Status.ResolvedVersion)
+	require.Len(t, got.Status.History, 1, "promotion must append exactly one record")
+	assert.Equal(t, oldVer.Name, got.Status.History[0].Version, "the appended record is the outgoing OLD target")
+}
+
+func TestAliasReconcileCanaryShimFailureWriteAppendsNothing(t *testing.T) {
+	oldVer := testVersion("orders", 1, "")
+	newVer := testVersion("orders", 2, "")
+	alias := testAliasNamePinned("prod", "orders", oldVer.Name)
+	r, c := newAliasReconciler(t, oldVer, newVer, alias)
+
+	reconcileAlias(t, r, "prod") // establish ResolvedVersion=old, no History
+
+	weight := 70
+	updateAliasSpec(t, c, "prod", func(s *fv1.FunctionAliasSpec) {
+		s.Version = oldVer.Name
+		s.Weight = &weight
+		s.SecondaryVersion = newVer.Name
+	})
+	reconcileAlias(t, r, "prod")
+
+	// Terminal FAILURE (rollbackAlias) write: Version stays OLD —
+	// canaryconfigmgr never touches it on a rollback.
+	updateAliasSpec(t, c, "prod", func(s *fv1.FunctionAliasSpec) {
+		s.Version = oldVer.Name
+		s.Weight = nil
+		s.SecondaryVersion = ""
+	})
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	assert.Equal(t, oldVer.Name, got.Status.ResolvedVersion)
+	assert.Empty(t, got.Status.History, "a rollback write that never changed Version must append nothing")
+}

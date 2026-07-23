@@ -38,11 +38,17 @@ func MakePrometheusClient(logger logr.Logger, prometheusSvc string) (*Prometheus
 	}, nil
 }
 
-func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcNs string, window string) (float64, error) {
+// funcVersion (RFC-0025 phase 5) adds a function_version label to every query
+// this method issues, disambiguating two versions of the SAME function that
+// otherwise share every other label (function_name/function_namespace/path/
+// method) — see docs/rfc/0025-function-versions-aliases-rollback.md
+// L181-182. Empty is function-pair mode: the query is byte-identical to
+// before this parameter existed.
+func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcVersion, funcNs string, window string) (float64, error) {
 	var reqs, failedReqs float64
 	// first get a total count of requests to this url in a time window
 	for _, method := range methods {
-		mreqs, err := promApiClient.GetRequestsToFuncInWindow(ctx, path, method, funcName, funcNs, window)
+		mreqs, err := promApiClient.GetRequestsToFuncInWindow(ctx, path, method, funcName, funcVersion, funcNs, window)
 		if err != nil {
 			return 0, err
 		}
@@ -55,7 +61,7 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx conte
 
 	// next, get a total count of errored out requests to this function in the same window
 	for _, method := range methods {
-		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(ctx, funcName, funcNs, path, method, window)
+		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(ctx, funcName, funcVersion, funcNs, path, method, window)
 		if err != nil {
 			return 0, err
 		}
@@ -68,12 +74,20 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx conte
 	return failurePercentForFunc, nil
 }
 
-func (PrometheusApiClient *PrometheusApiClient) getFunctionQueryLabels(functionName, functionNamespace, path, method string) string {
-	return fmt.Sprintf("function_name=\"%s\",function_namespace=\"%s\",path=\"%s\",method=\"%s\"", functionName, functionNamespace, path, method)
+// getFunctionQueryLabels builds the PromQL label-matcher body shared by every
+// query this client issues. functionVersion is only appended when non-empty
+// (pair mode omits it, keeping the query byte-identical to the pre-alias-mode
+// shape); see GetFunctionFailurePercentage.
+func (PrometheusApiClient *PrometheusApiClient) getFunctionQueryLabels(functionName, functionVersion, functionNamespace, path, method string) string {
+	labels := fmt.Sprintf("function_name=\"%s\",function_namespace=\"%s\",path=\"%s\",method=\"%s\"", functionName, functionNamespace, path, method)
+	if functionVersion != "" {
+		labels += fmt.Sprintf(",function_version=\"%s\"", functionVersion)
+	}
+	return labels
 }
 
-func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(ctx context.Context, path string, method string, funcName string, funcNs string, window string) (float64, error) {
-	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
+func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(ctx context.Context, path string, method string, funcName string, funcVersion string, funcNs string, window string) (float64, error) {
+	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcVersion, funcNs, path, method)
 	queryString := fmt.Sprintf("fission_function_calls_total{%s}[%v]", queryLabels, window)
 
 	reqs, err := promApiClient.executeQuery(ctx, queryString)
@@ -98,8 +112,8 @@ func (promApiClient *PrometheusApiClient) GetRequestsToFuncInWindow(ctx context.
 	return reqsInCurrentWindow, nil
 }
 
-func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(ctx context.Context, funcName string, funcNs string, path string, method string, window string) (float64, error) {
-	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcNs, path, method)
+func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(ctx context.Context, funcName string, funcVersion string, funcNs string, path string, method string, window string) (float64, error) {
+	queryLabels := promApiClient.getFunctionQueryLabels(funcName, funcVersion, funcNs, path, method)
 	queryString := fmt.Sprintf("fission_function_errors_total{%s}[%v]", queryLabels, window)
 
 	failedRequests, err := promApiClient.executeQuery(ctx, queryString)
