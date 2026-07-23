@@ -96,7 +96,15 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 		"X-Fission-MQTrigger-ErrorTopic": ch.trigger.Spec.ErrorTopic,
 		"Content-Type":                   ch.trigger.Spec.ContentType,
 	}
-	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunction(ch.trigger.Spec.FunctionReference.Name, ch.trigger.Namespace), "/")
+	// RFC-0025: append the alias/version suffix when the reference carries
+	// one; resolution stays entirely router-side. Precomputed once here (not
+	// per-delivery) since resolution happens per-request on the router side
+	// regardless of when the publisher built the URL string.
+	suffix := ch.trigger.Spec.FunctionReference.Alias
+	if suffix == "" {
+		suffix = ch.trigger.Spec.FunctionReference.Version
+	}
+	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunctionRef(ch.trigger.Spec.FunctionReference.Name, ch.trigger.Namespace, suffix), "/")
 	ch.logger.V(1).Info("function HTTP URL", "url", ch.fnUrl)
 	return ch
 }

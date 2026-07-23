@@ -39,6 +39,28 @@ func UrlForFunction(name, namespace string) string {
 	return fmt.Sprintf("%s/%s", prefix, name)
 }
 
+// UrlForFunctionRef is UrlForFunction with a router alias/version suffix
+// (":<suffix>") appended when suffix is non-empty -- the same "name:tag"
+// grammar the router's internal `:<alias>`/`:<version>` routes register at
+// (pkg/router/routeshape.go). Callers pass a FunctionReference's Alias if
+// set, else its Version (the two are mutually exclusive -- CEL/webhook
+// enforced, see FunctionReference's doc comment in pkg/apis/core/v1/types.go);
+// a bare reference (neither set) gets exactly UrlForFunction's result.
+//
+// This exists so every RFC-0025-aware publisher (timer, kubewatcher,
+// mqtrigger's kafka/statestore/scalermanager backends) builds the suffixed
+// URL the same one way, rather than five copies of the same
+// `if suffix != "" { url += ":" + suffix }` -- resolution of what the suffix
+// actually routes to stays entirely router-side; publishers only ever build
+// a URL string.
+func UrlForFunctionRef(name, namespace, suffix string) string {
+	url := UrlForFunction(name, namespace)
+	if suffix != "" {
+		url += ":" + suffix
+	}
+	return url
+}
+
 // GetFunctionIstioServiceName return service name of function for istio feature
 func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 	return fmt.Sprintf("istio-%s-%s", fnName, fnNamespace)

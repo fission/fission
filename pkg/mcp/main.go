@@ -120,6 +120,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error registering mcp function reconciler: %w", err)
 	}
 
+	// RFC-0025: re-reconcile a Tool-bearing Function's entry when the
+	// FunctionAlias it targets repoints. Permissive predicates -- see
+	// FunctionAliasToolReconciler's doc comment on why the default
+	// GenerationChangedPredicate would drop every resolver repoint.
+	aliasR := &FunctionAliasToolReconciler{
+		logger: logger.WithName("function_alias_tool_reconciler"),
+		client: crMgr.GetClient(),
+		tool:   r,
+	}
+	if err := controller.RegisterTenantScopedWithPredicates(crMgr, &fv1.FunctionAlias{}, aliasR, "mcp-functionalias", 0); err != nil {
+		return fmt.Errorf("error registering mcp functionalias reconciler: %w", err)
+	}
+
 	// ready flips true once the Function cache has synced (the manager starts
 	// added runnables only after cache sync), so a replica reports ready only
 	// after its registry is being populated. Without this an agent that connects

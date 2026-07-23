@@ -297,7 +297,13 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		// with the addition of multi-tenancy, the users can create functions in any namespace. however,
 		// the triggers can only be created in the same namespace as the function.
 		// so essentially, function namespace = trigger namespace.
-		url := utils.UrlForFunction(ws.watch.Spec.FunctionReference.Name, ws.watch.Namespace)
+		// RFC-0025: append the alias/version suffix when the reference carries
+		// one; resolution stays entirely router-side.
+		suffix := ws.watch.Spec.FunctionReference.Alias
+		if suffix == "" {
+			suffix = ws.watch.Spec.FunctionReference.Version
+		}
+		url := utils.UrlForFunctionRef(ws.watch.Spec.FunctionReference.Name, ws.watch.Namespace, suffix)
 		ws.publisher.Publish(ctx, buf.String(), headers, http.MethodPost, url)
 	}
 }

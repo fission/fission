@@ -27,6 +27,12 @@ type ToolEntry struct {
 	FnName      string
 	Description string
 	InputSchema json.RawMessage
+
+	// Alias, when non-empty, is the FunctionAlias name (RFC-0025) tools/call
+	// proxies through -- Proxy.Invoke builds the ":<alias>" internal route
+	// (utils.UrlForFunctionRef) instead of addressing FnName's live route.
+	// Empty (the default) preserves the pre-RFC-0025 behavior.
+	Alias string
 }
 
 // Registry is the in-memory source of truth for the MCP tool set, maintained by
@@ -132,6 +138,19 @@ func (r *Registry) Lookup(toolName string) (ToolEntry, bool) {
 	return e, ok
 }
 
+// HasFunction reports whether a tool is currently registered for the given
+// function. Used by the reconciler to decide, when an alias-addressed
+// function's target is momentarily unresolved, whether to keep serving the
+// last-registered entry untouched (true) or fall back to the live Function's
+// own Tool config because nothing has ever been registered for it yet
+// (false).
+func (r *Registry) HasFunction(nn types.NamespacedName) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.byFn[nn]
+	return ok
+}
+
 // Len returns the number of registered tools.
 func (r *Registry) Len() int {
 	r.mu.RLock()
@@ -159,6 +178,15 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 		FnName:      fn.Name,
 		Description: tc.Description,
 		InputSchema: schema,
+		// Alias is whatever fn.Spec.Tool.Alias says on the fn actually passed
+		// in: for the live function this is live's own Alias; for a
+		// versioning.VersionedFunction projection it is the resolved
+		// snapshot's recorded Alias -- reconciler.go's resolveEntry
+		// additionally overrides this to the alias CR's own name after the
+		// call, since that is the one value it knows for certain matched
+		// (fn.Spec.Tool.Alias could theoretically differ in a stale
+		// snapshot).
+		Alias: tc.Alias,
 	}
 }
 
@@ -166,6 +194,7 @@ func toolEntryEqual(a, b ToolEntry) bool {
 	return a.ToolName == b.ToolName &&
 		a.Namespace == b.Namespace &&
 		a.FnName == b.FnName &&
+		a.Alias == b.Alias &&
 		a.Description == b.Description &&
 		string(a.InputSchema) == string(b.InputSchema)
 }

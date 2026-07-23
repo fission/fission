@@ -41,6 +41,27 @@ func TestUrlForFunction(t *testing.T) {
 	}
 }
 
+func TestUrlForFunctionRef(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		fn, ns string
+		suffix string
+		want   string
+	}{
+		{"no suffix falls back to UrlForFunction", "fn", "default", "", "/fission-function/fn"},
+		{"alias suffix, default namespace", "fn", "default", "blue", "/fission-function/fn:blue"},
+		{"alias suffix, other namespace", "fn", "ns1", "blue", "/fission-function/ns1/fn:blue"},
+		{"version suffix", "fn", "ns1", "fn-v3", "/fission-function/ns1/fn:fn-v3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, UrlForFunctionRef(tc.fn, tc.ns, tc.suffix))
+		})
+	}
+}
+
 func TestIsURL(t *testing.T) {
 	tests := []struct {
 		name string

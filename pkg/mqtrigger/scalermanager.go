@@ -109,7 +109,13 @@ func toEnvVar(str string) string {
 }
 
 func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL string, kubeClient kubernetes.Interface) ([]apiv1.EnvVar, error) {
-	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(mqt.Spec.FunctionReference.Name, mqt.Namespace), "/")
+	// RFC-0025: append the alias/version suffix when the reference carries
+	// one; resolution stays entirely router-side.
+	suffix := mqt.Spec.FunctionReference.Alias
+	if suffix == "" {
+		suffix = mqt.Spec.FunctionReference.Version
+	}
+	url := routerURL + "/" + strings.TrimPrefix(utils.UrlForFunctionRef(mqt.Spec.FunctionReference.Name, mqt.Namespace, suffix), "/")
 	envVars := []apiv1.EnvVar{
 		{
 			Name:  "TOPIC",

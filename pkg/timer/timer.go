@@ -76,8 +76,26 @@ func (timer *Timer) remove(key types.NamespacedName) {
 	timer.logger.WithValues("trigger_name", key.Name, "trigger_namespace", key.Namespace).V(1).Info("cron deleted")
 }
 
+// functionTargetURL builds the internal-listener URL a TimeTrigger's cron
+// fires at: UrlForFunctionRef(name, namespace, suffix) + Subpath, where
+// suffix is the reference's Alias if set, else its Version (mutually
+// exclusive, CEL/webhook-enforced) -- extracted from newCron so it is
+// unit-testable without spinning up a cron.Cron.
+//
+// TimeTriggerSpec embeds FunctionReference (json "functionref"), so
+// Alias/Version are promoted fields, read the same way t.Spec.Name already
+// is. Resolution of what the suffix routes to stays entirely router-side --
+// this only builds a URL string.
+func functionTargetURL(t fv1.TimeTrigger) string {
+	suffix := t.Spec.Alias
+	if suffix == "" {
+		suffix = t.Spec.Version
+	}
+	return utils.UrlForFunctionRef(t.Spec.Name, t.Namespace, suffix) + t.Spec.Subpath
+}
+
 func (timer *Timer) newCron(t fv1.TimeTrigger, routerUrl string) *cron.Cron {
-	target := utils.UrlForFunction(t.Spec.Name, t.Namespace) + t.Spec.Subpath
+	target := functionTargetURL(t)
 
 	// create one publisher per-cron timer
 	timerPublisher := publisher.MakeWebhookPublisher(timer.logger, routerUrl)
