@@ -61,16 +61,13 @@ func TestVersionedSpecialize(t *testing.T) {
 	// versionretain sync doesn't flake the assertion.
 	const idleTimeoutSeconds = 30
 	const windowMultiplier = 4
-	// retainPods must be > 0 for alias-retention to have any observable effect:
-	// PoolCache.ListAvailableValue only offers a generation's pods as idle-reap
-	// candidates once its live pod count exceeds this floor (RetainPods, default
-	// 0). versionretain.View.Retained decides whether an alias-referenced
-	// non-latest generation keeps that same floor instead of having it forced to
-	// 0 -- with the default RetainPods=0 the floor is 0 either way, so alias
-	// retention would be unobservable (confirmed live: without this the v1 pod
-	// drains at IdleTimeout regardless of the alias). See
-	// pkg/executor/versionretain/view.go's package doc.
-	const retainPods = 1
+	// The function deliberately uses the CLI's default RetainPods (0, i.e.
+	// FunctionOptions.RetainPods left unset below): PoolCache.ListAvailableValue
+	// floors svcRetain at one warm pod for a non-latest generation that
+	// versionretain.View.Retained reports as alias-referenced (see
+	// pkg/executor/fscache/poolcache.go), without requiring RetainPods > 0. That
+	// floor is exactly the promise this test proves -- an aliased old version
+	// keeps ONE pod warm at default config, no operator opt-in required.
 
 	// Belt-and-suspenders cleanup, mirroring TestFunctionVersionPhase1: the
 	// alias must go before the versions it may still reference, so a
@@ -92,7 +89,6 @@ func TestVersionedSpecialize(t *testing.T) {
 		Env:         envName,
 		Code:        codeV1,
 		IdleTimeout: idleTimeoutSeconds,
-		RetainPods:  retainPods,
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 
