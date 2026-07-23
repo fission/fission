@@ -6,13 +6,17 @@ package versioning
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -657,6 +661,100 @@ func TestAliasReconcileIdempotentNoWritesOnSecondReconcileWithEnvDrift(t *testin
 	reconcileAlias(t, r2, "prod")
 
 	assert.Zero(t, writes, "a fully-converged reconcile — including a stable EnvDrift condition — must perform zero writes")
+}
+
+func TestNotAssessableGetErr(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"not found", apierrors.NewNotFound(schema.GroupResource{Group: fv1.SchemeGroupVersion.Group, Resource: "environments"}, "nodejs"), true},
+		{"forbidden", apierrors.NewForbidden(schema.GroupResource{Group: fv1.SchemeGroupVersion.Group, Resource: "environments"}, "nodejs", errors.New("rbac")), true},
+		{"uncached namespace (controller-runtime multi-namespace cache)", fmt.Errorf("unable to get: default/nodejs because of unknown namespace for the cache"), true},
+		{"unrelated error", errors.New("connection refused"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, notAssessableGetErr(tc.err))
+		})
+	}
+}
+
+// forbiddenGetInterceptor returns a client.Client wrapping objs that returns
+// a Forbidden error for any Get of an object whose type matches forbidType
+// (a zero-value instance, e.g. &fv1.Environment{}), and otherwise behaves
+// like a normal fake client.
+func forbiddenGetInterceptor(t *testing.T, forbidType client.Object, objs ...client.Object) client.Client {
+	t.Helper()
+	forbidKind := fmt.Sprintf("%T", forbidType)
+	return fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(&fv1.FunctionAlias{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if fmt.Sprintf("%T", obj) == forbidKind {
+					return apierrors.NewForbidden(schema.GroupResource{Group: fv1.SchemeGroupVersion.Group, Resource: "resource"}, key.Name, errors.New("rbac: not permitted in this namespace"))
+				}
+				return cl.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+}
+
+// TestAliasReconcileEnvDriftForbiddenEnvironmentGetDoesNotErrorLoop is the
+// review-flagged regression: a Forbidden Get on the Environment (the
+// realistic shape of a cross-namespace Snapshot.Environment reference under
+// a namespace-scoped buildermgr Role) must degrade to "EnvDrift not
+// assessable" exactly like NotFound -- NOT abort writeStatus before its
+// Patch call. Before the fix, this reconcile would return a non-nil error
+// on every call (an error loop) and the Resolved condition/History set
+// earlier in the SAME writeStatus call would never reach the API server.
+func TestAliasReconcileEnvDriftForbiddenEnvironmentGetDoesNotErrorLoop(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+
+	c := forbiddenGetInterceptor(t, &fv1.Environment{}, fn, v, alias)
+	r := &AliasReconciler{logger: logr.Discard(), client: c}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	require.NoError(t, err, "a Forbidden Environment Get must not error-loop the reconcile")
+
+	got := getAlias(t, c, "prod")
+	assert.True(t, conditions.IsTrue(got.Status.Conditions, fv1.FunctionAliasConditionResolved),
+		"the Resolved condition computed earlier in the same writeStatus call must still be persisted")
+	assert.Equal(t, v.Name, got.Status.ResolvedVersion)
+	assert.Nil(t, conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift),
+		"not assessable (Forbidden); EnvDrift must be absent, not an error")
+}
+
+// TestAliasReconcileEnvDriftForbiddenVersionGetDoesNotErrorLoop is the same
+// regression for the FunctionVersion Get (applyEnvDrift's first Get, ahead
+// of the Environment Get) -- symmetry requested in review. Uses a
+// digest-pinned alias deliberately: resolve() resolves a digest-pinned
+// target via List, not Get, so the interceptor's Forbidden-on-Get only ever
+// fires inside applyEnvDrift, not also inside resolve() (which a
+// name-pinned alias would hit too, since both call sites Get the exact same
+// FunctionVersion object -- that would test resolve()'s own error handling
+// instead of applyEnvDrift's).
+func TestAliasReconcileEnvDriftForbiddenVersionGetDoesNotErrorLoop(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasDigestPinned("prod", "hello", "sha256:aaa")
+
+	c := forbiddenGetInterceptor(t, &fv1.FunctionVersion{}, fn, v, alias)
+	r := &AliasReconciler{logger: logr.Discard(), client: c}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	require.NoError(t, err, "a Forbidden FunctionVersion Get must not error-loop the reconcile")
+
+	got := getAlias(t, c, "prod")
+	assert.True(t, conditions.IsTrue(got.Status.Conditions, fv1.FunctionAliasConditionResolved),
+		"digest resolution goes through List, unaffected by the Get interceptor; Resolved must still land")
+	assert.Nil(t, conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift),
+		"not assessable (Forbidden); EnvDrift must be absent, not an error")
 }
 
 // --- Environment watch -> alias enqueue ---

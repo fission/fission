@@ -7,6 +7,7 @@ package versioning
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -411,6 +412,52 @@ func (r *AliasReconciler) writeStatus(ctx context.Context, alias *fv1.FunctionAl
 	return r.client.Status().Patch(ctx, alias, client.MergeFrom(original))
 }
 
+// uncachedNamespaceErrSubstring is the message fragment controller-runtime's
+// multi-namespace cache (sigs.k8s.io/controller-runtime/pkg/cache,
+// multiNamespaceCache.Get/List, v0.24.1) returns when asked for a namespace
+// it was never configured to watch — a plain fmt.Errorf with no exported
+// sentinel or typed error to match via errors.Is/As as of that version:
+//
+//	fmt.Errorf("unable to get: %v because of unknown namespace for the cache", key)
+//
+// This is the concrete shape of "an Environment/FunctionVersion reference
+// lands outside a namespace-scoped buildermgr's watched set" — a real,
+// expected case for a cross-namespace Snapshot.Environment reference under
+// static (non-cluster-wide) multi-namespace tenancy. Matched by substring
+// because that is all upstream offers; a future controller-runtime bump
+// changing the wording fails CLOSED (notAssessableGetErr stops matching, the
+// error is treated as real, and the alias reconcile requeues with a logged
+// error instead of silently misclassifying something else as "not
+// assessable" forever).
+const uncachedNamespaceErrSubstring = "unknown namespace for the cache"
+
+// notAssessableGetErr reports whether err from a Get inside applyEnvDrift
+// means "cannot tell" rather than "a real failure that should propagate and
+// requeue the reconcile". Three cases collapse to the same "not assessable,
+// remove the condition" outcome documented on
+// FunctionAliasConditionEnvDrift:
+//   - NotFound: the object was deleted after resolution recorded it.
+//   - Forbidden: this reconciler's RBAC does not cover the object's
+//     namespace — a legitimate, non-transient case for a cross-namespace
+//     Environment/FunctionVersion reference under a namespace-scoped Role
+//     (see charts/fission-all/templates/buildermgr/role-fission-cr.yaml).
+//   - The uncached-namespace case controller-runtime's multi-namespace
+//     cache returns under static (non-cluster-wide) multi-namespace
+//     tenancy; see uncachedNamespaceErrSubstring.
+//
+// Before this existed, any of these three degraded applyEnvDrift into a
+// hard error that aborted writeStatus BEFORE its Patch call — silently
+// blocking the Resolved condition and History writes (which had already
+// been computed earlier in the same call) and error-looping the alias on
+// every reconcile. Only a genuinely unexpected error (a real API outage,
+// etc.) should still propagate.
+func notAssessableGetErr(err error) bool {
+	if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
+		return true
+	}
+	return strings.Contains(err.Error(), uncachedNamespaceErrSubstring)
+}
+
 // applyEnvDrift sets or removes the EnvDrift condition on alias (in-memory;
 // the caller folds this into its own status patch) and reports whether it
 // changed anything. Drift is assessable only once resolution succeeded AND
@@ -425,7 +472,7 @@ func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.Function
 
 	v := &fv1.FunctionVersion{}
 	if err := r.client.Get(ctx, client.ObjectKey{Namespace: alias.Namespace, Name: resolvedVersion}, v); err != nil {
-		if apierrors.IsNotFound(err) {
+		if notAssessableGetErr(err) {
 			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
 		}
 		return false, fmt.Errorf("versioning: getting function version %s/%s for alias %s/%s env-drift check: %w",
@@ -444,7 +491,7 @@ func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.Function
 
 	env := &fv1.Environment{}
 	if err := r.client.Get(ctx, client.ObjectKey{Namespace: envNS, Name: v.Spec.Snapshot.Environment.Name}, env); err != nil {
-		if apierrors.IsNotFound(err) {
+		if notAssessableGetErr(err) {
 			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
 		}
 		return false, fmt.Errorf("versioning: getting environment %s/%s referenced by function version %s/%s for alias %s/%s env-drift check: %w",

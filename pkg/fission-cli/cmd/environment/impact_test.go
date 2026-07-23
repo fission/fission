@@ -117,11 +117,17 @@ func TestBuildImpactRowsResolvedDriftedAndCurrent(t *testing.T) {
 	}
 	v1 := &fv1.FunctionVersion{
 		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1}, // stale
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1, // stale
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
 	}
 	v2 := &fv1.FunctionVersion{
 		ObjectMeta: metav1.ObjectMeta{Name: "hello-v2", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 2, EnvObservedGeneration: 2}, // current
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName: "hello", Sequence: 2, EnvObservedGeneration: 2, // current
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
 	}
 
 	rows := buildImpactRows(t.Context(), fissionfake.NewClientset(v1, v2), "default", env, fns, aliases)
@@ -135,6 +141,89 @@ func TestBuildImpactRowsResolvedDriftedAndCurrent(t *testing.T) {
 	assert.Equal(t, int64(1), byAlias["prod"].EnvObservedGeneration)
 	assert.Equal(t, "False", byAlias["canary"].Drift)
 	assert.Equal(t, int64(2), byAlias["canary"].EnvObservedGeneration)
+}
+
+func TestSnapshotEnvMatches(t *testing.T) {
+	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default"}}
+
+	cases := []struct {
+		name    string
+		envRef  fv1.EnvironmentReference
+		fnNS    string
+		matches bool
+	}{
+		{"same-ns explicit", fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"}, "default", true},
+		{"same-ns fallback (unset namespace)", fv1.EnvironmentReference{Name: "nodejs"}, "default", true},
+		{"different name", fv1.EnvironmentReference{Name: "python"}, "default", false},
+		{"different namespace, explicit", fv1.EnvironmentReference{Name: "nodejs", Namespace: "other-ns"}, "default", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := &fv1.FunctionVersion{Spec: fv1.FunctionVersionSpec{Snapshot: fv1.FunctionSpec{Environment: tc.envRef}}}
+			assert.Equal(t, tc.matches, snapshotEnvMatches(v, tc.fnNS, env))
+		})
+	}
+}
+
+// TestBuildImpactRowsAliasResolvedToVersionFromDifferentEnvironment is the
+// review-flagged regression: hello has since been repointed at env-b
+// (Spec.Environment, matched by filterFunctionsByEnvironment), but its
+// "prod" alias is still resolved to hello-v1, which was published back when
+// hello referenced env-a. Comparing hello-v1's EnvObservedGeneration
+// (recorded against env-a) to env-b's live Generation would be a bogus
+// cross-environment comparison; the row must report driftOtherEnv instead
+// of a misleading True/False.
+func TestBuildImpactRowsAliasResolvedToVersionFromDifferentEnvironment(t *testing.T) {
+	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env-b", Namespace: "default", Generation: 5}}
+	fn := impactFn("hello", "env-b", "") // hello's CURRENT environment reference
+	aliases := []fv1.FunctionAlias{{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+	}}
+	// hello-v1 predates the env-a -> env-b move: its snapshot still names env-a.
+	v1 := &fv1.FunctionVersion{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 9,
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "env-a"}},
+		},
+	}
+
+	rows := buildImpactRows(t.Context(), fissionfake.NewClientset(v1), "default", env, []fv1.Function{*fn}, aliases)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "hello-v1", rows[0].TargetVersion, "the resolved target name is still reported")
+	assert.Equal(t, driftOtherEnv, rows[0].Drift, "the version was published against a different environment; no meaningful drift verdict against env-b")
+	assert.Zero(t, rows[0].EnvObservedGeneration, "not populated for a cross-environment mismatch")
+}
+
+// TestBuildImpactRowsResolvedDriftedAndCurrentIsTheNormalCase re-affirms
+// the ordinary same-environment path (already covered by
+// TestBuildImpactRowsResolvedDriftedAndCurrent above) still classifies
+// True/False rather than driftOtherEnv, now that snapshotEnvMatches gates
+// the comparison.
+func TestBuildImpactRowsResolvedDriftedAndCurrentIsTheNormalCase(t *testing.T) {
+	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2}}
+	fn := impactFn("hello", "nodejs", "")
+	aliases := []fv1.FunctionAlias{{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+	}}
+	v1 := &fv1.FunctionVersion{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1,
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
+	}
+
+	rows := buildImpactRows(t.Context(), fissionfake.NewClientset(v1), "default", env, []fv1.Function{*fn}, aliases)
+
+	require.Len(t, rows, 1)
+	assert.Equal(t, "True", rows[0].Drift)
+	assert.Equal(t, int64(1), rows[0].EnvObservedGeneration)
 }
 
 func TestBuildImpactRowsResolvedVersionMissingIsNotAssessable(t *testing.T) {
@@ -169,7 +258,10 @@ func TestImpactCommandEndToEnd(t *testing.T) {
 	}
 	v1 := &fv1.FunctionVersion{
 		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1},
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1,
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
 	}
 	otherFn := impactFn("unrelated", "python", "")
 
