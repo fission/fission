@@ -73,10 +73,13 @@ type RouteSpec struct {
 	Namespace  string
 	Name       string
 	TriggerGen int64
-	// FnGens maps each resolved backend function's name to its Generation.
-	// It supersedes TTL-based invalidation with precise per-trigger change
-	// detection: a function spec change bumps its generation, which makes
-	// the apply a HandlerSwapped instead of a NoChange.
+	// FnGens maps each resolved backend's BackendKey (RFC-0025: "name" for
+	// the live Function, "name@version" for a pinned FunctionVersion
+	// snapshot) to its Generation. It supersedes TTL-based invalidation with
+	// precise per-trigger change detection: a function spec change bumps its
+	// generation, which makes the apply a HandlerSwapped instead of a
+	// NoChange. reindexLocked strips the "@version" suffix back to the live
+	// function's name when populating fnIndex — see its doc comment.
 	FnGens map[string]int64
 
 	// Match shape. Exactly one of ExactPath / PrefixPath may be empty; a
@@ -416,10 +419,21 @@ func (t *Table) Sizes() (public, internal int) {
 
 // reindexLocked rebuilds the fn index entries for one trigger from its
 // current FnRVs. Caller holds t.mu.
+//
+// FnGens keys are BackendKeys (RFC-0025): a versioned backend's key is
+// "name@version", not the live Function's name. The index must still be
+// keyed on the live function's NamespacedName — applyFunctionIncremental /
+// reapplyTriggersForFunction look triggers up by the REAL function name on
+// a live-Function event, and never see "name@version" — so every FnGens key
+// is stripped back to its function name (ParseBackendKey) before indexing.
+// Without this, a versioned trigger's route would never re-resolve on its
+// function's live events (spec change, delete): the index entry would sit
+// under a key {ns, "name@version"} the cascade never looks up.
 func (t *Table) reindexLocked(spec *RouteSpec) {
 	t.dropFnIndexLocked(spec.TriggerUID)
 	keys := make([]types.NamespacedName, 0, len(spec.FnGens))
-	for fnName := range spec.FnGens {
+	for backendKey := range spec.FnGens {
+		fnName, _ := ParseBackendKey(backendKey)
 		key := types.NamespacedName{Namespace: spec.Namespace, Name: fnName}
 		keys = append(keys, key)
 		set, ok := t.fnIndex[key]

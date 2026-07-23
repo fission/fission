@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/utils/correlation"
@@ -235,19 +236,20 @@ func TestPrecomputedPolicyParity(t *testing.T) {
 	stream.Spec.Streaming = &fv1.StreamingConfig{IdleTimeoutSeconds: 7}
 
 	fns := map[string]*fv1.Function{classic.Name: classic, stream.Name: stream}
-	timeouts := map[k8stypes.UID]int{classic.GetUID(): 42} // stream falls to default
+	timeouts := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&classic.ObjectMeta): 42} // stream falls to default
 	const idleDefault = 33 * time.Second
 
 	policies := precomputePolicies(fns, timeouts, idleDefault)
 	require.Len(t, policies, 2)
 
 	for _, fn := range fns {
-		fnTimeout := timeouts[fn.GetUID()]
+		key := crd.CacheKeyUGFromMeta(&fn.ObjectMeta)
+		fnTimeout := timeouts[key]
 		if fnTimeout == 0 {
 			fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 		}
 		want := resolveProxyPolicy(fn, time.Duration(fnTimeout)*time.Second, idleDefault)
-		assert.Equal(t, want, policies[fn.GetUID()], "hoisted policy must match per-request computation for %s", fn.Name)
+		assert.Equal(t, want, policies[key], "hoisted policy must match per-request computation for %s", fn.Name)
 	}
 
 	// The handler-side lookup helper returns the hoisted entry, and falls back
@@ -256,10 +258,64 @@ func TestPrecomputedPolicyParity(t *testing.T) {
 		tsRoundTripperParams: &tsRoundTripperParams{streamIdleDefault: idleDefault},
 		policyByUID:          policies,
 	}
-	assert.Equal(t, policies[stream.GetUID()], fh.proxyPolicyFor(stream, time.Duration(fv1.DEFAULT_FUNCTION_TIMEOUT)*time.Second))
+	assert.Equal(t, policies[crd.CacheKeyUGFromMeta(&stream.ObjectMeta)], fh.proxyPolicyFor(stream, time.Duration(fv1.DEFAULT_FUNCTION_TIMEOUT)*time.Second))
 	bare := &functionHandler{tsRoundTripperParams: &tsRoundTripperParams{streamIdleDefault: idleDefault}}
 	assert.Equal(t,
 		resolveProxyPolicy(classic, 42*time.Second, idleDefault),
 		bare.proxyPolicyFor(classic, 42*time.Second),
 		"missing map must fall back to direct computation")
+}
+
+// TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID is the RFC-0025
+// plan-review regression (warning #5): two resolved *fv1.Function snapshots
+// of the same versioned function -- e.g. a weighted alias's primary and
+// secondary target -- share a UID (versioning.VersionedFunction always
+// copies live's identity) but differ in Generation (each pins a different
+// FunctionVersion). Keying functionTimeoutMap/policyByUID on UID alone would
+// collapse the two into one entry and silently serve one snapshot's
+// timeout/streaming policy to the other; keying on crd.CacheKeyUG (UID,
+// Generation) keeps them distinct.
+func TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID(t *testing.T) {
+	sharedUID := k8stypes.UID("shared-fn-uid")
+
+	primary := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 1},
+		Spec:       fv1.FunctionSpec{FunctionTimeout: 10},
+	}
+	secondary := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 2},
+		Spec: fv1.FunctionSpec{
+			FunctionTimeout: 99,
+			Streaming:       &fv1.StreamingConfig{IdleTimeoutSeconds: 3},
+		},
+	}
+	require.Equal(t, primary.UID, secondary.UID, "precondition: both snapshots share one UID")
+	require.NotEqual(t, primary.Generation, secondary.Generation, "precondition: Generations differ")
+
+	primaryKey := crd.CacheKeyUGFromMeta(&primary.ObjectMeta)
+	secondaryKey := crd.CacheKeyUGFromMeta(&secondary.ObjectMeta)
+	require.NotEqual(t, primaryKey, secondaryKey, "CacheKeyUG must differ even though the UID is shared")
+
+	fnTimeoutMap := map[crd.CacheKeyUG]int{primaryKey: 10, secondaryKey: 99}
+	const idleDefault = 20 * time.Second
+	policies := precomputePolicies(
+		map[string]*fv1.Function{"primary": primary, "secondary": secondary},
+		fnTimeoutMap, idleDefault)
+	require.Len(t, policies, 2, "both snapshots must get their own policy entry")
+
+	fh := &functionHandler{
+		tsRoundTripperParams: &tsRoundTripperParams{streamIdleDefault: idleDefault},
+		functionTimeoutMap:   fnTimeoutMap,
+		policyByUID:          policies,
+	}
+
+	assert.Equal(t, 10, fh.functionTimeoutMap[primaryKey])
+	assert.Equal(t, 99, fh.functionTimeoutMap[secondaryKey])
+
+	primaryPolicy := fh.proxyPolicyFor(primary, 10*time.Second)
+	secondaryPolicy := fh.proxyPolicyFor(secondary, 99*time.Second)
+	assert.Equal(t, 10*time.Second, primaryPolicy.maxDuration, "primary's own timeout, not collapsed with secondary's")
+	assert.False(t, primaryPolicy.streaming, "primary snapshot has no Streaming config")
+	assert.True(t, secondaryPolicy.streaming, "secondary snapshot's Streaming config must not be shadowed by primary's")
+	assert.Equal(t, 3*time.Second, secondaryPolicy.idleTimeout, "secondary's own idle timeout, not collapsed with primary's (no streaming)")
 }

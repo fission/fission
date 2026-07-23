@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/correlation"
 	"github.com/fission/fission/pkg/utils/metrics"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -21,10 +22,12 @@ import (
 
 var (
 	// Function http call counters and the Fission-attributed overhead histogram,
-	// labelled by function_namespace, function_name, path (the client-called
-	// http path), method, and code (http status). Recorded on the request path
-	// with the request context, so the overhead histogram carries trace
-	// exemplars when the invocation is sampled.
+	// labelled by function_namespace, function_name, function_version
+	// (RFC-0025: the resolved fv1.FUNCTION_VERSION label, empty for an
+	// unversioned invocation), path (the client-called http path), method,
+	// and code (http status). Recorded on the request path with the request
+	// context, so the overhead histogram carries trace exemplars when the
+	// invocation is sampled.
 	functionCalls = metrics.Int64Counter(
 		"fission_function_calls_total",
 		"Count of Fission function calls",
@@ -103,22 +106,27 @@ var (
 )
 
 // functionCallAttrsCache memoizes the metric.MeasurementOption (which wraps a
-// sorted, deduped attribute.Set) per (namespace,name,path,method,code) so the
-// warm path does a comparable-array map lookup — allocating nothing — instead of
-// building and sorting a 5-attribute Set on every request. Mirrors pmcAttrs in
-// pkg/utils/metrics. `path` is the trigger pattern (not the raw request URL), so
-// the cache's cardinality tracks the metric series this option already feeds.
-var functionCallAttrsCache sync.Map // [5]string{namespace, name, path, method, code} -> metric.MeasurementOption
+// sorted, deduped attribute.Set) per (namespace,name,version,path,method,code)
+// so the warm path does a comparable-array map lookup — allocating nothing —
+// instead of building and sorting a 6-attribute Set on every request. Mirrors
+// pmcAttrs in pkg/utils/metrics. `path` is the trigger pattern (not the raw
+// request URL), so the cache's cardinality tracks the metric series this
+// option already feeds. `version` is fv1.FUNCTION_VERSION off the resolved
+// function (RFC-0025) — empty for an unversioned invocation, which the
+// Prometheus bridge exposes as an absent label (empty == absent in TSDB
+// series identity), so unversioned series are unaffected by this addition.
+var functionCallAttrsCache sync.Map // [6]string{namespace, name, version, path, method, code} -> metric.MeasurementOption
 
-func functionCallAttrs(namespace, name, path, method string, code int) metric.MeasurementOption {
+func functionCallAttrs(namespace, name, version, path, method string, code int) metric.MeasurementOption {
 	codeStr := strconv.Itoa(code)
-	key := [5]string{namespace, name, path, method, codeStr}
+	key := [6]string{namespace, name, version, path, method, codeStr}
 	if v, ok := functionCallAttrsCache.Load(key); ok {
 		return v.(metric.MeasurementOption)
 	}
 	opt := metric.WithAttributes(
 		attribute.String("function_namespace", namespace),
 		attribute.String("function_name", name),
+		attribute.String("function_version", version),
 		attribute.String("path", path),
 		attribute.String("method", method),
 		attribute.String("code", codeStr),
@@ -146,7 +154,8 @@ func (fh functionHandler) collectFunctionMetric(start time.Time, rrt *RetryingRo
 	// Same label set for all three; recorded with the request context so the
 	// overhead histogram attaches a trace exemplar on sampled invocations.
 	ctx := req.Context()
-	attrs := functionCallAttrs(fh.function.Namespace, fh.function.Name, path, req.Method, resp.StatusCode)
+	version := fh.function.Labels[fv1.FUNCTION_VERSION]
+	attrs := functionCallAttrs(fh.function.Namespace, fh.function.Name, version, path, req.Method, resp.StatusCode)
 
 	functionCalls.Add(ctx, 1, attrs)
 	if resp.StatusCode >= 400 {
