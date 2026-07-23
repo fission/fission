@@ -28,6 +28,8 @@ var (
 		"Count of async destination fires, labeled by outcome (enqueued/dropped/depth_capped/published/publish_error/publisher_unconfigured/topic_unsupported/encode_error/enqueue_error)")
 	asyncDepthCap = metrics.Int64Counter("fission_async_depth_cap_total",
 		"Count of async destination invocations dropped for exceeding the chain depth cap (A6)")
+	asyncVersionFallback = metrics.Int64Counter("fission_async_version_fallback_total",
+		"Count of async deliveries that fell back to the bare function route after a 404 on a version-pinned route (RFC-0025)")
 )
 
 func recordDelivery(ctx context.Context, condition string) {
@@ -48,6 +50,10 @@ func recordDestination(ctx context.Context, outcome string) {
 
 func recordDepthCap(ctx context.Context) {
 	asyncDepthCap.Add(ctx, 1)
+}
+
+func recordVersionFallback(ctx context.Context) {
+	asyncVersionFallback.Add(ctx, 1)
 }
 
 // deliveryCondition classifies a DeliveryResult for the deliveries_total label:

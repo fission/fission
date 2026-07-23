@@ -285,13 +285,94 @@ func TestResolveByName_Alias_Weighted(t *testing.T) {
 	primaryHits := 0
 	const trials = 20000
 	for range trials {
-		picked := getCanaryBackend(rr.functionMap, rr.functionWtDistributionList)
+		picked := getCanaryBackend(rr.functionMap, rr.functionWtDistributionList, "")
 		if picked.Spec.FunctionTimeout == 10 { // v1's distinctive snapshot marker
 			primaryHits++
 		}
 	}
 	ratio := float64(primaryHits) / float64(trials)
 	assert.InDelta(t, 0.70, ratio, 0.03, "weighted alias split must land close to 70/30 over %d trials", trials)
+
+	// The weighted alias's sticky config comes from the LIVE function, not
+	// either version snapshot's own recorded Spec (resolveResult.stickySource
+	// doc comment): the live read comes back through the fake client (a
+	// fresh copy, not the same pointer), so compare identity, not equality.
+	require.NotNil(t, rr.stickySource)
+	assert.Equal(t, fn.UID, rr.stickySource.UID, "weighted alias stickySource must be the live function")
+	assert.Equal(t, fn.Generation, rr.stickySource.Generation, "stickySource carries the live function's own Generation, not either snapshot's")
+}
+
+// TestResolveByName_Alias_Weighted_StickySourceIsLive further pins the Task 5
+// stickySource contract: even when a version SNAPSHOT carries its own
+// (different) Sticky config, the resolveResult surfaces the LIVE function's
+// config, not the snapshot's -- so a deterministic pick and the resolver's
+// Admit ranking always key off one canonical, current source.
+func TestResolveByName_Alias_Weighted_StickySourceIsLive(t *testing.T) {
+	fn := resolverFn("hello", "default", "fn-uid", 2, 60)
+	fn.Spec.State = &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Live-Session"}}
+
+	v1 := resolverVersion("hello-v1", "default", "hello", "fn-uid", 1, 1, 10)
+	v1.Spec.Snapshot.State = &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Snapshot-Session"}}
+	v2 := resolverVersion("hello-v2", "default", "hello", "fn-uid", 2, 2, 20)
+
+	weight := 50
+	alias := resolverAlias("prod", "default", "hello", func(a *fv1.FunctionAlias) {
+		a.Spec.Version = "hello-v1"
+		a.Spec.Weight = &weight
+		a.Spec.SecondaryVersion = "hello-v2"
+	})
+	frr := newResolver(t, fn, v1, v2, alias)
+
+	rr, err := frr.resolveByName(t.Context(), "default", fv1.FunctionReference{
+		Type: fv1.FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, rr.stickySource)
+	assert.Equal(t, "X-Live-Session", rr.stickySource.Spec.State.Sticky.Name,
+		"stickySource must carry the LIVE function's sticky config, not the primary snapshot's own")
+}
+
+// TestResolveByAlias_FunctionNameMismatch pins the carried Task-3-review
+// minor: a trigger's Name must match the alias's own Spec.FunctionName, with
+// a clear alias-scoped error, rather than falling through to a confusing
+// FunctionVersion-ownership error downstream.
+func TestResolveByAlias_FunctionNameMismatch(t *testing.T) {
+	fn := resolverFn("hello", "default", "fn-uid", 1, 60)
+	v := resolverVersion("hello-v1", "default", "hello", "fn-uid", 1, 1, 60)
+	alias := resolverAlias("prod", "default", "hello", func(a *fv1.FunctionAlias) {
+		a.Spec.Version = "hello-v1"
+	})
+	frr := newResolver(t, fn, v, alias)
+
+	_, err := frr.resolveByName(t.Context(), "default", fv1.FunctionReference{
+		Type: fv1.FunctionReferenceTypeFunctionName, Name: "someone-else", Alias: "prod",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errFunctionNotFound)
+	assert.Contains(t, err.Error(), "targets function")
+}
+
+// TestResolveByAlias_Weighted_EmptySecondaryVersion pins the carried
+// Task-3-review minor: a hand-crafted weighted alias with an empty
+// SecondaryVersion (the webhook normally requires it when Weight is set)
+// must resolve cleanly to errFunctionNotFound, not a transient reader error
+// from an empty-name Get.
+func TestResolveByAlias_Weighted_EmptySecondaryVersion(t *testing.T) {
+	fn := resolverFn("hello", "default", "fn-uid", 1, 60)
+	v1 := resolverVersion("hello-v1", "default", "hello", "fn-uid", 1, 1, 10)
+	weight := 50
+	alias := resolverAlias("prod", "default", "hello", func(a *fv1.FunctionAlias) {
+		a.Spec.Version = "hello-v1"
+		a.Spec.Weight = &weight
+		// SecondaryVersion intentionally left empty -- bypasses the webhook.
+	})
+	frr := newResolver(t, fn, v1, alias)
+
+	_, err := frr.resolveByName(t.Context(), "default", fv1.FunctionReference{
+		Type: fv1.FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errFunctionNotFound)
 }
 
 // TestResolveByAlias_Weighted_SecondaryVersionNotFound: the primary target

@@ -89,6 +89,91 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	require.Equal(t, env, got)
 }
 
+// TestEnvelopeRoundTrip_FunctionVersion pins the RFC-0025 Task 5 wire
+// contract: FunctionVersion marshals/unmarshals under its own "functionVersion"
+// key, and the PRE-EXISTING "version" key (the wire-format schema version,
+// EnvelopeVersion) is completely untouched -- a different field, never
+// conflated with FunctionVersion.
+func TestEnvelopeRoundTrip_FunctionVersion(t *testing.T) {
+	t.Parallel()
+	env := Envelope{
+		Version:         EnvelopeVersion,
+		Namespace:       "ns",
+		Function:        "hello",
+		FunctionVersion: "hello-v1",
+		Method:          "POST",
+		Body:            []byte("x"),
+		EnqueueTime:     time.Unix(1000, 0).UTC(),
+	}
+	data, err := env.Encode()
+	require.NoError(t, err)
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(data, &raw))
+	assert.Equal(t, EnvelopeVersion, raw["version"], "wire-format schema version key is untouched")
+	assert.Equal(t, "hello-v1", raw["functionVersion"], "FunctionVersion marshals under its own key")
+
+	got, err := Decode(data)
+	require.NoError(t, err)
+	require.Equal(t, env, got)
+}
+
+// TestEnvelopeDecode_PreTask5_NoFunctionVersionField proves an envelope
+// persisted before this field existed (no "functionVersion" key at all, e.g.
+// a message already sitting in the queue at deploy time) decodes cleanly with
+// FunctionVersion at its zero value -- not an error, not a spurious pin.
+func TestEnvelopeDecode_PreTask5_NoFunctionVersionField(t *testing.T) {
+	t.Parallel()
+	old := []byte(`{"version":"1.0","namespace":"ns","function":"fn","method":"POST","enqueueTime":"2020-01-01T00:00:00Z","depth":0}`)
+	got, err := Decode(old)
+	require.NoError(t, err)
+	assert.Equal(t, EnvelopeVersion, got.Version, "wire-format version decodes unaffected")
+	assert.Empty(t, got.FunctionVersion, "absent field decodes to the zero value, not an error")
+}
+
+// TestDestinationRoundTrip_AliasVersion pins the flat Destination struct's
+// Alias/Version fields (RFC-0025 Task 5) round-tripping through the envelope.
+func TestDestinationRoundTrip_AliasVersion(t *testing.T) {
+	t.Parallel()
+	env := Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: time.Unix(1000, 0).UTC(),
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next", Version: "next-v2"},
+		OnFailure: &Destination{FunctionNamespace: "ns", FunctionName: "handler", Alias: "prod"},
+	}
+	data, err := env.Encode()
+	require.NoError(t, err)
+	got, err := Decode(data)
+	require.NoError(t, err)
+	require.Equal(t, env, got)
+	assert.Equal(t, "next-v2", got.OnSuccess.Version)
+	assert.Equal(t, "prod", got.OnFailure.Alias)
+}
+
+// TestDestination_FunctionRouteName pins the `:<version>`/`:<alias>` URL
+// suffix grammar a fired destination's envelope.Function is built with:
+// Version takes precedence over Alias (matching FunctionReference's own
+// mutual-exclusivity priority), and a plain destination (neither set) is
+// unsuffixed -- byte-identical to pre-Task-5 behavior.
+func TestDestination_FunctionRouteName(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		dest Destination
+		want string
+	}{
+		{"plain", Destination{FunctionName: "fn"}, "fn"},
+		{"version pinned", Destination{FunctionName: "fn", Version: "fn-v1"}, "fn:fn-v1"},
+		{"alias pinned", Destination{FunctionName: "fn", Alias: "prod"}, "fn:prod"},
+		{"version wins over alias", Destination{FunctionName: "fn", Version: "fn-v1", Alias: "prod"}, "fn:fn-v1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.dest.functionRouteName())
+		})
+	}
+}
+
 func TestAllowedHeaders(t *testing.T) {
 	t.Parallel()
 	h := http.Header{}

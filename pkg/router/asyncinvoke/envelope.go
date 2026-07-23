@@ -75,6 +75,17 @@ type Envelope struct {
 	// after trigger resolution, so this is the concrete function, not a trigger).
 	Namespace string `json:"namespace"`
 	Function  string `json:"function"`
+	// FunctionVersion is the RFC-0025 FunctionVersion CR name the backend was
+	// pinned to at enqueue time -- stamped from the resolved function object's
+	// fv1.FUNCTION_VERSION label when the invoking trigger resolved through an
+	// alias or a direct version pin; empty for an unversioned (bare-name)
+	// function, which is enqueued and delivered exactly as before this field
+	// existed. The deliverer targets the versioned internal route
+	// (UrlForFunction(...) + ":" + FunctionVersion) first, falling back to the
+	// bare-name route on a 404 (the version's route was GC'd between enqueue
+	// and delivery). Distinct from Version above, which is the wire-format
+	// envelope schema version and is never touched by this field.
+	FunctionVersion string `json:"functionVersion,omitempty"`
 	// Method, Path, Query, Headers, and Body reproduce the original request. Path
 	// and Query are captured for fidelity; Headers is the replay allowlist
 	// (allowedHeaders). Body is opaque bytes (base64 on the wire).
@@ -115,10 +126,42 @@ type Destination struct {
 	FunctionName      string `json:"fn,omitempty"`
 	Topic             string `json:"topic,omitempty"`
 	MQType            string `json:"mqType,omitempty"`
+	// Alias and Version pin a function destination to a FunctionAlias or a
+	// direct FunctionVersion (RFC-0025), mirroring fv1.FunctionReference's
+	// Alias/Version on the DestinationRef this Destination is stamped from.
+	// At most one is set (mutually exclusive, like FunctionReference); Version
+	// takes precedence if a hand-crafted destination somehow carries both.
+	// Unlike Envelope.FunctionVersion (a resolved snapshot name with a 404
+	// fallback), these are RAW references baked directly into the delivery
+	// URL as a `:<alias>`/`:<version>` suffix when the destination fires --
+	// no fallback, since a dangling alias/version reference here is a
+	// destination-config error, not routine route GC.
+	Alias   string `json:"alias,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
 // IsFunction reports whether the destination targets a function.
 func (d Destination) IsFunction() bool { return d.FunctionName != "" }
+
+// functionRouteName returns the function name to deliver a function
+// destination at, suffixed `:<version>` or `:<alias>` when the destination
+// pins one (Version takes precedence over Alias, matching FunctionReference's
+// own priority) -- the same `name:tag` grammar the router's internal
+// `:<alias>`/`:<version>` routes register at (routeshape.go
+// internalRouteExactURLs). Baked directly into the delivery URL: unlike
+// Envelope.FunctionVersion's enqueue-time pin (which the deliverer falls back
+// off of on a 404), a dangling reference here is a destination-config error,
+// not routine route GC, so there is no fallback.
+func (d Destination) functionRouteName() string {
+	switch {
+	case d.Version != "":
+		return d.FunctionName + ":" + d.Version
+	case d.Alias != "":
+		return d.FunctionName + ":" + d.Alias
+	default:
+		return d.FunctionName
+	}
+}
 
 // IsTopic reports whether the destination targets a topic.
 func (d Destination) IsTopic() bool { return d.Topic != "" }

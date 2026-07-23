@@ -84,6 +84,55 @@ func TestProcessFiresOnSuccessFunctionDestination(t *testing.T) {
 	assert.Equal(t, 200, re.ResponseContext.StatusCode)
 }
 
+// TestProcessFiresFunctionDestination_VersionPinned pins the RFC-0025
+// Task 5 destination-invoke suffix: a function destination pinned via
+// Destination.Version fires with the `:<version>` suffix baked directly
+// into the new envelope's Function field, resolved via the SAME
+// functionRouteName grammar as the internal `:<alias>`/`:<version>` routes.
+func TestProcessFiresFunctionDestination_VersionPinned(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	now := time.Unix(1_000_000, 0)
+	d := destDispatcher(q, scriptedDeliverer{DeliveryResult{StatusCode: 200}}, now,
+		resolverFor(FunctionConfig{}))
+
+	_, msg := leaseOne(t, q, Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: []byte("orig"),
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next", Version: "next-v2"},
+	})
+	d.process(context.Background(), msg)
+
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1)
+	destEnv, err := Decode(l[0].Body)
+	require.NoError(t, err)
+	assert.Equal(t, "next:next-v2", destEnv.Function, "the fired envelope's Function carries the :<version> suffix")
+}
+
+// TestProcessFiresFunctionDestination_AliasPinned mirrors the version case
+// for an Alias-pinned destination.
+func TestProcessFiresFunctionDestination_AliasPinned(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	now := time.Unix(1_000_000, 0)
+	d := destDispatcher(q, scriptedDeliverer{DeliveryResult{StatusCode: 200}}, now,
+		resolverFor(FunctionConfig{}))
+
+	_, msg := leaseOne(t, q, Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: []byte("orig"),
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next", Alias: "prod"},
+	})
+	d.process(context.Background(), msg)
+
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1)
+	destEnv, err := Decode(l[0].Body)
+	require.NoError(t, err)
+	assert.Equal(t, "next:prod", destEnv.Function, "the fired envelope's Function carries the :<alias> suffix")
+}
+
 func TestProcessFiresOnFailureOn4xx(t *testing.T) {
 	t.Parallel()
 	q := memQueue(t)

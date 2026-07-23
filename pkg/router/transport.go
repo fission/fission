@@ -87,6 +87,15 @@ type (
 		isDebugEnv  bool
 		funcTimeout time.Duration
 		policy      proxyPolicy // resolved once in handler; drives streaming behavior
+		// stickyKey is the RFC-0023 sticky routing key, precomputed ONCE by
+		// functionHandler.handler() (RFC-0025 Task 5) from the route's
+		// stickySource -- before any per-request weighted pick -- and passed
+		// down here unchanged. RoundTrip consumes it as-is rather than
+		// recomputing from fn (the chosen backend): recomputing here could
+		// disagree with the key the weighted pick already used, corrupting
+		// the pick/admit consistency invariant. "" means unkeyed (not
+		// sticky-declared, or the declared key was absent from the request).
+		stickyKey string
 
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
@@ -151,9 +160,11 @@ func (roundTripper *RetryingRoundTripper) settle(release func(), tapURL *url.URL
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
-	// RFC-0023 sticky routing: extract the declared key once — it is stable
-	// across the retry loop, and every re-resolve should rank the same owner.
-	stickyKey := stickyKeyFromRequest(roundTripper.fn, req)
+	// RFC-0023 sticky routing: the key is precomputed by functionHandler.
+	// handler() (RFC-0025 Task 5, see the stickyKey field doc) and stable
+	// across the retry loop, so every re-resolve ranks the same owner AND
+	// agrees with whatever weighted pick already consumed it.
+	stickyKey := roundTripper.stickyKey
 
 	// set the timeout for transport context
 	addForwardedHostHeader(req)

@@ -422,7 +422,7 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 	env := Envelope{
 		Version:         EnvelopeVersion,
 		Namespace:       dest.FunctionNamespace,
-		Function:        dest.FunctionName,
+		Function:        dest.functionRouteName(),
 		Method:          http.MethodPost,
 		Headers:         map[string]string{"Content-Type": "application/json"},
 		Body:            body,

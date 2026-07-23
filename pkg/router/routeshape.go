@@ -198,7 +198,7 @@ func validateRouteTemplate(shape routeShape) error {
 // distinguishes their flavor and wrap the result (CORS, http.HandlerFunc)
 // themselves; extracted so the one place that assembles a functionHandler's
 // dozen fields can't drift between the three builders.
-func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap map[string]*fv1.Function, fnWeightDistributionList []functionWeightDistribution, fnTimeoutMap map[crd.CacheKeyUG]int) *functionHandler {
+func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap map[string]*fv1.Function, fnWeightDistributionList []functionWeightDistribution, fnTimeoutMap map[crd.CacheKeyUG]int, stickySource *fv1.Function) *functionHandler {
 	var streamIdleDefault time.Duration
 	if ts.tsRoundTripperParams != nil {
 		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
@@ -210,6 +210,7 @@ func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap m
 		tapper:                   ts.tapper,
 		functionMap:              functionMap,
 		fnWeightDistributionList: fnWeightDistributionList,
+		stickySource:             stickySource,
 		tsRoundTripperParams:     ts.tsRoundTripperParams,
 		isDebugEnv:               ts.isDebugEnv,
 		structuredErrors:         ts.structuredErrors,
@@ -231,7 +232,7 @@ func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap m
 // map (one-shot buildMuxes) or a per-trigger map derived from the resolved
 // functions (incremental path) — the handler only ever looks up its own backends.
 func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
-	fh := ts.newFunctionHandlerBase(trigger.Name, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap)
+	fh := ts.newFunctionHandlerBase(trigger.Name, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap, rr.stickySource)
 	fh.httpTrigger = trigger
 
 	// For FunctionReferenceTypeFunctionName the backend is fixed at build
@@ -256,7 +257,7 @@ func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *reso
 // handler for one function (the /fission-function/... target every non-HTTP
 // trigger publishes to).
 func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
-	fh := ts.newFunctionHandlerBase(fn.Name, map[string]*fv1.Function{fn.Name: fn}, nil, fnTimeoutMap)
+	fh := ts.newFunctionHandlerBase(fn.Name, map[string]*fv1.Function{fn.Name: fn}, nil, fnTimeoutMap, fn)
 	fh.function = fn
 	return http.HandlerFunc(fh.handler)
 }
@@ -272,7 +273,7 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 // path that reaches `:<alias>` — MQ/timer/kubewatcher/MCP publishers, and any
 // signed direct caller — not just HTTPTrigger routes.
 func (ts *HTTPTriggerSet) buildInternalAliasHandler(routeName string, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
-	fh := ts.newFunctionHandlerBase(routeName, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap)
+	fh := ts.newFunctionHandlerBase(routeName, rr.functionMap, rr.functionWtDistributionList, fnTimeoutMap, rr.stickySource)
 	if rr.resolveResultType == resolveResultSingleFunction {
 		for _, fn := range fh.functionMap {
 			fh.function = fn
