@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -120,6 +121,46 @@ func TestFunctionVersionSpecImmutable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFunctionVersionWebhook_ValidateCreate pins the CREATE admission path:
+// the kubebuilder marker on FunctionVersion now registers "create" alongside
+// "update;delete" (matching Function's posture), so GenericWebhook.ValidateCreate
+// must actually reach FunctionVersion.Validate() -> Snapshot.Validate() ->
+// pod-spec safety (ValidatePodSpecSafety, Go-only, not CEL) rather than that
+// check only ever firing on update/delete.
+func TestFunctionVersionWebhook_ValidateCreate(t *testing.T) {
+	t.Parallel()
+
+	w := &FunctionVersion{}
+	w.Validator = w
+
+	t.Run("valid create admitted", func(t *testing.T) {
+		t.Parallel()
+		_, err := w.ValidateCreate(t.Context(), makeValidFunctionVersion())
+		if err != nil {
+			t.Fatalf("valid FunctionVersion must be admitted at create: %v", err)
+		}
+	})
+
+	t.Run("unsafe Snapshot pod-spec rejected at create", func(t *testing.T) {
+		t.Parallel()
+		on := true
+		fv := makeValidFunctionVersion()
+		fv.Spec.Snapshot.PodSpec = &apiv1.PodSpec{
+			Containers: []apiv1.Container{{
+				Name:            "user",
+				SecurityContext: &apiv1.SecurityContext{Privileged: &on},
+			}},
+		}
+		_, err := w.ValidateCreate(t.Context(), fv)
+		if err == nil {
+			t.Fatalf("expected a privileged Snapshot.PodSpec to be rejected at create admission, got nil")
+		}
+		if !strings.Contains(err.Error(), "privileged") {
+			t.Fatalf("error must surface the pod-spec-safety violation, got: %v", err)
+		}
+	})
 }
 
 // TestFunctionVersionDeleteGuard is the delete-guard matrix: referenced via
