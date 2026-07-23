@@ -71,23 +71,35 @@ func VersionedObjName(prefix string, fn *fv1.Function) string {
 	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
 		suffix = VersionSuffix(v)
 	}
-	if suffix != "" {
-		// Reserve room for the suffix: the unversioned budget (35 chars for
-		// functionMetadata, engineered so prefix(10) + meta(35) + "-" +
-		// uid(17) lands at exactly 63) shrinks by len(suffix) so
-		// prefix + meta + "-" + uid + suffix still fits in 63.
-		budget := 35 - len(suffix)
-		if budget < 0 {
-			budget = 0
-		}
-		if len(functionMetadata) > budget {
-			functionMetadata = functionMetadata[:budget]
-		}
-	}
+	// Reserve room for the suffix: the unversioned budget (35 chars for
+	// functionMetadata, engineered so prefix(10) + meta(35) + "-" +
+	// uid(17) lands at exactly 63) shrinks by len(suffix) so
+	// prefix + meta + "-" + uid + suffix still fits in 63.
+	functionMetadata = TruncateForSuffix(functionMetadata, 35, suffix)
 
 	// constructed name should be 63 characters long, as it is a valid k8s name
 	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
 	// with the 10-character prefix (unversioned); a versioned function further
 	// truncates functionMetadata to reserve room for the "-v<seq>" suffix.
 	return strings.ToLower(fmt.Sprintf("%s%s-%s%s", prefix, functionMetadata, uid, suffix))
+}
+
+// TruncateForSuffix truncates base to fit within budget once suffix is
+// appended: it shrinks budget by len(suffix) (clamped at 0, never negative)
+// and truncates base to that shrunken budget if base is longer. An empty
+// suffix leaves budget unchanged, matching the pre-RFC-0025 unversioned
+// behaviour byte-for-byte at both call sites (base is already within budget
+// by construction there, so this degrades to a no-op). Shared by
+// VersionedObjName and poolmgr's functionServiceName — the two call sites
+// that budget a Kubernetes object name around a version suffix — so the
+// budget/clamp/truncate arithmetic lives in exactly one place.
+func TruncateForSuffix(base string, budget int, suffix string) string {
+	budget -= len(suffix)
+	if budget < 0 {
+		budget = 0
+	}
+	if len(base) > budget {
+		base = base[:budget]
+	}
+	return base
 }

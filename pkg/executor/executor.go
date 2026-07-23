@@ -120,7 +120,7 @@ func (executor *Executor) dispatchCreateFuncService(ctx context.Context, fn *fv1
 	// two concurrent createServiceForFunction callers that observed
 	// different RVs of the same spec would each get their own dedup
 	// bucket instead of coalescing onto one specialization.
-	return executor.dispatcher.Do(ctx, crd.CacheKeyUGFromObject(fn).String(), func(cctx context.Context) (*fscache.FuncSvc, error) {
+	return executor.dispatcher.Do(ctx, crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(cctx context.Context) (*fscache.FuncSvc, error) {
 		return createFrom(context.WithoutCancel(cctx))
 	})
 }

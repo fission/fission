@@ -129,13 +129,13 @@ type (
 		functionServicesEnabled bool
 
 		// fnSvcEnsured debounces ensureFunctionService per (function UID,
-		// version) -- see fnSvcEnsureKey: map[string]time.Time keyed on the
-		// composite "<uid>/<versionLabel>" string (unversioned functions get
-		// "<uid>/"), holding the last successful-or-in-flight ensure per key
-		// so one version's debounce window never starves another's (RFC-0025).
-		// Entries are dropped on function delete (deleteFnSvcEnsuredForUID
-		// sweeps every version's entry for the UID) and on ensure failure (so
-		// the next request retries).
+		// version) -- see fnSvcKey: map[fnSvcKey]time.Time keyed on the
+		// struct (uid, versionLabel) pair (unversioned functions get
+		// version==""), holding the last successful-or-in-flight ensure per
+		// key so one version's debounce window never starves another's
+		// (RFC-0025). Entries are dropped on function delete
+		// (deleteFnSvcEnsuredForUID sweeps every version's entry for the
+		// UID) and on ensure failure (so the next request retries).
 		fnSvcEnsured sync.Map
 
 		// provisioner maintains warm specialized pods for functions opted
@@ -937,14 +937,13 @@ func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyUG) {
 }
 
 // deleteFnSvcEnsuredForUID drops every fnSvcEnsured debounce entry for a
-// deleted function's UID, across every version -- fnSvcEnsureKey composes
-// (UID, version), and a delete only knows the UID (crd.CacheKeyUG carries no
-// version), so a plain Delete(uid) can no longer find the composite keys.
+// deleted function's UID, across every version -- fnSvcKey composes (UID,
+// version), and a delete only knows the UID (crd.CacheKeyUG carries no
+// version), so a plain Delete(uid) can no longer find every per-version key.
 // Cost is one full Range per function delete, an infrequent path.
 func (gpm *GenericPoolManager) deleteFnSvcEnsuredForUID(uid k8sTypes.UID) {
-	prefix := string(uid) + "/"
 	gpm.fnSvcEnsured.Range(func(k, _ any) bool {
-		if ks, ok := k.(string); ok && strings.HasPrefix(ks, prefix) {
+		if key, ok := k.(fnSvcKey); ok && key.uid == uid {
 			gpm.fnSvcEnsured.Delete(k)
 		}
 		return true

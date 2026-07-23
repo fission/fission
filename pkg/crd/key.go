@@ -40,13 +40,3 @@ func CacheKeyUGFromMeta(metadata *metav1.ObjectMeta) CacheKeyUG {
 		Generation: metadata.Generation,
 	}
 }
-
-// CacheKeyUGFromObject is CacheKeyUGFromMeta for callers that only have a
-// metav1.Object (e.g. *fv1.Function passed as the dispatcher dedup key),
-// not a bare ObjectMeta.
-func CacheKeyUGFromObject(obj metav1.Object) CacheKeyUG {
-	return CacheKeyUG{
-		UID:        obj.GetUID(),
-		Generation: obj.GetGeneration(),
-	}
-}

@@ -216,9 +216,7 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 func (gp *GenericPool) specializedPodLabels(metadata *metav1.ObjectMeta) map[string]string {
 	label := gp.labelsForFunction(metadata)
 	label[fv1.FUNCTION_GENERATION] = strconv.FormatInt(metadata.Generation, 10)
-	if v := metadata.Labels[fv1.FUNCTION_VERSION]; v != "" {
-		label[fv1.FUNCTION_VERSION] = v
-	}
+	copyVersionLabel(label, metadata.Labels)
 	return label
 }
 

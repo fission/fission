@@ -19,6 +19,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -102,15 +103,11 @@ func functionServiceName(fn *fv1.Function) string {
 		suffix = executorUtil.VersionSuffix(v)
 	}
 
-	name := fn.Name
-	// "fn-" + name + "-" + uid8 + suffix must fit in 63 chars.
-	overhead := len("fn-") + len("-") + len(uid8) + len(suffix)
-	if max := 63 - overhead; len(name) > max {
-		if max < 0 {
-			max = 0
-		}
-		name = name[:max]
-	}
+	// "fn-" + name + "-" + uid8 + suffix must fit in 63 chars: budget name
+	// against everything else that's fixed-width (prefix, dash, uid8), then
+	// let TruncateForSuffix reserve room for the version suffix on top.
+	budget := 63 - len("fn-") - len("-") - len(uid8)
+	name := executorUtil.TruncateForSuffix(fn.Name, budget, suffix)
 	return fmt.Sprintf("fn-%s-%s%s", name, uid8, suffix)
 }
 
@@ -130,9 +127,7 @@ func functionServiceSelector(fn *fv1.Function) map[string]string {
 		fv1.FUNCTION_GENERATION: strconv.FormatInt(fn.Generation, 10),
 		fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
 	}
-	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
-		sel[fv1.FUNCTION_VERSION] = v
-	}
+	copyVersionLabel(sel, fn.Labels)
 	return sel
 }
 
@@ -160,9 +155,7 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	// Mirrored by the built-in EndpointSlice controller onto every slice
 	// this Service owns, which is where fnKeyForSlice (endpointcache) reads
 	// it back to key the router's per-version endpoint index entry.
-	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
-		labels[fv1.FUNCTION_VERSION] = v
-	}
+	copyVersionLabel(labels, fn.Labels)
 
 	desired := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -238,16 +231,25 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 // (read-mostly) ensure per function (per version -- see fnSvcEnsureKey).
 const fnSvcEnsureDebounce = 30 * time.Second
 
-// fnSvcEnsureKey is the gpm.fnSvcEnsured debounce key: the function UID plus
-// its version label, so ensuring one version's Service has its own debounce
+// fnSvcKey is the gpm.fnSvcEnsured debounce key: the function UID plus its
+// version label, so ensuring one version's Service has its own debounce
 // window independent of any other version's. Without this, keying on UID
 // alone meant a v2 ensure arriving inside v1's 30s debounce window was
 // silently skipped -- starving v2's Service creation entirely as long as v1
 // traffic kept re-triggering the shared UID entry. An unversioned Function
-// (no FUNCTION_VERSION label) gets the bare "<uid>/" key, equivalent to
-// today's UID-only behavior.
-func fnSvcEnsureKey(fn *fv1.Function) string {
-	return string(fn.UID) + "/" + fn.Labels[fv1.FUNCTION_VERSION]
+// (no FUNCTION_VERSION label) gets version=="", equivalent to today's
+// UID-only behavior. A struct key (mirroring versionretain.retainKey)
+// rather than a "<uid>/<version>" string sidesteps needing a delimiter that
+// can't collide with either field and lets deleteFnSvcEnsuredForUID compare
+// .uid directly instead of prefix-scanning formatted keys.
+type fnSvcKey struct {
+	uid     k8sTypes.UID
+	version string
+}
+
+// fnSvcEnsureKey builds fn's fnSvcEnsured debounce key -- see fnSvcKey.
+func fnSvcEnsureKey(fn *fv1.Function) fnSvcKey {
+	return fnSvcKey{uid: fn.UID, version: fn.Labels[fv1.FUNCTION_VERSION]}
 }
 
 // maybeEnsureFunctionService fires an async, debounced ensure of the

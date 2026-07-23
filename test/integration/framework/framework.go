@@ -130,26 +130,20 @@ func newFramework() (*Framework, error) {
 	// connection pool); its DialContext keeps the registry alive for the
 	// process — the registry (and its port-forward connections) is never
 	// closed, dying with the test process.
-	var signing http.RoundTripper = reg.DefaultTransport()
-	if len(secret) > 0 {
-		// Sign requests to /fission-function/... with the
-		// ServiceRouterInternal key; other paths (HTTPTriggers,
-		// /router-healthz) pass through unsigned to match end-user
-		// behaviour against the public listener. Shared with the benchmark
-		// harness via pkg/auth/hmac.
-		signing = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceRouterInternal, reg.DefaultTransport(), "/fission-function/")
-	}
-	// executorSigning signs /v2/... (the executor's HTTP API — RFC-0025
-	// direct-specialize tests POST to /v2/getServiceForFunction) with the
-	// ServiceExecutor-derived key, mirroring routerHTTP's shape but against a
-	// different channel: the executor's verifier (pkg/executor/api.go
-	// GetHandler) derives its key for ServiceExecutor, not ServiceRouterInternal,
-	// so reusing `signing` above would sign with the wrong key and every
-	// request would 401.
-	var executorSigning http.RoundTripper = reg.DefaultTransport()
-	if len(secret) > 0 {
-		executorSigning = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceExecutor, reg.DefaultTransport(), "/v2/")
-	}
+	//
+	// routerHTTP signs /fission-function/... with the ServiceRouterInternal
+	// key; other paths (HTTPTriggers, /router-healthz) pass through unsigned
+	// to match end-user behaviour against the public listener. executorHTTP
+	// signs /v2/... (the executor's HTTP API — RFC-0025 direct-specialize
+	// tests POST to /v2/getServiceForFunction) with the ServiceExecutor-
+	// derived key, mirroring routerHTTP's shape but against a different
+	// channel: the executor's verifier (pkg/executor/api.go GetHandler)
+	// derives its key for ServiceExecutor, not ServiceRouterInternal, so
+	// reusing routerHTTP's transport would sign with the wrong key and every
+	// request would 401. Both an empty secret (pass-through, matching the
+	// chart's internalAuth.enabled=false mode).
+	routerHTTP := newSignedClient(secret, reg, hmacauth.ServiceRouterInternal, "/fission-function/")
+	executorHTTP := newSignedClient(secret, reg, hmacauth.ServiceExecutor, "/v2/")
 	return &Framework{
 		restConfig:         restConfig,
 		clientGen:          clientGen,
@@ -158,13 +152,26 @@ func newFramework() (*Framework, error) {
 		images:             loadRuntimeImages(),
 		internalAuthSecret: secret,
 		httpClient:         reg.DefaultClient(),
-		// WrapRoundTripper applies per-route Host rewrites (the mcp route
-		// declares one) on top of the signing wrapper; HMAC canonicals
-		// cover method+path+body, not Host, so the order is cosmetic.
-		routerHTTP:   &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(signing)},
-		executorHTTP: &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(executorSigning)},
-		logger:       loggerfactory.GetLogger(),
+		routerHTTP:         routerHTTP,
+		executorHTTP:       executorHTTP,
+		logger:             loggerfactory.GetLogger(),
 	}, nil
+}
+
+// newSignedClient builds an http.Client that signs requests under prefix
+// with the HMAC key derived for svc, or passes through unsigned when secret
+// is empty (matching the chart's internalAuth.enabled=false mode). Shared by
+// routerHTTP and executorHTTP, whose only differences are which service's
+// key they sign with and which path prefix that covers. WrapRoundTripper
+// applies per-route Host rewrites (the mcp route declares one) on top of the
+// signing transport; HMAC canonicals cover method+path+body, not Host, so
+// the order is cosmetic.
+func newSignedClient(secret []byte, reg *portless.Registry, svc hmacauth.Service, prefix string) *http.Client {
+	var transport http.RoundTripper = reg.DefaultTransport()
+	if len(secret) > 0 {
+		transport = hmacauth.NewServiceSigningTransport(secret, svc, reg.DefaultTransport(), prefix)
+	}
+	return &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(transport)}
 }
 
 // newRegistry builds the portless registry backing all framework HTTP

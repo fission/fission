@@ -267,16 +267,23 @@ func (c *PoolCache) ListAvailableValue(retained func(uid types.UID, gen int64) b
 		// alias pointing at a generation whose Function CR was removed has
 		// nothing left to serve.
 		isLatest := latestFuncGen[key1.UID] == key1.Generation
-		isRetained := retained != nil && retained(key1.UID, key1.Generation)
 		switch {
 		case values.deleted:
 			svcRetain = 0
-		case !isLatest && !isRetained:
-			svcRetain = 0
-		case !isLatest && isRetained && svcRetain < 1:
-			// See the asymmetry note above: floor at one warm pod, never lower
-			// a larger explicitly-configured RetainPods.
-			svcRetain = 1
+		case !isLatest:
+			// retained() is only meaningful (and only called) for a
+			// non-latest generation — a latest-generation entry is never
+			// drained here regardless of alias retention, so evaluating
+			// retained() for it would be discarded work on every reap tick.
+			if retained != nil && retained(key1.UID, key1.Generation) {
+				if svcRetain < 1 {
+					// See the asymmetry note above: floor at one warm pod,
+					// never lower a larger explicitly-configured RetainPods.
+					svcRetain = 1
+				}
+			} else {
+				svcRetain = 0
+			}
 		}
 		svcCleanQuota := len(values.svcs) - svcRetain
 		if svcCleanQuota <= 0 {
