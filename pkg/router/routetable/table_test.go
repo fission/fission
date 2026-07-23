@@ -211,8 +211,8 @@ func TestFnIndexMaintenance(t *testing.T) {
 // end-to-end: RouteSpec.Aliases is mirrored into aliasIndex by reindexLocked
 // exactly like FnGens is for fnIndex, TriggersForAlias finds the resolved
 // triggers, MarkUnresolved's alias half lets an unresolved reference be found
-// too, and both cascades clean up on delete — verifying the brief's "comes
-// free exactly like fnIndex" claim.
+// too, and both cascades clean up on delete — the alias index gets the same
+// maintenance guarantees as fnIndex, for free, from the same code path.
 func TestAliasIndexMaintenance(t *testing.T) {
 	tbl := New()
 	prodAlias := types.NamespacedName{Namespace: "default", Name: "prod"}

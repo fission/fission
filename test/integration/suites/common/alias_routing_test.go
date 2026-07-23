@@ -81,6 +81,88 @@ func createAliasRoute(t *testing.T, ctx context.Context, ns *framework.TestNames
 	})
 }
 
+// aliasFixture is the ~25-line env/fn/publish-v1/update/publish-v2/naming/
+// cleanup skeleton every TestAlias* test in this file starts from: it derives
+// the deterministic per-test resource names from a short tag + ns.ID (the
+// same naming scheme every one of these tests already used ad hoc), and
+// registers t.Cleanup for the four CRDs these tests create directly through
+// the typed client -- HTTPTrigger, FunctionAlias, and both FunctionVersions.
+// (CreateFunction/CreateEnv register their own cleanup via ns; these four
+// don't have an ns-owned equivalent because they aren't created through ns's
+// CLI helpers.) Per-test variation -- function options, what the v2 update
+// actually changes, the alias's weight/secondary-version, the route's
+// methods, the alias name's own prefix -- is caller-applied through
+// publishTwoVersions/createAlias/createRoute's own parameters rather than
+// baked in here.
+type aliasFixture struct {
+	ns *framework.TestNamespace
+
+	EnvName, FnName, AliasName, RouteName, RoutePath string
+	V1Name, V2Name                                   string
+}
+
+// newAliasFixture creates ns, computes the fixture's resource names --
+// env/fn/route named "<kind>-<tag>-<ns.ID>", route path "/<tag>-<ns.ID>",
+// alias named "<aliasPrefix>-<ns.ID>", FunctionVersion names
+// "<FnName>-v1"/"<FnName>-v2" -- and registers their cleanup.
+func newAliasFixture(t *testing.T, f *framework.Framework, tag, aliasPrefix string) *aliasFixture {
+	t.Helper()
+	ns := f.NewTestNamespace(t)
+	fc := f.FissionClient().CoreV1()
+	af := &aliasFixture{
+		ns:        ns,
+		EnvName:   "nodejs-" + tag + "-" + ns.ID,
+		FnName:    "fn-" + tag + "-" + ns.ID,
+		AliasName: aliasPrefix + "-" + ns.ID,
+		RouteName: "route-" + tag + "-" + ns.ID,
+		RoutePath: "/" + tag + "-" + ns.ID,
+	}
+	af.V1Name = af.FnName + "-v1"
+	af.V2Name = af.FnName + "-v2"
+	t.Cleanup(func() {
+		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer ccancel()
+		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, af.RouteName, metav1.DeleteOptions{})
+		_ = fc.FunctionAliases(ns.Name).Delete(cctx, af.AliasName, metav1.DeleteOptions{})
+		_ = fc.FunctionVersions(ns.Name).Delete(cctx, af.V1Name, metav1.DeleteOptions{})
+		_ = fc.FunctionVersions(ns.Name).Delete(cctx, af.V2Name, metav1.DeleteOptions{})
+	})
+	return af
+}
+
+// publishTwoVersions creates the environment and function (fnOpts.Name/Env
+// are overwritten with the fixture's EnvName/FnName; every other
+// framework.FunctionOptions field is the caller's to fill in) and publishes
+// it as v1, then runs `fn update --name <FnName> <updateArgs...>` (e.g.
+// "--code", path, or "--fntimeout", "45") and publishes again as v2.
+func (af *aliasFixture) publishTwoVersions(t *testing.T, ctx context.Context, image string, fnOpts framework.FunctionOptions, updateArgs ...string) {
+	t.Helper()
+	fnOpts.Name = af.FnName
+	fnOpts.Env = af.EnvName
+	af.ns.CreateEnv(t, ctx, framework.EnvOptions{Name: af.EnvName, Image: image})
+	af.ns.CreateFunction(t, ctx, fnOpts)
+	af.ns.WaitForFunction(t, ctx, af.FnName)
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
+	af.ns.CLI(t, ctx, append([]string{"fn", "update", "--name", af.FnName}, updateArgs...)...)
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
+}
+
+// createAlias runs `alias create --name <AliasName> --function <FnName>
+// --version <version>` plus any extraArgs (e.g. "--weight", "50",
+// "--secondary-version", af.V2Name) and returns the captured stdout.
+func (af *aliasFixture) createAlias(t *testing.T, ctx context.Context, version string, extraArgs ...string) string {
+	t.Helper()
+	args := append([]string{"alias", "create", "--name", af.AliasName, "--function", af.FnName, "--version", version}, extraArgs...)
+	return af.ns.CLICaptureStdout(t, ctx, args...)
+}
+
+// createRoute creates the alias-routed HTTPTrigger (see createAliasRoute)
+// using the fixture's RouteName/RoutePath/FnName/AliasName.
+func (af *aliasFixture) createRoute(t *testing.T, ctx context.Context, methods ...string) {
+	t.Helper()
+	createAliasRoute(t, ctx, af.ns, af.RouteName, af.RoutePath, af.FnName, af.AliasName, methods...)
+}
+
 // writeNodeStatus writes a Node.js function that logs `marker` via
 // console.log (so an async invocation -- whose HTTP response is never
 // returned to the caller -- can still be observed via FunctionLogs) and then
@@ -337,48 +419,23 @@ func TestAliasInvokeAndRepoint(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
-	fc := f.FissionClient().CoreV1()
+	af := newAliasFixture(t, f, "aliasrt", "prod")
+	af.publishTwoVersions(t, ctx, image,
+		framework.FunctionOptions{Code: writeNodeReturning(t, "v1", "alias-marker-v1\n")},
+		"--code", writeNodeReturning(t, "v2", "alias-marker-v2\n"))
 
-	envName := "nodejs-aliasrt-" + ns.ID
-	fnName := "fn-aliasrt-" + ns.ID
-	aliasName := "prod-" + ns.ID
-	routeName := "route-aliasrt-" + ns.ID
-	routePath := "/aliasrt-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
+	out := af.createAlias(t, ctx, af.V1Name)
+	assert.Contains(t, out, af.AliasName)
 
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Code: writeNodeReturning(t, "v1", "alias-marker-v1\n"),
-	})
-	ns.WaitForFunction(t, ctx, fnName)
-
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", writeNodeReturning(t, "v2", "alias-marker-v2\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-
-	out := ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName, "--version", v1Name)
-	assert.Contains(t, out, aliasName)
-
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodGet)
+	af.createRoute(t, ctx, http.MethodGet)
 
 	t.Run("public_listener_serves_resolved_version", func(t *testing.T) {
-		body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("alias-marker-v1"))
+		body := f.Router(t).GetEventually(t, ctx, af.RoutePath, framework.BodyContains("alias-marker-v1"))
 		assert.Contains(t, body, "alias-marker-v1")
 	})
 
 	t.Run("internal_listener_serves_resolved_version", func(t *testing.T) {
-		internalPath := "/fission-function/" + fnName + ":" + aliasName
+		internalPath := "/fission-function/" + af.FnName + ":" + af.AliasName
 		body := f.Router(t).GetEventually(t, ctx, internalPath, framework.BodyContains("alias-marker-v1"))
 		assert.Contains(t, body, "alias-marker-v1")
 	})
@@ -386,11 +443,11 @@ func TestAliasInvokeAndRepoint(t *testing.T) {
 	t.Run("repoint_latency_and_zero_drift", func(t *testing.T) {
 		driftBefore := scrapeCounterSum(t, ctx, f, "router", "fission_router_route_resync_drift_total")
 
-		ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", aliasName, "--version", v2Name)
+		af.ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", af.AliasName, "--version", af.V2Name)
 		ackTime := time.Now() // the alias PATCH ack -- elapsed is measured from here
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			status, body, err := f.Router(t).Get(ctx, routePath)
+			status, body, err := f.Router(t).Get(ctx, af.RoutePath)
 			if !assert.NoError(c, err) {
 				return
 			}
@@ -428,51 +485,26 @@ func TestAliasWeightedTrafficSplit(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
-	fc := f.FissionClient().CoreV1()
+	af := newAliasFixture(t, f, "aliaswt", "canary")
+	af.publishTwoVersions(t, ctx, image,
+		framework.FunctionOptions{Code: writeNodeReturning(t, "v1", "weighted-v1\n")},
+		"--code", writeNodeReturning(t, "v2", "weighted-v2\n"))
 
-	envName := "nodejs-aliaswt-" + ns.ID
-	fnName := "fn-aliaswt-" + ns.ID
-	aliasName := "canary-" + ns.ID
-	routeName := "route-aliaswt-" + ns.ID
-	routePath := "/aliaswt-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
+	af.createAlias(t, ctx, af.V1Name, "--weight", "50", "--secondary-version", af.V2Name)
 
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Code: writeNodeReturning(t, "v1", "weighted-v1\n"),
-	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", writeNodeReturning(t, "v2", "weighted-v2\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName,
-		"--version", v1Name, "--weight", "50", "--secondary-version", v2Name)
-
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodGet)
+	af.createRoute(t, ctx, http.MethodGet)
 
 	// Prime: wait for the route to serve before counting -- the first hits
 	// may race pod specialization for whichever version happens to be
 	// picked first.
-	f.Router(t).GetEventually(t, ctx, routePath, func(status int, body string) bool {
+	f.Router(t).GetEventually(t, ctx, af.RoutePath, func(status int, body string) bool {
 		return status == http.StatusOK && (strings.Contains(body, "weighted-v1") || strings.Contains(body, "weighted-v2"))
 	})
 
 	const n = 200
 	var v1Count, v2Count, otherCount int
 	for i := 0; i < n; i++ {
-		status, body, err := f.Router(t).Get(ctx, routePath)
+		status, body, err := f.Router(t).Get(ctx, af.RoutePath)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, status)
 		switch {
@@ -525,68 +557,46 @@ func TestAliasRollbackWarmth(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
+	af := newAliasFixture(t, f, "aliasrb", "prod")
 	fc := f.FissionClient().CoreV1()
 
-	envName := "nodejs-aliasrb-" + ns.ID
-	fnName := "fn-aliasrb-" + ns.ID
-	aliasName := "prod-" + ns.ID
-	routeName := "route-aliasrb-" + ns.ID
-	routePath := "/aliasrb-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Code: writeNodeReturning(t, "v1", "rollback-marker-v1\n"),
+	af.publishTwoVersions(t, ctx, image, framework.FunctionOptions{
+		Code:        writeNodeReturning(t, "v1", "rollback-marker-v1\n"),
 		IdleTimeout: 300, // generous: the reaper must not fire during this test's wall clock
-	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", writeNodeReturning(t, "v2", "rollback-marker-v2\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	}, "--code", writeNodeReturning(t, "v2", "rollback-marker-v2\n"))
 
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName, "--version", v1Name)
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodGet)
+	af.createAlias(t, ctx, af.V1Name)
+	af.createRoute(t, ctx, http.MethodGet)
 
-	liveFn, err := fc.Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
+	liveFn, err := fc.Functions(af.ns.Name).Get(ctx, af.FnName, metav1.GetOptions{})
 	require.NoError(t, err)
-	v1, err := fc.FunctionVersions(ns.Name).Get(ctx, v1Name, metav1.GetOptions{})
+	v1, err := fc.FunctionVersions(af.ns.Name).Get(ctx, af.V1Name, metav1.GetOptions{})
 	require.NoError(t, err)
 
 	// Specialize v1 through the alias and capture the pod that served it.
-	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("rollback-marker-v1"))
-	v1PodBefore := servedPodNameEventually(t, ctx, f, ns, liveFn.UID, v1.Spec.FunctionGeneration)
+	f.Router(t).GetEventually(t, ctx, af.RoutePath, framework.BodyContains("rollback-marker-v1"))
+	v1PodBefore := servedPodNameEventually(t, ctx, f, af.ns, liveFn.UID, v1.Spec.FunctionGeneration)
 
 	// Move the alias to v2 (History[last] becomes v1) but never invoke
 	// through it again -- v1's pod is simply left idle, not reaped (see the
 	// doc comment above on why 300s of headroom makes that safe).
 	driftBefore := scrapeCounterSum(t, ctx, f, "router", "fission_router_route_resync_drift_total")
-	ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", aliasName, "--version", v2Name)
-	f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("rollback-marker-v2"))
+	af.ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", af.AliasName, "--version", af.V2Name)
+	f.Router(t).GetEventually(t, ctx, af.RoutePath, framework.BodyContains("rollback-marker-v2"))
 
-	alias, err := fc.FunctionAliases(ns.Name).Get(ctx, aliasName, metav1.GetOptions{})
+	alias, err := fc.FunctionAliases(af.ns.Name).Get(ctx, af.AliasName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.NotEmptyf(t, alias.Status.History, "alias must record v1 in Status.History after the repoint")
-	require.Equal(t, v1Name, alias.Status.History[len(alias.Status.History)-1].Version)
+	require.Equal(t, af.V1Name, alias.Status.History[len(alias.Status.History)-1].Version)
 
 	// --- subtest 4: rollback warmth ---
-	out := ns.CLICaptureStdout(t, ctx, "fn", "rollback", "--name", fnName, "--alias", aliasName, "--wait")
-	assert.Contains(t, out, v1Name)
+	out := af.ns.CLICaptureStdout(t, ctx, "fn", "rollback", "--name", af.FnName, "--alias", af.AliasName, "--wait")
+	assert.Contains(t, out, af.V1Name)
 
-	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("rollback-marker-v1"))
+	body := f.Router(t).GetEventually(t, ctx, af.RoutePath, framework.BodyContains("rollback-marker-v1"))
 	assert.Contains(t, body, "rollback-marker-v1")
 
-	v1PodAfter := servedPodNameEventually(t, ctx, f, ns, liveFn.UID, v1.Spec.FunctionGeneration)
+	v1PodAfter := servedPodNameEventually(t, ctx, f, af.ns, liveFn.UID, v1.Spec.FunctionGeneration)
 	assert.Equalf(t, v1PodBefore, v1PodAfter,
 		"rollback must reuse the SAME v1 pod (no re-specialization) when performed within the idle window")
 
@@ -596,7 +606,7 @@ func TestAliasRollbackWarmth(t *testing.T) {
 
 	// --- subtest 7: internal-route repoint after rollback ---
 	t.Run("internal_route_reflects_rollback", func(t *testing.T) {
-		internalPath := "/fission-function/" + fnName + ":" + aliasName
+		internalPath := "/fission-function/" + af.FnName + ":" + af.AliasName
 		start := time.Now()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			status, body, err := f.Router(t).Get(ctx, internalPath)
@@ -606,7 +616,7 @@ func TestAliasRollbackWarmth(t *testing.T) {
 			assert.Equal(c, http.StatusOK, status)
 			assert.Contains(c, body, "rollback-marker-v1")
 		}, 10*time.Second, 50*time.Millisecond)
-		t.Logf("internal :%s route reflected the rollback within %s of the check starting (the `fn rollback --wait` above already blocked for CRD-level resolution)", aliasName, time.Since(start))
+		t.Logf("internal :%s route reflected the rollback within %s of the check starting (the `fn rollback --wait` above already blocked for CRD-level resolution)", af.AliasName, time.Since(start))
 	})
 }
 
@@ -640,39 +650,14 @@ func TestAliasStickyStability(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
-	fc := f.FissionClient().CoreV1()
-
-	envName := "nodejs-aliassticky-" + ns.ID
-	fnName := "fn-aliassticky-" + ns.ID
-	aliasName := "sticky-" + ns.ID
-	routeName := "route-aliassticky-" + ns.ID
-	routePath := "/aliassticky-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Code: writeNodeReturning(t, "v1", "sticky-v1\n"),
+	af := newAliasFixture(t, f, "aliassticky", "sticky")
+	af.publishTwoVersions(t, ctx, image, framework.FunctionOptions{
+		Code:  writeNodeReturning(t, "v1", "sticky-v1\n"),
 		State: true, StateStickySource: "queryparam", StateStickyName: "sid",
-	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", writeNodeReturning(t, "v2", "sticky-v2\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	}, "--code", writeNodeReturning(t, "v2", "sticky-v2\n"))
 
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName,
-		"--version", v1Name, "--weight", "90", "--secondary-version", v2Name)
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodGet)
+	af.createAlias(t, ctx, af.V1Name, "--weight", "90", "--secondary-version", af.V2Name)
+	af.createRoute(t, ctx, http.MethodGet)
 
 	markerFor := func(body string) string {
 		switch {
@@ -685,7 +670,7 @@ func TestAliasStickyStability(t *testing.T) {
 		}
 	}
 
-	f.Router(t).GetEventually(t, ctx, routePath+"?sid=warm", func(status int, body string) bool {
+	f.Router(t).GetEventually(t, ctx, af.RoutePath+"?sid=warm", func(status int, body string) bool {
 		return status == http.StatusOK && markerFor(body) != "?"
 	})
 
@@ -693,7 +678,7 @@ func TestAliasStickyStability(t *testing.T) {
 		const key = "sticky-fixed-key-alpha"
 		seen := map[string]int{}
 		for i := 0; i < 50; i++ {
-			status, body, err := f.Router(t).Get(ctx, routePath+"?sid="+key)
+			status, body, err := f.Router(t).Get(ctx, af.RoutePath+"?sid="+key)
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, status)
 			seen[markerFor(body)]++
@@ -709,7 +694,7 @@ func TestAliasStickyStability(t *testing.T) {
 		seenVersions := map[string]int{}
 		for i := 0; i < nKeys; i++ {
 			key := fmt.Sprintf("sticky-distinct-key-%d", i)
-			status, body, err := f.Router(t).Get(ctx, routePath+"?sid="+key)
+			status, body, err := f.Router(t).Get(ctx, af.RoutePath+"?sid="+key)
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, status)
 			seenVersions[markerFor(body)]++
@@ -742,42 +727,18 @@ func TestAliasKeyedStateContinuity(t *testing.T) {
 		t.Skipf("function state is static-tenancy only for now; tenancy mode is %q (per-namespace state key is a follow-up)", mode)
 	}
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
-	fc := f.FissionClient().CoreV1()
+	af := newAliasFixture(t, f, "aliasstate", "prod")
+	af.publishTwoVersions(t, ctx, image,
+		framework.FunctionOptions{Code: writeNodeKVFixture(t), State: true},
+		// v2's code is byte-identical to v1's (the fixture carries no version
+		// marker -- state continuity is the point here, not code differences),
+		// but publish only mints a new version when the live spec actually
+		// changed. A distinct FnTimeout is a runtime-affecting, otherwise-inert
+		// change that mints v2 without touching the fixture.
+		"--fntimeout", "45")
 
-	envName := "nodejs-aliasstate-" + ns.ID
-	fnName := "fn-aliasstate-" + ns.ID
-	aliasName := "prod-" + ns.ID
-	routeName := "route-aliasstate-" + ns.ID
-	routePath := "/aliasstate-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, Code: writeNodeKVFixture(t), State: true,
-	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-	// v2's code is byte-identical to v1's (the fixture carries no version
-	// marker -- state continuity is the point here, not code differences),
-	// but publish only mints a new version when the live spec actually
-	// changed. A distinct FnTimeout is a runtime-affecting, otherwise-inert
-	// change that mints v2 without touching the fixture.
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--fntimeout", "45")
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
-
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName, "--version", v2Name)
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodGet, http.MethodPost)
+	af.createAlias(t, ctx, af.V2Name)
+	af.createRoute(t, ctx, http.MethodGet, http.MethodPost)
 
 	// --- write under v2 ---
 	const value = "continuity-42"
@@ -785,7 +746,7 @@ func TestAliasKeyedStateContinuity(t *testing.T) {
 	var writeBody string
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
-		writeStatus, writeBody, err = f.Router(t).Post(ctx, routePath+"?value="+value, "", nil)
+		writeStatus, writeBody, err = f.Router(t).Post(ctx, af.RoutePath+"?value="+value, "", nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -795,11 +756,11 @@ func TestAliasKeyedStateContinuity(t *testing.T) {
 	require.Equal(t, value, writeBody)
 
 	// --- rollback to v1 ---
-	out := ns.CLICaptureStdout(t, ctx, "fn", "rollback", "--name", fnName, "--alias", aliasName, "--to", v1Name, "--wait")
-	assert.Contains(t, out, v1Name)
+	out := af.ns.CLICaptureStdout(t, ctx, "fn", "rollback", "--name", af.FnName, "--alias", af.AliasName, "--to", af.V1Name, "--wait")
+	assert.Contains(t, out, af.V1Name)
 
 	// --- read under v1: the value written under v2 must still be visible ---
-	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains(value))
+	body := f.Router(t).GetEventually(t, ctx, af.RoutePath, framework.BodyContains(value))
 	assert.Equal(t, value, body)
 }
 
@@ -832,44 +793,30 @@ func TestAliasAsyncVersionPin(t *testing.T) {
 	f := framework.Connect(t)
 	requireAsyncInvocationEnabled(t, ctx, f)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
-	fc := f.FissionClient().CoreV1()
+	af := newAliasFixture(t, f, "aliasasync", "prod")
 
-	envName := "nodejs-aliasasync-" + ns.ID
-	fnName := "fn-aliasasync-" + ns.ID
-	aliasName := "prod-" + ns.ID
-	routeName := "route-aliasasync-" + ns.ID
-	routePath := "/aliasasync-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, ExecutorType: "poolmgr",
+	// This test's alias is created between v1's publish and v2's -- deliberately
+	// unlike publishTwoVersions's bundled v1+v2 sequence -- so the enqueue below
+	// races an alias that has only ever pointed at v1. See the doc comment above
+	// for why the timing matters.
+	af.ns.CreateEnv(t, ctx, framework.EnvOptions{Name: af.EnvName, Image: image})
+	af.ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: af.FnName, Env: af.EnvName, ExecutorType: "poolmgr",
 		Code: writeNodeStatus(t, "v1", http.StatusOK, "async-pin-v1", "async-pin-v1\n"),
 	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	af.ns.WaitForFunction(t, ctx, af.FnName)
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
 
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName, "--version", v1Name)
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodPost)
+	af.createAlias(t, ctx, af.V1Name)
+	af.createRoute(t, ctx, http.MethodPost)
 
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", writeNodeStatus(t, "v2", http.StatusOK, "async-pin-v2", "async-pin-v2\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	af.ns.CLI(t, ctx, "fn", "update", "--name", af.FnName, "--code", writeNodeStatus(t, "v2", http.StatusOK, "async-pin-v2", "async-pin-v2\n"))
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
 
 	// Warm via a synchronous POST through the alias (still resolving to v1)
 	// so the route is materialized and a pod specialized before going async.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		status, body, err := f.Router(t).Post(ctx, routePath, "", nil)
+		status, body, err := f.Router(t).Post(ctx, af.RoutePath, "", nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -877,20 +824,20 @@ func TestAliasAsyncVersionPin(t *testing.T) {
 		assert.Contains(c, body, "async-pin-v1")
 	}, 2*time.Minute, 2*time.Second)
 
-	v1Baseline := strings.Count(ns.FunctionLogs(t, ctx, fnName), "async-pin-v1")
-	v2Baseline := strings.Count(ns.FunctionLogs(t, ctx, fnName), "async-pin-v2")
+	v1Baseline := strings.Count(af.ns.FunctionLogs(t, ctx, af.FnName), "async-pin-v1")
+	v2Baseline := strings.Count(af.ns.FunctionLogs(t, ctx, af.FnName), "async-pin-v2")
 
-	status, invocationID := asyncPostAlias(t, ctx, f, routePath, "alias-async-pin-"+ns.ID)
+	status, invocationID := asyncPostAlias(t, ctx, f, af.RoutePath, "alias-async-pin-"+af.ns.ID)
 	require.Equal(t, http.StatusAccepted, status)
 	require.NotEmpty(t, invocationID, "202 must carry an X-Fission-Invocation-Id")
 
 	// Move the alias to v2 right after enqueue -- see the doc comment above
 	// on why racing the dispatcher's delivery timing is neither needed nor
 	// desirable here.
-	ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", aliasName, "--version", v2Name)
+	af.ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", af.AliasName, "--version", af.V2Name)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		logs, err := ns.FunctionLogsE(t, ctx, fnName)
+		logs, err := af.ns.FunctionLogsE(t, ctx, af.FnName)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -898,7 +845,7 @@ func TestAliasAsyncVersionPin(t *testing.T) {
 			"async delivery must execute against the enqueue-time version (v1)")
 	}, 3*time.Minute, 3*time.Second)
 
-	finalV2 := strings.Count(ns.FunctionLogs(t, ctx, fnName), "async-pin-v2")
+	finalV2 := strings.Count(af.ns.FunctionLogs(t, ctx, af.FnName), "async-pin-v2")
 	assert.Equalf(t, v2Baseline, finalV2,
 		"async delivery must NOT execute against v2 even though the alias moved there before/around delivery")
 }
@@ -939,50 +886,36 @@ func TestAliasAsyncGCFallback(t *testing.T) {
 	f := framework.Connect(t)
 	requireAsyncInvocationEnabled(t, ctx, f)
 	image := f.Images().RequireNode(t)
-	ns := f.NewTestNamespace(t)
+	af := newAliasFixture(t, f, "aliasgc", "prod")
 	fc := f.FissionClient().CoreV1()
 
-	envName := "nodejs-aliasgc-" + ns.ID
-	fnName := "fn-aliasgc-" + ns.ID
-	aliasName := "prod-" + ns.ID
-	routeName := "route-aliasgc-" + ns.ID
-	routePath := "/aliasgc-" + ns.ID
-	v1Name := fnName + "-v1"
-	v2Name := fnName + "-v2"
-
-	t.Cleanup(func() {
-		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer ccancel()
-		_ = fc.HTTPTriggers(ns.Name).Delete(cctx, routeName, metav1.DeleteOptions{})
-		_ = fc.FunctionAliases(ns.Name).Delete(cctx, aliasName, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v1Name, metav1.DeleteOptions{})
-		_ = fc.FunctionVersions(ns.Name).Delete(cctx, v2Name, metav1.DeleteOptions{})
-	})
-
-	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
-	ns.CreateFunction(t, ctx, framework.FunctionOptions{
-		Name: fnName, Env: envName, ExecutorType: "poolmgr",
+	// As in TestAliasAsyncVersionPin, the alias is created between v1's
+	// publish and v2's, not via publishTwoVersions's bundled sequence -- v1
+	// must be the alias's only-ever target when the async POST below enqueues.
+	af.ns.CreateEnv(t, ctx, framework.EnvOptions{Name: af.EnvName, Image: image})
+	af.ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: af.FnName, Env: af.EnvName, ExecutorType: "poolmgr",
 		Code: writeNodeStatusDelayed(t, "v1fail", 20*time.Second, http.StatusInternalServerError, "gcfallback-v1-attempt", "boom\n"),
 	})
-	ns.WaitForFunction(t, ctx, fnName)
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	af.ns.WaitForFunction(t, ctx, af.FnName)
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
 
-	ns.CLICaptureStdout(t, ctx, "alias", "create", "--name", aliasName, "--function", fnName, "--version", v1Name)
-	createAliasRoute(t, ctx, ns, routeName, routePath, fnName, aliasName, http.MethodPost)
+	af.createAlias(t, ctx, af.V1Name)
+	af.createRoute(t, ctx, http.MethodPost)
 
 	// The live function now succeeds -- this is the bare-name fallback
 	// target. Publish it as v2 so `alias update --version v2` (needed below
 	// to release the delete guard on v1) has a valid target to point at.
-	ns.CLI(t, ctx, "fn", "update", "--name", fnName,
+	af.ns.CLI(t, ctx, "fn", "update", "--name", af.FnName,
 		"--code", writeNodeStatus(t, "v2ok", http.StatusOK, "gcfallback-v2-delivered", "ok\n"))
-	ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")
+	af.ns.CLI(t, ctx, "fn", "publish", "--name", af.FnName, "--wait")
 
 	// Warm the route through v1 -- 500 (after v1's built-in 20s delay) is
 	// expected and PROVES the route round-trips to the function, which is
 	// exactly what "warm" needs to mean here (v1 never succeeds by design).
 	// The 3min budget absorbs cold-start + the 20s response delay per probe.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		status, _, err := f.Router(t).Post(ctx, routePath, "", nil)
+		status, _, err := f.Router(t).Post(ctx, af.RoutePath, "", nil)
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -990,25 +923,25 @@ func TestAliasAsyncGCFallback(t *testing.T) {
 	}, 3*time.Minute, 2*time.Second)
 
 	fallbackBefore := scrapeCounterSum(t, ctx, f, "router", "fission_async_version_fallback_total")
-	deliveredBaseline := strings.Count(ns.FunctionLogs(t, ctx, fnName), "gcfallback-v2-delivered")
+	deliveredBaseline := strings.Count(af.ns.FunctionLogs(t, ctx, af.FnName), "gcfallback-v2-delivered")
 
-	status, _ := asyncPostAlias(t, ctx, f, routePath, "alias-gc-fallback-"+ns.ID)
+	status, _ := asyncPostAlias(t, ctx, f, af.RoutePath, "alias-gc-fallback-"+af.ns.ID)
 	require.Equal(t, http.StatusAccepted, status)
 
 	// Release the delete guard (the alias no longer references v1) and
 	// delete v1's FunctionVersion -- this removes the internal `:v1` route
 	// the dispatcher's next attempt targets, forcing the 404-fallback path.
-	ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", aliasName, "--version", v2Name)
+	af.ns.CLICaptureStdout(t, ctx, "alias", "update", "--name", af.AliasName, "--version", af.V2Name)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		err := fc.FunctionVersions(ns.Name).Delete(ctx, v1Name, metav1.DeleteOptions{})
-		assert.NoErrorf(c, err, "delete FunctionVersion %q (webhook guard should clear once the alias moved off it)", v1Name)
+		err := fc.FunctionVersions(af.ns.Name).Delete(ctx, af.V1Name, metav1.DeleteOptions{})
+		assert.NoErrorf(c, err, "delete FunctionVersion %q (webhook guard should clear once the alias moved off it)", af.V1Name)
 	}, 30*time.Second, time.Second)
 
 	// The only way "gcfallback-v2-delivered" can grow now is through the
 	// bare-name fallback route: v1's versioned route is gone, and no
 	// synchronous request in this test hits the live function's v2 code.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		logs, err := ns.FunctionLogsE(t, ctx, fnName)
+		logs, err := af.ns.FunctionLogsE(t, ctx, af.FnName)
 		if !assert.NoError(c, err) {
 			return
 		}

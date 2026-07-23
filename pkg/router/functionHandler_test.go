@@ -297,15 +297,14 @@ func TestPrecomputedPolicyParity(t *testing.T) {
 		"missing map must fall back to direct computation")
 }
 
-// TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID is the RFC-0025
-// plan-review regression (warning #5): two resolved *fv1.Function snapshots
-// of the same versioned function -- e.g. a weighted alias's primary and
-// secondary target -- share a UID (versioning.VersionedFunction always
-// copies live's identity) but differ in Generation (each pins a different
-// FunctionVersion). Keying functionTimeoutMap/policyByUID on UID alone would
-// collapse the two into one entry and silently serve one snapshot's
-// timeout/streaming policy to the other; keying on crd.CacheKeyUG (UID,
-// Generation) keeps them distinct.
+// TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID pins the RFC-0025
+// invariant that two resolved *fv1.Function snapshots of the same versioned
+// function -- e.g. a weighted alias's primary and secondary target -- share
+// a UID (versioning.VersionedFunction always copies live's identity) but
+// differ in Generation (each pins a different FunctionVersion). Keying
+// functionTimeoutMap/policyByUID on UID alone would collapse the two into
+// one entry and silently serve one snapshot's timeout/streaming policy to
+// the other; keying on crd.CacheKeyUG (UID, Generation) keeps them distinct.
 func TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID(t *testing.T) {
 	sharedUID := k8stypes.UID("shared-fn-uid")
 

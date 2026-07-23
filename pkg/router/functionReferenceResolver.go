@@ -246,10 +246,7 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 			namespace, ref.Alias, alias.Spec.FunctionName, ref.Name, errFunctionNotFound)
 	}
 
-	target := alias.Spec.Version
-	if target == "" {
-		target = alias.Status.ResolvedVersion
-	}
+	target := alias.EffectiveTarget()
 	if target == "" {
 		return nil, fmt.Errorf("function alias %s/%s has not resolved to a version yet: %w", namespace, ref.Alias, errFunctionNotFound)
 	}

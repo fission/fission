@@ -299,11 +299,7 @@ func (ws *watchSubscription) eventDispatchLoop(ctx context.Context) {
 		// so essentially, function namespace = trigger namespace.
 		// RFC-0025: append the alias/version suffix when the reference carries
 		// one; resolution stays entirely router-side.
-		suffix := ws.watch.Spec.FunctionReference.Alias
-		if suffix == "" {
-			suffix = ws.watch.Spec.FunctionReference.Version
-		}
-		url := utils.UrlForFunctionRef(ws.watch.Spec.FunctionReference.Name, ws.watch.Namespace, suffix)
+		url := utils.UrlForFunctionReference(ws.watch.Spec.FunctionReference, ws.watch.Namespace)
 		ws.publisher.Publish(ctx, buf.String(), headers, http.MethodPost, url)
 	}
 }

@@ -97,11 +97,11 @@ func twoBackendDist(primaryWeight int) (map[string]*fv1.Function, []functionWeig
 	return fnMap, dist
 }
 
-// TestGetCanaryBackend_Boundary pins the Task-3-review off-by-one fix: a
-// 100/0 split must ALWAYS pick the primary and a 0/100 split must ALWAYS
-// pick the secondary — for both the random draw (unkeyed) and the
-// deterministic hash draw (keyed) — never the old ~1% leak from
-// rand.Intn(sumPrefix+1).
+// TestGetCanaryBackend_Boundary pins the invariant that a 100/0 split must
+// ALWAYS pick the primary and a 0/100 split must ALWAYS pick the secondary —
+// for both the random draw (unkeyed) and the deterministic hash draw
+// (keyed) — never the ~1% leak rand.Intn(sumPrefix+1) would produce at
+// exactly 0 or 100.
 func TestGetCanaryBackend_Boundary(t *testing.T) {
 	t.Parallel()
 

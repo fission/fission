@@ -61,6 +61,22 @@ func UrlForFunctionRef(name, namespace, suffix string) string {
 	return url
 }
 
+// UrlForFunctionReference is UrlForFunctionRef with the alias/version suffix
+// selection folded in: it reads ref.Alias, falling back to ref.Version, and
+// builds the URL in one call. The two fields are mutually exclusive
+// (CEL/webhook enforced -- see FunctionReference's doc comment in
+// pkg/apis/core/v1/types.go), so this is the one place that picks between
+// them; every RFC-0025-aware publisher (timer, kubewatcher, mqtrigger's
+// kafka/statestore/scalermanager backends) should call this instead of
+// repeating the alias-else-version selection at the call site.
+func UrlForFunctionReference(ref fv1.FunctionReference, namespace string) string {
+	suffix := ref.Alias
+	if suffix == "" {
+		suffix = ref.Version
+	}
+	return UrlForFunctionRef(ref.Name, namespace, suffix)
+}
+
 // GetFunctionIstioServiceName return service name of function for istio feature
 func GetFunctionIstioServiceName(fnName, fnNamespace string) string {
 	return fmt.Sprintf("istio-%s-%s", fnName, fnNamespace)

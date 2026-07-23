@@ -96,6 +96,13 @@ type (
 		// the pick/admit consistency invariant. "" means unkeyed (not
 		// sticky-declared, or the declared key was absent from the request).
 		stickyKey string
+		// bases is fn's hoisted functionURLBases result (RFC-0014-style,
+		// see functionHandler.basesFor), precomputed by functionHandler.handler()
+		// before RoundTrip is ever called. nil when a caller builds a
+		// RetryingRoundTripper directly without going through functionHandler
+		// (test harnesses) -- RoundTrip falls back to deriving it from fn on
+		// the spot in that case.
+		bases []string
 
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
@@ -291,7 +298,14 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 			// rewrite the request to reflect the service url (which comes from
 			// the executor response) and the trigger's prefix specification.
-			rewriteFunctionURL(logger, req, roundTripper.trigger, fnMeta, roundTripper.serviceURL)
+			// bases is normally already hoisted (functionHandler.handler());
+			// the nil fallback only fires for a RetryingRoundTripper built
+			// directly (test harnesses bypassing functionHandler).
+			bases := roundTripper.bases
+			if bases == nil {
+				bases = functionURLBases(fnMeta)
+			}
+			rewriteFunctionURL(logger, req, roundTripper.trigger, bases, roundTripper.serviceURL)
 		}
 
 		// Do NOT assign returned request to "req"
