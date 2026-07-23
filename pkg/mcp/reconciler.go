@@ -7,6 +7,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -63,12 +64,24 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	entry, err := r.resolveEntry(ctx, fn)
+	// fallback marks that this reconcile is serving entry from the live
+	// function's own Tool config because the alias it names has never
+	// resolved -- NOT from the alias's resolved snapshot. Threaded through to
+	// the ToolExposed condition below (distinct Reason) so an operator can
+	// tell snapshot-serving from fallback-serving via kubectl without reading
+	// logs; it flips back to the normal Reason on the reconcile after the
+	// alias first resolves, since that pass takes the non-error branch above
+	// and fallback stays false.
+	fallback := false
 	if errors.Is(err, errAliasUnresolved) {
 		if r.reg.HasFunction(req.NamespacedName) {
 			// Keep the last tool entry serving -- mirrors the router's own
 			// eventual-consistency posture for an alias mid-resolve (or
 			// momentarily broken) rather than yanking a working tool out from
-			// under an agent for a transient condition.
+			// under an agent for a transient condition. The condition is left
+			// untouched too: whatever Reason the last successful reconcile
+			// wrote (ToolExposed or ToolAliasFallback) already accurately
+			// describes what's still being served.
 			r.logger.V(1).Info("alias target unresolved; keeping last-known tool entry",
 				"function", req.NamespacedName, "alias", fn.Spec.Tool.Alias)
 			return ctrl.Result{}, nil
@@ -83,6 +96,7 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// of advertising a working fallback tool at all.
 		entry = toolEntryFromFunction(fn)
 		entry.Alias = ""
+		fallback = true
 	} else if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -113,13 +127,24 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.server.ApplyToolDelta([]ToolEntry{entry}, nil)
 	}
 
-	// Best-effort condition; never gates exposure. SetConditions skips the write
-	// when nothing changed.
+	// Best-effort condition; never gates exposure. SetConditions skips the
+	// write when nothing changed -- which is also what makes the reason flip
+	// back to FunctionReasonToolExposed a normal, observable write: the
+	// reconcile right after the alias first resolves takes the non-fallback
+	// branch above, so this call's Reason differs from what's currently on
+	// Status and the update actually lands.
+	reason := fv1.FunctionReasonToolExposed
+	message := "exposed as MCP tool " + entry.ToolName
+	if fallback {
+		reason = fv1.FunctionReasonToolAliasFallback
+		message = fmt.Sprintf("exposed as MCP tool %s: alias %q has not resolved a target yet; serving this function's live Tool config directly instead of the alias's snapshot",
+			entry.ToolName, fn.Spec.Tool.Alias)
+	}
 	controller.SetConditions(ctx, r.logger, r.client, fn, metav1.Condition{
 		Type:    fv1.FunctionConditionToolExposed,
 		Status:  metav1.ConditionTrue,
-		Reason:  fv1.FunctionReasonToolExposed,
-		Message: "exposed as MCP tool " + entry.ToolName,
+		Reason:  reason,
+		Message: message,
 	})
 	return ctrl.Result{}, nil
 }
