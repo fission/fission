@@ -656,29 +656,15 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	return multierr
 }
 
-// getObjName returns a unique name for kubernetes objects of function
+// getObjName returns a unique name for kubernetes objects of function. A
+// versioned Function (fv1.FUNCTION_VERSION label present, RFC-0025) gets a
+// name suffixed with the version's bounded "-v<seq>" tail so each published
+// version's Deployment/Service/HPA is distinct; see
+// executorUtils.VersionedObjName for the truncation budget that keeps the
+// whole name within the Kubernetes 63-char limit either way. The
+// unversioned path is byte-identical to the pre-RFC-0025 behaviour.
 func (caaf *Container) getObjName(fn *fv1.Function) string {
-	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.UID[len(fn.UID)-17:]
-	var functionMetadata string
-	if len(fn.Name)+len(fn.Namespace) < 35 {
-		functionMetadata = fn.Name + "-" + fn.Namespace
-	} else {
-		if len(fn.Name) > 17 {
-			functionMetadata = fn.Name[:17]
-		} else {
-			functionMetadata = fn.Name
-		}
-		if len(fn.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
-		} else {
-			functionMetadata = functionMetadata + "-" + fn.Namespace
-		}
-	}
-	// constructed name should be 63 characters long, as it is a valid k8s name
-	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
-	// with the "container-" 10 character prefix
-	return strings.ToLower(fmt.Sprintf("container-%s-%s", functionMetadata, uid))
+	return executorUtils.VersionedObjName("container-", fn)
 }
 
 func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]string {
