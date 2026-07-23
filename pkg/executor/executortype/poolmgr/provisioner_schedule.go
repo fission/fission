@@ -15,8 +15,8 @@ import (
 
 // effectiveTargetAt returns the effective provisioned target for cfg at
 // instant now: cfg.Target if no window is currently active, or the max
-// Target across all currently-active windows otherwise (a Target:0 window
-// intentionally wins over a nonzero base — the un-warm case). Pure: no I/O,
+// Target across all currently-active windows. If activeWindow.Target <= base.Target, activeWindow wins over base.
+// Pure: no I/O,
 // no wall-clock reads, so property/DST tests can hammer it directly.
 // Windows that fail to evaluate (malformed cron/duration, e.g. from a raw
 // kubectl write bypassing admission) are skipped rather than aborting the
@@ -24,17 +24,19 @@ import (
 func effectiveTargetAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (int, []error) {
 	target := cfg.Target
 	badWindows := []error{}
+	maxActiveTarget := 0
+	active := false
 	for _, window := range cfg.Windows {
 		if windowActive, err := windowActiveAt(window, now); err != nil {
 			e := fmt.Errorf("window %s failed: %w", window.Name, err)
 			badWindows = append(badWindows, e)
 		} else if windowActive {
-			if window.Target == 0 {
-				target = 0
-				continue
-			}
-			target = max(target, window.Target)
+			maxActiveTarget = max(maxActiveTarget, window.Target)
+			active = true
 		}
+	}
+	if active {
+		target = maxActiveTarget
 	}
 	return target, badWindows
 
@@ -56,6 +58,9 @@ func windowActiveAt(window fv1.ProvisionedWindow, now time.Time) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if dur <= 0 {
+		return false, fmt.Errorf("window duration must be positive")
+	}
 	t := sched.Next(now.Add(-dur))
 	if t.IsZero() || t.After(now) {
 		return false, nil
@@ -70,6 +75,7 @@ func windowActiveAt(window fv1.ProvisionedWindow, now time.Time) (bool, error) {
 				break
 			}
 			t = t2
+			iterations++
 		}
 		return now.Sub(t) < dur, nil
 	}
