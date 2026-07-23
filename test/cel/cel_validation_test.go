@@ -488,3 +488,61 @@ func TestCELHTTPTriggerRouteConfig(t *testing.T) {
 		})
 	}
 }
+
+// TestCELFunctionReferenceAliasVersion verifies the RFC-0025 CEL rules on the
+// FunctionReference type — alias/version mutual exclusion and the
+// type=='name'-only gate — are enforced by the API server itself. HTTPTrigger
+// has no admission webhook (CEL is its only admission-time gate for
+// functionref shape, see pkg/webhook/service.go), so these cases exercise the
+// rule where it matters most.
+func TestCELFunctionReferenceAliasVersion(t *testing.T) {
+	fc := client(t)
+
+	ht := func(name string, ref fv1.FunctionReference) *fv1.HTTPTrigger {
+		return &fv1.HTTPTrigger{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Spec: fv1.HTTPTriggerSpec{
+				RelativeURL:       "/" + name,
+				Methods:           []string{"GET"},
+				FunctionReference: ref,
+			},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		ht      *fv1.HTTPTrigger
+		wantErr string // empty => expect accept
+	}{
+		{"alias and version both set rejected", ht("fr-both", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "prod", Version: "fn-v1",
+		}), "mutually exclusive"},
+		{"alias with type function-weights rejected", ht("fr-weights-alias", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionWeights, FunctionWeights: map[string]int{"fn": 100}, Alias: "prod",
+		}), "only valid when type is 'name'"},
+		{"version with type function-weights rejected", ht("fr-weights-version", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionWeights, FunctionWeights: map[string]int{"fn": 100}, Version: "fn-v1",
+		}), "only valid when type is 'name'"},
+		{"valid alias accepted", ht("fr-valid-alias", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "prod",
+		}), ""},
+		{"valid version accepted", ht("fr-valid-version", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Version: "fn-v1",
+		}), ""},
+		{"neither alias nor version accepted", ht("fr-neither", fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn",
+		}), ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fc.CoreV1().HTTPTriggers(ns).Create(t.Context(), tc.ht, metav1.CreateOptions{})
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err, "apiserver should reject")
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}

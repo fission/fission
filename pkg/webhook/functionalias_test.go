@@ -140,3 +140,31 @@ func TestFunctionAliasWebhook_ReferenceIntegrity(t *testing.T) {
 		}
 	})
 }
+
+// TestFunctionAliasWebhook_UpdatePath_DanglingVersionRejected exercises the
+// actual UPDATE admission entrypoint (GenericWebhook.ValidateUpdate), not
+// just Validate() directly: an alias that starts out pointing at an existing
+// FunctionVersion must still be rejected when the update transitions
+// spec.Version to a version name that does not exist. The create path is
+// covered by TestFunctionAliasWebhook_ReferenceIntegrity; ValidateUpdate
+// wiring (r.Validator set, delegating to the same Validate(new) the create
+// path uses) was not previously exercised for an update that turns a
+// previously-valid reference dangling.
+func TestFunctionAliasWebhook_UpdatePath_DanglingVersionRejected(t *testing.T) {
+	existing := functionVersionFor("fn", "fn-v1")
+	r := &FunctionAlias{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(existing).Build()}
+	r.Validator = r
+
+	oldAlias := makeValidFunctionAlias() // spec.Version = "fn-v1" (exists)
+	if err := r.Validate(oldAlias); err != nil {
+		t.Fatalf("precondition: old alias must be valid: %v", err)
+	}
+
+	newAlias := oldAlias.DeepCopy()
+	newAlias.Spec.Version = "fn-v-does-not-exist"
+
+	_, err := r.ValidateUpdate(t.Context(), oldAlias, newAlias)
+	if err == nil || !strings.Contains(err.Error(), "fn-v-does-not-exist") {
+		t.Fatalf("expected update to a dangling version to be rejected via ValidateUpdate, got: %v", err)
+	}
+}

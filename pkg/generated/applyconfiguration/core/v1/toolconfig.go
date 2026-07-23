@@ -31,6 +31,14 @@ type ToolConfigApplyConfiguration struct {
 	// ToolName overrides the advertised tool name. Defaults to
 	// "<namespace>-<function name>". Must match ^[a-zA-Z0-9_-]{1,64}$.
 	ToolName *string `json:"toolName,omitempty"`
+	// Alias, when set, targets a FunctionAlias by name (RFC-0025) instead of
+	// the live Function: the MCP registry serves the tool from the alias's
+	// currently-resolved FunctionVersion snapshot, and tools/call is proxied
+	// to the ":<alias>" route rather than straight to the live Function.
+	// Empty (the default) preserves today's behavior. Router/registry-side
+	// resolution lands in a later RFC-0025 task — until then this field is
+	// accepted but inert.
+	Alias *string `json:"alias,omitempty"`
 }
 
 // ToolConfigApplyConfiguration constructs a declarative configuration of the ToolConfig type for use with
@@ -60,5 +68,13 @@ func (b *ToolConfigApplyConfiguration) WithInputSchema(value apiextensionsv1.JSO
 // If called multiple times, the ToolName field is set to the value of the last call.
 func (b *ToolConfigApplyConfiguration) WithToolName(value string) *ToolConfigApplyConfiguration {
 	b.ToolName = &value
+	return b
+}
+
+// WithAlias sets the Alias field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Alias field is set to the value of the last call.
+func (b *ToolConfigApplyConfiguration) WithAlias(value string) *ToolConfigApplyConfiguration {
+	b.Alias = &value
 	return b
 }

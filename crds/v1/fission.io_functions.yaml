@@ -800,6 +800,19 @@ spec:
                           Function is a same-namespace function destination, invoked asynchronously
                           with the result envelope as its body (depth-capped to stop runaway chains).
                         properties:
+                          alias:
+                            description: |-
+                              Alias, when set, targets a FunctionAlias by name instead of the live
+                              Function directly (RFC-0025): the alias is a movable pointer that the
+                              router resolves at request time to whatever FunctionVersion it
+                              currently points at, so repointing the alias (e.g. for a canary
+                              rollout or a rollback) redirects traffic without touching this
+                              reference. Valid only when Type is "name"; mutually exclusive with
+                              Version. Empty (the default) preserves today's behavior: route
+                              straight to the live Function. Router-side resolution lands in a
+                              later RFC-0025 task — until then this field is accepted but inert.
+                            maxLength: 63
+                            type: string
                           functionweights:
                             additionalProperties:
                               type: integer
@@ -830,6 +843,16 @@ spec:
                             - name
                             - function-weights
                             type: string
+                          version:
+                            description: |-
+                              Version, when set, pins this reference to one FunctionVersion CR by
+                              name (RFC-0025) — an immutable published snapshot that never moves,
+                              unlike Alias. Valid only when Type is "name"; mutually exclusive
+                              with Alias. Empty (the default) preserves today's behavior: route
+                              straight to the live Function. Router-side resolution lands in a
+                              later RFC-0025 task — until then this field is accepted but inert.
+                            maxLength: 63
+                            type: string
                         required:
                         - name
                         - type
@@ -840,6 +863,17 @@ spec:
                             max 63 chars) when type is 'name'
                           rule: self.type != 'name' || (self.name.size() <= 63 &&
                             self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                        - message: functionref.alias and functionref.version are mutually
+                            exclusive
+                          rule: '!((has(self.alias) && self.alias != '''') && (has(self.version)
+                            && self.version != ''''))'
+                        - message: functionref.alias is only valid when type is 'name'
+                          rule: '!(has(self.alias) && self.alias != '''') || self.type
+                            == ''name'''
+                        - message: functionref.version is only valid when type is
+                            'name'
+                          rule: '!(has(self.version) && self.version != '''') || self.type
+                            == ''name'''
                       topic:
                         description: Topic publishes the result envelope to a message-queue
                           topic.
@@ -872,6 +906,19 @@ spec:
                           Function is a same-namespace function destination, invoked asynchronously
                           with the result envelope as its body (depth-capped to stop runaway chains).
                         properties:
+                          alias:
+                            description: |-
+                              Alias, when set, targets a FunctionAlias by name instead of the live
+                              Function directly (RFC-0025): the alias is a movable pointer that the
+                              router resolves at request time to whatever FunctionVersion it
+                              currently points at, so repointing the alias (e.g. for a canary
+                              rollout or a rollback) redirects traffic without touching this
+                              reference. Valid only when Type is "name"; mutually exclusive with
+                              Version. Empty (the default) preserves today's behavior: route
+                              straight to the live Function. Router-side resolution lands in a
+                              later RFC-0025 task — until then this field is accepted but inert.
+                            maxLength: 63
+                            type: string
                           functionweights:
                             additionalProperties:
                               type: integer
@@ -902,6 +949,16 @@ spec:
                             - name
                             - function-weights
                             type: string
+                          version:
+                            description: |-
+                              Version, when set, pins this reference to one FunctionVersion CR by
+                              name (RFC-0025) — an immutable published snapshot that never moves,
+                              unlike Alias. Valid only when Type is "name"; mutually exclusive
+                              with Alias. Empty (the default) preserves today's behavior: route
+                              straight to the live Function. Router-side resolution lands in a
+                              later RFC-0025 task — until then this field is accepted but inert.
+                            maxLength: 63
+                            type: string
                         required:
                         - name
                         - type
@@ -912,6 +969,17 @@ spec:
                             max 63 chars) when type is 'name'
                           rule: self.type != 'name' || (self.name.size() <= 63 &&
                             self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                        - message: functionref.alias and functionref.version are mutually
+                            exclusive
+                          rule: '!((has(self.alias) && self.alias != '''') && (has(self.version)
+                            && self.version != ''''))'
+                        - message: functionref.alias is only valid when type is 'name'
+                          rule: '!(has(self.alias) && self.alias != '''') || self.type
+                            == ''name'''
+                        - message: functionref.version is only valid when type is
+                            'name'
+                          rule: '!(has(self.version) && self.version != '''') || self.type
+                            == ''name'''
                       topic:
                         description: Topic publishes the result envelope to a message-queue
                           topic.
@@ -9702,6 +9770,17 @@ spec:
                   the on switch (like Streaming): nil (the default) means the function is
                   never advertised as a tool. Additive and backward compatible.
                 properties:
+                  alias:
+                    description: |-
+                      Alias, when set, targets a FunctionAlias by name (RFC-0025) instead of
+                      the live Function: the MCP registry serves the tool from the alias's
+                      currently-resolved FunctionVersion snapshot, and tools/call is proxied
+                      to the ":<alias>" route rather than straight to the live Function.
+                      Empty (the default) preserves today's behavior. Router/registry-side
+                      resolution lands in a later RFC-0025 task — until then this field is
+                      accepted but inert.
+                    maxLength: 63
+                    type: string
                   description:
                     description: |-
                       Description is the human/agent-facing tool description surfaced in the MCP

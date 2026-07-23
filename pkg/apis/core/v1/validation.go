@@ -608,6 +608,10 @@ func (tc *ToolConfig) Validate() error {
 		}
 	}
 
+	if tc.Alias != "" {
+		errs = errors.Join(errs, ValidateKubeName("FunctionSpec.Tool.Alias", tc.Alias))
+	}
+
 	return errs
 }
 
@@ -743,6 +747,14 @@ func (es ExecutionStrategy) Validate() error {
 	return errs
 }
 
+// Validate checks a FunctionReference: Type is a supported value, Name is a
+// kube name when Type is "name", and the optional Alias/Version pins
+// (RFC-0025) are each a kube name, mutually exclusive, and valid only when
+// Type is "name" — mirroring the CRD's CEL rules on this type so the CLI
+// validates client-side. This is FORMAT validation only: whether the named
+// alias/version actually exists is not checked here (aliases are eventually
+// consistent, and existence-at-admission would break apply-before-publish
+// ordering); router-side resolution enforces existence at request time.
 func (ref FunctionReference) Validate() error {
 	var errs error
 
@@ -755,6 +767,25 @@ func (ref FunctionReference) Validate() error {
 
 	if ref.Type == FunctionReferenceTypeFunctionName {
 		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Name", ref.Name))
+	}
+
+	hasAlias := ref.Alias != ""
+	hasVersion := ref.Version != ""
+
+	if hasAlias && hasVersion {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference", "", "alias and version are mutually exclusive"))
+	}
+	if hasAlias {
+		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Alias", ref.Alias))
+		if ref.Type != FunctionReferenceTypeFunctionName {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference.Alias", ref.Alias, "alias is only valid when type is 'name'"))
+		}
+	}
+	if hasVersion {
+		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Version", ref.Version))
+		if ref.Type != FunctionReferenceTypeFunctionName {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference.Version", ref.Version, "version is only valid when type is 'name'"))
+		}
 	}
 
 	return errs
@@ -1147,6 +1178,10 @@ func (spec TimeTriggerSpec) Validate() error {
 	}
 
 	errs = errors.Join(errs, spec.FunctionReference.Validate())
+
+	if spec.Alias != "" {
+		errs = errors.Join(errs, ValidateKubeName("TimeTriggerSpec.Alias", spec.Alias))
+	}
 
 	return errs
 }
