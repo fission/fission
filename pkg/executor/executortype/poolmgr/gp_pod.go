@@ -207,12 +207,18 @@ func (gp *GenericPool) labelsForFunction(metadata *metav1.ObjectMeta) map[string
 }
 
 // specializedPodLabels is labelsForFunction plus the function-generation label
-// (RFC-0002). Used for the choosePod relabel only — listing/selection paths
+// (RFC-0002), and the function-version label when metadata carries one
+// (RFC-0025) -- mirroring functionServiceSelector's belt-and-braces addition
+// so the specialized pod stays self-describing alongside the Service that
+// selects it. Used for the choosePod relabel only — listing/selection paths
 // (RefreshFuncPods, the legacy useSvc/istio selectors) keep labelsForFunction so
 // they still match pods of every generation.
 func (gp *GenericPool) specializedPodLabels(metadata *metav1.ObjectMeta) map[string]string {
 	label := gp.labelsForFunction(metadata)
 	label[fv1.FUNCTION_GENERATION] = strconv.FormatInt(metadata.Generation, 10)
+	if v := metadata.Labels[fv1.FUNCTION_VERSION]; v != "" {
+		label[fv1.FUNCTION_VERSION] = v
+	}
 	return label
 }
 

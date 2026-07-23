@@ -929,7 +929,22 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyUG) {
 	gpm.fsCache.MarkFuncDeleted(key)
-	gpm.fnSvcEnsured.Delete(key.UID)
+	gpm.deleteFnSvcEnsuredForUID(key.UID)
+}
+
+// deleteFnSvcEnsuredForUID drops every fnSvcEnsured debounce entry for a
+// deleted function's UID, across every version -- fnSvcEnsureKey composes
+// (UID, version), and a delete only knows the UID (crd.CacheKeyUG carries no
+// version), so a plain Delete(uid) can no longer find the composite keys.
+// Cost is one full Range per function delete, an infrequent path.
+func (gpm *GenericPoolManager) deleteFnSvcEnsuredForUID(uid k8sTypes.UID) {
+	prefix := string(uid) + "/"
+	gpm.fnSvcEnsured.Range(func(k, _ any) bool {
+		if ks, ok := k.(string); ok && strings.HasPrefix(ks, prefix) {
+			gpm.fnSvcEnsured.Delete(k)
+		}
+		return true
+	})
 }
 
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has

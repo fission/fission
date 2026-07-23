@@ -53,6 +53,18 @@ func addrs(eps []Endpoint) []string {
 	return out
 }
 
+// versionedSlice is slice plus the mirrored fission.io/function-version
+// label (RFC-0025): version == "" omits the label entirely, matching a
+// Service the executor never stamped with FUNCTION_VERSION (today's only
+// case, until phase 3).
+func versionedSlice(name, fnName, fnNamespace, version string, port int32, addrs ...string) *discoveryv1.EndpointSlice {
+	es := slice(name, fnName, fnNamespace, port, addrs...)
+	if version != "" {
+		es.Labels[fv1.FUNCTION_VERSION] = version
+	}
+	return es
+}
+
 func TestIndexApplyAndDelete(t *testing.T) {
 	t.Parallel()
 	ix := NewIndex()
@@ -118,6 +130,68 @@ func TestIndexNamespaceIsolation(t *testing.T) {
 	assert.ElementsMatch(t, []string{"10.0.0.2:8888"}, addrs(ix.Lookup("ns2", "fn-a")))
 }
 
+// TestIndexTwoVersionsOfOneFunction covers the RFC-0025 version dimension:
+// two FunctionVersions of the same function, in the same namespace, must
+// surface as two independently-addressable warm pools -- Admit for one
+// version must never return the other's endpoint, and each has its own
+// entry (Size == 2).
+func TestIndexTwoVersionsOfOneFunction(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+
+	ix.ApplySlice(versionedSlice("s-v1", "fn-a", "default", "fn-a-v1", 8888, "10.0.1.1"))
+	ix.ApplySlice(versionedSlice("s-v2", "fn-a", "default", "fn-a-v2", 8888, "10.0.2.1"))
+
+	assert.Equal(t, 2, ix.Size(), "two versions of one function must be two distinct entries")
+
+	// Repeated admits for v1 must only ever land on v1's endpoint, never v2's.
+	for range 5 {
+		ep, release, result := ix.Admit("default", "fn-a", "fn-a-v1", 4, "")
+		require.Equal(t, Admitted, result)
+		assert.Equal(t, "10.0.1.1:8888", ep.Address, "v1 Admit must never return v2's endpoint")
+		release()
+	}
+	for range 5 {
+		ep, release, result := ix.Admit("default", "fn-a", "fn-a-v2", 4, "")
+		require.Equal(t, Admitted, result)
+		assert.Equal(t, "10.0.2.1:8888", ep.Address, "v2 Admit must never return v1's endpoint")
+		release()
+	}
+
+	// The unversioned pool ("") is a distinct, empty entry -- no accidental
+	// fallback from a versioned function to a bare (namespace, name) key.
+	_, _, result := ix.Admit("default", "fn-a", "", 1, "")
+	assert.Equal(t, NoEntry, result, "the unversioned pool must not exist when only versioned slices were applied")
+
+	// Deleting v1's slice leaves v2 untouched.
+	ix.DeleteSlice(versionedSlice("s-v1", "fn-a", "default", "fn-a-v1", 8888))
+	assert.Equal(t, 1, ix.Size())
+	_, _, result = ix.Admit("default", "fn-a", "fn-a-v1", 1, "")
+	assert.Equal(t, NoEntry, result, "v1's entry must be gone")
+	ep, release, result := ix.Admit("default", "fn-a", "fn-a-v2", 1, "")
+	require.Equal(t, Admitted, result)
+	assert.Equal(t, "10.0.2.1:8888", ep.Address)
+	release()
+}
+
+// TestIndexUnversionedSliceHasEmptyVersion pins the regression: a slice
+// carrying no fission.io/function-version label (the only shape produced in
+// production today) maps to FnKey.Version == "", and Admit("") is the only
+// way to reach it -- an explicit version never accidentally matches it.
+func TestIndexUnversionedSliceHasEmptyVersion(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
+
+	ep, release, result := ix.Admit("default", "fn-a", "", 1, "")
+	require.Equal(t, Admitted, result)
+	assert.Equal(t, "10.0.0.1:8888", ep.Address)
+	release()
+
+	_, _, result = ix.Admit("default", "fn-a", "some-version", 1, "")
+	assert.Equal(t, NoEntry, result, "a non-empty version must not match the unversioned entry")
+}
+
 // TestIndexConcurrentReadersDuringEventStorm drives concurrent readers against
 // a high-churn writer; the race detector is the assertion.
 func TestIndexConcurrentReadersDuringEventStorm(t *testing.T) {
@@ -170,7 +244,7 @@ func TestAdmit(t *testing.T) {
 	t.Run("no entry", func(t *testing.T) {
 		t.Parallel()
 		ix := NewIndex()
-		_, release, result := ix.Admit("default", "ghost", 1, "")
+		_, release, result := ix.Admit("default", "ghost", "", 1, "")
 		assert.Equal(t, NoEntry, result)
 		assert.Nil(t, release)
 	})
@@ -185,7 +259,7 @@ func TestAdmit(t *testing.T) {
 		// others idle.
 		seen := map[string]int{}
 		for i := range 3 {
-			ep, release, result := ix.Admit("default", "fn-a", 1, "")
+			ep, release, result := ix.Admit("default", "fn-a", "", 1, "")
 			require.Equalf(t, Admitted, result, "admit %d", i)
 			require.NotNil(t, release)
 			seen[ep.Address]++
@@ -193,7 +267,7 @@ func TestAdmit(t *testing.T) {
 		assert.Len(t, seen, 3, "3 admissions at cap 1 must use 3 distinct pods, got %v", seen)
 
 		// Saturated now.
-		_, release, result := ix.Admit("default", "fn-a", 1, "")
+		_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllBusy, result)
 		assert.Nil(t, release)
 	})
@@ -205,16 +279,16 @@ func TestAdmit(t *testing.T) {
 
 		var releases []func()
 		for i := range 3 {
-			_, release, result := ix.Admit("default", "fn-a", 3, "")
+			_, release, result := ix.Admit("default", "fn-a", "", 3, "")
 			require.Equalf(t, Admitted, result, "admit %d of 3 on one pod", i)
 			releases = append(releases, release)
 		}
-		_, _, result := ix.Admit("default", "fn-a", 3, "")
+		_, _, result := ix.Admit("default", "fn-a", "", 3, "")
 		assert.Equal(t, AllBusy, result)
 
 		// Releasing one slot re-opens admission.
 		releases[0]()
-		_, release, result := ix.Admit("default", "fn-a", 3, "")
+		_, release, result := ix.Admit("default", "fn-a", "", 3, "")
 		assert.Equal(t, Admitted, result)
 		release()
 	})
@@ -224,7 +298,7 @@ func TestAdmit(t *testing.T) {
 		ix := NewIndex()
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
 
-		_, release, result := ix.Admit("default", "fn-a", 1, "")
+		_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, Admitted, result)
 		// The transport deliberately releases from two places (re-resolve and
 		// the per-request defer); a double release driving the counter negative
@@ -233,9 +307,9 @@ func TestAdmit(t *testing.T) {
 		release()
 		release()
 
-		_, r1, result := ix.Admit("default", "fn-a", 1, "")
+		_, r1, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, Admitted, result)
-		_, _, result = ix.Admit("default", "fn-a", 1, "")
+		_, _, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllBusy, result, "counter must not have gone negative from double release")
 		r1()
 	})
@@ -246,18 +320,18 @@ func TestAdmit(t *testing.T) {
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
 
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		ep, release, result := ix.Admit("default", "fn-a", 1, "")
+		ep, release, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, Admitted, result)
 		assert.Equal(t, "10.0.0.2:8888", ep.Address, "quarantined endpoint must be skipped")
 		release()
 
 		ix.Quarantine("default", "fn-a", "10.0.0.2:8888")
-		_, _, result = ix.Admit("default", "fn-a", 1, "")
+		_, _, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 
 		// Any slice event lifts the quarantine.
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
-		_, release, result = ix.Admit("default", "fn-a", 1, "")
+		_, release, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, Admitted, result)
 		release()
 	})
@@ -272,11 +346,11 @@ func TestAdmit(t *testing.T) {
 		// quarantined while the executor is down, so no slice event will ever
 		// arrive to lift it. The TTL is the self-heal.
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		_, _, result := ix.Admit("default", "fn-a", 1, "")
+		_, _, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, AllQuarantined, result)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, release, result := ix.Admit("default", "fn-a", 1, "")
+			_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 			if assert.Equal(c, Admitted, result, "quarantine must expire after the TTL") {
 				release()
 			}
@@ -284,7 +358,7 @@ func TestAdmit(t *testing.T) {
 
 		// A dead pod is simply re-quarantined by the next dial failure.
 		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
-		_, _, result = ix.Admit("default", "fn-a", 1, "")
+		_, _, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
 
@@ -296,7 +370,7 @@ func TestAdmit(t *testing.T) {
 		es.Endpoints[0].Conditions.Ready = &notReady
 		ix.ApplySlice(es)
 
-		_, release, result := ix.Admit("default", "fn-a", 1, "")
+		_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, NoCountedReady, result)
 		assert.Nil(t, release)
 	})
@@ -312,7 +386,7 @@ func TestAdmit(t *testing.T) {
 		var wg sync.WaitGroup
 		for range goroutines {
 			wg.Go(func() {
-				_, release, result := ix.Admit("default", "fn-a", perPod, "")
+				_, release, result := ix.Admit("default", "fn-a", "", perPod, "")
 				switch result {
 				case Admitted:
 					admitted.Add(1)
@@ -343,12 +417,12 @@ func TestReportDialTimeout(t *testing.T) {
 
 		for i := 1; i < dialTimeoutStrikeLimit; i++ {
 			assert.Falsef(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "strike %d must not quarantine", i)
-			_, release, result := ix.Admit("default", "fn-a", 1, "")
+			_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 			require.Equalf(t, Admitted, result, "endpoint must stay admissible after strike %d", i)
 			release()
 		}
 		assert.True(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "the limit-th strike escalates")
-		_, _, result := ix.Admit("default", "fn-a", 1, "")
+		_, _, result := ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
 
