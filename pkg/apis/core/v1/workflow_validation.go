@@ -206,6 +206,25 @@ func (st WorkflowState) validate(field string, states map[string]WorkflowState) 
 				"a Task function reference must be by name"))
 		default:
 			errs = errors.Join(errs, st.Function.Validate())
+			// RFC-0025 explicitly defers a Task state's live-tracking
+			// alias/version semantics ("WorkflowState.Function must not grow
+			// alias fields until it is decided", rfc/0025-function-versions-
+			// aliases-rollback.md) — whether a run should resolve alias→version
+			// once at RunStarted (version-consistent) or re-resolve per step
+			// (live-tracking) changes replay semantics and isn't settled.
+			// FunctionReference.Validate() itself accepts both fields (they're
+			// legitimate for HTTPTrigger/TimeTrigger/MessageQueueTrigger/
+			// KubernetesWatchTrigger), and the CRD schema's struct-level CEL
+			// rules on FunctionReference accept them too regardless of where
+			// the type is embedded — so this workflow-specific Go-side check
+			// is the ONLY thing rejecting them for a Task state, and it is
+			// reached only through the webhook (pkg/webhook/workflow.go calls
+			// Workflow.Validate(), which reaches WorkflowSpec.Validate() and
+			// this state validator), not CEL.
+			if st.Function.Alias != "" || st.Function.Version != "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, field+".Function", st.Function.Name,
+					"alias/version references on a workflow Task state are not yet supported (RFC-0025 defers this decision until live-tracking-vs-version-consistent run semantics are settled)"))
+			}
 		}
 		hasNext := st.Next != ""
 		if hasNext == st.End {

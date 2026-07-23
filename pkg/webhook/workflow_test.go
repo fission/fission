@@ -64,6 +64,40 @@ func TestWorkflowWebhookApplyDefaults(t *testing.T) {
 	assert.NoError(t, r.Validate(wf))
 }
 
+// TestWorkflowWebhookValidate_RejectsTaskAliasAndVersion verifies the
+// RFC-0025-deferred alias/version guard is actually reached through the
+// webhook admission entry point (Workflow.Validate -> Workflow.Validate() ->
+// WorkflowSpec.Validate() -> the Task-state validator in
+// pkg/apis/core/v1/workflow_validation.go), not just exercised directly
+// against the apis package. FunctionReference.Validate() alone accepts
+// Alias/Version (they're legal on HTTPTrigger/TimeTrigger/etc.), so this
+// pins that the workflow-specific guard is what rejects them here — the CRD
+// schema/CEL do not (FunctionReference's own CEL rules don't know they're
+// embedded in a WorkflowState), so the webhook is the only enforcing layer.
+func TestWorkflowWebhookValidate_RejectsTaskAliasAndVersion(t *testing.T) {
+	r := &Workflow{}
+
+	aliased := makeValidWorkflow()
+	st := aliased.Spec.States["a"]
+	st.Function = &v1.FunctionReference{Type: v1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "blue"}
+	aliased.Spec.States["a"] = st
+	err := r.Validate(aliased)
+	require.Error(t, err, "alias reference on a Task state must be rejected at admission")
+	assert.Contains(t, err.Error(), "not yet supported")
+
+	versioned := makeValidWorkflow()
+	st = versioned.Spec.States["a"]
+	st.Function = &v1.FunctionReference{Type: v1.FunctionReferenceTypeFunctionName, Name: "fn", Version: "fn-v3"}
+	versioned.Spec.States["a"] = st
+	err = r.Validate(versioned)
+	require.Error(t, err, "version reference on a Task state must be rejected at admission")
+	assert.Contains(t, err.Error(), "not yet supported")
+
+	// A bare name reference (the pre-RFC-0025, still-supported shape) must
+	// keep validating cleanly.
+	assert.NoError(t, r.Validate(makeValidWorkflow()))
+}
+
 func TestWorkflowRunSpecImmutable(t *testing.T) {
 	r := &WorkflowRun{}
 

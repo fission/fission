@@ -110,6 +110,15 @@ const (
 	FunctionReasonPackageFailed    = "PackageBuildFailed" // buildermgr: package build failed
 	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
 	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
+	// FunctionReasonToolAliasFallback: RFC-0025 alias-addressed Tool
+	// (Spec.Tool.Alias set) whose alias has never resolved a target — the mcp
+	// reconciler is serving a fallback entry built from THIS function's own
+	// live Tool config (not the alias's snapshot) so the tool is not
+	// invisible while the alias catches up. Distinct from
+	// FunctionReasonToolExposed so `kubectl get function -o
+	// jsonpath='{.status.conditions}'` can tell snapshot-serving from
+	// fallback-serving without reading logs.
+	FunctionReasonToolAliasFallback = "ToolAliasFallback"
 
 	// Provisioned condition reasons (RFC-0026 provisioner).
 	FunctionReasonProvisionedSatisfied = "ProvisionedSatisfied" // ProvisionedReady >= ProvisionedTarget

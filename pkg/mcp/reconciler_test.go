@@ -313,6 +313,58 @@ func TestFunctionToolReconciler_AliasUnresolvedAfterward_KeepsLastEntry(t *testi
 	assert.Equal(t, "flaky-alias", e.Alias)
 }
 
+// TestFunctionToolReconciler_AliasFallbackConditionReasonTransitions is the
+// auditability requirement: a fallback-serving entry (alias never resolved)
+// must carry a distinct ToolExposed Reason/Message naming the unresolved
+// alias, and the Reason must flip back to the normal one the reconcile after
+// the alias resolves.
+func TestFunctionToolReconciler_AliasFallbackConditionReasonTransitions(t *testing.T) {
+	t.Parallel()
+	fn := exposedFn("flips", &fv1.ToolConfig{Alias: "not-yet-alias", Description: "live-desc"})
+	r, reg, c := newReconciler(t, fn)
+	key := types.NamespacedName{Namespace: "default", Name: "flips"}
+	ctx := t.Context()
+
+	// Pass 1: the alias does not exist yet -- fallback-serving.
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	e, ok := reg.Lookup("default-flips")
+	require.True(t, ok)
+	assert.Empty(t, e.Alias, "fallback entry calls the live function directly")
+
+	got := &fv1.Function{}
+	require.NoError(t, c.Get(ctx, key, got))
+	cond := meta.FindStatusCondition(got.Status.Conditions, fv1.FunctionConditionToolExposed)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, fv1.FunctionReasonToolAliasFallback, cond.Reason, "fallback-serving must carry a distinct Reason")
+	assert.Contains(t, cond.Message, "not-yet-alias", "message must name the unresolved alias")
+
+	// The alias now shows up and resolves to a version.
+	v := mkVersion("flips-v1", "flips", fv1.FunctionSpec{
+		Tool: &fv1.ToolConfig{Alias: "not-yet-alias", Description: "snap-desc"},
+	})
+	alias := mkAlias("not-yet-alias", "flips", "flips-v1", "")
+	require.NoError(t, c.Create(ctx, v))
+	require.NoError(t, c.Create(ctx, alias))
+
+	// Pass 2: resolves successfully -- Reason must flip back.
+	_, err = r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	e, ok = reg.Lookup("default-flips")
+	require.True(t, ok)
+	assert.Equal(t, "snap-desc", e.Description, "now served from the resolved snapshot")
+	assert.Equal(t, "not-yet-alias", e.Alias)
+
+	require.NoError(t, c.Get(ctx, key, got))
+	cond = meta.FindStatusCondition(got.Status.Conditions, fv1.FunctionConditionToolExposed)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, fv1.FunctionReasonToolExposed, cond.Reason, "must flip back to the normal Reason once resolved")
+}
+
 func TestFunctionToolReconcilerDelete(t *testing.T) {
 	fn := exposedFn("del", &fv1.ToolConfig{Description: "d"})
 	r, reg, c := newReconciler(t, fn)
