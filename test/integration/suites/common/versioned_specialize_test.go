@@ -44,6 +44,9 @@ func TestVersionedSpecialize(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("ENABLE_FUNCTION_SERVICES not set on executor; skipping per-version headless Service assertions")
+	}
 	acquireHeavySlot(t)
 
 	ns := f.NewTestNamespace(t)
