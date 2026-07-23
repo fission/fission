@@ -281,6 +281,17 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.FnRollbackTo, flag.FnRollbackDetach, flag.FnRollbackWait, flag.WaitTimeout},
 	})
 
+	gcVersionsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "gc-versions",
+		Short: "Sweep a function's old FunctionVersions down to its retain floor (RFC-0025)",
+		Long: "Runs one on-demand retention-GC sweep, the same engine the buildermgr-hosted controller runs " +
+			"automatically. Never deletes a version referenced by any FunctionAlias, or the newest/only " +
+			"version, however low --keep is set.",
+	}, GCVersions, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.GCVersionsKeep},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
@@ -288,7 +299,7 @@ func Commands() *cobra.Command {
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
 		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, publishCmd, versionsCmd,
-		rollbackCmd, DLQCommands(), StateCommands())
+		rollbackCmd, gcVersionsCmd, DLQCommands(), StateCommands())
 
 	return command
 }

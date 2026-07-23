@@ -328,4 +328,7 @@ var (
 	FnRollbackTo     = Flag{Type: String, Name: flagkey.FnRollbackTo, Usage: "Explicit FunctionVersion name to roll back to (default: the alias's previous target, Status.History's last entry)"}
 	FnRollbackDetach = Flag{Type: Bool, Name: flagkey.FnRollbackDetach, Usage: "Strip `fission spec` (Git) ownership annotations from the alias so a future `spec apply` does not revert the rollback"}
 	FnRollbackWait   = Flag{Type: Bool, Name: flagkey.FnRollbackWait, Usage: "Wait for the alias to resolve to the rollback target (see --timeout)"}
+
+	// RFC-0025 `fission fn gc-versions`.
+	GCVersionsKeep = Flag{Type: Int, Name: flagkey.GCVersionsKeep, Usage: "Override the retain count for this sweep (default: the function's Spec.Versioning.Retain, or 10)"}
 )
