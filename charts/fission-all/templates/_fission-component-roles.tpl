@@ -340,6 +340,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # Read-only, RFC-0025: the router watches these to resolve function aliases
+  # and version-pinned targets during request routing. The router never writes
+  # either type.
+  resources:
+  - functionversions
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "storagesvc-rules" }}
 rules:
