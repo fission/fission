@@ -265,6 +265,23 @@ func (d *Dispatcher) process(ctx context.Context, msg statestore.LeasedMessage) 
 	dctx, dcancel := context.WithTimeout(ctx, d.deliveryTimeout(env))
 	res := d.deliverer.Deliver(dctx, env, msg.ID, msg.Attempts)
 	dcancel()
+
+	// Refresh the settle budget now that delivery has returned: settleTimeout
+	// must bound the settle op itself (Ack/Nack/Kill), not delivery. A function
+	// can legitimately run for minutes (up to FunctionTimeout), which can exceed
+	// settleTimeout many times over — settling against the pre-delivery sctx
+	// would find it already expired, so every settle call below would fail with
+	// "context deadline exceeded". That leaves the message leased until
+	// DefaultLeaseDuration: a failed slow delivery can't retry promptly, and a
+	// SUCCESSFUL slow delivery gets duplicate-delivered at lease expiry. The
+	// killReason/settleFail calls above (undecodable envelope, MaxAge already
+	// exceeded) both return before any delivery is attempted, so they fire
+	// within ms of the lease and are unaffected — they keep using the
+	// pre-delivery sctx.
+	scancel()
+	sctx, scancel = context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+	defer scancel()
+
 	recordDelivery(sctx, deliveryCondition(res))
 
 	action := classify(res)
