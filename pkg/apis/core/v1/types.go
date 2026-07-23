@@ -1630,8 +1630,7 @@ type (
 		// rollout or a rollback) redirects traffic without touching this
 		// reference. Valid only when Type is "name"; mutually exclusive with
 		// Version. Empty (the default) preserves today's behavior: route
-		// straight to the live Function. Router-side resolution lands in a
-		// later RFC-0025 task — until then this field is accepted but inert.
+		// straight to the live Function.
 		// +kubebuilder:validation:MaxLength=63
 		// +optional
 		Alias string `json:"alias,omitempty"`
@@ -1640,8 +1639,7 @@ type (
 		// name (RFC-0025) — an immutable published snapshot that never moves,
 		// unlike Alias. Valid only when Type is "name"; mutually exclusive
 		// with Alias. Empty (the default) preserves today's behavior: route
-		// straight to the live Function. Router-side resolution lands in a
-		// later RFC-0025 task — until then this field is accepted but inert.
+		// straight to the live Function.
 		// +kubebuilder:validation:MaxLength=63
 		// +optional
 		Version string `json:"version,omitempty"`
