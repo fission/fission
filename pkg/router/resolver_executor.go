@@ -79,6 +79,9 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 	// can diverge for that one race window; a follower joining on the old
 	// key would get an entry keyed under a Generation that doesn't match
 	// what was specialized. Pre-existing shape (predates this migration).
+	// Version-pinned projections (fv1.FUNCTION_VERSION label) are exempt
+	// from this race: currentFunction passes them through without a re-read,
+	// so the throttler key and the specialized object always agree.
 	recordObj, err := r.throttler.RunOnce(
 		crd.CacheKeyUGFromMeta(fnMeta).String(),
 		func(firstToTheLock bool) (any, error) {
@@ -148,7 +151,21 @@ func (r *executorResolver) fromCache(fn *fv1.Function) (serviceUrl *url.URL, err
 // executor specialize — fromExecutor AND the fallback resolver's
 // ensureCapacity — must use the current spec, or updated functions keep
 // getting pods specialized from the old package.
+//
+// A version-pinned projection is the one exception, returned AS-IS: when the
+// resolved fn carries the fv1.FUNCTION_VERSION label it is
+// versioning.VersionedFunction's projection of an immutable FunctionVersion
+// snapshot (Spec = snapshot, Generation = pinned), so the
+// re-read-for-freshness rationale above does not apply — live specs mutate,
+// version snapshots cannot, and the pin IS the freshness contract.
+// Substituting the live Function here would discard the pinned
+// Spec/Generation/version label and make the executor specialize the LIVE
+// spec for an alias/version-pinned route — RFC-0025's "silently executes the
+// wrong version's code" failure.
 func (r *executorResolver) currentFunction(ctx context.Context, fn *fv1.Function) *fv1.Function {
+	if fn.Labels[fv1.FUNCTION_VERSION] != "" {
+		return fn
+	}
 	if r.reader == nil {
 		return fn
 	}
