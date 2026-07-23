@@ -139,6 +139,47 @@ func TestFunctionServiceNameLengthBound(t *testing.T) {
 	})
 }
 
+// TestVersionServiceSuffixHashFallback exercises versionServiceSuffix's
+// fallback branch directly: a version label that does NOT end in the
+// expected "-v<seq>" shape (regexp mismatch) falls back to an 8-hex-char
+// hash-derived suffix. TestFunctionServiceNameLengthBound never reaches this
+// branch -- its generated labels are always "<name>-v<seq>" -- so it is
+// covered here explicitly.
+func TestVersionServiceSuffixHashFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		label string
+	}{
+		{"no -v at all", "garbage"},
+		{"-v tail with non-digit suffix", "fn-vabc"},
+		{"-v<seq> not at the end", "fn-v3-extra"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			suffix := versionServiceSuffix(tc.label)
+
+			assert.NotRegexp(t, `^-v[0-9]+$`, suffix, "a mismatched label must not produce the regex-tail shape")
+			assert.Regexp(t, `^-v[0-9a-f]{8}$`, suffix, "the fallback must be \"-v\" + 8 hex chars")
+			assert.LessOrEqual(t, len(suffix), 10, "the fallback suffix must be bounded regardless of label length")
+
+			assert.Equal(t, suffix, versionServiceSuffix(tc.label), "the fallback must be deterministic")
+
+			fn := fnForService("hello", 1)
+			fn.Labels = map[string]string{fv1.FUNCTION_VERSION: tc.label}
+			assert.LessOrEqual(t, len(functionServiceName(fn)), 63, "the derived Service name must still fit the limit")
+		})
+	}
+
+	t.Run("distinct mismatched labels get distinct fallback suffixes", func(t *testing.T) {
+		t.Parallel()
+		assert.NotEqual(t, versionServiceSuffix("garbage"), versionServiceSuffix("fn-vabc"))
+		assert.NotEqual(t, versionServiceSuffix("fn-vabc"), versionServiceSuffix("fn-v3-extra"))
+	})
+}
+
 func TestEnsureFunctionService(t *testing.T) {
 	t.Parallel()
 
