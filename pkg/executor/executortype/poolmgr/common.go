@@ -26,13 +26,12 @@ func getSpecializedPodLabels(env *fv1.Environment) map[string]string {
 	return specialPodLabels
 }
 
-// copyVersionLabel propagates the fv1.FUNCTION_VERSION label from src to
-// dst when present (RFC-0025), the "if v := src[FUNCTION_VERSION]; v != ""
-// { dst[FUNCTION_VERSION] = v }" idiom repeated at every pod/Service
-// label/selector site that needs a versioned Function's per-version objects
-// distinguishable from its unversioned ones. A no-op (dst left untouched)
-// when src carries no version label, matching the pre-RFC-0025 behaviour of
-// every one of those sites byte-for-byte.
+// copyVersionLabel propagates the fv1.FUNCTION_VERSION label from src to dst
+// when present (RFC-0025) -- extracted because every pod/Service label and
+// selector site that needs a versioned Function's per-version objects
+// distinguishable from its unversioned ones repeats this exact copy. A no-op
+// (dst left untouched) when src carries no version label, matching the
+// pre-RFC-0025 behaviour of every one of those sites byte-for-byte.
 func copyVersionLabel(dst, src map[string]string) {
 	if v := src[fv1.FUNCTION_VERSION]; v != "" {
 		dst[fv1.FUNCTION_VERSION] = v
