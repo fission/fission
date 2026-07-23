@@ -139,6 +139,15 @@ type (
 		// disabled (no env var config — see Step 9). Set in
 		// RegisterReconcilers after crClient is available.
 		provisioner *Provisioner
+
+		// retainedFn reports whether a live FunctionAlias still references a
+		// (function UID, generation) pin (RFC-0025 versionretain.View.Retained),
+		// forwarded to the idle reaper's PoolDeleteStrategy so it can exempt
+		// that generation from the "drain everything but the latest" rule. Set
+		// once via SetVersionRetain, from start.go, after the view is
+		// constructed; nil (never set — e.g. in tests) keeps the pre-RFC-0025
+		// behaviour.
+		retainedFn func(uid k8sTypes.UID, gen int64) bool
 	}
 	request struct {
 		requestType
@@ -1091,7 +1100,17 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // pods), run by the shared idle reaper.
 func (gpm *GenericPoolManager) IdleStrategy() idle.Strategy {
 	return idle.NewPoolDeleteStrategy(gpm.logger, gpm.fissionClient, gpm.fsCache, gpm.kubernetesClient,
-		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled)
+		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled, gpm.retainedFn)
+}
+
+// SetVersionRetain wires the RFC-0025 alias-retain view's Retained method (or
+// any equivalent func) into the idle reaper's drain decision — see
+// IdleStrategy and idle.PoolDeleteStrategy.retained. Called once from
+// start.go after both the pool manager and the view exist. Not calling it
+// (e.g. in tests that construct a GenericPoolManager directly) keeps the
+// pre-RFC-0025 behaviour: every non-latest generation drains.
+func (gpm *GenericPoolManager) SetVersionRetain(retained func(uid k8sTypes.UID, gen int64) bool) {
+	gpm.retainedFn = retained
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event

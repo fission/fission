@@ -219,8 +219,16 @@ func (c *PoolCache) TouchByAddress(address string) error {
 	return nil
 }
 
-// ListAvailableValue returns a list of the available function services stored in the Cache
-func (c *PoolCache) ListAvailableValue() []*FuncSvc {
+// ListAvailableValue returns a list of the available function services stored
+// in the Cache. retained exempts a non-latest generation from the "drain
+// everything but the latest generation" rule below when it reports true for
+// that (UID, Generation) — the RFC-0025 "warm rollback" correction: a
+// generation a live FunctionAlias still points at must not be treated as
+// unconditionally disposable just because a newer generation exists. deleted
+// groups are unaffected by retained — a function whose CR was removed always
+// drains, alias-referenced or not. Pass nil to keep the pre-RFC-0025 behaviour
+// (every non-latest generation forced to svcRetain=0).
+func (c *PoolCache) ListAvailableValue(retained func(uid types.UID, gen int64) bool) []*FuncSvc {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -240,8 +248,14 @@ func (c *PoolCache) ListAvailableValue() []*FuncSvc {
 
 	for key1, values := range c.cache {
 		svcRetain := values.svcRetain
-		// if the function is not latest generation, then we don't need to retain any pods
-		if latestFuncGen[key1.UID] != key1.Generation || values.deleted {
+		// If the function is not latest generation, we don't need to retain any
+		// pods for it UNLESS a live FunctionAlias still references this exact
+		// generation (retained). deleted always forces a drain regardless — an
+		// alias pointing at a generation whose Function CR was removed has
+		// nothing left to serve.
+		isLatest := latestFuncGen[key1.UID] == key1.Generation
+		isRetained := retained != nil && retained(key1.UID, key1.Generation)
+		if (!isLatest && !isRetained) || values.deleted {
 			svcRetain = 0
 		}
 		svcCleanQuota := len(values.svcs) - svcRetain

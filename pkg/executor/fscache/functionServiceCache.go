@@ -341,12 +341,15 @@ func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) 
 	return funcObjects, nil
 }
 
-// ListOldForPool returns a list of aged function services in cache for pooling.
-func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration) ([]*FuncSvc, error) {
+// ListOldForPool returns a list of aged function services in cache for
+// pooling. retained is forwarded to PoolCache.ListAvailableValue — see its
+// doc for the RFC-0025 alias-retain semantics; nil keeps the pre-RFC-0025
+// behaviour.
+func (fsc *FunctionServiceCache) ListOldForPool(age time.Duration, retained func(uid types.UID, gen int64) bool) ([]*FuncSvc, error) {
 	fsc.lock.Lock()
 	defer fsc.lock.Unlock()
 
-	fscs := fsc.connFunctionCache.ListAvailableValue()
+	fscs := fsc.connFunctionCache.ListAvailableValue(retained)
 	funcObjects := make([]*FuncSvc, 0, len(fscs))
 	for _, fsvc := range fscs {
 		if time.Since(fsvc.Atime) > age {

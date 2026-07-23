@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,8 +17,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
@@ -88,7 +91,7 @@ func TestPoolCache(t *testing.T) {
 
 		checkErr(c3.DeleteValue(ctx, keyFunc2, "ip2"))
 
-		cc := c3.ListAvailableValue()
+		cc := c3.ListAvailableValue(nil)
 		if len(cc) != 0 {
 			log.Panicf("expected 0 available items")
 		}
@@ -287,14 +290,94 @@ func TestPoolCacheRequests(t *testing.T) {
 				p.SetSvcValue(t.Context(), newKey, address, &FuncSvc{
 					Name: address,
 				}, resource.MustParse("45m"), tt.rpp, tt.retainPods)
-				funcSvc := p.ListAvailableValue()
+				funcSvc := p.ListAvailableValue(nil)
 				require.Equal(t, tt.concurrency, len(funcSvc))
 			} else {
-				funcSvc := p.ListAvailableValue()
+				funcSvc := p.ListAvailableValue(nil)
 				require.Equal(t, tt.concurrency-tt.retainPods, len(funcSvc))
 			}
 		})
 	}
+}
+
+// TestListAvailableValue_RetainSemantics is the RFC-0025 "warm rollback"
+// matrix: the latest generation is always eligible to keep its retained
+// pods; a non-latest generation drains (svcRetain forced to 0) UNLESS
+// retained reports true for it (an alias still points at it); a deleted
+// group always drains regardless of retained; and a nil retained func
+// reproduces the pre-RFC-0025 behaviour where every non-latest generation
+// drains unconditionally. Each scenario uses one service per cache group so
+// which address ListAvailableValue returns is deterministic (map iteration
+// order over multiple same-group services is not).
+func TestListAvailableValue_RetainSemantics(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	set := func(p *PoolCache, uid types.UID, gen int64, addr string, retain int) {
+		key := crd.CacheKeyUG{UID: uid, Generation: gen}
+		p.SetSvcValue(t.Context(), key, addr,
+			&FuncSvc{Name: addr}, resource.MustParse("45m"), 10, retain)
+		// SetSvcValue marks the service active (activeRequests++, as it does
+		// for a real specialization); ListAvailableValue only considers idle
+		// (activeRequests == 0) services reapable, so mark it available again —
+		// matching how TestPoolCacheRequests above exercises the same cache.
+		p.MarkAvailable(key, addr)
+	}
+	names := func(svcs []*FuncSvc) []string {
+		out := make([]string, len(svcs))
+		for i, s := range svcs {
+			out[i] = s.Name
+		}
+		return out
+	}
+
+	t.Run("latest generation keeps its retained pod; non-latest drains (nil retained)", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 1) // non-latest; requested retain is irrelevant once forced to 0
+		set(p, "fn", 2, "new", 1) // latest; retain honoured, so nothing to reap
+		avail := names(p.ListAvailableValue(nil))
+		assert.Equal(t, []string{"old"}, avail, "non-latest generation drains, latest generation's retained pod stays")
+	})
+
+	t.Run("non-latest generation drains when retained says false", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 1)
+		set(p, "fn", 2, "new", 0)
+		retained := func(uid types.UID, gen int64) bool { return false }
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"new", "old"}, sortedCopy(avail), "retained=false behaves exactly like nil")
+	})
+
+	t.Run("non-latest generation retained by a live alias is kept, not drained", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 1) // non-latest, but an alias retains gen 1
+		set(p, "fn", 2, "new", 0) // latest, no retain requested
+		retained := func(uid types.UID, gen int64) bool { return uid == "fn" && gen == 1 }
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"new"}, avail, "alias-retained non-latest generation must NOT drain")
+	})
+
+	t.Run("deleted group always drains, even when retained", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 1)
+		p.MarkFuncDeleted(crd.CacheKeyUG{UID: "fn", Generation: 1})
+		retained := func(uid types.UID, gen int64) bool { return true } // would otherwise keep it
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"old"}, avail, "deleted groups drain unconditionally, retained or not")
+	})
+
+	t.Run("latest generation is unaffected by retained reporting false for it", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 0)
+		set(p, "fn", 2, "new", 1) // latest; retained() is never even consulted for it
+		retained := func(uid types.UID, gen int64) bool { return false }
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"old"}, avail, "latest generation keeps its retained pod regardless of retained's answer")
+	})
+}
+
+func sortedCopy(s []string) []string {
+	out := append([]string(nil), s...)
+	sort.Strings(out)
+	return out
 }
 
 // TestReserveCapacity locks the RFC-0002 ensureCapacity contract: the
