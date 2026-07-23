@@ -151,6 +151,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to register function alias reconciler: %w", err)
 	}
 
+	// RFC-0025 Phase 4: the leader-elected auto-publish controller. Same
+	// rationale for living here as the alias resolver above (a pure
+	// controller with no builder/package dependency, hosted purely because
+	// this Manager is already the single leader-elected watcher of these
+	// namespaces); it additionally needs the generated clientset because the
+	// publish engine it drives (versioning.Publish) is clientset-based, not
+	// controller-runtime-client-based.
+	if err := versioning.RegisterAutoPublishReconciler(mgr, bmLogger, fissionClient); err != nil {
+		return fmt.Errorf("unable to register function auto-publish reconciler: %w", err)
+	}
+
 	// Cross-process propagation: under dynamic tenancy keep buildermgr's resolver
 	// in step with the FissionTenant set so a runtime-onboarded namespace's
 	// Packages reach the membership predicate (and build) without a restart. The
