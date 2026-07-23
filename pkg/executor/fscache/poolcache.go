@@ -228,6 +228,19 @@ func (c *PoolCache) TouchByAddress(address string) error {
 // groups are unaffected by retained — a function whose CR was removed always
 // drains, alias-referenced or not. Pass nil to keep the pre-RFC-0025 behaviour
 // (every non-latest generation forced to svcRetain=0).
+//
+// Retention is asymmetric between the latest and a retained-non-latest
+// generation, and deliberately so. The latest generation's svcRetain is left
+// exactly as configured (RetainPods, possibly 0): it sits on the router's
+// live traffic path, so it self-warms — losing every pod costs one cold
+// start, then real requests refill it. A retained-but-non-latest generation
+// has NO organic traffic (the alias moved away from it), so its configured
+// svcRetain is never re-achieved once drained to 0 — a zero floor there is
+// not "less warm," it is a guaranteed cold start on the very next rollback,
+// defeating the RFC's headline promise for every function left at the CLI's
+// RetainPods=0 default. Flooring a retained-non-latest generation's
+// svcRetain at 1 keeps exactly one pod alive as insurance against that,
+// without overriding an explicit RetainPods > 1 the operator configured.
 func (c *PoolCache) ListAvailableValue(retained func(uid types.UID, gen int64) bool) []*FuncSvc {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -255,8 +268,15 @@ func (c *PoolCache) ListAvailableValue(retained func(uid types.UID, gen int64) b
 		// nothing left to serve.
 		isLatest := latestFuncGen[key1.UID] == key1.Generation
 		isRetained := retained != nil && retained(key1.UID, key1.Generation)
-		if (!isLatest && !isRetained) || values.deleted {
+		switch {
+		case values.deleted:
 			svcRetain = 0
+		case !isLatest && !isRetained:
+			svcRetain = 0
+		case !isLatest && isRetained && svcRetain < 1:
+			// See the asymmetry note above: floor at one warm pod, never lower
+			// a larger explicitly-configured RetainPods.
+			svcRetain = 1
 		}
 		svcCleanQuota := len(values.svcs) - svcRetain
 		if svcCleanQuota <= 0 {

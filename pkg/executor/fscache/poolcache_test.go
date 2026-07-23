@@ -372,6 +372,52 @@ func TestListAvailableValue_RetainSemantics(t *testing.T) {
 		avail := names(p.ListAvailableValue(retained))
 		assert.Equal(t, []string{"old"}, avail, "latest generation keeps its retained pod regardless of retained's answer")
 	})
+
+	// The following scenarios lock the "floor at one warm pod" fix: a
+	// retained-non-latest generation has no organic traffic to re-warm it
+	// (the alias moved away), so svcRetain=0 there is not "less warm" — it is
+	// a guaranteed cold start on the very next rollback. The latest
+	// generation is deliberately NOT floored (it self-warms from live
+	// traffic), and deleted always overrides the floor.
+
+	t.Run("retained non-latest with svcRetain=0 floors to one kept pod, rest reaped", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old-1", 0) // non-latest, RetainPods=0 (CLI default), alias-retained
+		set(p, "fn", 1, "old-2", 0)
+		set(p, "fn", 2, "new", 1) // latest, retain == its own svc count so it stays silent in this assertion
+		retained := func(uid types.UID, gen int64) bool { return uid == "fn" && gen == 1 }
+		avail := p.ListAvailableValue(retained)
+		require.Len(t, avail, 1, "svcRetain floors to 1, so exactly one of the two pods is reapable")
+		assert.Contains(t, []string{"old-1", "old-2"}, avail[0].Name, "the kept-vs-reaped pod is the retained (gen 1) group, not the latest")
+	})
+
+	t.Run("retained non-latest with svcRetain=2 keeps both, floor is a no-op", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old-1", 2) // non-latest, explicit RetainPods=2, alias-retained
+		set(p, "fn", 1, "old-2", 2)
+		set(p, "fn", 2, "new", 1) // latest, stays silent
+		retained := func(uid types.UID, gen int64) bool { return uid == "fn" && gen == 1 }
+		avail := names(p.ListAvailableValue(retained))
+		assert.Empty(t, avail, "an explicit RetainPods above the floor is never lowered by it")
+	})
+
+	t.Run("latest generation with svcRetain=0 is NOT floored: drains per idle as today", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 1) // non-latest but retained, stays silent (fully retained, 1 svc)
+		set(p, "fn", 2, "new", 0) // latest, RetainPods=0: must drain, not be floored to 1
+		retained := func(uid types.UID, gen int64) bool { return uid == "fn" && gen == 1 }
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"new"}, avail, "the floor is asymmetric: it never applies to the latest generation")
+	})
+
+	t.Run("deleted and retained with svcRetain=0 still drains: deleted overrides the floor", func(t *testing.T) {
+		p := NewPoolCache(logger)
+		set(p, "fn", 1, "old", 0)
+		p.MarkFuncDeleted(crd.CacheKeyUG{UID: "fn", Generation: 1})
+		retained := func(uid types.UID, gen int64) bool { return true } // would otherwise floor to 1
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"old"}, avail, "deleted takes priority over the retain floor, not just the retain exemption")
+	})
 }
 
 func sortedCopy(s []string) []string {
