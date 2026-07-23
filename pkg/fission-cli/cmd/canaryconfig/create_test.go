@@ -112,6 +112,23 @@ func TestCanaryCreateAliasMode(t *testing.T) {
 	assert.Equal(t, "orders-v1", got.Spec.OldFunction)
 }
 
+func TestCanaryCreateAliasModeNotPointingAtOldFuncErrors(t *testing.T) {
+	trigger := aliasTrigger("route", "prod")
+	alias := &fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v0"}, // not --oldfn
+	}
+	oldVer := newFunctionVersion("orders-v1", "orders", 1)
+	newVer := newFunctionVersion("orders-v2", "orders", 2)
+	fc := setCreateClient(trigger, alias, oldVer, newVer)
+
+	in := newCreateFlagSet("canary", "route", "orders-v2", "orders-v1")
+	require.Error(t, Create(in))
+
+	_, err := fc.CoreV1().CanaryConfigs("default").Get(t.Context(), "canary", metav1.GetOptions{})
+	assert.Error(t, err, "a rejected create must not leave a CanaryConfig behind")
+}
+
 func TestCanaryCreateAliasModeMissingAliasErrors(t *testing.T) {
 	trigger := aliasTrigger("route", "prod") // "prod" alias not seeded
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)

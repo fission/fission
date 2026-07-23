@@ -355,16 +355,20 @@ func (m *canaryConfigMgr) stepAlias(ctx context.Context, cfg *fv1.CanaryConfig, 
 
 // validateAliasRollout performs the reconcile-start checks an alias-mode
 // canary must pass before step() may touch anything (RFC-0025 plan-review
-// blocker #5): the FunctionAlias exists; cfg.Spec.NewFunction/OldFunction
-// each name a FunctionVersion belonging to the alias's function; and the
-// alias is neither digest-pinned nor spec-managed — either of which the
-// shim's writes would silently corrupt (a digest-pinned alias's success
-// write would need to clear PackageDigest, converting a GitOps content pin
-// into a name pin behind the pipeline's back; a spec-managed alias would
-// have its promotion reverted by the very next `spec apply`, per the RFC's
-// Git-ownership rule — see pkg/fission-cli/cmd/function/rollback.go's
-// identical guard). A non-empty failReason means the caller must terminate
-// the rollout Failed WITHOUT writing the alias.
+// blocker #5): the FunctionAlias exists; it is neither digest-pinned nor
+// spec-managed — either of which the shim's writes would silently corrupt (a
+// digest-pinned alias's success write would need to clear PackageDigest,
+// converting a GitOps content pin into a name pin behind the pipeline's
+// back; a spec-managed alias would have its promotion reverted by the very
+// next `spec apply`, per the RFC's Git-ownership rule — see
+// pkg/fission-cli/cmd/function/rollback.go's identical guard); the alias's
+// CURRENT Spec.Version already equals cfg.Spec.OldFunction (the RFC's "OLD
+// stays primary throughout" role mapping is a precondition, not something
+// the shim establishes — without this check the first progression write
+// would silently repoint a live alias away from its actual current target);
+// and cfg.Spec.NewFunction/OldFunction each name a FunctionVersion belonging
+// to the alias's function. A non-empty failReason means the caller must
+// terminate the rollout Failed WITHOUT writing the alias.
 //
 // Reads go through m.apiReader (uncached), matching updateHttpTriggerWithRetries's
 // rationale: an uncached read observes a concurrent edit to the alias or its
@@ -384,9 +388,24 @@ func (m *canaryConfigMgr) validateAliasRollout(ctx context.Context, cfg *fv1.Can
 		return nil, fmt.Sprintf("function alias %s is digest-pinned (packageDigest %q); alias-mode canary requires a name-pinned alias (spec.version), not a declarative digest pin",
 			aliasKey, alias.Spec.PackageDigest), nil
 	}
-	if uid, managed := alias.Annotations[specManagedAnnotation]; managed && uid != "" {
+	// Key PRESENCE marks the alias spec-managed, matching
+	// pkg/fission-cli/cmd/function/rollback.go's identical guard — a
+	// present-but-empty annotation value still means a `fission spec`
+	// deployment stamped this alias.
+	if _, managed := alias.Annotations[specManagedAnnotation]; managed {
 		return nil, fmt.Sprintf("function alias %s is managed by `fission spec` (Git); the promotion write would be reverted by the next `spec apply` — detach it from the deployment (see `fission fn rollback --detach`) before running an alias-mode canary against it",
 			aliasKey), nil
+	}
+
+	// Start-state precondition: the RFC's role mapping ("OLD stays primary
+	// throughout") only holds if the alias is ALREADY pointing at OldFunction
+	// before the rollout begins. Without this check the first progression
+	// write (rollForwardAlias, which always writes Spec.Version as
+	// cfg.Spec.OldFunction) would silently repoint a live alias away from
+	// whatever it actually currently serves.
+	if alias.Spec.Version != cfg.Spec.OldFunction {
+		return nil, fmt.Sprintf("function alias %s currently points at %q, expected OldFunction %q — repoint the alias or fix the canary spec",
+			aliasKey, alias.Spec.Version, cfg.Spec.OldFunction), nil
 	}
 
 	for _, versionName := range []string{cfg.Spec.NewFunction, cfg.Spec.OldFunction} {
