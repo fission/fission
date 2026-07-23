@@ -38,3 +38,42 @@ var autopublishTotal = metrics.Int64Counter(
 func recordAutopublish(ctx context.Context, result string) {
 	autopublishTotal.Add(ctx, 1, metric.WithAttributes(attribute.String("result", result)))
 }
+
+// Skip-reason labels for fission_versiongc_skipped_total. Bounded to these
+// two -- the only reasons SweepVersions ever skips a candidate instead of
+// deleting it (see SweepResult's doc comment).
+const (
+	versionGCSkipReasonReferenced = "referenced"
+	versionGCSkipReasonForbidden  = "forbidden"
+)
+
+// versionGCDeletedTotal counts RFC-0025 retention GC (pkg/versioning.
+// SweepVersions) FunctionVersion deletes.
+var versionGCDeletedTotal = metrics.Int64Counter(
+	"fission_versiongc_deleted_total",
+	"RFC-0025 retention GC: FunctionVersions deleted.",
+)
+
+// versionGCSkippedTotal counts RFC-0025 retention GC deletes skipped, by
+// reason (referenced|forbidden).
+var versionGCSkippedTotal = metrics.Int64Counter(
+	"fission_versiongc_skipped_total",
+	"RFC-0025 retention GC: FunctionVersion deletes skipped, by reason (referenced|forbidden).",
+)
+
+// recordVersionGCDeleted counts n retention-GC deletes (a no-op for n<=0, so
+// callers can pass a result slice's length unconditionally).
+func recordVersionGCDeleted(ctx context.Context, n int) {
+	if n <= 0 {
+		return
+	}
+	versionGCDeletedTotal.Add(ctx, int64(n))
+}
+
+// recordVersionGCSkipped counts n retention-GC skips for reason.
+func recordVersionGCSkipped(ctx context.Context, reason string, n int) {
+	if n <= 0 {
+		return
+	}
+	versionGCSkippedTotal.Add(ctx, int64(n), metric.WithAttributes(attribute.String("reason", reason)))
+}

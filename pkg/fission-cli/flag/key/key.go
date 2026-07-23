@@ -278,5 +278,8 @@ const (
 	FnRollbackDetach = "detach"
 	FnRollbackWait   = "wait"
 
+	// RFC-0025 `fission fn gc-versions`.
+	GCVersionsKeep = "keep"
+
 	DefaultSpecOutputDir = "fission-dump"
 )

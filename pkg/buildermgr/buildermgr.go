@@ -162,6 +162,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to register function auto-publish reconciler: %w", err)
 	}
 
+	// RFC-0025 Phase 4 Task 3: the leader-elected retention GC controller.
+	// Same rationale for living here as the two reconcilers above; sweeps old
+	// FunctionVersions down to each versioning-opted-in function's retain
+	// floor via the SweepVersions engine (also shared by `fission fn
+	// gc-versions`), never deleting an alias-referenced version (invariant
+	// V3; see docs/rfc/specs/aliasgc.tla).
+	if err := versioning.RegisterRetentionGCReconciler(mgr, bmLogger, fissionClient); err != nil {
+		return fmt.Errorf("unable to register function retention GC reconciler: %w", err)
+	}
+
 	// Cross-process propagation: under dynamic tenancy keep buildermgr's resolver
 	// in step with the FissionTenant set so a runtime-onboarded namespace's
 	// Packages reach the membership predicate (and build) without a restart. The
