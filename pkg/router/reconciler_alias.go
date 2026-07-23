@@ -78,9 +78,9 @@ func (r *functionVersionReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.client.Get(ctx, req.NamespacedName, v); err != nil {
 		if apierrors.IsNotFound(err) {
 			// FunctionVersion carries no function name once deleted; the
-			// route is found by namespace+suffix (the version CR's own name).
-			r.ts.deleteVersionIncremental(req.Namespace, req.Name)
-			return ctrl.Result{}, nil
+			// route is found by namespace+suffix (the version CR's own name),
+			// scoped to whichever function still actually owns that suffix.
+			return ctrl.Result{}, r.ts.deleteVersionIncremental(ctx, req.Namespace, req.Name)
 		}
 		return ctrl.Result{}, err
 	}

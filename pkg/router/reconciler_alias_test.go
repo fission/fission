@@ -414,3 +414,66 @@ func TestInternalAliasRouteWeightChangeIsHandlerSwapped(t *testing.T) {
 	assert.Same(t, before.Handler, after.Handler, "still an atomic swap, not a new route")
 	assert.NotEqual(t, before.FunctionGen, after.FunctionGen, "the weight edit must be visible in the change-detection value")
 }
+
+// hasInternalRoute reports whether the table currently materializes an
+// internal route at (ns, fnName, suffix).
+func hasInternalRoute(ts *HTTPTriggerSet, ns, fnName, suffix string) bool {
+	for _, s := range ts.routeTable.InternalSnapshot() {
+		if s.Key.Namespace == ns && s.Key.Name == fnName && s.Key.Suffix == suffix {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision is the fix
+// for the reviewer-flagged Important defect: an alias named "hello-v1" for
+// function "world" and a FunctionVersion literally named "hello-v1" for
+// function "hello" share the same Suffix but are DISTINCT InternalKeys
+// (different function names). Deleting the alias must remove ONLY its own
+// route (world:hello-v1) and leave function hello's own hello-v1 version
+// route untouched — the previous unscoped DeleteInternalBySuffix nuked both,
+// which self-healed only via the 60s resync (a real drift-metric increment,
+// violating the zero-drift bar). A resync run immediately after the delete
+// must find nothing left to correct.
+func TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision(t *testing.T) {
+	fnHello := incrFn("hello", "default", 1)
+	vHelloV1 := incrVersion("hello-v1", "default", "hello", fnHello.UID, 1, 1)
+	fnWorld := incrFn("world", "default", 1)
+	vWorldV1 := incrVersion("world-v1", "default", "world", fnWorld.UID, 1, 1)
+	// The alias's OWN name happens to collide with function "hello"'s
+	// "hello-v1" FunctionVersion name — allowed by the webhook, since the
+	// guard only rejects a collision with the alias's OWN function's scheme
+	// ("world-v<seq>", not "hello-v<seq>").
+	alias := incrAlias("hello-v1", "default", "world", "world-v1", 1)
+
+	ts, cl := newIncrementalTS(t, fnHello, vHelloV1, fnWorld, vWorldV1, alias)
+
+	// Seed: an initial resync establishes the fully-reconciled baseline
+	// (BOTH functions, BOTH versions, and the alias all applied once) —
+	// exactly the state production is in by the time a delete event fires,
+	// so the zero-drift assertion below isolates "did the delete alone
+	// leave the table converged" instead of also catching objects this test
+	// never separately populated.
+	_, err := ts.resync(t.Context(), true)
+	require.NoError(t, err)
+	require.True(t, hasInternalRoute(ts, "default", "hello", "hello-v1"), "precondition: function hello's version route exists")
+	require.True(t, hasInternalRoute(ts, "default", "world", "hello-v1"), "precondition: function world's alias route exists")
+
+	// Delete the ALIAS (not the version) — from the client too, matching a
+	// real DELETE event (the reconciler's Get returns NotFound and THEN
+	// calls deleteAliasIncremental; leaving the object live in the client
+	// would make the next resync re-materialize it, masking this test).
+	require.NoError(t, cl.Delete(t.Context(), alias))
+	err = ts.deleteAliasIncremental(t.Context(), types.NamespacedName{Namespace: "default", Name: "hello-v1"})
+	require.NoError(t, err)
+
+	assert.False(t, hasInternalRoute(ts, "default", "world", "hello-v1"), "the deleted alias's own route must be gone")
+	assert.True(t, hasInternalRoute(ts, "default", "hello", "hello-v1"), "function hello's UNRELATED version route must survive")
+
+	// Zero drift: the surviving route was never actually broken, so a
+	// resync immediately after must find nothing to correct.
+	drift, err := ts.resync(t.Context(), false)
+	require.NoError(t, err)
+	assert.Zero(t, drift, "the innocent function's route must not have been touched, so there is nothing to heal")
+}

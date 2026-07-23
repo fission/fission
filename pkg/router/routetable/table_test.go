@@ -292,11 +292,18 @@ func TestInternalKeySuffixIsolation(t *testing.T) {
 	require.Len(t, tbl.InternalSnapshot(), 2)
 }
 
-// TestDeleteInternalBySuffix pins the FunctionAlias/FunctionVersion DELETE
-// path: the object (and with it the function-name half of InternalKey) is
-// already gone, so cleanup can only key on namespace + suffix. Mirrors
-// DeleteTriggerByName's by-name lookup on the public side.
-func TestDeleteInternalBySuffix(t *testing.T) {
+// TestInternalKeysBySuffix pins the FunctionAlias/FunctionVersion DELETE
+// path's CANDIDATE lookup: the object (and with it the function-name half of
+// InternalKey) is already gone, so the deleted route can only be FOUND by
+// namespace + suffix — but, unlike DeleteTriggerByName's by-name lookup on
+// the public side, this must NOT itself delete: a suffix can legitimately be
+// shared across different functions in the same namespace (an alias
+// "hello-v1" on function "world" and a FunctionVersion "hello-v1" on
+// function "hello" are two independent, equally-live routes), so the method
+// only enumerates candidates — scoping which one actually orphaned is the
+// caller's job (incremental.go's deleteInternalRouteBySuffix, which Gets
+// each candidate's live claimant before deleting).
+func TestInternalKeysBySuffix(t *testing.T) {
 	tbl := New()
 	prod := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello"}, Suffix: "prod"}
 	otherFnSameSuffix := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "world"}, Suffix: "prod"}
@@ -308,16 +315,16 @@ func TestDeleteInternalBySuffix(t *testing.T) {
 	}
 	require.Len(t, tbl.InternalSnapshot(), 4)
 
-	assert.Equal(t, ShapeChanged, tbl.DeleteInternalBySuffix("default", "prod"))
-	snap := tbl.InternalSnapshot()
-	require.Len(t, snap, 2, "both default-namespace :prod routes drop, regardless of function name")
-	remaining := map[InternalKey]struct{}{}
-	for _, s := range snap {
-		remaining[s.Key] = struct{}{}
-	}
-	assert.Contains(t, remaining, otherNS, "a same-suffix route in a DIFFERENT namespace is untouched")
-	assert.Contains(t, remaining, plain, "the function's own (Suffix-less) route is untouched")
-	assert.Equal(t, NoChange, tbl.DeleteInternalBySuffix("default", "prod"))
+	got := tbl.InternalKeysBySuffix("default", "prod")
+	assert.ElementsMatch(t, []InternalKey{prod, otherFnSameSuffix}, got,
+		"both default-namespace :prod routes are candidates, regardless of function name")
+	assert.NotContains(t, got, otherNS, "a same-suffix route in a DIFFERENT namespace is not a candidate")
+	assert.NotContains(t, got, plain, "the function's own (Suffix-less) route is not a candidate")
+
+	assert.Empty(t, tbl.InternalKeysBySuffix("default", "no-such-suffix"))
+
+	// Read-only: the table must be unchanged after the lookup.
+	require.Len(t, tbl.InternalSnapshot(), 4)
 }
 
 // TestHandlerRefSwapUnderConcurrentServe drives sustained traffic through a

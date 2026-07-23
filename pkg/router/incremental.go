@@ -310,6 +310,13 @@ func internalKeyForVersion(v *fv1.FunctionVersion) routetable.InternalKey {
 // alias.Generation itself does not move (Status is a subresource write), and
 // a weight-only edit (same two targets, new split) still changes the hash
 // even though neither target's Generation moves.
+//
+// alias is the caller's snapshot while rr comes from resolveByAlias's OWN
+// fresh re-Get of the same object (applyAliasInternalRoute's doc comment) —
+// a concurrent write landing between the two reads could pair a stale
+// alias.Generation with a fresher rr; this is a narrow, self-healing race
+// (any subsequent event, or the periodic resync, re-applies with both reads
+// fresh), not a correctness bug worth synchronizing against.
 func aliasRouteGeneration(alias *fv1.FunctionAlias, rr *resolveResult) int64 {
 	h := fnv.New64a()
 	var buf [8]byte
@@ -347,6 +354,7 @@ func (ts *HTTPTriggerSet) applyAliasInternalRoute(ctx context.Context, alias *fv
 			// Not resolved (or no longer resolves): drop any stale route
 			// from a prior resolution.
 			res := ts.routeTable.DeleteFunction(key)
+			routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "rejected")))
 			if res == routetable.ShapeChanged {
 				ts.signalMaterialize()
 			}
@@ -363,6 +371,7 @@ func (ts *HTTPTriggerSet) applyAliasInternalRoute(ctx context.Context, alias *fv
 	res := ts.routeTable.ApplyFunction(key, aliasRouteGeneration(alias, rr), func() http.Handler {
 		return ts.buildInternalAliasHandler(alias.Name, rr, fnTimeout)
 	})
+	routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res.String())))
 	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
 	}
@@ -381,17 +390,81 @@ func (ts *HTTPTriggerSet) applyAliasIncremental(ctx context.Context, alias *fv1.
 	return res, errors.Join(err, cascadeErr)
 }
 
+// suffixStillClaimed reports whether the internal route at key is still
+// claimed by a live FunctionAlias or FunctionVersion named key.Suffix
+// belonging to key.Name (the function that InternalKey addresses) — the
+// scoping check deleteInternalRouteBySuffix needs before removing a
+// candidate: a suffix name can be shared across DIFFERENT functions (an
+// alias "hello-v1" on function "world" and a FunctionVersion "hello-v1" on
+// function "hello" are both valid, independent routes), so a delete event for
+// one must not remove the other's still-live route. In practice at most one
+// of the two Gets below can hit for a well-formed object (the FunctionAlias
+// webhook's aliasNameShadowsVersionScheme rejects an alias colliding with
+// ITS OWN function's version scheme), but both are checked defensively.
+func (ts *HTTPTriggerSet) suffixStillClaimed(ctx context.Context, key routetable.InternalKey) (bool, error) {
+	nsName := types.NamespacedName{Namespace: key.Namespace, Name: key.Suffix}
+
+	alias := &fv1.FunctionAlias{}
+	switch err := ts.client.Get(ctx, nsName, alias); {
+	case err == nil:
+		return alias.Spec.FunctionName == key.Name, nil
+	case !apierrors.IsNotFound(err):
+		return false, err
+	}
+
+	v := &fv1.FunctionVersion{}
+	switch err := ts.client.Get(ctx, nsName, v); {
+	case err == nil:
+		return v.Spec.FunctionName == key.Name, nil
+	case !apierrors.IsNotFound(err):
+		return false, err
+	}
+
+	return false, nil
+}
+
+// deleteInternalRouteBySuffix removes exactly the internal route(s) at
+// (namespace, suffix) no longer claimed by ANY live FunctionAlias/
+// FunctionVersion for that candidate's OWN function — the delete-path
+// counterpart to applyAliasInternalRoute/applyVersionIncremental, and the fix
+// for the unscoped DeleteInternalBySuffix bug it replaces: deleting alias
+// "hello-v1" (function "world") must not also remove function "hello"'s own
+// "hello-v1" FunctionVersion route. Per-candidate Gets are acceptable here —
+// deletes are rare, human- or GC-driven events, and InternalKeysBySuffix's
+// candidate set is at most one entry per function sharing the suffix name.
+func (ts *HTTPTriggerSet) deleteInternalRouteBySuffix(ctx context.Context, namespace, suffix string) (routetable.ApplyResult, error) {
+	res := routetable.NoChange
+	var errs error
+	for _, key := range ts.routeTable.InternalKeysBySuffix(namespace, suffix) {
+		claimed, err := ts.suffixStillClaimed(ctx, key)
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if claimed {
+			continue
+		}
+		if ts.routeTable.DeleteFunction(key) == routetable.ShapeChanged {
+			res = routetable.ShapeChanged
+		}
+	}
+	return res, errs
+}
+
 // deleteAliasIncremental handles a FunctionAlias deletion event: removes its
 // materialized `:<alias>` internal route (found by namespace+suffix — the
-// alias object, and with it its target function's name, is already gone) and
-// cascades to its triggers, which re-resolve, fail with errFunctionNotFound,
-// and drop their routes via the existing unresolved path.
+// alias object, and with it its target function's name, is already gone —
+// then scoped to THIS function via deleteInternalRouteBySuffix) and cascades
+// to its triggers, which re-resolve, fail with errFunctionNotFound, and drop
+// their routes via the existing unresolved path.
 func (ts *HTTPTriggerSet) deleteAliasIncremental(ctx context.Context, key types.NamespacedName) error {
-	if ts.routeTable.DeleteInternalBySuffix(key.Namespace, key.Name) == routetable.ShapeChanged {
+	res, err := ts.deleteInternalRouteBySuffix(ctx, key.Namespace, key.Name)
+	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
 		ts.updateRoutesGauge()
 	}
-	return ts.reapplyTriggersForAlias(ctx, key)
+	cascadeErr := ts.reapplyTriggersForAlias(ctx, key)
+	return errors.Join(err, cascadeErr)
 }
 
 // applyVersionIncremental upserts (or, if the live function is gone, drops)
@@ -406,6 +479,7 @@ func (ts *HTTPTriggerSet) applyVersionIncremental(ctx context.Context, v *fv1.Fu
 	if err != nil {
 		if errors.Is(err, errFunctionNotFound) {
 			res := ts.routeTable.DeleteFunction(key)
+			routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "rejected")))
 			if res == routetable.ShapeChanged {
 				ts.signalMaterialize()
 			}
@@ -419,6 +493,7 @@ func (ts *HTTPTriggerSet) applyVersionIncremental(ctx context.Context, v *fv1.Fu
 	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
+	routeTableApplies.Add(ctx, 1, metric.WithAttributes(attribute.String("result", res.String())))
 	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
 	}
@@ -428,12 +503,15 @@ func (ts *HTTPTriggerSet) applyVersionIncremental(ctx context.Context, v *fv1.Fu
 
 // deleteVersionIncremental removes a deleted FunctionVersion's `:<version>`
 // internal route, found by namespace+suffix (the version object, and with it
-// its function's name, is already gone).
-func (ts *HTTPTriggerSet) deleteVersionIncremental(namespace, name string) {
-	if ts.routeTable.DeleteInternalBySuffix(namespace, name) == routetable.ShapeChanged {
+// its function's name, is already gone — then scoped to THIS function via
+// deleteInternalRouteBySuffix).
+func (ts *HTTPTriggerSet) deleteVersionIncremental(ctx context.Context, namespace, name string) error {
+	res, err := ts.deleteInternalRouteBySuffix(ctx, namespace, name)
+	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
 		ts.updateRoutesGauge()
 	}
+	return err
 }
 
 // signalMaterialize requests a debounced mux rebuild on the
