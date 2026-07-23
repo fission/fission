@@ -153,10 +153,10 @@ func TestAliasRepointIsHandlerSwapOnlyZeroDrift(t *testing.T) {
 
 	after := internalSpecFor(t, ts, "default", "hello", "prod")
 	assert.Same(t, before.Handler, after.Handler, "the HandlerRef identity is stable across a repoint (atomic swap, not a new route)")
-	// FunctionGen is now aliasRouteGeneration's hash (folds alias.Generation +
+	// Revision is now aliasRouteGeneration's hash (folds alias.Generation +
 	// every resolved target's Generation), not a literal Generation value —
 	// it must simply have MOVED, proving the swap actually picked up v2.
-	assert.NotEqual(t, before.FunctionGen, after.FunctionGen, "the SAME ref now serves the v2 target")
+	assert.NotEqual(t, before.Revision, after.Revision, "the SAME ref now serves the v2 target")
 
 	// Zero-drift: a resync pass immediately after must find nothing to
 	// correct.
@@ -412,7 +412,7 @@ func TestInternalAliasRouteWeightChangeIsHandlerSwapped(t *testing.T) {
 
 	after := internalSpecFor(t, ts, "default", "hello", "prod")
 	assert.Same(t, before.Handler, after.Handler, "still an atomic swap, not a new route")
-	assert.NotEqual(t, before.FunctionGen, after.FunctionGen, "the weight edit must be visible in the change-detection value")
+	assert.NotEqual(t, before.Revision, after.Revision, "the weight edit must be visible in the change-detection value")
 }
 
 // hasInternalRoute reports whether the table currently materializes an

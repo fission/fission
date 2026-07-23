@@ -39,15 +39,6 @@ type failurePercentageGetter interface {
 	GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcVersion, funcNs, window string) (float64, error)
 }
 
-// specManagedAnnotation is the `fission spec` (GitOps) deployment-UID
-// annotation key that marks a FunctionAlias as owned by a Git-tracked
-// manifest. Duplicated here as a literal rather than importing
-// pkg/fission-cli/cmd/spec.FISSION_DEPLOYMENT_UID_KEY: that package pulls in
-// the CLI's cobra/cliwrapper dependency tree, which fission-bundle's canary
-// server must not link. Mirrors the same guard in
-// pkg/fission-cli/cmd/function/rollback.go.
-const specManagedAnnotation = "fission-uid"
-
 // setCanaryConfigConditions mirrors the bare Status string onto the standard
 // Progressing/Ready conditions so `kubectl wait --for=condition=Ready
 // canaryconfig/<name>` works alongside the legacy status. The mapping matches
@@ -392,7 +383,7 @@ func (m *canaryConfigMgr) validateAliasRollout(ctx context.Context, cfg *fv1.Can
 	// pkg/fission-cli/cmd/function/rollback.go's identical guard — a
 	// present-but-empty annotation value still means a `fission spec`
 	// deployment stamped this alias.
-	if _, managed := alias.Annotations[specManagedAnnotation]; managed {
+	if _, managed := alias.Annotations[fv1.SpecDeploymentUIDAnnotation]; managed {
 		return nil, fmt.Sprintf("function alias %s is managed by `fission spec` (Git); the promotion write would be reverted by the next `spec apply` — detach it from the deployment (see `fission fn rollback --detach`) before running an alias-mode canary against it",
 			aliasKey), nil
 	}

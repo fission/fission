@@ -148,9 +148,12 @@ type InternalKey struct {
 // so it never shape-changes in place — only insert and delete touch the
 // internal mux.
 type InternalSpec struct {
-	Key         InternalKey
-	FunctionGen int64
-	Handler     *HandlerRef
+	Key InternalKey
+	// Revision is any value whose change means the handler must be rebuilt —
+	// the live Function's Generation for plain internal routes, a derived
+	// identity hash for alias/version routes.
+	Revision int64
+	Handler  *HandlerRef
 }
 
 // ApplyResult tells the caller what an apply did — and therefore what it
@@ -315,24 +318,25 @@ func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
 // route (RFC-0025, from the alias/version reconcilers) — both share this one
 // insert/swap/delete contract, so an alias repoint is exactly the same
 // HandlerSwapped path a function spec change already takes. Insert is a
-// ShapeChanged (the internal mux gains the route pair); a generation change
-// (gen is the resolved backend Function's Generation — see
-// versioning.VersionedFunction, which makes each distinct
-// FunctionVersion's Generation unique) is a pure handler swap; same
-// generation is NoChange.
-func (t *Table) ApplyFunction(key InternalKey, gen int64, build func() http.Handler) ApplyResult {
+// ShapeChanged (the internal mux gains the route pair); a revision change
+// (revision is any value whose change means the handler must be rebuilt —
+// the live Function's Generation for plain internal routes, a derived
+// identity hash for alias/version routes; see versioning.VersionedFunction,
+// which makes each distinct FunctionVersion's Generation unique) is a pure
+// handler swap; same revision is NoChange.
+func (t *Table) ApplyFunction(key InternalKey, revision int64, build func() http.Handler) ApplyResult {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	old, ok := t.internal[key]
 	if !ok {
-		t.internal[key] = &InternalSpec{Key: key, FunctionGen: gen, Handler: NewHandlerRef(build())}
+		t.internal[key] = &InternalSpec{Key: key, Revision: revision, Handler: NewHandlerRef(build())}
 		return ShapeChanged
 	}
-	if old.FunctionGen == gen {
+	if old.Revision == revision {
 		return NoChange
 	}
 	old.Handler.Swap(build())
-	old.FunctionGen = gen
+	old.Revision = revision
 	return HandlerSwapped
 }
 

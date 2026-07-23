@@ -278,6 +278,18 @@ const (
 	VersionFunctionUIDLabel  = "fission.io/function-uid"
 )
 
+// SpecDeploymentUIDAnnotation and SpecDeploymentNameAnnotation are written by
+// `fission spec apply` to mark spec-managed objects: control-plane components
+// treat their presence as Git ownership of the object. This is a
+// control-plane contract, not just a CLI implementation detail — both
+// canaryconfigmgr (treats a spec-managed FunctionAlias as ineligible for a
+// canary rollout) and the `fission function rollback` gate (refuses to
+// repoint a spec-managed alias without --detach) key off the annotation.
+const (
+	SpecDeploymentUIDAnnotation  = "fission-uid"
+	SpecDeploymentNameAnnotation = "fission-name"
+)
+
 const (
 	ANNOTATION_SVC_HOST = "svcHost"
 )

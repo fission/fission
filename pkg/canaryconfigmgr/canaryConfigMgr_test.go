@@ -543,7 +543,7 @@ func TestStepAlias(t *testing.T) {
 
 	t.Run("spec-managed alias is refused and never written", func(t *testing.T) {
 		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(30, 10)
-		alias.Annotations = map[string]string{specManagedAnnotation: "some-deploy-uid"}
+		alias.Annotations = map[string]string{fv1.SpecDeploymentUIDAnnotation: "some-deploy-uid"}
 		wantSpec := alias.Spec
 		mgr, _, c := newTestEnv(&fakeFailureClient{}, trigger, cc, alias, oldVer, newVer)
 
@@ -561,7 +561,7 @@ func TestStepAlias(t *testing.T) {
 		// pkg/fission-cli/cmd/function/rollback.go's guard — an empty value is
 		// still a `fission spec` stamp.
 		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(30, 10)
-		alias.Annotations = map[string]string{specManagedAnnotation: ""}
+		alias.Annotations = map[string]string{fv1.SpecDeploymentUIDAnnotation: ""}
 		wantSpec := alias.Spec
 		mgr, _, c := newTestEnv(&fakeFailureClient{}, trigger, cc, alias, oldVer, newVer)
 
