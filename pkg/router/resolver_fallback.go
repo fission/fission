@@ -74,7 +74,10 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function, sticky
 		return f.executor.Resolve(ctx, fn, stickyKey)
 	}
 
-	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod(), stickyKey)
+	// version "" -- the router does not yet resolve a specific
+	// FunctionVersion to route to (RFC-0025 phase 3+); until then every
+	// function's pool lives at the unversioned FnKey.
+	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, "", fn.GetRequestPerPod(), stickyKey)
 	if admit == endpointcache.Admitted {
 		endpointcache.RecordHit()
 		return ResolvedEntry{SvcURL: ep.URL, FromCache: true, Release: release}, nil
@@ -146,7 +149,7 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 		// address the executor knows, not the pod IP. Any inadmissible state
 		// (e.g. every endpoint quarantined) keeps the VIP entry, which still
 		// works.
-		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32, stickyKey)
+		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, "", math.MaxInt32, stickyKey)
 		if admit == endpointcache.Admitted {
 			// Counted separately from hits: the Service entry above may have
 			// cost an executor RPC, so this is NOT a "zero-RPC" hit — it is an

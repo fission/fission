@@ -52,11 +52,17 @@ type dialStrike struct {
 }
 
 type (
-	// FnKey identifies a function by its CR coordinates (the labels mirrored
-	// from the function's Service onto its slices).
+	// FnKey identifies a function by its CR coordinates plus, when present,
+	// the RFC-0025 published version it was specialized for (the labels
+	// mirrored from the function's Service onto its slices). Version is ""
+	// for the unversioned (live-spec) pool -- today's only pool, until phase
+	// 3 starts stamping fission.io/function-version on Function objects --
+	// so two versions of one function occupy distinct FnKeys and therefore
+	// distinct, independently addressable warm pools.
 	FnKey struct {
 		Namespace string
 		Name      string
+		Version   string
 	}
 
 	// Endpoint is one slice endpoint, pre-resolved to a dialable address.
@@ -142,6 +148,10 @@ func (ix *Index) shard(key FnKey) *indexShard {
 	for i := 0; i < len(key.Name); i++ {
 		h = (h ^ uint32(key.Name[i])) * 16777619
 	}
+	h = (h ^ uint32('/')) * 16777619
+	for i := 0; i < len(key.Version); i++ {
+		h = (h ^ uint32(key.Version[i])) * 16777619
+	}
 	return &ix.shards[h%shardCount]
 }
 
@@ -181,14 +191,17 @@ func (ix *Index) Size() int {
 
 // fnKeyForSlice maps a slice to its function via the labels the EndpointSlice
 // controller mirrors from the function's Service. ok=false for slices that do
-// not carry function labels (not Fission-managed).
+// not carry function labels (not Fission-managed). Version comes from the
+// same mirrored fission.io/function-version label, "" when the Service (and
+// so the slice) carries none -- the unversioned pool.
 func fnKeyForSlice(es *discoveryv1.EndpointSlice) (FnKey, bool) {
 	name := es.Labels[fv1.FUNCTION_NAME]
 	namespace := es.Labels[fv1.FUNCTION_NAMESPACE]
 	if name == "" || namespace == "" {
 		return FnKey{}, false
 	}
-	return FnKey{Namespace: namespace, Name: name}, true
+	version := es.Labels[fv1.FUNCTION_VERSION]
+	return FnKey{Namespace: namespace, Name: name, Version: version}, true
 }
 
 // endpointsFromSlice flattens one slice into Endpoints. The port is taken from
@@ -386,11 +399,17 @@ func hrwScore(key, address string) uint64 {
 // over-admission is (replicas-1)×requestsPerPod per pod, degrading to brief
 // queueing at the pod. Functions needing exact global accounting use the
 // strict-mode annotation, which bypasses this path entirely.
-func (ix *Index) Admit(namespace, name string, requestsPerPod int, stickyKey string) (Endpoint, func(), AdmitResult) {
+//
+// version selects which of a function's warm pools to admit from (RFC-0025):
+// "" is the unversioned (live-spec) pool, today's only pool until phase 3
+// starts stamping fission.io/function-version. A non-empty version admits
+// only from that version's own FnKey entry -- it never falls back to, or
+// bleeds into, another version's endpoints.
+func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stickyKey string) (Endpoint, func(), AdmitResult) {
 	if requestsPerPod <= 0 {
 		requestsPerPod = 1
 	}
-	key := FnKey{Namespace: namespace, Name: name}
+	key := FnKey{Namespace: namespace, Name: name, Version: version}
 	s := ix.shard(key)
 	s.mu.RLock()
 	e, ok := s.m[key]

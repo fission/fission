@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -81,19 +83,54 @@ func functionServicesEnabled() bool {
 // every ensure).
 var warnBadGateOnce sync.Once
 
+// versionSuffixPattern matches the "-v<seq>" tail of a FunctionVersion's
+// name (minted as "<fn>-v<sequence>" by versioning.Publish).
+var versionSuffixPattern = regexp.MustCompile(`-v[0-9]+$`)
+
+// versionServiceSuffix derives the bounded suffix functionServiceName adds
+// for a published version: the version label's own "-v<seq>" tail when it
+// matches the expected shape, or a short deterministic hash-derived
+// fallback otherwise -- so a version label that (by bug or hand-edit)
+// doesn't end in "-v<seq>" can never blow the Service name's 63-char budget
+// open-ended. Either way the result is a handful of bytes, bounded
+// independent of the label's own length.
+func versionServiceSuffix(versionLabel string) string {
+	if m := versionSuffixPattern.FindString(versionLabel); m != "" {
+		return m
+	}
+	h := sha256.Sum256([]byte(versionLabel))
+	return "-v" + hex.EncodeToString(h[:])[:8]
+}
+
 // functionServiceName returns the deterministic name of a function's headless
 // Service (RFC-0002): fn-<name>-<uid8>, truncated to fit the 63-char Service
 // name limit. uid8 is the first 8 hex chars of sha256(uid) so the name stays
 // stable for the function's lifetime and unique across delete/recreate.
+//
+// A versioned Function (fv1.FUNCTION_VERSION label present, RFC-0025) gets
+// its own Service, distinguishable from the unversioned one and from every
+// other version's: fn-<name>-<uid8>-<versionSuffix>, where versionSuffix is
+// the bounded tail from versionServiceSuffix. name is truncated as needed to
+// keep the whole name within 63 chars regardless of how long that suffix is.
 func functionServiceName(fn *fv1.Function) string {
 	h := sha256.Sum256([]byte(fn.UID))
 	uid8 := hex.EncodeToString(h[:])[:8]
+
+	suffix := ""
+	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
+		suffix = versionServiceSuffix(v)
+	}
+
 	name := fn.Name
-	// "fn-" + name + "-" + uid8 must fit in 63 chars.
-	if max := 63 - len("fn-") - len("-")*1 - len(uid8); len(name) > max {
+	// "fn-" + name + "-" + uid8 + suffix must fit in 63 chars.
+	overhead := len("fn-") + len("-") + len(uid8) + len(suffix)
+	if max := 63 - overhead; len(name) > max {
+		if max < 0 {
+			max = 0
+		}
 		name = name[:max]
 	}
-	return fmt.Sprintf("fn-%s-%s", name, uid8)
+	return fmt.Sprintf("fn-%s-%s%s", name, uid8, suffix)
 }
 
 // functionServiceSelector matches exactly the pods specialized for this
@@ -101,12 +138,21 @@ func functionServiceName(fn *fv1.Function) string {
 // (RFC-0002): the fission.io/served gate keeps relabeled-but-unspecialized
 // pods out of the EndpointSlices, and the generation label keeps
 // stale-generation pods out after a function update.
+//
+// FUNCTION_VERSION is added when fn carries it: belt-and-braces alongside
+// FUNCTION_GENERATION, which already uniquely maps to the version (see
+// versioning.VersionedFunction's invariant) -- adding it too keeps the
+// Service/pod selector self-describing without changing what it matches.
 func functionServiceSelector(fn *fv1.Function) map[string]string {
-	return map[string]string{
+	sel := map[string]string{
 		fv1.FUNCTION_UID:        string(fn.UID),
 		fv1.FUNCTION_GENERATION: strconv.FormatInt(fn.Generation, 10),
 		fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
 	}
+	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
+		sel[fv1.FUNCTION_VERSION] = v
+	}
+	return sel
 }
 
 // ensureFunctionService idempotently creates (or updates the selector of) the
@@ -123,17 +169,25 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	name := functionServiceName(fn)
 	selector := functionServiceSelector(fn)
 
+	labels := map[string]string{
+		fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
+		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypePoolmgr),
+		fv1.FUNCTION_NAME:      fn.Name,
+		fv1.FUNCTION_NAMESPACE: fn.Namespace,
+		fv1.FUNCTION_UID:       string(fn.UID),
+	}
+	// Mirrored by the built-in EndpointSlice controller onto every slice
+	// this Service owns, which is where fnKeyForSlice (endpointcache) reads
+	// it back to key the router's per-version endpoint index entry.
+	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
+		labels[fv1.FUNCTION_VERSION] = v
+	}
+
 	desired := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
-			Labels: map[string]string{
-				fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
-				fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypePoolmgr),
-				fv1.FUNCTION_NAME:      fn.Name,
-				fv1.FUNCTION_NAMESPACE: fn.Namespace,
-				fv1.FUNCTION_UID:       string(fn.UID),
-			},
+			Labels:    labels,
 			Annotations: map[string]string{
 				fv1.EXECUTOR_INSTANCEID_LABEL: gpm.instanceID,
 			},
@@ -200,29 +254,43 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 }
 
 // fnSvcEnsureDebounce bounds how often maybeEnsureFunctionService re-runs the
-// (read-mostly) ensure per function.
+// (read-mostly) ensure per function (per version -- see fnSvcEnsureKey).
 const fnSvcEnsureDebounce = 30 * time.Second
+
+// fnSvcEnsureKey is the gpm.fnSvcEnsured debounce key: the function UID plus
+// its version label, so ensuring one version's Service has its own debounce
+// window independent of any other version's. Without this, keying on UID
+// alone meant a v2 ensure arriving inside v1's 30s debounce window was
+// silently skipped -- starving v2's Service creation entirely as long as v1
+// traffic kept re-triggering the shared UID entry. An unversioned Function
+// (no FUNCTION_VERSION label) gets the bare "<uid>/" key, equivalent to
+// today's UID-only behavior.
+func fnSvcEnsureKey(fn *fv1.Function) string {
+	return string(fn.UID) + "/" + fn.Labels[fv1.FUNCTION_VERSION]
+}
 
 // maybeEnsureFunctionService fires an async, debounced ensure of the
 // function's headless Service. Called from both the cold-start path (first
 // creation) and the warm RPC cache-hit path: the latter is the self-healing
 // loop — a lost ensure (executor rolled mid-flight) leaves the function
 // without slices, which routes all its traffic through the RPC path, which
-// re-triggers the ensure here. Debounced per function UID so steady-state
-// traffic adds no API reads; skipped for OnceOnly functions, whose pods serve
-// exactly one request and must never be admitted from slices.
+// re-triggers the ensure here. Debounced per (function UID, version) --see
+// fnSvcEnsureKey -- so steady-state traffic adds no API reads; skipped for
+// OnceOnly functions, whose pods serve exactly one request and must never be
+// admitted from slices.
 func (gpm *GenericPoolManager) maybeEnsureFunctionService(fn *fv1.Function) {
 	if !gpm.functionServicesEnabled || fn.Spec.OnceOnly {
 		return
 	}
-	if v, ok := gpm.fnSvcEnsured.Load(fn.UID); ok {
+	key := fnSvcEnsureKey(fn)
+	if v, ok := gpm.fnSvcEnsured.Load(key); ok {
 		if last, ok := v.(time.Time); ok && time.Since(last) < fnSvcEnsureDebounce {
 			return
 		}
 	}
 	// Optimistic stamp dedups concurrent triggers; the failure path below
 	// removes it so the next request retries immediately.
-	gpm.fnSvcEnsured.Store(fn.UID, time.Now())
+	gpm.fnSvcEnsured.Store(key, time.Now())
 	go gpm.ensureFunctionServiceAsync(fn)
 }
 
@@ -241,22 +309,40 @@ func (gpm *GenericPoolManager) ensureFunctionServiceAsync(fn *fv1.Function) {
 	gpm.logger.V(1).Info("retrying function service ensure", "function", fn.Name, "namespace", fn.Namespace, "error", err.Error())
 	time.Sleep(2 * time.Second)
 	if err := gpm.ensureFunctionService(ctx, fn); err != nil {
-		gpm.fnSvcEnsured.Delete(fn.UID)
+		gpm.fnSvcEnsured.Delete(fnSvcEnsureKey(fn))
 		metrics.RecordFunctionServiceEnsure(ctx, "error")
 		gpm.logger.Error(err, "failed to ensure function service; warm-path endpoint discovery degrades to executor RPC for this function",
 			"function", fn.Name, "namespace", fn.Namespace)
 	}
 }
 
-// deleteFunctionService removes the function's headless Service. Idempotent (a
-// missing Service is success). Driven by the Function reconciler on delete —
-// the owner reference covers same-namespace installs, this covers
-// cross-namespace ones and keeps both paths symmetric.
+// deleteFunctionService removes every headless Service the executor created
+// for this function -- the unversioned one plus every per-version one
+// (RFC-0025). Idempotent (no matching Services is success). Driven by the
+// Function reconciler on delete — the owner reference covers same-namespace
+// installs, this covers cross-namespace ones and keeps both paths symmetric.
+//
+// Lists by the labels actually stamped in ensureFunctionService
+// (FUNCTION_UID + MANAGED_BY_LABEL) rather than deleting the single
+// unversioned functionServiceName(fn): a versioned Function has one Service
+// per published version, each with its own name, and deleting only the
+// unversioned name orphaned every one of them.
 func (gpm *GenericPoolManager) deleteFunctionService(ctx context.Context, fn *fv1.Function) error {
 	ns := gpm.nsResolver.GetFunctionNS(fn.Namespace)
-	err := gpm.kubernetesClient.CoreV1().Services(ns).Delete(ctx, functionServiceName(fn), metav1.DeleteOptions{})
-	if err != nil && !kerrors.IsNotFound(err) {
+	selector := labels.SelectorFromSet(labels.Set{
+		fv1.FUNCTION_UID:     string(fn.UID),
+		fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+		fv1.EXECUTOR_TYPE:    string(fv1.ExecutorTypePoolmgr),
+	}).String()
+	svcs, err := gpm.kubernetesClient.CoreV1().Services(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
 		return err
+	}
+	for i := range svcs.Items {
+		name := svcs.Items[i].Name
+		if err := gpm.kubernetesClient.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {
+			return err
+		}
 	}
 	return nil
 }

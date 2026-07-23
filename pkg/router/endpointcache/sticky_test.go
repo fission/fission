@@ -26,7 +26,7 @@ import (
 func admitOnce(t interface{ Fatalf(string, ...any) }, ix *Index, keys []string) map[string]string {
 	got := make(map[string]string, len(keys))
 	for _, k := range keys {
-		ep, release, res := ix.Admit("default", "fn-a", 100, k)
+		ep, release, res := ix.Admit("default", "fn-a", "", 100, k)
 		if res != Admitted {
 			t.Fatalf("Admit(%q) = %v", k, res)
 		}
@@ -112,7 +112,7 @@ func TestStickyDistributionBalance(t *testing.T) {
 
 		counts := map[string]int{}
 		for i := range nKeys {
-			ep, release, res := ix.Admit("default", "fn-a", nKeys, fmt.Sprintf("bal-%05d", i))
+			ep, release, res := ix.Admit("default", "fn-a", "", nKeys, fmt.Sprintf("bal-%05d", i))
 			require.Equal(t, Admitted, res)
 			release()
 			counts[ep.Address]++
@@ -134,21 +134,21 @@ func TestStickySaturationOverflow(t *testing.T) {
 	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
 
 	const key = "session-owner"
-	ep1, release1, res := ix.Admit("default", "fn-a", 1, key)
+	ep1, release1, res := ix.Admit("default", "fn-a", "", 1, key)
 	require.Equal(t, Admitted, res)
 
 	// Same key while its owner is at capacity: the OTHER pod admits.
-	ep2, release2, res := ix.Admit("default", "fn-a", 1, key)
+	ep2, release2, res := ix.Admit("default", "fn-a", "", 1, key)
 	require.Equal(t, Admitted, res)
 	assert.NotEqual(t, ep1.Address, ep2.Address, "saturated sticky target must overflow, not double-book")
 
 	// Both saturated: AllBusy, same as the default pick.
-	_, _, res = ix.Admit("default", "fn-a", 1, key)
+	_, _, res = ix.Admit("default", "fn-a", "", 1, key)
 	assert.Equal(t, AllBusy, res)
 
 	release1()
 	release2()
-	ep3, release3, res := ix.Admit("default", "fn-a", 1, key)
+	ep3, release3, res := ix.Admit("default", "fn-a", "", 1, key)
 	require.Equal(t, Admitted, res)
 	assert.Equal(t, ep1.Address, ep3.Address, "capacity restored: the key returns to its HRW owner")
 	release3()
@@ -160,9 +160,9 @@ func TestStickyEmptyKeyKeepsLeastOutstanding(t *testing.T) {
 	ix := NewIndex()
 	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
 
-	ep1, r1, res := ix.Admit("default", "fn-a", 4, "")
+	ep1, r1, res := ix.Admit("default", "fn-a", "", 4, "")
 	require.Equal(t, Admitted, res)
-	ep2, r2, res := ix.Admit("default", "fn-a", 4, "")
+	ep2, r2, res := ix.Admit("default", "fn-a", "", 4, "")
 	require.Equal(t, Admitted, res)
 	assert.NotEqual(t, ep1.Address, ep2.Address, "least-outstanding spreads load")
 	r1()
@@ -201,7 +201,7 @@ func TestStickyChurnRace(t *testing.T) {
 		wg.Go(func() {
 			for i := range 500 {
 				key := fmt.Sprintf("churn-%d-%d", w, i%17)
-				_, release, res := ix.Admit("default", "fn-a", 100, key)
+				_, release, res := ix.Admit("default", "fn-a", "", 100, key)
 				if res == Admitted {
 					release()
 				}
