@@ -77,7 +77,7 @@ type (
 		nsResolver       *utils.NamespaceResolver
 
 		fissionClient  versioned.Interface
-		functionEnv    *cache.Cache[crd.CacheKeyUR, *fv1.Environment]
+		functionEnv    *cache.Cache[crd.CacheKeyUG, *fv1.Environment]
 		fsCache        *fscache.FunctionServiceCache
 		instanceID     string
 		requestChannel chan *request
@@ -194,7 +194,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		nsResolver:                 utils.DefaultNSResolver(),
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
-		functionEnv:                cache.MakeCache[crd.CacheKeyUR, *fv1.Environment](10*time.Second, 0),
+		functionEnv:                cache.MakeCache[crd.CacheKeyUG, *fv1.Environment](10*time.Second, 0),
 		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
@@ -1032,7 +1032,12 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
-	result, err := gpm.functionEnv.Get(crd.CacheKeyURFromMeta(&fn.ObjectMeta))
+	// Keyed on UID+Generation, not ResourceVersion (see #3596): the
+	// function's environment reference only changes on a spec update, so
+	// keying on RV (which also moves on status-only writes) would miss
+	// this cache on every status update and re-fetch the environment for
+	// no reason.
+	result, err := gpm.functionEnv.Get(crd.CacheKeyUGFromMeta(&fn.ObjectMeta))
 	if err == nil {
 		return result, nil
 	}
@@ -1049,7 +1054,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// cache for future lookups
 	m := fn.ObjectMeta
-	_, err = gpm.functionEnv.Set(crd.CacheKeyURFromMeta(&m), env)
+	_, err = gpm.functionEnv.Set(crd.CacheKeyUGFromMeta(&m), env)
 	if err != nil {
 		gpm.logger.Error(err,
 			"failed to set the key", "function", fn.Name,

@@ -95,3 +95,39 @@ func TestCacheKeyUG_String(t *testing.T) {
 	ck := CacheKeyUG{UID: types.UID("abc"), Generation: 7}
 	assert.Equal(t, "abc_7", ck.String())
 }
+
+func TestCacheKeyUGFromObject_StableAcrossStatusUpdates(t *testing.T) {
+	t.Parallel()
+
+	// Mirrors TestCacheKeyUGFromMeta_StableAcrossStatusUpdates for the
+	// metav1.Object-typed constructor (used where callers hold a
+	// *fv1.Function rather than a bare ObjectMeta, e.g. the executor
+	// dispatcher's dedup key).
+	uid := types.UID("fn-uid-1")
+	gen := int64(3)
+
+	before := &metav1.ObjectMeta{UID: uid, Generation: gen, ResourceVersion: "100"}
+	after := &metav1.ObjectMeta{UID: uid, Generation: gen, ResourceVersion: "200"}
+
+	assert.Equal(t, CacheKeyUGFromObject(before), CacheKeyUGFromObject(after),
+		"CacheKeyUGFromObject must be stable across status-only updates (RV change, same UID+Generation)")
+}
+
+func TestCacheKeyUGFromObject_ChangesOnSpecUpdate(t *testing.T) {
+	t.Parallel()
+
+	uid := types.UID("fn-uid-1")
+	before := &metav1.ObjectMeta{UID: uid, Generation: 3, ResourceVersion: "100"}
+	after := &metav1.ObjectMeta{UID: uid, Generation: 4, ResourceVersion: "101"}
+
+	assert.NotEqual(t, CacheKeyUGFromObject(before), CacheKeyUGFromObject(after),
+		"CacheKeyUGFromObject must change on spec updates (Generation increment)")
+}
+
+func TestCacheKeyUGFromObject_MatchesCacheKeyUGFromMeta(t *testing.T) {
+	t.Parallel()
+
+	meta := &metav1.ObjectMeta{UID: types.UID("fn-uid-1"), Generation: 2, ResourceVersion: "50"}
+	assert.Equal(t, CacheKeyUGFromMeta(meta), CacheKeyUGFromObject(meta),
+		"the two constructors must agree for the same object")
+}

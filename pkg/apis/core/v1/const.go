@@ -223,6 +223,12 @@ const (
 	// includes it so stale-generation pods drop out of the EndpointSlices on a
 	// function update (the executor-side equivalent is CacheKeyUG keying).
 	FUNCTION_GENERATION = "fission.io/function-generation"
+	// FUNCTION_VERSION labels a Function with the published FunctionVersion
+	// name it was specialized from (RFC-0025 phase 3). Empty for every
+	// function until versioned routing lands; carried in
+	// pkg/router/functionServiceMap.go's metadataKey now so the key's shape
+	// doesn't change twice.
+	FUNCTION_VERSION = "fission.io/function-version"
 	// SERVED_LABEL gates a specialized pod's membership in its function
 	// Service: pool pods pass readiness probes before specialization, so the
 	// label is set only by the post-specialization patch — without it the

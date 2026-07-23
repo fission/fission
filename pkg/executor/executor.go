@@ -114,7 +114,13 @@ func (executor *Executor) dispatchCreateFuncService(ctx context.Context, fn *fv1
 			return createFrom(cctx)
 		})
 	}
-	return executor.dispatcher.Do(ctx, crd.CacheKeyURFromObject(fn).String(), func(cctx context.Context) (*fscache.FuncSvc, error) {
+	// Dedup key is UID+Generation, not ResourceVersion (see #3596): keying
+	// on RV here (which the router-side migration alone would not fix)
+	// would reintroduce status-churn duplication on the executor side —
+	// two concurrent createServiceForFunction callers that observed
+	// different RVs of the same spec would each get their own dedup
+	// bucket instead of coalescing onto one specialization.
+	return executor.dispatcher.Do(ctx, crd.CacheKeyUGFromObject(fn).String(), func(cctx context.Context) (*fscache.FuncSvc, error) {
 		return createFrom(context.WithoutCancel(cctx))
 	})
 }

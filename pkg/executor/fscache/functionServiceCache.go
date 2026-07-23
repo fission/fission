@@ -44,7 +44,7 @@ type (
 	// FunctionServiceCache represents the function service cache
 	FunctionServiceCache struct {
 		logger            logr.Logger
-		byFunction        *cache.Cache[crd.CacheKeyUR, *FuncSvc]
+		byFunction        *cache.Cache[crd.CacheKeyUG, *FuncSvc]
 		byAddress         *cache.Cache[string, metav1.ObjectMeta]
 		byFunctionUID     *cache.Cache[types.UID, metav1.ObjectMeta]
 		connFunctionCache *PoolCache // function-key -> funcSvc : map[string]*funcSvc
@@ -85,7 +85,7 @@ func IsNameExistError(err error) bool {
 func MakeFunctionServiceCache(logger logr.Logger) *FunctionServiceCache {
 	return &FunctionServiceCache{
 		logger:            logger.WithName("function_service_cache"),
-		byFunction:        cache.MakeCache[crd.CacheKeyUR, *FuncSvc](0, 0),
+		byFunction:        cache.MakeCache[crd.CacheKeyUG, *FuncSvc](0, 0),
 		byAddress:         cache.MakeCache[string, metav1.ObjectMeta](0, 0),
 		byFunctionUID:     cache.MakeCache[types.UID, metav1.ObjectMeta](0, 0),
 		connFunctionCache: NewPoolCache(logger.WithName("conn_function_cache")),
@@ -114,8 +114,14 @@ func (fsc *FunctionServiceCache) DumpDebugInfo(ctx context.Context) error {
 }
 
 // GetByFunction gets a function service from cache using function key.
+//
+// The key is UID+Generation, not ResourceVersion (see #3596): RV moves on
+// status-only writes (not just spec changes), and a caller's view of the
+// function can lag the writer's (informer cache lag across components) —
+// an RV-keyed lookup would miss the entry Add()/DeleteEntry() operate on,
+// splitting one function's cache entry across RV churn.
 func (fsc *FunctionServiceCache) GetByFunction(m *metav1.ObjectMeta) (*FuncSvc, error) {
-	key := crd.CacheKeyURFromMeta(m)
+	key := crd.CacheKeyUGFromMeta(m)
 
 	fsvc, err := fsc.byFunction.Get(key)
 	if err != nil {
@@ -160,7 +166,7 @@ func (fsc *FunctionServiceCache) GetByFunctionUID(uid types.UID) (*FuncSvc, erro
 		return nil, err
 	}
 
-	fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+	fsvc, err := fsc.byFunction.Get(crd.CacheKeyUGFromMeta(&m))
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +206,7 @@ func (fsc *FunctionServiceCache) MarkSpecializationFailure(key crd.CacheKeyUG) {
 
 // Add adds a function service to cache if it does not exist already.
 func (fsc *FunctionServiceCache) Add(fsvc FuncSvc) (*FuncSvc, error) {
-	existing, err := fsc.byFunction.Set(crd.CacheKeyURFromMeta(fsvc.Function), &fsvc)
+	existing, err := fsc.byFunction.Set(crd.CacheKeyUGFromMeta(fsvc.Function), &fsvc)
 	if err != nil {
 		if IsNameExistError(err) {
 			err2 := fsc.TouchByAddress(existing.Address)
@@ -255,7 +261,7 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 	if err != nil {
 		return err
 	}
-	fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+	fsvc, err := fsc.byFunction.Get(crd.CacheKeyUGFromMeta(&m))
 	if err != nil {
 		return err
 	}
@@ -265,7 +271,7 @@ func (fsc *FunctionServiceCache) _touchByAddress(address string) error {
 
 // DeleteEntry deletes a function service from cache.
 func (fsc *FunctionServiceCache) DeleteEntry(fsvc *FuncSvc) {
-	fsc.byFunction.Delete(crd.CacheKeyURFromMeta(fsvc.Function))
+	fsc.byFunction.Delete(crd.CacheKeyUGFromMeta(fsvc.Function))
 	fsc.byAddress.Delete(fsvc.Address)
 	fsc.byFunctionUID.Delete(fsvc.Function.UID)
 	metrics.ObserveFunctionRunningSeconds(context.Background(), fsvc.Function.Name, fsvc.Function.Namespace, fsvc.Atime.Sub(fsvc.Ctime).Seconds())
@@ -319,7 +325,7 @@ func (fsc *FunctionServiceCache) ListOld(age time.Duration) ([]*FuncSvc, error) 
 	fscs := fsc.byFunctionUID.Copy()
 	funcObjects := make([]*FuncSvc, 0, len(fscs))
 	for _, m := range fscs {
-		fsvc, err := fsc.byFunction.Get(crd.CacheKeyURFromMeta(&m))
+		fsvc, err := fsc.byFunction.Get(crd.CacheKeyUGFromMeta(&m))
 		if err != nil {
 			// A byFunctionUID entry without a byFunction entry is a transient
 			// TOCTOU gap (concurrent delete). Skip it and return what we have;
