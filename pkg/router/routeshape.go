@@ -5,15 +5,17 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"time"
 
-	"k8s.io/apimachinery/pkg/types"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/router/routetable"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
@@ -117,25 +119,49 @@ func registerRouteShape(m *httpmux.Mux, shape routeShape, handler http.Handler) 
 	}
 }
 
-// internalRoutePair returns the internal listener's route pair for a
-// function: the exact /fission-function/... URL and its slash subtree.
-// utils.UrlForFunction folds the default namespace — the form every internal
-// publisher builds.
-func internalRoutePair(key types.NamespacedName) (exact, prefix string) {
-	exact = utils.UrlForFunction(key.Name, key.Namespace)
-	return exact, exact + "/"
+// internalRouteExactURLs returns every exact internal-listener URL an
+// InternalKey resolves to. A plain function route (Suffix == "") gets
+// exactly one, from utils.UrlForFunction, which folds the default namespace
+// — the form every internal publisher (kubewatcher/timer/mqtrigger/executor)
+// builds, unchanged from pre-RFC-0025 behavior.
+//
+// A materialized `:<alias>`/`:<version>` route (Suffix != "", RFC-0025) is
+// more liberal: it registers BOTH the namespace-qualified form
+// (/fission-function/<ns>/<name>:<suffix>, always) and, for the default
+// namespace specifically, ALSO the folded form
+// (/fission-function/<name>:<suffix>) — so callers that always write the
+// namespace-qualified "name:tag" form (never relying on the default-namespace
+// fold a plain function route requires) can address a default-namespace
+// alias/version too, without having to special-case it.
+func internalRouteExactURLs(key routetable.InternalKey) []string {
+	name := key.Name
+	if key.Suffix != "" {
+		name += ":" + key.Suffix
+	}
+	folded := utils.UrlForFunction(name, key.Namespace)
+	if key.Suffix == "" || key.Namespace != metav1.NamespaceDefault {
+		return []string{folded}
+	}
+	// key.Namespace == default and this is a suffixed route: fold gives the
+	// SAME string UrlForFunction always returns for the default namespace
+	// (no /<ns>/ segment), so build the qualified form explicitly alongside
+	// it.
+	qualified := fmt.Sprintf("/fission-function/%s/%s", key.Namespace, name)
+	return []string{folded, qualified}
 }
 
-// registerInternalRoute registers a function's internal-listener route pair —
-// the exact /fission-function/... URL plus its slash subtree — onto the
-// internal mux. No method gate (the HMAC verifier the bundle wraps is the
-// access control). Shared by the one-shot buildMuxes and the incremental
-// buildIncrementalMuxes so the two builders register the internal routes
-// identically, mirroring registerRouteShape on the public side.
-func registerInternalRoute(m *httpmux.Mux, key types.NamespacedName, handler http.Handler) {
-	exact, prefix := internalRoutePair(key)
-	m.Handle(exact, handler)
-	m.HandlePrefix(prefix, handler)
+// registerInternalRoute registers one internal-listener key's route(s) — each
+// exact /fission-function/... URL plus its slash subtree, per
+// internalRouteExactURLs — onto the internal mux. No method gate (the HMAC
+// verifier the bundle wraps is the access control). Shared by the one-shot
+// buildMuxes and the incremental buildIncrementalMuxes so the two builders
+// register the internal routes identically, mirroring registerRouteShape on
+// the public side.
+func registerInternalRoute(m *httpmux.Mux, key routetable.InternalKey, handler http.Handler) {
+	for _, exact := range internalRouteExactURLs(key) {
+		m.Handle(exact, handler)
+		m.HandlePrefix(exact+"/", handler)
+	}
 }
 
 // validateRouteTemplate reports whether a shape's path templates compile.

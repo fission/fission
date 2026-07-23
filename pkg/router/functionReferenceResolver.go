@@ -53,6 +53,13 @@ type (
 		resolveResultType
 		functionMap                map[string]*fv1.Function
 		functionWtDistributionList []functionWeightDistribution
+		// Aliases is the FunctionAlias names this resolution consumed
+		// (RFC-0025): only resolveByAlias populates it (a plain name,
+		// version-pinned, or FunctionWeights reference never references an
+		// alias). applyTriggerIncremental copies it onto the route's
+		// RouteSpec.Aliases so a FunctionAlias event can find and re-apply
+		// exactly the triggers resolving through it (TriggersForAlias).
+		Aliases []string
 	}
 )
 
@@ -208,7 +215,9 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 	primaryKey := routetable.BackendKey(ref.Name, target)
 
 	if alias.Spec.Weight == nil {
-		return singleFunctionResult(primaryKey, primary), nil
+		rr := singleFunctionResult(primaryKey, primary)
+		rr.Aliases = []string{ref.Alias}
+		return rr, nil
 	}
 
 	secondary, err := frr.resolveVersion(ctx, namespace, ref.Name, alias.Spec.SecondaryVersion)
@@ -228,6 +237,7 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 			{name: primaryKey, weight: weight, sumPrefix: weight},
 			{name: secondaryKey, weight: 100 - weight, sumPrefix: 100},
 		},
+		Aliases: []string{ref.Alias},
 	}
 	return &rr, nil
 }

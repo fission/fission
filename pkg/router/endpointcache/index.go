@@ -158,14 +158,14 @@ func (ix *Index) shard(key FnKey) *indexShard {
 // Lookup returns the function's merged endpoint list (nil when unknown). The
 // returned slice is immutable — callers must not modify it.
 //
-// Unversioned-only (RFC-0025): Lookup always builds FnKey with Version ""
-// and so only ever sees the unversioned pool's entry -- a versioned pool's
-// endpoints (Version != "") are invisible to it. This is deliberate for now:
-// nothing routes to a specific version yet (see Admit's doc comment). Lookup
-// will need a version parameter, mirroring Admit, before phase 3 introduces
-// version-aware endpoint reads.
-func (ix *Index) Lookup(namespace, name string) []Endpoint {
-	key := FnKey{Namespace: namespace, Name: name}
+// version selects which of a function's warm pools to read (RFC-0025),
+// mirroring Admit: "" is the unversioned (live-spec) pool, a non-empty
+// version reads only that version's own FnKey entry -- it never falls back
+// to, or merges with, another version's endpoints. Callers resolving a
+// versioned backend (a Version/Alias trigger reference) pass the resolved
+// fv1.FUNCTION_VERSION label; everything else passes "".
+func (ix *Index) Lookup(namespace, name, version string) []Endpoint {
+	key := FnKey{Namespace: namespace, Name: name, Version: version}
 	s := ix.shard(key)
 	s.mu.RLock()
 	e, ok := s.m[key]
@@ -182,11 +182,10 @@ func (ix *Index) Lookup(namespace, name string) []Endpoint {
 
 // ReadyCount returns how many ready endpoints the function has.
 //
-// Unversioned-only (RFC-0025): built on Lookup, so it inherits the same
-// Version "" restriction -- see Lookup's doc comment.
-func (ix *Index) ReadyCount(namespace, name string) int {
+// version selects the warm pool, mirroring Lookup (see its doc comment).
+func (ix *Index) ReadyCount(namespace, name, version string) int {
 	n := 0
-	for _, ep := range ix.Lookup(namespace, name) {
+	for _, ep := range ix.Lookup(namespace, name, version) {
 		if ep.Ready {
 			n++
 		}
@@ -503,15 +502,13 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 // (or expired-and-renewed) quarantine is counted in
 // fission_router_endpointcache_quarantines_total.
 //
-// Unversioned-only (RFC-0025): builds FnKey with Version "", so it can only
-// ever quarantine an address within the unversioned pool's entry -- see
-// Lookup's doc comment. Quarantining a dial failure reported against a
-// versioned endpoint would silently find no entry under "" and do nothing
-// (the dead address stays admissible); this needs a version parameter
-// before phase 3 introduces version-aware endpoints and callers that dial
-// them.
-func (ix *Index) Quarantine(namespace, name, address string) {
-	key := FnKey{Namespace: namespace, Name: name}
+// version selects the warm pool to quarantine within, mirroring Admit/Lookup
+// (see their doc comments): resolver_fallback's Invalidate passes the
+// resolved backend's fv1.FUNCTION_VERSION label, so a dial failure against a
+// versioned endpoint quarantines it within its OWN pool rather than silently
+// missing (finding no entry under "") or bleeding into the unversioned pool.
+func (ix *Index) Quarantine(namespace, name, version, address string) {
+	key := FnKey{Namespace: namespace, Name: name, Version: version}
 	s := ix.shard(key)
 	s.mu.RLock()
 	e, ok := s.m[key]
@@ -566,12 +563,11 @@ func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Durat
 // limit and when a concurrent report already quarantined the address, so
 // callers can log escalations without storm-duplicated noise.
 //
-// Unversioned-only (RFC-0025): builds FnKey with Version "" -- see
-// Quarantine's doc comment. A dial timeout reported against a versioned
-// endpoint would silently find no entry and record nothing (no strike, no
-// eventual quarantine); needs a version parameter before phase 3.
-func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
-	key := FnKey{Namespace: namespace, Name: name}
+// version selects the warm pool, mirroring Quarantine (see its doc comment):
+// a dial timeout reported against a versioned endpoint strikes within its
+// OWN pool's entry rather than silently recording nothing.
+func (ix *Index) ReportDialTimeout(namespace, name, version, address string) bool {
+	key := FnKey{Namespace: namespace, Name: name, Version: version}
 	s := ix.shard(key)
 	s.mu.RLock()
 	e, ok := s.m[key]

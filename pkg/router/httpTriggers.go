@@ -357,7 +357,7 @@ func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[crd.C
 	for i := range ts.functions {
 		fn := ts.functions[i]
 		handler := ts.buildInternalFunctionHandler(&fn, fnTimeoutMap)
-		key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
+		key := routetable.InternalKey{NamespacedName: types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}}
 		registerInternalRoute(internalMux, key, handler)
 		ts.logger.V(1).Info("add internal handler and prefix route for function", "function", fn.Name)
 	}

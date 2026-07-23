@@ -71,8 +71,8 @@ func TestIndexApplyAndDelete(t *testing.T) {
 
 	t.Run("slice add populates the function entry", func(t *testing.T) {
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
-		assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("default", "fn-a")))
-		assert.Equal(t, 1, ix.ReadyCount("default", "fn-a"))
+		assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("default", "fn-a", "")))
+		assert.Equal(t, 1, ix.ReadyCount("default", "fn-a", ""))
 		assert.Equal(t, 1, ix.Size())
 	})
 
@@ -80,7 +80,7 @@ func TestIndexApplyAndDelete(t *testing.T) {
 		ix.ApplySlice(slice("s2", "fn-a", "default", 8888, "10.0.0.2", "10.0.0.3"))
 		assert.ElementsMatch(t,
 			[]string{"10.0.0.1:8888", "10.0.0.2:8888", "10.0.0.3:8888"},
-			addrs(ix.Lookup("default", "fn-a")))
+			addrs(ix.Lookup("default", "fn-a", "")))
 		assert.Equal(t, 1, ix.Size(), "one function, regardless of slice count")
 	})
 
@@ -88,14 +88,14 @@ func TestIndexApplyAndDelete(t *testing.T) {
 		ix.ApplySlice(slice("s2", "fn-a", "default", 8888, "10.0.0.9"))
 		assert.ElementsMatch(t,
 			[]string{"10.0.0.1:8888", "10.0.0.9:8888"},
-			addrs(ix.Lookup("default", "fn-a")))
+			addrs(ix.Lookup("default", "fn-a", "")))
 	})
 
 	t.Run("slice delete removes its endpoints; last slice drops the entry", func(t *testing.T) {
 		ix.DeleteSlice(slice("s2", "fn-a", "default", 8888))
-		assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("default", "fn-a")))
+		assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("default", "fn-a", "")))
 		ix.DeleteSlice(slice("s1", "fn-a", "default", 8888))
-		assert.Empty(t, ix.Lookup("default", "fn-a"))
+		assert.Empty(t, ix.Lookup("default", "fn-a", ""))
 		assert.Equal(t, 0, ix.Size())
 	})
 }
@@ -117,8 +117,8 @@ func TestIndexNotReadyEndpoints(t *testing.T) {
 	es.Endpoints[1].Conditions.Ready = &notReady
 	ix.ApplySlice(es)
 
-	assert.Len(t, ix.Lookup("default", "fn-a"), 2, "not-ready endpoints stay visible (drain awareness)")
-	assert.Equal(t, 1, ix.ReadyCount("default", "fn-a"))
+	assert.Len(t, ix.Lookup("default", "fn-a", ""), 2, "not-ready endpoints stay visible (drain awareness)")
+	assert.Equal(t, 1, ix.ReadyCount("default", "fn-a", ""))
 }
 
 func TestIndexNamespaceIsolation(t *testing.T) {
@@ -126,8 +126,8 @@ func TestIndexNamespaceIsolation(t *testing.T) {
 	ix := NewIndex()
 	ix.ApplySlice(slice("s1", "fn-a", "ns1", 8888, "10.0.0.1"))
 	ix.ApplySlice(slice("s2", "fn-a", "ns2", 8888, "10.0.0.2"))
-	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("ns1", "fn-a")))
-	assert.ElementsMatch(t, []string{"10.0.0.2:8888"}, addrs(ix.Lookup("ns2", "fn-a")))
+	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(ix.Lookup("ns1", "fn-a", "")))
+	assert.ElementsMatch(t, []string{"10.0.0.2:8888"}, addrs(ix.Lookup("ns2", "fn-a", "")))
 }
 
 // TestIndexTwoVersionsOfOneFunction covers the RFC-0025 version dimension:
@@ -209,8 +209,8 @@ func TestIndexConcurrentReadersDuringEventStorm(t *testing.T) {
 				case <-stop:
 					return
 				default:
-					_ = ix.Lookup("default", fn)
-					_ = ix.ReadyCount("default", fn)
+					_ = ix.Lookup("default", fn, "")
+					_ = ix.ReadyCount("default", fn, "")
 					_ = ix.Size()
 				}
 			}
@@ -319,13 +319,13 @@ func TestAdmit(t *testing.T) {
 		ix := NewIndex()
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
 
-		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		ix.Quarantine("default", "fn-a", "", "10.0.0.1:8888")
 		ep, release, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, Admitted, result)
 		assert.Equal(t, "10.0.0.2:8888", ep.Address, "quarantined endpoint must be skipped")
 		release()
 
-		ix.Quarantine("default", "fn-a", "10.0.0.2:8888")
+		ix.Quarantine("default", "fn-a", "", "10.0.0.2:8888")
 		_, _, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 
@@ -345,7 +345,7 @@ func TestAdmit(t *testing.T) {
 		// The CI-observed outage mode: the function's ONLY endpoint gets
 		// quarantined while the executor is down, so no slice event will ever
 		// arrive to lift it. The TTL is the self-heal.
-		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		ix.Quarantine("default", "fn-a", "", "10.0.0.1:8888")
 		_, _, result := ix.Admit("default", "fn-a", "", 1, "")
 		require.Equal(t, AllQuarantined, result)
 
@@ -357,7 +357,7 @@ func TestAdmit(t *testing.T) {
 		}, 2*time.Second, 10*time.Millisecond)
 
 		// A dead pod is simply re-quarantined by the next dial failure.
-		ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+		ix.Quarantine("default", "fn-a", "", "10.0.0.1:8888")
 		_, _, result = ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
@@ -416,12 +416,12 @@ func TestReportDialTimeout(t *testing.T) {
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
 
 		for i := 1; i < dialTimeoutStrikeLimit; i++ {
-			assert.Falsef(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "strike %d must not quarantine", i)
+			assert.Falsef(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"), "strike %d must not quarantine", i)
 			_, release, result := ix.Admit("default", "fn-a", "", 1, "")
 			require.Equalf(t, Admitted, result, "endpoint must stay admissible after strike %d", i)
 			release()
 		}
-		assert.True(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"), "the limit-th strike escalates")
+		assert.True(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"), "the limit-th strike escalates")
 		_, _, result := ix.Admit("default", "fn-a", "", 1, "")
 		assert.Equal(t, AllQuarantined, result)
 	})
@@ -432,11 +432,11 @@ func TestReportDialTimeout(t *testing.T) {
 		ix.quarantineTTL = 30 * time.Millisecond
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
 
-		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
-		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
 		time.Sleep(60 * time.Millisecond)
 		// The window lapsed: the count restarts, so this is strike 1 again.
-		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"),
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"),
 			"stale strikes must not accumulate across windows")
 	})
 
@@ -445,17 +445,17 @@ func TestReportDialTimeout(t *testing.T) {
 		ix := NewIndex()
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
 
-		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
-		require.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
+		require.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
 		ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
-		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"),
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"),
 			"a slice event resets the strike count")
 	})
 
 	t.Run("unknown function is a no-op", func(t *testing.T) {
 		t.Parallel()
 		ix := NewIndex()
-		assert.False(t, ix.ReportDialTimeout("default", "nope", "10.0.0.1:8888"))
+		assert.False(t, ix.ReportDialTimeout("default", "nope", "", "10.0.0.1:8888"))
 	})
 }
 
@@ -463,11 +463,11 @@ func TestReportDialTimeoutIgnoredWhileQuarantined(t *testing.T) {
 	t.Parallel()
 	ix := NewIndex()
 	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1"))
-	ix.Quarantine("default", "fn-a", "10.0.0.1:8888")
+	ix.Quarantine("default", "fn-a", "", "10.0.0.1:8888")
 
 	// In-flight requests keep timing out after the quarantine stores; those
 	// reports must not bank strikes that outlive the quarantine window.
 	for range dialTimeoutStrikeLimit + 2 {
-		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "10.0.0.1:8888"))
+		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
 	}
 }
