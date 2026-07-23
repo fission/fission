@@ -86,14 +86,25 @@ func RegisterAliasReconciler(mgr ctrl.Manager, logger logr.Logger) error {
 	return b.Complete(r)
 }
 
-// mapVersionToAliases enqueues every FunctionAlias in a created/updated
-// FunctionVersion's namespace that could plausibly be affected by it: one
-// whose Spec.PackageDigest matches the version's recorded digest (a
-// digest-pinned alias's exact resolution target just appeared), or one that
-// is not currently Resolved (its unmatched target may now resolve — covers
-// both digest-pinned aliases waiting on any matching version and name-pinned
-// aliases waiting on a version that was recreated under the same name).
-// Aliases for a different function are always skipped.
+// mapVersionToAliases enqueues every FunctionAlias in a FunctionVersion
+// event's namespace that could plausibly be affected by it: one whose
+// Spec.PackageDigest matches the version's recorded digest (a digest-pinned
+// alias's exact resolution target just appeared), one that is not currently
+// Resolved (its unmatched target may now resolve — covers both digest-pinned
+// aliases waiting on any matching version and name-pinned aliases waiting on
+// a version that was recreated under the same name), or one that is
+// name-pinned directly at this version (Spec.Version or Spec.SecondaryVersion
+// == v.Name) regardless of its current resolved state — this last clause is
+// what re-checks a RESOLVED name-pinned alias on its target's DELETE event:
+// without it, a Resolved=True name-pinned alias would never be re-enqueued
+// when its FunctionVersion is removed (digestMatch never fires — it has no
+// PackageDigest — and unresolved never fires — it is already Resolved), so
+// ResolvedVersion would keep pointing at a version that no longer exists
+// until some unrelated event happened to touch the alias. The webhook
+// already blocks creating/updating an alias to name-pin a nonexistent
+// version; this is the defense-in-depth path for a version deleted out from
+// under an alias that already resolved successfully. Aliases for a
+// different function are always skipped.
 func (r *AliasReconciler) mapVersionToAliases(ctx context.Context, obj client.Object) []reconcile.Request {
 	v, ok := obj.(*fv1.FunctionVersion)
 	if !ok {
@@ -115,7 +126,8 @@ func (r *AliasReconciler) mapVersionToAliases(ctx context.Context, obj client.Ob
 		}
 		digestMatch := a.Spec.PackageDigest != "" && a.Spec.PackageDigest == v.Spec.PackageDigest
 		unresolved := !conditions.IsTrue(a.Status.Conditions, fv1.FunctionAliasConditionResolved)
-		if digestMatch || unresolved {
+		namePinnedMatch := a.Spec.Version == v.Name || a.Spec.SecondaryVersion == v.Name
+		if digestMatch || unresolved || namePinnedMatch {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
 		}
 	}
