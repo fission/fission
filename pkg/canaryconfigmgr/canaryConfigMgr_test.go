@@ -556,6 +556,40 @@ func TestStepAlias(t *testing.T) {
 		assert.Equal(t, wantSpec, got.Spec, "a refused validation must never write the alias")
 	})
 
+	t.Run("spec-managed alias with a present-but-empty annotation value is still refused", func(t *testing.T) {
+		// Key PRESENCE marks an alias spec-managed, matching
+		// pkg/fission-cli/cmd/function/rollback.go's guard — an empty value is
+		// still a `fission spec` stamp.
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(30, 10)
+		alias.Annotations = map[string]string{specManagedAnnotation: ""}
+		wantSpec := alias.Spec
+		mgr, _, c := newTestEnv(&fakeFailureClient{}, trigger, cc, alias, oldVer, newVer)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusFailed, out.terminalStatus)
+		assert.Contains(t, out.message, "fission spec")
+
+		got := getAliasByName(t, c, "prod")
+		assert.Equal(t, wantSpec, got.Spec, "a refused validation must never write the alias")
+	})
+
+	t.Run("alias not currently pointing at OldFunction is refused and never written", func(t *testing.T) {
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(30, 10)
+		alias.Spec.Version = "orders-v0" // some third version, not cfg.Spec.OldFunction
+		wantSpec := alias.Spec
+		mgr, _, c := newTestEnv(&fakeFailureClient{}, trigger, cc, alias, oldVer, newVer)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusFailed, out.terminalStatus)
+		assert.Contains(t, out.message, "orders-v0")
+		assert.Contains(t, out.message, "orders-v1")
+
+		got := getAliasByName(t, c, "prod")
+		assert.Equal(t, wantSpec, got.Spec, "a refused validation must never write the alias — the first progression write must not silently repoint it")
+	})
+
 	t.Run("new-function version belonging to a different function is refused", func(t *testing.T) {
 		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(30, 10)
 		newVer.Spec.FunctionName = "other-fn"

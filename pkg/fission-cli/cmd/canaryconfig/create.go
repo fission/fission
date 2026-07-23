@@ -120,16 +120,26 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	return nil
 }
 
-// validateAliasTargets checks that newFunc/oldFunc each name a
-// FunctionVersion belonging to aliasName's function — the alias-mode
-// equivalent of the FunctionWeights-map membership checks in complete().
-// Mirrors pkg/canaryconfigmgr's validateAliasRollout, run client-side at
-// create time so a typo'd --newfn/--oldfn is caught immediately instead of
-// silently failing the rollout at the first reconcile.
+// validateAliasTargets checks that the alias is already pointing at oldFunc
+// and that newFunc/oldFunc each name a FunctionVersion belonging to
+// aliasName's function — the alias-mode equivalent of the FunctionWeights-map
+// membership checks in complete(). Mirrors pkg/canaryconfigmgr's
+// validateAliasRollout, run client-side at create time so a typo'd
+// --newfn/--oldfn, or an alias that isn't currently pointing at --oldfn, is
+// caught immediately instead of silently failing the rollout at the first
+// reconcile.
 func (opts *CreateSubCommand) validateAliasTargets(input cli.Input, ns, aliasName, newFunc, oldFunc string) error {
 	alias, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(ns).Get(input.Context(), aliasName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("error finding function alias '%s' referenced by http trigger: %w", aliasName, err)
+	}
+
+	// Start-state precondition: the RFC's "OLD stays primary throughout" role
+	// mapping requires the alias to already point at --oldfn before the
+	// rollout starts — the controller never establishes this for you.
+	if alias.Spec.Version != oldFunc {
+		return fmt.Errorf("function alias '%s' currently points at '%s', expected --oldfn '%s' — repoint the alias or fix --oldfn",
+			aliasName, alias.Spec.Version, oldFunc)
 	}
 
 	for _, versionName := range []string{newFunc, oldFunc} {
