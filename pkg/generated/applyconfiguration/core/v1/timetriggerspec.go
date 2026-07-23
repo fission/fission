@@ -18,15 +18,13 @@ import (
 type TimeTriggerSpecApplyConfiguration struct {
 	// Cron schedule
 	Cron *string `json:"cron,omitempty"`
-	// The reference to function
+	// The reference to function. Alias is read from the embedded
+	// FunctionReference.Alias (RFC-0025) — TimeTriggerSpec has no field of
+	// its own for it, so there is exactly one JSON path (spec.functionref.alias)
+	// and one Go path (spec.Alias, promoted) for the concept, never two
+	// competing ones. The timer publisher (a later RFC-0025 task) reads it
+	// the same way timer.go:80 already reads the promoted spec.Name today.
 	*FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
-	// Alias, when set, targets a FunctionAlias by name (RFC-0025): the timer
-	// publisher appends ":<alias>" to the internal invocation URL, so the
-	// router resolves the alias's currently-pointed-at FunctionVersion at
-	// fire time instead of the live Function. Empty (the default) preserves
-	// today's behavior. Router-side resolution lands in a later RFC-0025
-	// task — until then this field is accepted but inert.
-	Alias *string `json:"alias,omitempty"`
 	// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")
 	Method *string `json:"method,omitempty"`
 	// Subpath to trigger a specific route if function
