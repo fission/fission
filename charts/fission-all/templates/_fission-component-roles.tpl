@@ -27,6 +27,43 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # RFC-0025 leader-elected alias resolver (pkg/versioning.RegisterAliasReconciler,
+  # registered on this Manager). functions: get-only, for the ownerRef repair
+  # (never lists/watches Functions — it only Gets the one a FunctionAlias
+  # names). functionversions: read-only, resolves name-/digest-pinned
+  # targets. functionaliases: read/write the objects it reconciles, plus
+  # /status for ResolvedVersion, History and the Resolved condition.
+  resources:
+  - functions
+  verbs:
+  - get
+- apiGroups:
+  - fission.io
+  resources:
+  - functionversions
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "executor-rules" }}
 rules:

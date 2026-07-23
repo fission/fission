@@ -57,11 +57,19 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.AliasFunction, flag.AllNamespaces, flag.Output},
 	})
 
+	waitCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "wait",
+		Short: "Wait for a function alias to reach a status condition",
+	}, Wait, flag.FlagSet{
+		Required: []flag.Flag{flag.AliasName, flag.WaitFor},
+		Optional: []flag.Flag{flag.WaitTimeout},
+	})
+
 	command := &cobra.Command{
 		Use:   "alias",
 		Short: "Create, update and manage function aliases",
 	}
-	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd)
+	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, waitCmd)
 
 	return command
 }
