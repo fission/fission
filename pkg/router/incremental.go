@@ -6,9 +6,13 @@ package router
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -290,40 +294,58 @@ func internalKeyForVersion(v *fv1.FunctionVersion) routetable.InternalKey {
 	}
 }
 
+// aliasRouteGeneration folds every input that can change a materialized
+// `:<alias>` internal route's resolved backend(s) into one int64 for
+// ApplyFunction's identity-only change detection: the alias's own spec
+// Generation (a Weight/SecondaryVersion edit changes the served split
+// without touching either target Function's own Generation) plus each
+// resolved target's Generation, keyed by BackendKey and walked in sorted
+// order so the hash is independent of map iteration order.
+//
+// This must NOT be simplified to "just the resolved target's Generation"
+// (what the single-target case used before weighted internal routes existed):
+// a repoint (Status.ResolvedVersion moving to a different FunctionVersion,
+// which — see versioning.VersionedFunction's invariant — never shares a
+// Generation with the one it replaces) still changes the hash even though
+// alias.Generation itself does not move (Status is a subresource write), and
+// a weight-only edit (same two targets, new split) still changes the hash
+// even though neither target's Generation moves.
+func aliasRouteGeneration(alias *fv1.FunctionAlias, rr *resolveResult) int64 {
+	h := fnv.New64a()
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], uint64(alias.Generation))
+	_, _ = h.Write(buf[:])
+	for _, key := range slices.Sorted(maps.Keys(rr.functionMap)) {
+		_, _ = h.Write([]byte(key))
+		binary.BigEndian.PutUint64(buf[:], uint64(rr.functionMap[key].Generation))
+		_, _ = h.Write(buf[:])
+	}
+	return int64(h.Sum64())
+}
+
 // applyAliasInternalRoute upserts (or, if the alias has not resolved, drops)
-// the materialized `:<alias>` internal route: the handler always proxies to
-// the alias's CURRENT effective target (Spec.Version when name-pinned, else
-// Status.ResolvedVersion — mirroring functionReferenceResolver.resolveByAlias,
-// but never the weighted split: a direct `:<alias>` call always reaches the
-// PRIMARY target, matching the RFC's "whatever FunctionVersion it currently
-// resolves to" framing). ApplyFunction keys the change-detection on the
-// resolved version's Generation, which versioning.VersionedFunction sets to
-// v.Spec.FunctionGeneration — unique per FunctionVersion by construction, so
-// a repoint (even one that changes nothing observable, e.g. re-resolving to
-// the same target) is a HandlerSwapped, never a spurious ShapeChanged: only
-// route ADD/DELETE (a brand-new alias, or one that stops resolving) signals
-// the materializer.
+// the materialized `:<alias>` internal route. It resolves through the SAME
+// path an HTTPTrigger's Alias reference does (functionReferenceResolver.
+// resolveByAlias) and builds through buildInternalAliasHandler, so a weighted
+// FunctionAlias's split (Spec.Weight != nil) is served identically on this
+// route as on any HTTPTrigger referencing the alias — a name-pinned
+// (unweighted) alias still resolves to one fixed backend. Change detection
+// (aliasRouteGeneration) makes both a repoint and a weight-only edit a
+// HandlerSwapped, never a spurious ShapeChanged: only route ADD/DELETE (a
+// brand-new alias, or one that stops resolving) signals the materializer.
 func (ts *HTTPTriggerSet) applyAliasInternalRoute(ctx context.Context, alias *fv1.FunctionAlias) (routetable.ApplyResult, error) {
 	key := internalKeyForAlias(alias)
-	target := alias.Spec.Version
-	if target == "" {
-		target = alias.Status.ResolvedVersion
-	}
-	if target == "" {
-		// Not resolved yet: nothing to serve. Drop any stale route from a
-		// prior resolution (e.g. the alias was repointed at a target that no
-		// longer exists).
-		res := ts.routeTable.DeleteFunction(key)
-		if res == routetable.ShapeChanged {
-			ts.signalMaterialize()
-		}
-		ts.updateRoutesGauge()
-		return res, nil
-	}
 
-	fn, err := ts.resolver.resolveVersion(ctx, alias.Namespace, alias.Spec.FunctionName, target)
+	ref := fv1.FunctionReference{
+		Type:  fv1.FunctionReferenceTypeFunctionName,
+		Name:  alias.Spec.FunctionName,
+		Alias: alias.Name,
+	}
+	rr, err := ts.resolver.resolveByAlias(ctx, alias.Namespace, ref)
 	if err != nil {
 		if errors.Is(err, errFunctionNotFound) {
+			// Not resolved (or no longer resolves): drop any stale route
+			// from a prior resolution.
 			res := ts.routeTable.DeleteFunction(key)
 			if res == routetable.ShapeChanged {
 				ts.signalMaterialize()
@@ -334,9 +356,12 @@ func (ts *HTTPTriggerSet) applyAliasInternalRoute(ctx context.Context, alias *fv
 		return routetable.NoChange, err
 	}
 
-	fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
-	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
-		return ts.buildInternalFunctionHandler(fn, fnTimeout)
+	fnTimeout := make(map[crd.CacheKeyUG]int, len(rr.functionMap))
+	for _, fn := range rr.functionMap {
+		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
+	}
+	res := ts.routeTable.ApplyFunction(key, aliasRouteGeneration(alias, rr), func() http.Handler {
+		return ts.buildInternalAliasHandler(alias.Name, rr, fnTimeout)
 	})
 	if res == routetable.ShapeChanged {
 		ts.signalMaterialize()
@@ -747,11 +772,16 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) (int, error)
 			continue
 		}
 		// A materialized alias or version route: live in EITHER set means
-		// keep it (the alias-name and version-name spaces are independent,
-		// so a suffix collision across the two kinds is not this loop's
-		// concern — both applied it under the identical InternalKey above,
-		// so at most one is "stale" and the loop below only fires with
-		// neither claiming it).
+		// keep it. The FunctionAlias webhook (aliasNameShadowsVersionScheme,
+		// pkg/apis/core/v1/validation.go) rejects any alias named like one of
+		// ITS OWN function's published versions ("<functionName>-v<seq>"),
+		// so for a well-formed object this InternalKey collision cannot
+		// happen at all: the alias and version namespaces are disjoint by
+		// construction. A hand-crafted/legacy object that bypassed the
+		// webhook could still collide; both this sweep and the reconcilers
+		// simply apply whichever event landed last (last-writer-wins) —
+		// deliberately unenforced here, since the webhook is the single
+		// place this ambiguity is meant to be prevented.
 		if _, ok := liveAliasKeys[key]; ok {
 			continue
 		}

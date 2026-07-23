@@ -513,6 +513,76 @@ func TestFunctionAliasValidate(t *testing.T) {
 			t.Fatal("expected error, got nil")
 		}
 	})
+
+	// Alias-name/FunctionVersion-name collision guard: an alias for function
+	// "fn" named like one of "fn"'s own published versions
+	// ("<fn>-v<sequence>") would materialize to the same internal-listener
+	// route as that FunctionVersion (routetable.InternalKey has no
+	// alias-vs-version discriminant) — the webhook rejects it outright so a
+	// well-formed object can never hit that ambiguity.
+	t.Run("alias name colliding with own function's version scheme rejected", func(t *testing.T) {
+		fa := FunctionAlias{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
+			Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+		}
+		err := fa.Validate()
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "FunctionVersion naming scheme") {
+			t.Fatalf("error %q does not name the collision", err)
+		}
+	})
+
+	t.Run("alias name matching ANOTHER function's version scheme is allowed", func(t *testing.T) {
+		// "fn-v3" only collides for function "fn"; here the alias belongs to
+		// "other", so the exact same name is fine.
+		fa := FunctionAlias{
+			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
+			Spec:       FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
+		}
+		if err := fa.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("alias name that merely looks similar but isn't the scheme is allowed", func(t *testing.T) {
+		for _, name := range []string{"fn-version1", "fn-v", "fn-vabc", "prod", "fn-prod"} {
+			fa := FunctionAlias{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			}
+			if err := fa.Validate(); err != nil {
+				t.Errorf("name %q: unexpected error: %v", name, err)
+			}
+		}
+	})
+}
+
+func TestAliasNameShadowsVersionScheme(t *testing.T) {
+	tests := []struct {
+		name, functionName string
+		want               bool
+	}{
+		{"fn-v1", "fn", true},
+		{"fn-v42", "fn", true},
+		{"fn-v0", "fn", true},
+		{"fn-v3", "other", false},    // different function
+		{"fn-version1", "fn", false}, // not the "-v<digits>" shape
+		{"fn-v", "fn", false},        // no digits
+		{"fn-vabc", "fn", false},     // non-numeric suffix
+		{"fn-v1x", "fn", false},      // trailing non-digit
+		{"fn", "fn", false},          // no suffix at all
+		{"other-fn-v1", "fn", false}, // functionName must be a true prefix
+	}
+	for _, tt := range tests {
+		t.Run(tt.name+"/"+tt.functionName, func(t *testing.T) {
+			got := aliasNameShadowsVersionScheme(tt.name, tt.functionName)
+			if got != tt.want {
+				t.Fatalf("aliasNameShadowsVersionScheme(%q, %q) = %v, want %v", tt.name, tt.functionName, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestFunctionSpecValidateVersioning(t *testing.T) {

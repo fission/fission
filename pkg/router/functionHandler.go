@@ -126,12 +126,18 @@ func (fh functionHandler) asyncRequested(request *http.Request) bool {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	if fh.httpTrigger != nil && len(fh.fnWeightDistributionList) > 0 {
+	if len(fh.fnWeightDistributionList) > 0 {
 		// Weighted backend selection: the legacy FunctionReferenceTypeFunctionWeights
 		// canary AND an RFC-0025 weighted FunctionAlias (Spec.Weight != nil) both
 		// resolve to a resolveResultMultipleFunctions with a non-empty weight
 		// distribution — pick the per-request backend from it now rather than at
-		// mux-build time.
+		// mux-build time. NOT gated on fh.httpTrigger != nil: a weighted alias's
+		// materialized `:<alias>` internal route (buildInternalAliasHandler,
+		// routeshape.go) carries the same distribution with no httpTrigger at
+		// all, so MQ/timer/kubewatcher/MCP invocations through that route see
+		// the identical split an HTTPTrigger referencing the alias would —
+		// "weighted aliases work uniformly on all trigger types for free,
+		// because the weighted pick happens router-side" (RFC-0025).
 		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",

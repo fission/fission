@@ -141,6 +141,33 @@ func TestFunctionAliasWebhook_ReferenceIntegrity(t *testing.T) {
 	})
 }
 
+// TestFunctionAliasWebhook_NameCollisionWithVersionScheme exercises the
+// webhook path (not just v1.FunctionAlias.Validate directly) for the
+// alias-name/FunctionVersion-name collision guard: an alias named like one of
+// its OWN function's published versions is rejected before the reference
+// lookups even run (new.Validate() is the first check in Validate); the same
+// name is fine for a DIFFERENT function.
+func TestFunctionAliasWebhook_NameCollisionWithVersionScheme(t *testing.T) {
+	r := &FunctionAlias{}
+
+	colliding := &v1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
+		Spec:       v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+	}
+	err := r.Validate(colliding)
+	if err == nil || !strings.Contains(err.Error(), "FunctionVersion naming scheme") {
+		t.Fatalf("expected version-scheme collision rejection, got: %v", err)
+	}
+
+	allowed := &v1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
+		Spec:       v1.FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
+	}
+	if err := r.Validate(allowed); err != nil {
+		t.Fatalf("the same name must be accepted for a different function: %v", err)
+	}
+}
+
 // TestFunctionAliasWebhook_UpdatePath_DanglingVersionRejected exercises the
 // actual UPDATE admission entrypoint (GenericWebhook.ValidateUpdate), not
 // just Validate() directly: an alias that starts out pointing at an existing

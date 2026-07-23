@@ -266,6 +266,45 @@ func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeo
 	return http.HandlerFunc(fh.handler)
 }
 
+// buildInternalAliasHandler constructs the internal listener's proxy handler
+// for a materialized `:<alias>` route (RFC-0025). It mirrors
+// buildTriggerHandler's shape exactly — functionMap + fnWeightDistributionList
+// for a weighted alias's per-request canary pick, a fixed fh.function for a
+// name-pinned (unweighted) one — but carries no httpTrigger (this route is
+// never driven by an HTTPTrigger) and no CORS wrap (the internal listener
+// never serves browsers). Reusing the exact canary-pick machinery is what
+// makes a weighted FunctionAlias's split apply uniformly to every invocation
+// path that reaches `:<alias>` — MQ/timer/kubewatcher/MCP publishers, and any
+// signed direct caller — not just HTTPTrigger routes.
+func (ts *HTTPTriggerSet) buildInternalAliasHandler(routeName string, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
+	var streamIdleDefault time.Duration
+	if ts.tsRoundTripperParams != nil {
+		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
+	}
+	routeLogger := ts.logger.WithName(routeName)
+	fh := &functionHandler{
+		logger:                   routeLogger,
+		resolver:                 ts.addressResolver,
+		tapper:                   ts.tapper,
+		functionMap:              rr.functionMap,
+		fnWeightDistributionList: rr.functionWtDistributionList,
+		tsRoundTripperParams:     ts.tsRoundTripperParams,
+		isDebugEnv:               ts.isDebugEnv,
+		structuredErrors:         ts.structuredErrors,
+		accessLog:                ts.accessLog,
+		functionTimeoutMap:       fnTimeoutMap,
+		rtLogger:                 routeLogger.WithName("roundtripper"),
+		policyByUID:              precomputePolicies(rr.functionMap, fnTimeoutMap, streamIdleDefault),
+		asyncInvoker:             ts.asyncInvoker,
+	}
+	if rr.resolveResultType == resolveResultSingleFunction {
+		for _, fn := range fh.functionMap {
+			fh.function = fn
+		}
+	}
+	return http.HandlerFunc(fh.handler)
+}
+
 // newListenerMuxes creates the public + internal mux skeletons: encoded-path
 // handling and the middleware chains. USE_ENCODED_PATH must be applied here
 // — i.e. on EVERY build, one-shot or materialized — because the routers are

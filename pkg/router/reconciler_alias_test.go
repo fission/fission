@@ -5,7 +5,11 @@
 package router
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,7 +140,6 @@ func TestAliasRepointIsHandlerSwapOnlyZeroDrift(t *testing.T) {
 	drainSignals(ts) // the initial population's debounced signal(s) must not leak into the assertions below
 
 	before := internalSpecFor(t, ts, "default", "hello", "prod")
-	assert.EqualValues(t, 1, before.FunctionGen, "route initially serves the v1 target's generation")
 
 	// Repoint: update the alias's status in the fake client (simulating the
 	// leader-elected resolver) and re-reconcile.
@@ -150,7 +153,10 @@ func TestAliasRepointIsHandlerSwapOnlyZeroDrift(t *testing.T) {
 
 	after := internalSpecFor(t, ts, "default", "hello", "prod")
 	assert.Same(t, before.Handler, after.Handler, "the HandlerRef identity is stable across a repoint (atomic swap, not a new route)")
-	assert.EqualValues(t, 2, after.FunctionGen, "the SAME ref now serves the v2 target's generation")
+	// FunctionGen is now aliasRouteGeneration's hash (folds alias.Generation +
+	// every resolved target's Generation), not a literal Generation value —
+	// it must simply have MOVED, proving the swap actually picked up v2.
+	assert.NotEqual(t, before.FunctionGen, after.FunctionGen, "the SAME ref now serves the v2 target")
 
 	// Zero-drift: a resync pass immediately after must find nothing to
 	// correct.
@@ -299,4 +305,112 @@ func TestResyncHealsMissedAliasEvent(t *testing.T) {
 	drift, err = ts.resync(t.Context(), false)
 	require.NoError(t, err)
 	assert.Zero(t, drift, "a converged table has nothing left for resync to correct")
+}
+
+// versionRecordingResolver is a minimal AddressResolver that always resolves
+// to the same upstream (an httptest.Server) but records which resolved
+// version (fv1.FUNCTION_VERSION label) each call carried — the direct
+// observable for "did the weighted pick actually alternate backends" without
+// needing two distinguishable upstream servers.
+type versionRecordingResolver struct {
+	mu    sync.Mutex
+	url   *url.URL
+	calls map[string]int
+}
+
+func (r *versionRecordingResolver) Resolve(_ context.Context, fn *fv1.Function, _ string) (ResolvedEntry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.calls == nil {
+		r.calls = map[string]int{}
+	}
+	r.calls[fn.Labels[fv1.FUNCTION_VERSION]]++
+	return ResolvedEntry{SvcURL: r.url}, nil
+}
+
+func (r *versionRecordingResolver) Invalidate(*fv1.Function, *url.URL, InvalidateReason) {}
+
+// TestInternalAliasRouteServesWeightedSplit is the fix for the reported spec
+// gap: a weighted FunctionAlias's materialized `:<alias>` internal route
+// must serve the SAME split an HTTPTrigger referencing it would, not just the
+// primary target — the RFC's "weighted aliases work uniformly on all trigger
+// type for free, because the weighted pick happens router-side" applies to
+// MQ/timer/kubewatcher/MCP invocations too, and those all land on this
+// internal route (never an HTTPTrigger). Drives the materialized route's live
+// handler directly N times and asserts BOTH backends were resolved.
+func TestInternalAliasRouteServesWeightedSplit(t *testing.T) {
+	fn := incrFn("hello", "default", 1)
+	v1 := incrVersion("hello-v1", "default", "hello", fn.UID, 1, 1)
+	v2 := incrVersion("hello-v2", "default", "hello", fn.UID, 2, 2)
+	alias := incrAlias("prod", "default", "hello", "hello-v1", 1)
+	alias.Spec.Weight = new(50)
+	alias.Spec.SecondaryVersion = "hello-v2"
+	ts, _ := newIncrementalTS(t, fn, v1, v2, alias)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+	upstreamURL, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	resolver := &versionRecordingResolver{url: upstreamURL}
+	ts.addressResolver = resolver
+	ts.tapper = &nopTapper{}
+	ts.tsRoundTripperParams = newTestParams(1, 1)
+
+	res, err := ts.applyAliasInternalRoute(t.Context(), alias)
+	require.NoError(t, err)
+	require.Equal(t, routetable.ShapeChanged, res)
+
+	spec := internalSpecFor(t, ts, "default", "hello", "prod")
+
+	const n = 200
+	for range n {
+		rr := httptest.NewRecorder()
+		spec.Handler.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/fission-function/hello:prod", nil))
+		require.Equal(t, http.StatusOK, rr.Code)
+	}
+
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	assert.Positive(t, resolver.calls["hello-v1"], "the primary target must receive traffic")
+	assert.Positive(t, resolver.calls["hello-v2"], "the secondary target must receive traffic too — the split, not primary-only")
+	assert.Equal(t, n, resolver.calls["hello-v1"]+resolver.calls["hello-v2"], "every request resolved to one of the two targets")
+}
+
+// TestInternalAliasRouteWeightChangeIsHandlerSwapped pins that
+// aliasRouteGeneration reacts to a WEIGHT-only edit (same two targets, new
+// split) — a case a naive "just the resolved target's Generation" scheme
+// would miss (neither target's Generation moves on a weight edit).
+func TestInternalAliasRouteWeightChangeIsHandlerSwapped(t *testing.T) {
+	fn := incrFn("hello", "default", 1)
+	v1 := incrVersion("hello-v1", "default", "hello", fn.UID, 1, 1)
+	v2 := incrVersion("hello-v2", "default", "hello", fn.UID, 2, 2)
+	alias := incrAlias("prod", "default", "hello", "hello-v1", 1)
+	alias.Spec.Weight = new(90)
+	alias.Spec.SecondaryVersion = "hello-v2"
+	ts, cl := newIncrementalTS(t, fn, v1, v2, alias)
+
+	res, err := ts.applyAliasInternalRoute(t.Context(), alias)
+	require.NoError(t, err)
+	require.Equal(t, routetable.ShapeChanged, res)
+	before := internalSpecFor(t, ts, "default", "hello", "prod")
+
+	// Weight-only edit: same primary/secondary targets, new split, and a
+	// spec write bumps alias.Generation (Status is untouched). Persisted to
+	// the client (not just the in-memory copy) so applyAliasInternalRoute's
+	// resolveByAlias — which always re-Gets the alias — actually sees it,
+	// exactly as the reconciler's own re-Get would in production.
+	reweighted := alias.DeepCopy()
+	reweighted.Generation = 2
+	reweighted.Spec.Weight = new(10)
+	require.NoError(t, cl.Update(t.Context(), reweighted))
+
+	res, err = ts.applyAliasInternalRoute(t.Context(), reweighted)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.HandlerSwapped, res, "a weight-only edit must swap the handler (never a no-op)")
+
+	after := internalSpecFor(t, ts, "default", "hello", "prod")
+	assert.Same(t, before.Handler, after.Handler, "still an atomic swap, not a new route")
+	assert.NotEqual(t, before.FunctionGen, after.FunctionGen, "the weight edit must be visible in the change-detection value")
 }

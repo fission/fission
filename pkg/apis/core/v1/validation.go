@@ -1510,12 +1510,42 @@ func (fv *FunctionVersion) Validate() error {
 	return errs
 }
 
+// aliasNameShadowsVersionScheme reports whether name matches the
+// FunctionVersion naming scheme minted FOR functionName —
+// "<functionName>-v<sequence>" (versioning.Publish; enforced on the
+// FunctionVersion side by FunctionVersion.Validate above). An alias with
+// such a name would materialize to the IDENTICAL internal-listener route as
+// one of that function's own published versions
+// (/fission-function/[<ns>/]<functionName>:<name> — see pkg/router's
+// internalRouteExactURLs/routetable.InternalKey, which has no alias-vs-
+// version discriminant beyond the shared Suffix string), so whichever event
+// (alias repoint vs. a new publish) lands last would silently overwrite the
+// other's route. The check is scoped to functionName specifically — an
+// alias named e.g. "hello-v3" is fine for any function OTHER than "hello".
+func aliasNameShadowsVersionScheme(name, functionName string) bool {
+	suffix, ok := strings.CutPrefix(name, functionName+"-v")
+	if !ok || suffix == "" {
+		return false
+	}
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func (fa *FunctionAlias) Validate() error {
 	var errs error
 
 	errs = errors.Join(errs,
 		validateMetadata("FunctionAlias", fa.ObjectMeta),
 		fa.Spec.Validate())
+
+	if aliasNameShadowsVersionScheme(fa.Name, fa.Spec.FunctionName) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAlias.ObjectMeta.Name", fa.Name,
+			fmt.Sprintf("collides with the FunctionVersion naming scheme for function %q (<functionName>-v<sequence>); choose a different alias name", fa.Spec.FunctionName)))
+	}
 
 	return errs
 }

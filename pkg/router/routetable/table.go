@@ -128,6 +128,16 @@ func (s *RouteSpec) shapeEqual(o *RouteSpec) bool {
 // differing Suffix are two independent routes (the plain function route and
 // its `:<alias>`/`:<version>` siblings all coexist and are applied,
 // swapped, and deleted independently).
+//
+// This package has no way to tell an alias-sourced Suffix from a
+// version-sourced one — a FunctionAlias and a FunctionVersion of the same
+// function sharing a name would collide on the identical InternalKey. The
+// FunctionAlias admission webhook (v1 package's aliasNameShadowsVersionScheme)
+// is what makes that impossible for a well-formed alias, by rejecting any
+// name matching the FunctionVersion naming scheme for its own function; this
+// package intentionally does not re-enforce it (a hand-crafted/legacy object
+// that bypassed the webhook simply falls to last-writer-wins, same as any
+// other unenforced invariant here).
 type InternalKey struct {
 	types.NamespacedName
 	Suffix string
