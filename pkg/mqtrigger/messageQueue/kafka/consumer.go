@@ -100,11 +100,7 @@ func NewMqtConsumerGroupHandler(version sarama.KafkaVersion,
 	// one; resolution stays entirely router-side. Precomputed once here (not
 	// per-delivery) since resolution happens per-request on the router side
 	// regardless of when the publisher built the URL string.
-	suffix := ch.trigger.Spec.FunctionReference.Alias
-	if suffix == "" {
-		suffix = ch.trigger.Spec.FunctionReference.Version
-	}
-	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunctionRef(ch.trigger.Spec.FunctionReference.Name, ch.trigger.Namespace, suffix), "/")
+	ch.fnUrl = routerUrl + "/" + strings.TrimPrefix(utils.UrlForFunctionReference(ch.trigger.Spec.FunctionReference, ch.trigger.Namespace), "/")
 	ch.logger.V(1).Info("function HTTP URL", "url", ch.fnUrl)
 	return ch
 }

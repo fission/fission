@@ -426,16 +426,15 @@ func hasInternalRoute(ts *HTTPTriggerSet, ns, fnName, suffix string) bool {
 	return false
 }
 
-// TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision is the fix
-// for the reviewer-flagged Important defect: an alias named "hello-v1" for
-// function "world" and a FunctionVersion literally named "hello-v1" for
-// function "hello" share the same Suffix but are DISTINCT InternalKeys
-// (different function names). Deleting the alias must remove ONLY its own
-// route (world:hello-v1) and leave function hello's own hello-v1 version
-// route untouched — the previous unscoped DeleteInternalBySuffix nuked both,
-// which self-healed only via the 60s resync (a real drift-metric increment,
-// violating the zero-drift bar). A resync run immediately after the delete
-// must find nothing left to correct.
+// TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision pins the
+// invariant that an alias named "hello-v1" for function "world" and a
+// FunctionVersion literally named "hello-v1" for function "hello" share the
+// same Suffix but are DISTINCT InternalKeys (different function names).
+// Deleting the alias must remove ONLY its own route (world:hello-v1) and
+// leave function hello's own hello-v1 version route untouched — an unscoped
+// DeleteInternalBySuffix would nuke both, self-healing only via the 60s
+// resync (a real drift-metric increment, violating the zero-drift bar). A
+// resync run immediately after the delete must find nothing left to correct.
 func TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision(t *testing.T) {
 	fnHello := incrFn("hello", "default", 1)
 	vHelloV1 := incrVersion("hello-v1", "default", "hello", fnHello.UID, 1, 1)

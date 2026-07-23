@@ -153,6 +153,7 @@ func benchHandler(b *testing.B, upstream *url.URL, hoisted bool) functionHandler
 	if hoisted {
 		fh.rtLogger = logger.WithName("roundtripper")
 		fh.policyByUID = precomputePolicies(map[string]*fv1.Function{fn.Name: fn}, fh.functionTimeoutMap, params.streamIdleDefault)
+		fh.basesByUID = precomputeFunctionURLBases(map[string]*fv1.Function{fn.Name: fn})
 	}
 	return fh
 }

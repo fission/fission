@@ -77,9 +77,12 @@ type functionHandler struct {
 	// Hoisted per-route state (RFC-0014): computed once at mux build instead
 	// of per request. rtLogger is the round tripper's named logger;
 	// policyByUID holds the resolved proxy policy per backend function (the
-	// canary path selects the backend per request, hence per-key).
+	// canary path selects the backend per request, hence per-key);
+	// basesByUID holds each backend function's internal-listener URL prefix
+	// candidates (functionURLBases) the same way, for trimFunctionPrefix.
 	rtLogger    logr.Logger
 	policyByUID map[crd.CacheKeyUG]proxyPolicy
+	basesByUID  map[crd.CacheKeyUG][]string
 	// asyncInvoker enqueues RFC-0024 async invocations. Set on both the public
 	// HTTPTrigger handlers and the internal direct-function handlers, so a signed
 	// direct caller can go async; the dispatcher's own deliveries are excluded by
@@ -104,6 +107,17 @@ func (fh *functionHandler) roundTripperLogger() logr.Logger {
 		return fh.rtLogger
 	}
 	return fh.logger.WithName("roundtripper")
+}
+
+// basesFor returns the hoisted internal-listener URL prefix candidates for
+// fn (see functionURLBases), computing them on the spot only when the route
+// was built without a precomputed map (test harnesses) — same fallback
+// pattern as proxyPolicyFor/roundTripperLogger above.
+func (fh *functionHandler) basesFor(fn *fv1.Function) []string {
+	if b, ok := fh.basesByUID[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)]; ok {
+		return b
+	}
+	return functionURLBases(&fn.ObjectMeta)
 }
 
 // asyncRequested reports whether request should be enqueued for RFC-0024 async
@@ -241,6 +255,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		funcTimeout: time.Duration(fnTimeout) * time.Second,
 		policy:      policy,
 		stickyKey:   stickyKey,
+		bases:       fh.basesFor(fh.function),
 	}
 
 	start := time.Now()

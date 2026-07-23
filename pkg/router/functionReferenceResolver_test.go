@@ -181,9 +181,9 @@ func TestResolveByName_Alias_NamePinned(t *testing.T) {
 	assert.Equal(t, 88, rr.functionMap[key].Spec.FunctionTimeout)
 }
 
-// TestResolveByName_Alias_NamePinned_Unweighted_StickySourceIsLive is the
-// reviewer-flagged unification: an UNWEIGHTED alias's stickySource must ALSO
-// be the live function, not the resolved snapshot's own recorded Spec --
+// TestResolveByName_Alias_NamePinned_Unweighted_StickySourceIsLive pins the
+// stickySource invariant: an UNWEIGHTED alias's stickySource must ALSO be
+// the live function, not the resolved snapshot's own recorded Spec --
 // matching the weighted branch, so that adding/removing Weight on the alias
 // never changes which config the sticky key is computed against (a
 // snapshot-sourced unweighted stickySource would silently re-key every
@@ -361,9 +361,9 @@ func TestResolveByName_Alias_Weighted_StickySourceIsLive(t *testing.T) {
 		"stickySource must carry the LIVE function's sticky config, not the primary snapshot's own")
 }
 
-// TestResolveByAlias_FunctionNameMismatch pins the carried Task-3-review
-// minor: a trigger's Name must match the alias's own Spec.FunctionName, with
-// a clear alias-scoped error, rather than falling through to a confusing
+// TestResolveByAlias_FunctionNameMismatch pins the invariant that a
+// trigger's Name must match the alias's own Spec.FunctionName, with a clear
+// alias-scoped error, rather than falling through to a confusing
 // FunctionVersion-ownership error downstream.
 func TestResolveByAlias_FunctionNameMismatch(t *testing.T) {
 	fn := resolverFn("hello", "default", "fn-uid", 1, 60)
@@ -381,11 +381,10 @@ func TestResolveByAlias_FunctionNameMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "targets function")
 }
 
-// TestResolveByAlias_Weighted_EmptySecondaryVersion pins the carried
-// Task-3-review minor: a hand-crafted weighted alias with an empty
-// SecondaryVersion (the webhook normally requires it when Weight is set)
-// must resolve cleanly to errFunctionNotFound, not a transient reader error
-// from an empty-name Get.
+// TestResolveByAlias_Weighted_EmptySecondaryVersion pins the invariant that
+// a hand-crafted weighted alias with an empty SecondaryVersion (the webhook
+// normally requires it when Weight is set) must resolve cleanly to
+// errFunctionNotFound, not a transient reader error from an empty-name Get.
 func TestResolveByAlias_Weighted_EmptySecondaryVersion(t *testing.T) {
 	fn := resolverFn("hello", "default", "fn-uid", 1, 60)
 	v1 := resolverVersion("hello-v1", "default", "hello", "fn-uid", 1, 1, 10)

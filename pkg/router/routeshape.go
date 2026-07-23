@@ -218,6 +218,7 @@ func (ts *HTTPTriggerSet) newFunctionHandlerBase(routeName string, functionMap m
 		functionTimeoutMap:       fnTimeoutMap,
 		rtLogger:                 routeLogger.WithName("roundtripper"),
 		policyByUID:              precomputePolicies(functionMap, fnTimeoutMap, streamIdleDefault),
+		basesByUID:               precomputeFunctionURLBases(functionMap),
 		// Direct callers can go async on any of these routes (RFC-0024); the
 		// dispatcher's own deliveries are gated out by the
 		// X-Fission-Invocation-Id guard in handler(), so they still proxy

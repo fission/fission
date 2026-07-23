@@ -111,7 +111,7 @@ func TestRewriteFunctionURL(t *testing.T) {
 			req := httptest.NewRequest("GET", tt.reqURL, nil)
 			wantQuery := req.URL.RawQuery
 
-			rewriteFunctionURL(logr.Discard(), req, tt.trigger, &tt.fnMeta, svcURL)
+			rewriteFunctionURL(logr.Discard(), req, tt.trigger, functionURLBases(&tt.fnMeta), svcURL)
 
 			assert.Equal(t, tt.wantPath, req.URL.Path)
 			assert.Equal(t, "http", req.URL.Scheme)
@@ -202,7 +202,7 @@ func TestRewriteFunctionURLSuffixAware(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest("GET", tt.reqURL, nil)
-			rewriteFunctionURL(logr.Discard(), req, nil, &tt.fnMeta, svcURL)
+			rewriteFunctionURL(logr.Discard(), req, nil, functionURLBases(&tt.fnMeta), svcURL)
 			assert.Equal(t, tt.wantPath, req.URL.Path)
 		})
 	}

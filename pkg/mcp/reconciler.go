@@ -154,9 +154,8 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // function, unchanged from pre-RFC-0025 behavior.
 //
 // An alias-addressed Tool (Alias set) is instead built from the ALIAS'S
-// RESOLVED VERSION's snapshot: Get the named FunctionAlias, compute its
-// effective target (Spec.Version if name-pinned, else
-// Status.ResolvedVersion -- the same precedence
+// RESOLVED VERSION's snapshot: Get the named FunctionAlias, take its
+// EffectiveTarget() (the same precedence
 // pkg/router/functionReferenceResolver.go's resolveByAlias uses), Get that
 // FunctionVersion, and build the entry from
 // versioning.VersionedFunction(fn, v) -- toolEntryFromFunction works
@@ -185,10 +184,7 @@ func (r *FunctionToolReconciler) resolveEntry(ctx context.Context, fn *fv1.Funct
 		return ToolEntry{}, err
 	}
 
-	target := alias.Spec.Version
-	if target == "" {
-		target = alias.Status.ResolvedVersion
-	}
+	target := alias.EffectiveTarget()
 	if target == "" {
 		return ToolEntry{}, errAliasUnresolved
 	}

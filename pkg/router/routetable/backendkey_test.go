@@ -70,12 +70,12 @@ func TestBackendKeyRoundTrip(t *testing.T) {
 	}
 }
 
-// TestReindexLockedStripsBackendKeyVersionSuffix is the plan-review
-// regression (warning #4): a versioned trigger's FnGens key is a BackendKey
-// ("name@version"), but reindexLocked must index it under the live
-// function's plain NamespacedName — otherwise a live-Function event (which
-// TriggersForFunction is always queried with the plain name for) would never
-// find the versioned trigger, and its route would never re-resolve.
+// TestReindexLockedStripsBackendKeyVersionSuffix pins the invariant that a
+// versioned trigger's FnGens key is a BackendKey ("name@version"), but
+// reindexLocked must index it under the live function's plain
+// NamespacedName — otherwise a live-Function event (which TriggersForFunction
+// is always queried with the plain name for) would never find the versioned
+// trigger, and its route would never re-resolve.
 func TestReindexLockedStripsBackendKeyVersionSuffix(t *testing.T) {
 	tbl := New()
 	fnKey := types.NamespacedName{Namespace: "default", Name: "hello"}

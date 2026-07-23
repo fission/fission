@@ -49,15 +49,15 @@ func incrVersionedTrigger(name, ns string, gen int64, url, fnName, version strin
 	}
 }
 
-// TestIncrementalVersionedTriggerReResolvesOnFunctionEvent is the
-// plan-review regression (warning #4): a versioned trigger's FnGens key is a
-// BackendKey ("hello@hello-v1"), not the live function's plain name. Without
-// reindexLocked stripping the "@version" suffix back to the plain name
-// before populating fnIndex, a live-Function DELETE event would never find
-// this trigger via TriggersForFunction (which the cascade always queries by
-// plain name) — so the trigger's route would incorrectly keep serving after
-// its underlying function is gone. With the fix, the delete cascades: the
-// route drops and the trigger is marked FunctionNotFound.
+// TestIncrementalVersionedTriggerReResolvesOnFunctionEvent pins the
+// invariant that a versioned trigger's FnGens key is a BackendKey
+// ("hello@hello-v1"), not the live function's plain name, so reindexLocked
+// must strip the "@version" suffix back to the plain name before populating
+// fnIndex: a live-Function DELETE event is always looked up via
+// TriggersForFunction by plain name, so without the stripped index this
+// trigger would never be found and its route would incorrectly keep serving
+// after its underlying function is gone. The delete must cascade: the route
+// drops and the trigger is marked FunctionNotFound.
 func TestIncrementalVersionedTriggerReResolvesOnFunctionEvent(t *testing.T) {
 	fn := incrFn("hello", "myns", 1) // UID: "fn-hello" (incrFn's convention)
 	v := incrVersion("hello-v1", "myns", "hello", fn.UID, fn.Generation, 1)
