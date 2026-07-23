@@ -69,6 +69,16 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 	// informer cache can lag another component's view, so an RV-keyed
 	// throttler key could split one function's in-flight specialization
 	// across concurrent callers observing different RVs of the same spec.
+	//
+	// Minor pre-existing gap (unrelated to the RV->Generation swap, noted
+	// here for a future revisit): the key is derived from fnMeta — the
+	// resolved fn snapshot passed in — but fromExecutor() below re-reads the
+	// live Function via currentFunction() before calling GetServiceForFunction.
+	// A spec update landing between the two reads means the throttler key
+	// (old Generation) and the object actually specialized (new Generation)
+	// can diverge for that one race window; a follower joining on the old
+	// key would get an entry keyed under a Generation that doesn't match
+	// what was specialized. Pre-existing shape (predates this migration).
 	recordObj, err := r.throttler.RunOnce(
 		crd.CacheKeyUGFromMeta(fnMeta).String(),
 		func(firstToTheLock bool) (any, error) {
