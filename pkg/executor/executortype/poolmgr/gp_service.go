@@ -338,6 +338,12 @@ func (gpm *GenericPoolManager) deleteFunctionService(ctx context.Context, fn *fv
 	if err != nil {
 		return err
 	}
+	// Fail-fast on the first delete error rather than aggregating: the
+	// Function reconciler retries the whole delete on any error, which
+	// re-Lists and re-attempts every remaining Service (including ones this
+	// pass already deleted, now idempotently absent) -- no partial-progress
+	// state to preserve across attempts, so there's nothing an aggregated
+	// error would buy over the simpler early return.
 	for i := range svcs.Items {
 		name := svcs.Items[i].Name
 		if err := gpm.kubernetesClient.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !kerrors.IsNotFound(err) {

@@ -157,6 +157,13 @@ func (ix *Index) shard(key FnKey) *indexShard {
 
 // Lookup returns the function's merged endpoint list (nil when unknown). The
 // returned slice is immutable — callers must not modify it.
+//
+// Unversioned-only (RFC-0025): Lookup always builds FnKey with Version ""
+// and so only ever sees the unversioned pool's entry -- a versioned pool's
+// endpoints (Version != "") are invisible to it. This is deliberate for now:
+// nothing routes to a specific version yet (see Admit's doc comment). Lookup
+// will need a version parameter, mirroring Admit, before phase 3 introduces
+// version-aware endpoint reads.
 func (ix *Index) Lookup(namespace, name string) []Endpoint {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)
@@ -174,6 +181,9 @@ func (ix *Index) Lookup(namespace, name string) []Endpoint {
 }
 
 // ReadyCount returns how many ready endpoints the function has.
+//
+// Unversioned-only (RFC-0025): built on Lookup, so it inherits the same
+// Version "" restriction -- see Lookup's doc comment.
 func (ix *Index) ReadyCount(namespace, name string) int {
 	n := 0
 	for _, ep := range ix.Lookup(namespace, name) {
@@ -492,6 +502,14 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 // executor-resolved path climbs a retry ladder before invalidating. Each new
 // (or expired-and-renewed) quarantine is counted in
 // fission_router_endpointcache_quarantines_total.
+//
+// Unversioned-only (RFC-0025): builds FnKey with Version "", so it can only
+// ever quarantine an address within the unversioned pool's entry -- see
+// Lookup's doc comment. Quarantining a dial failure reported against a
+// versioned endpoint would silently find no entry under "" and do nothing
+// (the dead address stays admissible); this needs a version parameter
+// before phase 3 introduces version-aware endpoints and callers that dial
+// them.
 func (ix *Index) Quarantine(namespace, name, address string) {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)
@@ -547,6 +565,11 @@ func (e *fnEntry) quarantineLocked(address string, now time.Time, ttl time.Durat
 // reports whether THIS call stored a new quarantine — false both below the
 // limit and when a concurrent report already quarantined the address, so
 // callers can log escalations without storm-duplicated noise.
+//
+// Unversioned-only (RFC-0025): builds FnKey with Version "" -- see
+// Quarantine's doc comment. A dial timeout reported against a versioned
+// endpoint would silently find no entry and record nothing (no strike, no
+// eventual quarantine); needs a version parameter before phase 3.
 func (ix *Index) ReportDialTimeout(namespace, name, address string) bool {
 	key := FnKey{Namespace: namespace, Name: name}
 	s := ix.shard(key)

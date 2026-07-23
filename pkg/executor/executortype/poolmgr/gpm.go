@@ -128,10 +128,14 @@ type (
 		// functions are addressed via Istio services instead.
 		functionServicesEnabled bool
 
-		// fnSvcEnsured debounces ensureFunctionService per function UID (see
-		// maybeEnsureFunctionService): map[types.UID]time.Time of the last
-		// successful-or-in-flight ensure. Entries are dropped on function
-		// delete and on ensure failure (so the next request retries).
+		// fnSvcEnsured debounces ensureFunctionService per (function UID,
+		// version) -- see fnSvcEnsureKey: map[string]time.Time keyed on the
+		// composite "<uid>/<versionLabel>" string (unversioned functions get
+		// "<uid>/"), holding the last successful-or-in-flight ensure per key
+		// so one version's debounce window never starves another's (RFC-0025).
+		// Entries are dropped on function delete (deleteFnSvcEnsuredForUID
+		// sweeps every version's entry for the UID) and on ensure failure (so
+		// the next request retries).
 		fnSvcEnsured sync.Map
 
 		// provisioner maintains warm specialized pods for functions opted
