@@ -38,7 +38,10 @@ func Commands() *cobra.Command {
 		Short: "Update a function alias",
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.AliasName},
-		Optional: []flag.Flag{flag.AliasVersion, flag.AliasPackageDigest, flag.AliasWeight, flag.AliasSecondaryVersion, flag.AliasClearWeight},
+		Optional: []flag.Flag{
+			flag.AliasVersion, flag.AliasPackageDigest, flag.AliasWeight, flag.AliasSecondaryVersion, flag.AliasClearWeight,
+			flag.AliasWait, flag.WaitTimeout,
+		},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{

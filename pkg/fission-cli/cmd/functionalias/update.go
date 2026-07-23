@@ -44,12 +44,25 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 
 func (opts *UpdateSubCommand) run(input cli.Input) error {
 	aliases := opts.Client().FissionClientSet.CoreV1().FunctionAliases(opts.namespace)
-	_, err := util.UpdateOnConflict(input.Context(), aliases, opts.name, mutateAliasSpec(input))
+	updated, err := util.UpdateOnConflict(input.Context(), aliases, opts.name, mutateAliasSpec(input))
 	if err != nil {
 		return fmt.Errorf("error updating function alias: %w", err)
 	}
 
 	fmt.Printf("function alias '%v' updated\n", opts.name)
+
+	if input.Bool(flagkey.AliasWait) {
+		timeout := input.Duration(flagkey.WaitTimeout)
+		// updated.Spec.Version is empty for a PackageDigest-pinned alias;
+		// waitForResolved treats that as "just wait for Resolved=True" (see
+		// its doc comment) since the caller cannot name the target version
+		// the async digest resolution will land on.
+		if err := WaitForResolved(input.Context(), opts.Client().FissionClientSet, opts.namespace, opts.name, updated.Spec.Version, timeout); err != nil {
+			return fmt.Errorf("error waiting for function alias to resolve: %w", err)
+		}
+		fmt.Printf("function alias '%v' resolved\n", opts.name)
+	}
+
 	return nil
 }
 
