@@ -149,11 +149,16 @@ func TestDestinationRoundTrip_AliasVersion(t *testing.T) {
 	assert.Equal(t, "prod", got.OnFailure.Alias)
 }
 
-// TestDestination_FunctionRouteName pins the `:<version>`/`:<alias>` URL
-// suffix grammar a fired destination's envelope.Function is built with:
-// Version takes precedence over Alias (matching FunctionReference's own
-// mutual-exclusivity priority), and a plain destination (neither set) is
-// unsuffixed -- byte-identical to pre-Task-5 behavior.
+// TestDestination_FunctionRouteName pins the `:<alias>` URL suffix grammar a
+// fired destination's envelope.Function is built with. A Version pin is
+// deliberately NOT suffixed (it travels on Envelope.FunctionVersion instead,
+// via fireDestination, so it inherits the deliverer's 404 fallback rather
+// than dead-lettering on routine retain-N GC -- see Destination.Version's
+// doc comment) and so returns the bare name here, same as no pin at all.
+// Version still takes precedence over Alias when both are set (matching
+// FunctionReference's own mutual-exclusivity priority): the caller reads
+// dest.Version directly for the FunctionVersion field in that case, and
+// functionRouteName correctly omits the (superseded) Alias suffix.
 func TestDestination_FunctionRouteName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -162,9 +167,9 @@ func TestDestination_FunctionRouteName(t *testing.T) {
 		want string
 	}{
 		{"plain", Destination{FunctionName: "fn"}, "fn"},
-		{"version pinned", Destination{FunctionName: "fn", Version: "fn-v1"}, "fn:fn-v1"},
+		{"version pinned returns bare name", Destination{FunctionName: "fn", Version: "fn-v1"}, "fn"},
 		{"alias pinned", Destination{FunctionName: "fn", Alias: "prod"}, "fn:prod"},
-		{"version wins over alias", Destination{FunctionName: "fn", Version: "fn-v1", Alias: "prod"}, "fn:fn-v1"},
+		{"version wins over alias: bare name, not the alias suffix", Destination{FunctionName: "fn", Version: "fn-v1", Alias: "prod"}, "fn"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

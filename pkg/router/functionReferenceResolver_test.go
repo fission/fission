@@ -181,6 +181,35 @@ func TestResolveByName_Alias_NamePinned(t *testing.T) {
 	assert.Equal(t, 88, rr.functionMap[key].Spec.FunctionTimeout)
 }
 
+// TestResolveByName_Alias_NamePinned_Unweighted_StickySourceIsLive is the
+// reviewer-flagged unification: an UNWEIGHTED alias's stickySource must ALSO
+// be the live function, not the resolved snapshot's own recorded Spec --
+// matching the weighted branch, so that adding/removing Weight on the alias
+// never changes which config the sticky key is computed against (a
+// snapshot-sourced unweighted stickySource would silently re-key every
+// in-flight session the moment a rollout turns a name-pinned alias into a
+// weighted split).
+func TestResolveByName_Alias_NamePinned_Unweighted_StickySourceIsLive(t *testing.T) {
+	fn := resolverFn("hello", "default", "fn-uid", 5, 60)
+	fn.Spec.State = &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Live-Session"}}
+
+	v := resolverVersion("hello-v1", "default", "hello", "fn-uid", 5, 1, 88)
+	v.Spec.Snapshot.State = &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Snapshot-Session"}}
+
+	alias := resolverAlias("prod", "default", "hello", func(a *fv1.FunctionAlias) {
+		a.Spec.Version = "hello-v1"
+	})
+	frr := newResolver(t, fn, v, alias)
+
+	rr, err := frr.resolveByName(t.Context(), "default", fv1.FunctionReference{
+		Type: fv1.FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, rr.stickySource)
+	assert.Equal(t, "X-Live-Session", rr.stickySource.Spec.State.Sticky.Name,
+		"unweighted alias stickySource must be the LIVE function, not the resolved snapshot's own Sticky config")
+}
+
 // TestResolveByName_Alias_DigestPinned_UsesResolvedVersion resolves through
 // a digest-pinned alias (Spec.Version empty, Spec.PackageDigest set): the
 // effective target falls back to Status.ResolvedVersion, the AliasReconciler's

@@ -234,9 +234,19 @@ func TestHTTPDelivererVersionPinned_FallsBackOnNotFound(t *testing.T) {
 }
 
 // TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus proves the fallback
-// is scoped to exactly a 404 on the versioned route -- any other status
-// (including a 4xx that isn't 404, or the function's own legitimate 404) is
-// relayed as-is, with only ONE attempt.
+// is scoped to exactly a 404 status on the versioned route -- any OTHER
+// status (this test uses 500) is relayed as-is, with only ONE attempt.
+//
+// It does NOT prove "the function's own legitimate 404 is relayed as-is" --
+// that claim would be false. A route-miss 404 (httpmux, no matching route)
+// and a 404 the function ITSELF chooses to return as a normal response are
+// byte-identical HTTP responses at this layer; the deliverer cannot tell
+// them apart, so a function that legitimately answers 404 to a version-
+// pinned async invocation IS double-invoked by the fallback below (see the
+// HONESTY NOTE on the FunctionVersion branch in Deliver). Async delivery is
+// already at-least-once, so this is a real but bounded widening of an
+// existing risk, not a new failure class -- flagged here, not fixed (see the
+// TODO(rfc-0025) on a future route-miss marker header).
 func TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus(t *testing.T) {
 	t.Parallel()
 	var attempts int

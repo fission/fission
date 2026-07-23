@@ -81,11 +81,29 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 
 	// RFC-0025 Task 5: a version-pinned envelope tries the versioned internal
 	// route (`:<version>` suffix, the same grammar buildInternalAliasHandler's
-	// routes register at) first. A 404 there means the version's route was GC'd
-	// between enqueue and this delivery attempt (the function moved on) -- fall
-	// back to the bare-name route immediately, as part of the SAME attempt, not
-	// a redelivery cycle (the dispatcher's attempt/backoff accounting never sees
-	// this as a retry).
+	// routes register at) first. A 404 there is ASSUMED to mean the version's
+	// route was GC'd between enqueue and this delivery attempt (the router's
+	// httpmux returning 404 because no route matched) -- fall back to the
+	// bare-name route immediately, as part of the SAME attempt, not a
+	// redelivery cycle (the dispatcher's attempt/backoff accounting never
+	// sees this as a retry).
+	//
+	// HONESTY NOTE: a 404 from a route MISS and a 404 the function itself
+	// legitimately RETURNS as its own response are indistinguishable at this
+	// layer -- both arrive as plain HTTP 404s with no marker distinguishing
+	// them. So a function that (correctly, for its own business logic)
+	// responds 404 to a version-pinned async invocation gets DOUBLE-INVOKED
+	// by this fallback: once on the versioned route (which served it and
+	// returned 404), once more on the bare-name route. This is not a new
+	// failure mode async invocation didn't already have -- delivery is
+	// at-least-once by design (a dispatcher crash between Deliver and Ack has
+	// the same effect) -- but it is a real, present trade-off of this
+	// fallback specifically, not just a theoretical edge of the at-least-once
+	// contract, and is not something the caller can suppress today.
+	// TODO(rfc-0025): the robust fix is a router-set marker distinguishing a
+	// route-miss 404 (e.g. a response header the internal listener's 404
+	// handler stamps, checked here instead of trusting the bare status code)
+	// from a function-emitted 404, so only a genuine route-miss falls back.
 	if env.FunctionVersion != "" {
 		result := h.deliverOnce(ctx, env, invocationID, attempt, h.targetURL(funcPath+":"+env.FunctionVersion, env.Query))
 		if result.Err == nil && result.StatusCode == http.StatusNotFound {
