@@ -54,6 +54,7 @@ func TestCanaryAliasPromotion(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
+	acquireHeavySlot(t)
 	af := newAliasFixture(t, f, "canaryaliasp", "canary")
 	af.publishTwoVersions(t, ctx, image,
 		framework.FunctionOptions{Code: writeNodeReturning(t, "v1", "hello, world!\n")},
@@ -126,6 +127,7 @@ func TestCanaryAliasRollback(t *testing.T) {
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
+	acquireHeavySlot(t)
 	af := newAliasFixture(t, f, "canaryaliasrb", "canary")
 	af.publishTwoVersions(t, ctx, image,
 		framework.FunctionOptions{Code: writeNodeReturning(t, "v1", "hello, world!\n")},
