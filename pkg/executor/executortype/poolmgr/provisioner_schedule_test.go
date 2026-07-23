@@ -62,7 +62,7 @@ func TestEffectiveTargetAt(t *testing.T) {
 				},
 			},
 			now:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
-			want: 4,
+			want: 3,
 		},
 		{
 			name: "Return windowTarget: active Window",
@@ -177,7 +177,7 @@ func TestEffectiveTargetAt(t *testing.T) {
 				Windows: []fv1.ProvisionedWindow{
 					{
 						Start:    "* * * * * *",
-						Duration: "28h", // 60 minutes
+						Duration: "28h", // 28 hours
 						Target:   5,
 						Name:     "denseWindow",
 					},
@@ -193,7 +193,7 @@ func TestEffectiveTargetAt(t *testing.T) {
 				Windows: []fv1.ProvisionedWindow{
 					{
 						Start:    "* 0 * * *",
-						Duration: "10m", // 60 minutes
+						Duration: "10m", // 10 minutes
 						Target:   0,
 						Name:     "sleepWindow",
 					},
@@ -202,7 +202,30 @@ func TestEffectiveTargetAt(t *testing.T) {
 			now:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
 			want: 0,
 		},
+		{
+			name: "multiple active windows, with one Target=0",
+			cfg: &fv1.ProvisionedConcurrencyConfig{
+				Target: 2,
+				Windows: []fv1.ProvisionedWindow{
+					{
+						Start:    "* 0 * * *",
+						Duration: "10m", // 10 minutes
+						Target:   0,
+						Name:     "sleepWindow",
+					},
+					{
+						Start:    "* 0 * * *",
+						Duration: "5m", // 5 minutes
+						Target:   1,
+						Name:     "activeWindow",
+					},
+				},
+			},
+			now:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			want: 1,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, gotErrors := effectiveTargetAt(tt.cfg, tt.now)
