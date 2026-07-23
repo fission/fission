@@ -933,6 +933,15 @@ spec:
                                 is 'name'
                               rule: '!(has(self.version) && self.version != '''')
                                 || self.type == ''name'''
+                            - message: functionref.alias must be a valid DNS1123 label
+                                (lowercase alphanumeric or '-', start/end alphanumeric,
+                                max 63 chars)
+                              rule: '!(has(self.alias) && self.alias != '''') || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
+                            - message: functionref.version must be a valid DNS1123
+                                label (lowercase alphanumeric or '-', start/end alphanumeric,
+                                max 63 chars)
+                              rule: '!(has(self.version) && self.version != '''')
+                                || self.version.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
                           topic:
                             description: Topic publishes the result envelope to a
                               message-queue topic.
@@ -1040,6 +1049,15 @@ spec:
                                 is 'name'
                               rule: '!(has(self.version) && self.version != '''')
                                 || self.type == ''name'''
+                            - message: functionref.alias must be a valid DNS1123 label
+                                (lowercase alphanumeric or '-', start/end alphanumeric,
+                                max 63 chars)
+                              rule: '!(has(self.alias) && self.alias != '''') || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
+                            - message: functionref.version must be a valid DNS1123
+                                label (lowercase alphanumeric or '-', start/end alphanumeric,
+                                max 63 chars)
+                              rule: '!(has(self.version) && self.version != '''')
+                                || self.version.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
                           topic:
                             description: Topic publishes the result envelope to a
                               message-queue topic.
@@ -9897,6 +9915,10 @@ spec:
                         pattern: ^[a-zA-Z0-9_-]{1,64}$
                         type: string
                     type: object
+                    x-kubernetes-validations:
+                    - message: tool.alias must be a valid DNS1123 label (lowercase
+                        alphanumeric or '-', start/end alphanumeric, max 63 chars)
+                      rule: '!(has(self.alias) && self.alias != '''') || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
                   versioning:
                     description: |-
                       Versioning, when non-nil, opts this function into RFC-0025 immutable
