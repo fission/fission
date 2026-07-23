@@ -36,15 +36,13 @@ type FunctionReferenceApplyConfiguration struct {
 	// rollout or a rollback) redirects traffic without touching this
 	// reference. Valid only when Type is "name"; mutually exclusive with
 	// Version. Empty (the default) preserves today's behavior: route
-	// straight to the live Function. Router-side resolution lands in a
-	// later RFC-0025 task — until then this field is accepted but inert.
+	// straight to the live Function.
 	Alias *string `json:"alias,omitempty"`
 	// Version, when set, pins this reference to one FunctionVersion CR by
 	// name (RFC-0025) — an immutable published snapshot that never moves,
 	// unlike Alias. Valid only when Type is "name"; mutually exclusive
 	// with Alias. Empty (the default) preserves today's behavior: route
-	// straight to the live Function. Router-side resolution lands in a
-	// later RFC-0025 task — until then this field is accepted but inert.
+	// straight to the live Function.
 	Version *string `json:"version,omitempty"`
 	// Function Reference by weight. this map contains function name as key and its weight
 	// as the value. This is for canary upgrade purpose.

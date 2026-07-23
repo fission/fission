@@ -28,8 +28,11 @@ import (
 )
 
 const (
-	FISSION_DEPLOYMENT_NAME_KEY = "fission-name"
-	FISSION_DEPLOYMENT_UID_KEY  = "fission-uid"
+	// FISSION_DEPLOYMENT_NAME_KEY and FISSION_DEPLOYMENT_UID_KEY are aliases
+	// of the fv1 spec-ownership annotation consts, kept under their original
+	// exported names since other spec code already references them.
+	FISSION_DEPLOYMENT_NAME_KEY = fv1.SpecDeploymentNameAnnotation
+	FISSION_DEPLOYMENT_UID_KEY  = fv1.SpecDeploymentUIDAnnotation
 
 	SPEC_API_VERSION          = "fission.io/v1"
 	ARCHIVE_URL_PREFIX string = "archive://"

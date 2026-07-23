@@ -54,8 +54,7 @@ spec:
                       rollout or a rollback) redirects traffic without touching this
                       reference. Valid only when Type is "name"; mutually exclusive with
                       Version. Empty (the default) preserves today's behavior: route
-                      straight to the live Function. Router-side resolution lands in a
-                      later RFC-0025 task — until then this field is accepted but inert.
+                      straight to the live Function.
                     maxLength: 63
                     type: string
                   functionweights:
@@ -94,8 +93,7 @@ spec:
                       name (RFC-0025) — an immutable published snapshot that never moves,
                       unlike Alias. Valid only when Type is "name"; mutually exclusive
                       with Alias. Empty (the default) preserves today's behavior: route
-                      straight to the live Function. Router-side resolution lands in a
-                      later RFC-0025 task — until then this field is accepted but inert.
+                      straight to the live Function.
                     maxLength: 63
                     type: string
                 required:
