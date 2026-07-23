@@ -25,6 +25,7 @@ import (
 	"pgregory.net/rapid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -139,7 +140,7 @@ func TestFunctionServiceNameLengthBound(t *testing.T) {
 	})
 }
 
-// TestVersionServiceSuffixHashFallback exercises versionServiceSuffix's
+// TestVersionServiceSuffixHashFallback exercises executorUtil.VersionSuffix's
 // fallback branch directly: a version label that does NOT end in the
 // expected "-v<seq>" shape (regexp mismatch) falls back to an 8-hex-char
 // hash-derived suffix. TestFunctionServiceNameLengthBound never reaches this
@@ -159,13 +160,13 @@ func TestVersionServiceSuffixHashFallback(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			suffix := versionServiceSuffix(tc.label)
+			suffix := executorUtil.VersionSuffix(tc.label)
 
 			assert.NotRegexp(t, `^-v[0-9]+$`, suffix, "a mismatched label must not produce the regex-tail shape")
 			assert.Regexp(t, `^-v[0-9a-f]{8}$`, suffix, "the fallback must be \"-v\" + 8 hex chars")
 			assert.LessOrEqual(t, len(suffix), 10, "the fallback suffix must be bounded regardless of label length")
 
-			assert.Equal(t, suffix, versionServiceSuffix(tc.label), "the fallback must be deterministic")
+			assert.Equal(t, suffix, executorUtil.VersionSuffix(tc.label), "the fallback must be deterministic")
 
 			fn := fnForService("hello", 1)
 			fn.Labels = map[string]string{fv1.FUNCTION_VERSION: tc.label}
@@ -175,8 +176,8 @@ func TestVersionServiceSuffixHashFallback(t *testing.T) {
 
 	t.Run("distinct mismatched labels get distinct fallback suffixes", func(t *testing.T) {
 		t.Parallel()
-		assert.NotEqual(t, versionServiceSuffix("garbage"), versionServiceSuffix("fn-vabc"))
-		assert.NotEqual(t, versionServiceSuffix("fn-vabc"), versionServiceSuffix("fn-v3-extra"))
+		assert.NotEqual(t, executorUtil.VersionSuffix("garbage"), executorUtil.VersionSuffix("fn-vabc"))
+		assert.NotEqual(t, executorUtil.VersionSuffix("fn-vabc"), executorUtil.VersionSuffix("fn-v3-extra"))
 	})
 }
 

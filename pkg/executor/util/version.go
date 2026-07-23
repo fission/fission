@@ -15,12 +15,9 @@ import (
 )
 
 // versionSuffixPattern matches the "-v<seq>" tail of a FunctionVersion's name
-// (minted as "<fn>-v<sequence>" by versioning.Publish). Mirrors
-// poolmgr/gp_service.go's own versionServiceSuffix so newdeploy and container
-// derive the identical bounded suffix from the same
-// fission.io/function-version label value that poolmgr uses for its Service
-// name; poolmgr keeps its own private copy (a cross-executor-type import
-// would be unusual coupling) — keep the two in sync if either changes.
+// (minted as "<fn>-v<sequence>" by versioning.Publish). Used by VersionSuffix
+// to derive the identical bounded suffix from the same
+// fission.io/function-version label value.
 var versionSuffixPattern = regexp.MustCompile(`-v[0-9]+$`)
 
 // VersionSuffix derives the bounded suffix a per-version Kubernetes object
