@@ -22,8 +22,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/executor/metrics"
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
