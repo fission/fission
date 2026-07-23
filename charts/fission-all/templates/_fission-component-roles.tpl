@@ -29,12 +29,15 @@ rules:
   - patch
 - apiGroups:
   - fission.io
-  # RFC-0025 leader-elected alias resolver (pkg/versioning.RegisterAliasReconciler,
-  # registered on this Manager). functions: get-only, for the ownerRef repair
-  # (never lists/watches Functions — it only Gets the one a FunctionAlias
-  # names). functionversions: read-only, resolves name-/digest-pinned
-  # targets. functionaliases: read/write the objects it reconciles, plus
-  # /status for ResolvedVersion, History and the Resolved condition.
+  # RFC-0025 versioning controllers (pkg/versioning: alias resolver,
+  # auto-publish, retention GC — all on this Manager). functions: get-only,
+  # for the ownerRef repair (never lists/watches Functions — it only Gets
+  # the one a FunctionAlias names). functionversions: read for name-/digest-
+  # pin resolution, create for auto-publish minting, delete for retention GC
+  # (the GC's skip-on-Forbidden handling makes a missing delete grant a
+  # SILENT no-op — do not remove). functionaliases: read/write the objects
+  # it reconciles, plus /status for ResolvedVersion, History and the
+  # Resolved condition.
   resources:
   - functions
   verbs:
@@ -47,6 +50,8 @@ rules:
   - get
   - list
   - watch
+  - create
+  - delete
 - apiGroups:
   - fission.io
   resources:
