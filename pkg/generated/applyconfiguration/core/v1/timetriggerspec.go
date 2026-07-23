@@ -20,6 +20,13 @@ type TimeTriggerSpecApplyConfiguration struct {
 	Cron *string `json:"cron,omitempty"`
 	// The reference to function
 	*FunctionReferenceApplyConfiguration `json:"functionref,omitempty"`
+	// Alias, when set, targets a FunctionAlias by name (RFC-0025): the timer
+	// publisher appends ":<alias>" to the internal invocation URL, so the
+	// router resolves the alias's currently-pointed-at FunctionVersion at
+	// fire time instead of the live Function. Empty (the default) preserves
+	// today's behavior. Router-side resolution lands in a later RFC-0025
+	// task — until then this field is accepted but inert.
+	Alias *string `json:"alias,omitempty"`
 	// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")
 	Method *string `json:"method,omitempty"`
 	// Subpath to trigger a specific route if function
@@ -56,6 +63,24 @@ func (b *TimeTriggerSpecApplyConfiguration) WithType(value corev1.FunctionRefere
 func (b *TimeTriggerSpecApplyConfiguration) WithName(value string) *TimeTriggerSpecApplyConfiguration {
 	b.ensureFunctionReferenceApplyConfigurationExists()
 	b.FunctionReferenceApplyConfiguration.Name = &value
+	return b
+}
+
+// WithAlias sets the Alias field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Alias field is set to the value of the last call.
+func (b *TimeTriggerSpecApplyConfiguration) WithAlias(value string) *TimeTriggerSpecApplyConfiguration {
+	b.ensureFunctionReferenceApplyConfigurationExists()
+	b.FunctionReferenceApplyConfiguration.Alias = &value
+	return b
+}
+
+// WithVersion sets the Version field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Version field is set to the value of the last call.
+func (b *TimeTriggerSpecApplyConfiguration) WithVersion(value string) *TimeTriggerSpecApplyConfiguration {
+	b.ensureFunctionReferenceApplyConfigurationExists()
+	b.FunctionReferenceApplyConfiguration.Version = &value
 	return b
 }
 

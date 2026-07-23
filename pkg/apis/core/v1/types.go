@@ -1300,6 +1300,17 @@ type (
 		// +optional
 		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]{1,64}$`
 		ToolName string `json:"toolName,omitempty"`
+
+		// Alias, when set, targets a FunctionAlias by name (RFC-0025) instead of
+		// the live Function: the MCP registry serves the tool from the alias's
+		// currently-resolved FunctionVersion snapshot, and tools/call is proxied
+		// to the ":<alias>" route rather than straight to the live Function.
+		// Empty (the default) preserves today's behavior. Router/registry-side
+		// resolution lands in a later RFC-0025 task — until then this field is
+		// accepted but inert.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Alias string `json:"alias,omitempty"`
 	}
 
 	// StateConfig declares a function's keyed-state keyspace and quotas
@@ -1587,6 +1598,9 @@ type (
 
 	// FunctionReference refers to a function
 	// +kubebuilder:validation:XValidation:rule="self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="functionref.name must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars) when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!((has(self.alias) && self.alias != '') && (has(self.version) && self.version != ''))",message="functionref.alias and functionref.version are mutually exclusive"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.type == 'name'",message="functionref.alias is only valid when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.version) && self.version != '') || self.type == 'name'",message="functionref.version is only valid when type is 'name'"
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:
@@ -1605,6 +1619,29 @@ type (
 		// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
 		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
+
+		// Alias, when set, targets a FunctionAlias by name instead of the live
+		// Function directly (RFC-0025): the alias is a movable pointer that the
+		// router resolves at request time to whatever FunctionVersion it
+		// currently points at, so repointing the alias (e.g. for a canary
+		// rollout or a rollback) redirects traffic without touching this
+		// reference. Valid only when Type is "name"; mutually exclusive with
+		// Version. Empty (the default) preserves today's behavior: route
+		// straight to the live Function. Router-side resolution lands in a
+		// later RFC-0025 task — until then this field is accepted but inert.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Alias string `json:"alias,omitempty"`
+
+		// Version, when set, pins this reference to one FunctionVersion CR by
+		// name (RFC-0025) — an immutable published snapshot that never moves,
+		// unlike Alias. Valid only when Type is "name"; mutually exclusive
+		// with Alias. Empty (the default) preserves today's behavior: route
+		// straight to the live Function. Router-side resolution lands in a
+		// later RFC-0025 task — until then this field is accepted but inert.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Version string `json:"version,omitempty"`
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.
@@ -2128,6 +2165,16 @@ type (
 
 		// The reference to function
 		FunctionReference `json:"functionref"`
+
+		// Alias, when set, targets a FunctionAlias by name (RFC-0025): the timer
+		// publisher appends ":<alias>" to the internal invocation URL, so the
+		// router resolves the alias's currently-pointed-at FunctionVersion at
+		// fire time instead of the live Function. Empty (the default) preserves
+		// today's behavior. Router-side resolution lands in a later RFC-0025
+		// task — until then this field is accepted but inert.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Alias string `json:"alias,omitempty"`
 
 		// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")
 		// +kubebuilder:default:="POST"
