@@ -53,7 +53,7 @@ func TestPrintVersionsListTableTruncatesDigest(t *testing.T) {
 		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
-	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputTable) })
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputTable, nil) })
 	assert.Contains(t, out, "hello-v1")
 	assert.Contains(t, out, truncateDigest(longDigest))
 	assert.False(t, strings.Contains(out, longDigest), "table output should not contain the full digest:\n%s", out)
@@ -66,7 +66,7 @@ func TestPrintVersionsListWideKeepsFullDigest(t *testing.T) {
 		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
-	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide) })
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide, nil) })
 	assert.Contains(t, out, longDigest)
 }
 
@@ -77,11 +77,99 @@ func TestPrintVersionsListJSON(t *testing.T) {
 		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
-	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputJSON) })
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputJSON, nil) })
 	var got []fv1.FunctionVersion
 	require.NoError(t, json.Unmarshal([]byte(out), &got))
 	require.Len(t, got, 1)
 	assert.Equal(t, longDigest, got[0].Spec.PackageDigest, "json must carry the full, untruncated digest")
+}
+
+func TestPrintVersionsListWideAddsEnvDriftColumn(t *testing.T) {
+	versions := []fv1.FunctionVersion{{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+	}}
+	drift := map[string]string{"hello-v1": "True"}
+
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide, drift) })
+	assert.Contains(t, out, "ENVDRIFT")
+	assert.Contains(t, out, "True")
+}
+
+func TestPrintVersionsListWideDriftMissingFallsBackToNone(t *testing.T) {
+	versions := []fv1.FunctionVersion{{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+	}}
+
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide, nil) })
+	assert.Contains(t, out, util.NoneValue)
+}
+
+func TestPrintVersionsListTableOmitsEnvDriftColumn(t *testing.T) {
+	versions := []fv1.FunctionVersion{{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+	}}
+
+	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputTable, nil) })
+	assert.False(t, strings.Contains(out, "ENVDRIFT"), "the plain table format must not gain the wide-only column:\n%s", out)
+}
+
+func TestEnvDriftByVersionDetectsDrift(t *testing.T) {
+	cmd.ResetClientsetForTest()
+	env := &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2},
+	}
+	fc := fissionfake.NewClientset(env)
+	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
+
+	versions := []fv1.FunctionVersion{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+			Spec: fv1.FunctionVersionSpec{
+				Sequence:              1,
+				EnvObservedGeneration: 1, // stale vs live generation 2
+				Snapshot:              fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "hello-v2"},
+			Spec: fv1.FunctionVersionSpec{
+				Sequence:              2,
+				EnvObservedGeneration: 2, // current
+				Snapshot:              fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "hello-v3"},
+			Spec: fv1.FunctionVersionSpec{
+				Sequence: 3, // no Environment recorded on the snapshot
+			},
+		},
+	}
+
+	drift := envDriftByVersion(t.Context(), fc, "default", versions)
+	assert.Equal(t, "True", drift["hello-v1"])
+	assert.Equal(t, "False", drift["hello-v2"])
+	assert.Equal(t, util.NoneValue, drift["hello-v3"])
+}
+
+func TestEnvDriftByVersionUnknownWhenEnvironmentMissing(t *testing.T) {
+	cmd.ResetClientsetForTest()
+	fc := fissionfake.NewClientset()
+	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
+
+	versions := []fv1.FunctionVersion{{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+		Spec: fv1.FunctionVersionSpec{
+			Sequence: 1,
+			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "does-not-exist"}},
+		},
+	}}
+
+	drift := envDriftByVersion(t.Context(), fc, "default", versions)
+	assert.Equal(t, util.NoneValue, drift["hello-v1"])
 }
 
 // TestVersionsCommandFiltersByFunctionLabel exercises the command-level
@@ -118,4 +206,40 @@ func TestVersionsCommandFiltersByFunctionLabel(t *testing.T) {
 	assert.False(t, strings.Contains(out, "other-v1"), "versions of a different function must not be listed:\n%s", out)
 	// v1 (older) should be printed before v2 (ascending Sequence).
 	assert.Less(t, strings.Index(out, "hello-v1"), strings.Index(out, "hello-v2"))
+}
+
+// TestVersionsCommandWideShowsEnvDrift is the command-level end-to-end for
+// the ENVDRIFT column: Versions() -> envDriftByVersion() -> printVersionsList().
+func TestVersionsCommandWideShowsEnvDrift(t *testing.T) {
+	env := &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2},
+	}
+	v := &fv1.FunctionVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "hello-v1",
+			Namespace: "default",
+			Labels:    map[string]string{fv1.VersionFunctionNameLabel: "hello"},
+		},
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName:          "hello",
+			Sequence:              1,
+			EnvObservedGeneration: 1,
+			Snapshot:              fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
+	}
+
+	cmd.ResetClientsetForTest()
+	cmd.SetClientset(cmd.Client{
+		FissionClientSet: fissionfake.NewClientset(env, v),
+		Namespace:        "default",
+	})
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.FnName, "hello")
+	in.Set(flagkey.Output, "wide")
+	out := captureStdout(t, func() error { return Versions(in) })
+
+	assert.Contains(t, out, "ENVDRIFT")
+	assert.Contains(t, out, "hello-v1")
+	assert.Contains(t, out, "True")
 }

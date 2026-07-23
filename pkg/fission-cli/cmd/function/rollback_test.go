@@ -5,6 +5,7 @@
 package function
 
 import (
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -46,12 +47,8 @@ func aliasForRollback() *fv1.FunctionAlias {
 	}
 }
 
-func setRollbackClient(objs ...*fv1.FunctionAlias) *fissionfake.Clientset {
-	rs := make([]runtime.Object, 0, len(objs))
-	for _, o := range objs {
-		rs = append(rs, o)
-	}
-	fc := fissionfake.NewSimpleClientset(rs...) //nolint:staticcheck
+func setRollbackClient(objs ...runtime.Object) *fissionfake.Clientset {
+	fc := fissionfake.NewSimpleClientset(objs...) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 	return fc
@@ -130,6 +127,69 @@ func TestRollbackSpecManagedWarnsAndErrorsWithoutDetach(t *testing.T) {
 	require.NoError(t, getErr)
 	assert.Equal(t, "hello-v3", got.Spec.Version, "spec-managed alias must not be repointed without --detach")
 	assert.Equal(t, "deploy-uid-1", got.Annotations[spec.FISSION_DEPLOYMENT_UID_KEY])
+}
+
+// rollbackTargetVersion builds the FunctionVersion aliasForRollback()'s bare
+// (no --to) rollback lands on -- hello-v2, per the History last-entry
+// contract -- carrying the env-observation fields warnEnvDrift reads.
+func rollbackTargetVersion(envObservedGen int64) *fv1.FunctionVersion {
+	return &fv1.FunctionVersion{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello-v2", Namespace: "default"},
+		Spec: fv1.FunctionVersionSpec{
+			FunctionName:          "hello",
+			Sequence:              2,
+			EnvObservedGeneration: envObservedGen,
+			Snapshot:              fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		},
+	}
+}
+
+func rollbackEnvironment(generation int64) *fv1.Environment {
+	return &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: generation},
+	}
+}
+
+func TestRollbackWarnsOnEnvDrift(t *testing.T) {
+	setRollbackClient(aliasForRollback(), rollbackTargetVersion(1), rollbackEnvironment(2))
+
+	in := rollbackFlags("hello", "prod")
+	out := captureStdout(t, func() error { return Rollback(in) })
+
+	assert.Contains(t, out, "WARNING")
+	assert.Contains(t, out, "hello-v2")
+	assert.Contains(t, out, "generation 1")
+	assert.Contains(t, out, "generation 2")
+}
+
+func TestRollbackNoWarningWhenEnvGenerationMatches(t *testing.T) {
+	setRollbackClient(aliasForRollback(), rollbackTargetVersion(2), rollbackEnvironment(2))
+
+	in := rollbackFlags("hello", "prod")
+	out := captureStdout(t, func() error { return Rollback(in) })
+
+	assert.False(t, strings.Contains(out, "WARNING"), "no drift; no warning expected:\n%s", out)
+}
+
+func TestRollbackNoWarningWhenTargetVersionMissing(t *testing.T) {
+	// No FunctionVersion object for hello-v2 at all -- not assessable, must
+	// not error or warn.
+	setRollbackClient(aliasForRollback())
+
+	in := rollbackFlags("hello", "prod")
+	out := captureStdout(t, func() error { return Rollback(in) })
+
+	assert.False(t, strings.Contains(out, "WARNING"), "missing target version is not assessable:\n%s", out)
+}
+
+func TestRollbackNoWarningWhenEnvironmentMissing(t *testing.T) {
+	// FunctionVersion exists but references an Environment that does not.
+	setRollbackClient(aliasForRollback(), rollbackTargetVersion(1))
+
+	in := rollbackFlags("hello", "prod")
+	out := captureStdout(t, func() error { return Rollback(in) })
+
+	assert.False(t, strings.Contains(out, "WARNING"), "missing environment is not assessable:\n%s", out)
 }
 
 func TestRollbackDetachStripsAnnotationsAndRepoints(t *testing.T) {

@@ -486,3 +486,219 @@ func TestAliasReconcileNotFoundIsNotAnError(t *testing.T) {
 	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "missing"}})
 	assert.NoError(t, err)
 }
+
+// --- EnvDrift condition ---
+
+func testEnvironment(namespace, name string, generation int64, image string) *fv1.Environment {
+	return &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: generation},
+		Spec:       fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: image}},
+	}
+}
+
+// testVersionWithEnv builds a FunctionVersion carrying the env-observation
+// fields (EnvObservedGeneration/EnvRuntimeImage) plus a Snapshot.Environment
+// reference, everything applyEnvDrift needs. envNS == "" exercises the
+// same-namespace-as-function fallback (publish.go:118).
+func testVersionWithEnv(fnName string, seq int64, digest, envNS, envName string, envObservedGen int64, envImage string) *fv1.FunctionVersion {
+	v := testVersion(fnName, seq, digest)
+	v.Spec.EnvObservedGeneration = envObservedGen
+	v.Spec.EnvRuntimeImage = envImage
+	v.Spec.Snapshot.Environment = fv1.EnvironmentReference{Namespace: envNS, Name: envName}
+	return v
+}
+
+func TestAliasReconcileEnvDriftSetWhenGenerationMoved(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	env := testEnvironment("default", "nodejs", 2, "fission/node-env:v2")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, env, v, alias)
+
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	cond := conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift)
+	require.NotNil(t, cond, "EnvDrift must be set once resolution + env are both assessable")
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Equal(t, fv1.FunctionAliasReasonEnvGenerationDrift, cond.Reason)
+	assert.Contains(t, cond.Message, "default/nodejs")
+	assert.Contains(t, cond.Message, "generation 1")
+	assert.Contains(t, cond.Message, "generation 2")
+	assert.Contains(t, cond.Message, "runtime image also changed")
+}
+
+func TestAliasReconcileEnvDriftFalseWhenGenerationMatches(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	env := testEnvironment("default", "nodejs", 1, "fission/node-env:v1")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, env, v, alias)
+
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	cond := conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, fv1.FunctionAliasReasonEnvCurrent, cond.Reason)
+	assert.NotContains(t, cond.Message, "runtime image also changed")
+}
+
+func TestAliasReconcileEnvDriftUsesCrossNamespaceSnapshotEnvironment(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	env := testEnvironment("envs-ns", "nodejs", 3, "fission/node-env:v3")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "envs-ns", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, env, v, alias)
+
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	cond := conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionTrue, cond.Status)
+	assert.Contains(t, cond.Message, "envs-ns/nodejs")
+}
+
+func TestAliasReconcileEnvDriftRemovedWhenAliasUnresolved(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	alias := testAliasNamePinned("prod", "hello", "hello-v9") // no such version
+	r, c := newAliasReconciler(t, fn, alias)
+
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	assert.Nil(t, conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift),
+		"unresolved alias has no assessable target; EnvDrift must be absent, not False")
+}
+
+func TestAliasReconcileEnvDriftRemovedWhenEnvironmentMissing(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "does-not-exist", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, v, alias)
+
+	reconcileAlias(t, r, "prod")
+
+	got := getAlias(t, c, "prod")
+	require.True(t, conditions.IsTrue(got.Status.Conditions, fv1.FunctionAliasConditionResolved), "resolution itself must still succeed")
+	assert.Nil(t, conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift),
+		"missing Environment is not assessable; EnvDrift must be absent")
+}
+
+// TestAliasReconcileEnvDriftClearedOnceMissingEnvironmentAppears exercises
+// the removed->set transition: EnvDrift starts absent (env missing), then
+// becomes assessable once the env is created.
+func TestAliasReconcileEnvDriftClearedOnceMissingEnvironmentAppears(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, v, alias)
+
+	reconcileAlias(t, r, "prod")
+	got := getAlias(t, c, "prod")
+	require.Nil(t, conditions.Find(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift))
+
+	env := testEnvironment("default", "nodejs", 1, "fission/node-env:v1")
+	require.NoError(t, c.Create(t.Context(), env))
+
+	reconcileAlias(t, r, "prod")
+	final := getAlias(t, c, "prod")
+	cond := conditions.Find(final.Status.Conditions, fv1.FunctionAliasConditionEnvDrift)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+}
+
+// TestAliasReconcileIdempotentNoWritesOnSecondReconcileWithEnvDrift extends
+// the anti-loop guarantee (TestAliasReconcileIdempotentNoWritesOnSecondReconcile)
+// to a converged alias that also carries an EnvDrift=True condition: the
+// second reconcile — same alias, same version, same (still-drifted)
+// environment — must still perform zero writes.
+func TestAliasReconcileIdempotentNoWritesOnSecondReconcileWithEnvDrift(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	env := testEnvironment("default", "nodejs", 2, "fission/node-env:v2")
+	v := testVersionWithEnv("hello", 1, "sha256:aaa", "", "nodejs", 1, "fission/node-env:v1")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+
+	c := fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(fn, env, v, alias).
+		WithStatusSubresource(&fv1.FunctionAlias{}).
+		Build()
+	r := &AliasReconciler{logger: logr.Discard(), client: c}
+
+	reconcileAlias(t, r, "prod")
+	got := getAlias(t, c, "prod")
+	require.True(t, conditions.IsTrue(got.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), "precondition: drift must be set")
+
+	writes := 0
+	counting := fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithObjects(fn, env, v, got).
+		WithStatusSubresource(&fv1.FunctionAlias{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Update: func(ctx context.Context, cl client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+				writes++
+				return cl.Update(ctx, obj, opts...)
+			},
+			Patch: func(ctx context.Context, cl client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				writes++
+				return cl.Patch(ctx, obj, patch, opts...)
+			},
+			SubResourcePatch: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+				writes++
+				return cl.SubResource(subResourceName).Patch(ctx, obj, patch, opts...)
+			},
+		}).
+		Build()
+	r2 := &AliasReconciler{logger: logr.Discard(), client: counting}
+
+	reconcileAlias(t, r2, "prod")
+
+	assert.Zero(t, writes, "a fully-converged reconcile — including a stable EnvDrift condition — must perform zero writes")
+}
+
+// --- Environment watch -> alias enqueue ---
+
+func TestMapEnvToAliasesEnqueuesCrossNamespaceMatch(t *testing.T) {
+	// matching: alias's resolved version snapshot references envs-ns/nodejs.
+	vMatch := testVersionWithEnv("hello", 1, "sha256:aaa", "envs-ns", "nodejs", 1, "fission/node-env:v1")
+	aliasMatch := testAliasNamePinned("prod", "hello", vMatch.Name)
+	aliasMatch.Status.ResolvedVersion = vMatch.Name
+
+	// same-namespace fallback: envNS unset on the snapshot, alias lives in
+	// "default", and the event Environment is also in "default" -- must match.
+	vFallback := testVersionWithEnv("other", 1, "sha256:bbb", "", "nodejs", 1, "fission/node-env:v1")
+	vFallback.Namespace = "default"
+	aliasFallback := testAliasNamePinned("prod-fallback", "other", vFallback.Name)
+	aliasFallback.Namespace = "default"
+	aliasFallback.Status.ResolvedVersion = vFallback.Name
+
+	// non-matching: different env name.
+	vOther := testVersionWithEnv("hello2", 1, "sha256:ccc", "envs-ns", "python", 1, "fission/python-env:v1")
+	aliasOther := testAliasNamePinned("prod-other", "hello2", vOther.Name)
+	aliasOther.Status.ResolvedVersion = vOther.Name
+
+	// unresolved: no ResolvedVersion at all -- must never be enqueued.
+	aliasUnresolved := testAliasNamePinned("unresolved", "hello3", "hello3-v1")
+
+	r, _ := newAliasReconciler(t, vMatch, aliasMatch, vFallback, aliasFallback, vOther, aliasOther, aliasUnresolved)
+
+	env := testEnvironment("envs-ns", "nodejs", 5, "fission/node-env:v5")
+	reqs := r.mapEnvToAliases(t.Context(), env)
+
+	names := make([]string, 0, len(reqs))
+	for _, req := range reqs {
+		names = append(names, req.Name)
+	}
+	assert.ElementsMatch(t, []string{"prod"}, names)
+
+	envDefault := testEnvironment("default", "nodejs", 5, "fission/node-env:v5")
+	reqs = r.mapEnvToAliases(t.Context(), envDefault)
+	names = names[:0]
+	for _, req := range reqs {
+		names = append(names, req.Name)
+	}
+	assert.ElementsMatch(t, []string{"prod-fallback"}, names)
+}

@@ -5,6 +5,7 @@
 package function
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 // digestTableWidth is how many characters of a package digest the VersionsList
@@ -54,7 +56,63 @@ func (opts *VersionsSubCommand) do(input cli.Input) error {
 		return err
 	}
 
-	return printVersionsList(versions, format)
+	var drift map[string]string
+	if format == util.OutputWide {
+		drift = envDriftByVersion(input.Context(), opts.Client().FissionClientSet, namespace, versions)
+	}
+
+	return printVersionsList(versions, format, drift)
+}
+
+// envDriftByVersion computes, for -o wide, each version's ENVDRIFT table
+// cell against its recorded Snapshot.Environment's live Generation: "True"
+// (EnvObservedGeneration has fallen behind), "False" (still matches), or
+// util.NoneValue when it is not assessable at all (no Environment recorded
+// on the snapshot, or the Environment can no longer be read) — mirroring
+// the AliasReconciler's EnvDrift condition "absence means not assessable"
+// contract, condensed to a table cell instead of a condition. A function's
+// versions normally all reference the same Environment identity, so this
+// Gets each distinct (namespace, name) it encounters only once, not once
+// per version.
+func envDriftByVersion(ctx context.Context, cl versioned.Interface, namespace string, versions []fv1.FunctionVersion) map[string]string {
+	drift := make(map[string]string, len(versions))
+	envCache := make(map[string]*fv1.Environment)
+
+	for _, v := range versions {
+		envName := v.Spec.Snapshot.Environment.Name
+		if envName == "" {
+			drift[v.Name] = util.NoneValue
+			continue
+		}
+
+		// Mirrors publish.go:118's envNS fallback: an unset Snapshot
+		// Environment namespace means "same namespace as the function".
+		envNS := v.Spec.Snapshot.Environment.Namespace
+		if envNS == "" {
+			envNS = namespace
+		}
+
+		key := envNS + "/" + envName
+		env, cached := envCache[key]
+		if !cached {
+			got, err := cl.CoreV1().Environments(envNS).Get(ctx, envName, metav1.GetOptions{})
+			if err == nil {
+				env = got
+			}
+			envCache[key] = env
+		}
+
+		if env == nil {
+			drift[v.Name] = util.NoneValue
+			continue
+		}
+		if v.Spec.EnvObservedGeneration != env.Generation {
+			drift[v.Name] = "True"
+		} else {
+			drift[v.Name] = "False"
+		}
+	}
+	return drift
 }
 
 // sortedBySequence returns items sorted ascending by Spec.Sequence (v1 first),
@@ -70,11 +128,13 @@ func sortedBySequence(items []fv1.FunctionVersion) []fv1.FunctionVersion {
 // util.PrintObjects gives every list command (see functionalias/list.go).
 // json/yaml marshal the full slice (untruncated digests); the table format
 // truncates DIGEST to digestTableWidth characters so the row fits a
-// terminal, wide prints it in full. There are no wide-only extra columns
-// here, so row itself closes over truncate (fixed for the whole call, from
-// format) rather than the headers/wideExtra split list.go uses for its
-// NAMESPACE/AGE columns.
-func printVersionsList(versions []fv1.FunctionVersion, format util.OutputFormat) error {
+// terminal, wide prints it in full and additionally appends an ENVDRIFT
+// column sourced from drift (keyed by version Name; envDriftByVersion
+// builds it, empty/nil is treated as util.NoneValue for every row — this
+// happens for every non-wide call, which never sees the column at all, and
+// callers that already know the answer, e.g. tests, may pass an explicit
+// map).
+func printVersionsList(versions []fv1.FunctionVersion, format util.OutputFormat, drift map[string]string) error {
 	truncate := format != util.OutputWide
 	headers := []string{"NAME", "SEQUENCE", "DIGEST", "PUBLISHED", "AGE"}
 	row := func(v fv1.FunctionVersion) []string {
@@ -90,8 +150,14 @@ func printVersionsList(versions []fv1.FunctionVersion, format util.OutputFormat)
 			util.AgeOf(v.CreationTimestamp),
 		}
 	}
-	wideRow := func(v fv1.FunctionVersion) []string { return nil }
-	return util.PrintObjects(format, versions, headers, row, nil, wideRow)
+	wideRow := func(v fv1.FunctionVersion) []string {
+		d, ok := drift[v.Name]
+		if !ok {
+			d = util.NoneValue
+		}
+		return []string{d}
+	}
+	return util.PrintObjects(format, versions, headers, row, []string{"ENVDRIFT"}, wideRow)
 }
 
 // truncateDigest shortens d to at most digestTableWidth characters for the

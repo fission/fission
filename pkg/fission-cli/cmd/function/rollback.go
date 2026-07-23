@@ -100,6 +100,8 @@ func (opts *RollbackSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *RollbackSubCommand) run(input cli.Input) error {
+	opts.warnEnvDrift(input)
+
 	aliases := opts.Client().FissionClientSet.CoreV1().FunctionAliases(opts.namespace)
 
 	_, err := util.UpdateOnConflict(input.Context(), aliases, opts.aliasName, func(cur *fv1.FunctionAlias) {
@@ -132,6 +134,43 @@ func (opts *RollbackSubCommand) run(input cli.Input) error {
 	}
 
 	return nil
+}
+
+// warnEnvDrift prints a non-blocking WARNING when opts.target was published
+// under an Environment generation the live Environment has since moved past
+// (RFC-0025 "Environment & Package changes across the version boundary": an
+// env update bumps no Function Generation and recycles pods under EVERY
+// version, so it sits outside the version boundary entirely). "Instant
+// rollback" here means the FunctionSpec snapshot — code/config — not the
+// runtime image, and this warning is the CLI-side surfacing of that gap;
+// see the AliasReconciler's EnvDrift condition for the same check running
+// continuously in-cluster. A missing target FunctionVersion or a
+// missing/unreadable Environment is not assessable and is silently
+// skipped — never blocks or errors the rollback, mirroring the
+// reconciler's "absence means not assessable" EnvDrift contract.
+func (opts *RollbackSubCommand) warnEnvDrift(input cli.Input) {
+	v, err := opts.Client().FissionClientSet.CoreV1().FunctionVersions(opts.namespace).Get(input.Context(), opts.target, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+
+	// Mirrors publish.go:118's envNS fallback: an unset Snapshot Environment
+	// namespace means "same namespace as the function", and opts.namespace
+	// is that namespace (FunctionVersions/FunctionAliases live alongside
+	// their Function).
+	envNS := v.Spec.Snapshot.Environment.Namespace
+	if envNS == "" {
+		envNS = opts.namespace
+	}
+	env, err := opts.Client().FissionClientSet.CoreV1().Environments(envNS).Get(input.Context(), v.Spec.Snapshot.Environment.Name, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+
+	if v.Spec.EnvObservedGeneration != env.Generation {
+		fmt.Printf("WARNING: target version %v was published under env %v/%v generation %v; live env is generation %v — rollback restores code/config, not the runtime image\n",
+			opts.target, envNS, env.Name, v.Spec.EnvObservedGeneration, env.Generation)
+	}
 }
 
 // aliasTargetDisplay renders a FunctionAliasSpec's target for the "old ->
