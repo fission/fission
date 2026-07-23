@@ -17,9 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	k8stypes "k8s.io/apimachinery/pkg/types"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -149,7 +148,7 @@ func benchHandler(b *testing.B, upstream *url.URL, hoisted bool) functionHandler
 		tapper:               &nopTapper{},
 		function:             fn,
 		tsRoundTripperParams: params,
-		functionTimeoutMap:   map[k8stypes.UID]int{},
+		functionTimeoutMap:   map[crd.CacheKeyUG]int{},
 	}
 	if hoisted {
 		fh.rtLogger = logger.WithName("roundtripper")

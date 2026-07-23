@@ -23,6 +23,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/conditions"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	config "github.com/fission/fission/pkg/featureconfig"
@@ -277,23 +278,27 @@ func versionHandler(w http.ResponseWriter, r *http.Request) {
 // precomputePolicies resolves the proxy policy for every backend function of
 // a route at mux-build time (RFC-0014): resolveProxyPolicy is a pure function
 // of (fn, timeout, idle-default), and the canary path selects the backend per
-// request, so the map is keyed by function UID.
-func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[types.UID]int, streamIdleDefault time.Duration) map[types.UID]proxyPolicy {
-	policies := make(map[types.UID]proxyPolicy, len(fns))
+// request, so the map is keyed by crd.CacheKeyUG (UID, Generation) rather
+// than UID alone — two resolved snapshots of the same versioned function
+// (e.g. a weighted alias's primary and secondary target) share a UID but
+// differ in Generation, and each must get its own policy.
+func precomputePolicies(fns map[string]*fv1.Function, fnTimeoutMap map[crd.CacheKeyUG]int, streamIdleDefault time.Duration) map[crd.CacheKeyUG]proxyPolicy {
+	policies := make(map[crd.CacheKeyUG]proxyPolicy, len(fns))
 	for _, fn := range fns {
 		if fn == nil {
 			continue
 		}
-		fnTimeout := fnTimeoutMap[fn.GetUID()]
+		key := crd.CacheKeyUGFromMeta(&fn.ObjectMeta)
+		fnTimeout := fnTimeoutMap[key]
 		if fnTimeout == 0 {
 			fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 		}
-		policies[fn.GetUID()] = resolveProxyPolicy(fn, time.Duration(fnTimeout)*time.Second, streamIdleDefault)
+		policies[key] = resolveProxyPolicy(fn, time.Duration(fnTimeout)*time.Second, streamIdleDefault)
 	}
 	return policies
 }
 
-func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[types.UID]int) (public, internal *httpmux.Mux, err error) {
+func (ts *HTTPTriggerSet) buildMuxes(ctx context.Context, fnTimeoutMap map[crd.CacheKeyUG]int) (public, internal *httpmux.Mux, err error) {
 	featureConfig, err := config.GetFeatureConfig(ts.logger)
 	if err != nil {
 		return nil, nil, err

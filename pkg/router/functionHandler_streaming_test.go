@@ -23,6 +23,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	eclient "github.com/fission/fission/pkg/executor/client"
 	"github.com/fission/fission/pkg/throttler"
@@ -115,8 +116,8 @@ func newStreamingHandler(t *testing.T, fn *fv1.Function, exec eclient.ClientInte
 			throttler: throttler.MakeThrottler(30 * time.Second),
 		},
 		tapper: &executorTapper{logger: logger, executor: exec, unTapTimeout: time.Hour},
-		functionTimeoutMap: map[k8stypes.UID]int{
-			fn.GetUID(): fnTimeoutSec,
+		functionTimeoutMap: map[crd.CacheKeyUG]int{
+			crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fnTimeoutSec,
 		},
 		tsRoundTripperParams: &tsRoundTripperParams{
 			timeout:           5 * time.Second,
@@ -424,8 +425,8 @@ func TestStreamingRouterAdmittedSlotReleasedAfterDrain(t *testing.T) {
 		function: fn,
 		resolver: resolver,
 		tapper:   tapper,
-		functionTimeoutMap: map[k8stypes.UID]int{
-			fn.GetUID(): 0,
+		functionTimeoutMap: map[crd.CacheKeyUG]int{
+			crd.CacheKeyUGFromMeta(&fn.ObjectMeta): 0,
 		},
 		tsRoundTripperParams: &tsRoundTripperParams{
 			timeout:           5 * time.Second,

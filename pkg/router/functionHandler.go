@@ -17,9 +17,9 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
@@ -58,13 +58,20 @@ type functionHandler struct {
 	isDebugEnv               bool
 	structuredErrors         bool
 	accessLog                bool
-	functionTimeoutMap       map[k8stypes.UID]int
+	// functionTimeoutMap and policyByUID are keyed by crd.CacheKeyUG (UID,
+	// Generation), not UID alone: an RFC-0025 versioned backend (a weighted
+	// alias's primary/secondary target, or the internal route's fresh
+	// resolve on a live-Function event) can produce two *fv1.Function
+	// snapshots sharing a UID but differing in Generation, and each needs
+	// its own timeout/policy — collapsing on UID would let one snapshot's
+	// entry silently serve the other's streaming/proxy policy.
+	functionTimeoutMap map[crd.CacheKeyUG]int
 	// Hoisted per-route state (RFC-0014): computed once at mux build instead
 	// of per request. rtLogger is the round tripper's named logger;
 	// policyByUID holds the resolved proxy policy per backend function (the
-	// canary path selects the backend per request, hence per-UID).
+	// canary path selects the backend per request, hence per-key).
 	rtLogger    logr.Logger
-	policyByUID map[k8stypes.UID]proxyPolicy
+	policyByUID map[crd.CacheKeyUG]proxyPolicy
 	// asyncInvoker enqueues RFC-0024 async invocations. Set on both the public
 	// HTTPTrigger handlers and the internal direct-function handlers, so a signed
 	// direct caller can go async; the dispatcher's own deliveries are excluded by
@@ -76,7 +83,7 @@ type functionHandler struct {
 // proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
 // only when the route was built without a precomputed map (test harnesses).
 func (fh *functionHandler) proxyPolicyFor(fn *fv1.Function, fnTimeout time.Duration) proxyPolicy {
-	if p, ok := fh.policyByUID[fn.GetUID()]; ok {
+	if p, ok := fh.policyByUID[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)]; ok {
 		return p
 	}
 	return resolveProxyPolicy(fn, fnTimeout, fh.tsRoundTripperParams.streamIdleDefault)
@@ -119,8 +126,12 @@ func (fh functionHandler) asyncRequested(request *http.Request) bool {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionWeights {
-		// canary deployment. need to determine the function to send request to now
+	if fh.httpTrigger != nil && len(fh.fnWeightDistributionList) > 0 {
+		// Weighted backend selection: the legacy FunctionReferenceTypeFunctionWeights
+		// canary AND an RFC-0025 weighted FunctionAlias (Spec.Weight != nil) both
+		// resolve to a resolveResultMultipleFunctions with a non-empty weight
+		// distribution — pick the per-request backend from it now rather than at
+		// mux-build time.
 		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",
@@ -153,7 +164,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	fnTimeout := fh.functionTimeoutMap[fh.function.GetUID()]
+	fnTimeout := fh.functionTimeoutMap[crd.CacheKeyUGFromMeta(&fh.function.ObjectMeta)]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}

@@ -59,7 +59,7 @@ func BenchmarkWarmPathFunctionCallAttrsNew(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		// Vary the status code a little to exercise the cache realistically.
-		_ = functionCallAttrs("default", "hello", "/hello", http.MethodGet, 200+(i&1))
+		_ = functionCallAttrs("default", "hello", "", "/hello", http.MethodGet, 200+(i&1))
 		i++
 	}
 }

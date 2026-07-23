@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/router/routetable"
 	"github.com/fission/fission/pkg/utils/httpmux"
@@ -119,10 +120,10 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 
 	shape := deriveRouteShape(trigger)
 	fnGens := make(map[string]int64, len(rr.functionMap))
-	fnTimeout := make(map[types.UID]int, len(rr.functionMap))
+	fnTimeout := make(map[crd.CacheKeyUG]int, len(rr.functionMap))
 	for name, fn := range rr.functionMap {
 		fnGens[name] = fn.Generation
-		fnTimeout[fn.UID] = fn.Spec.FunctionTimeout
+		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
 	}
 	spec := &routetable.RouteSpec{
 		TriggerUID: trigger.UID,
@@ -185,7 +186,7 @@ func (ts *HTTPTriggerSet) deleteTriggerIncremental(key types.NamespacedName) rou
 // resolve before re-admits here).
 func (ts *HTTPTriggerSet) applyFunctionIncremental(ctx context.Context, fn *fv1.Function) (routetable.ApplyResult, error) {
 	key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
-	fnTimeout := map[types.UID]int{fn.UID: fn.Spec.FunctionTimeout}
+	fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
 	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
@@ -491,7 +492,7 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) error {
 		fn := &functionList.Items[i]
 		key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
 		liveFns[key] = struct{}{}
-		fnTimeout := map[types.UID]int{fn.UID: fn.Spec.FunctionTimeout}
+		fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
 		// Apply the internal route directly (no trigger cascade — the
 		// triggers are re-applied below in this same pass).
 		res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {

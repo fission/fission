@@ -16,6 +16,8 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/routetable"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 // errFunctionNotFound marks a resolve failure caused by the referenced
@@ -74,7 +76,7 @@ func makeFunctionReferenceResolver(logger logr.Logger, reader client.Reader) *fu
 func (frr *functionReferenceResolver) resolve(ctx context.Context, trigger fv1.HTTPTrigger) (*resolveResult, error) {
 	switch trigger.Spec.FunctionReference.Type {
 	case fv1.FunctionReferenceTypeFunctionName:
-		return frr.resolveByName(ctx, trigger.Namespace, trigger.Spec.FunctionReference.Name)
+		return frr.resolveByName(ctx, trigger.Namespace, trigger.Spec.FunctionReference)
 	case fv1.FunctionReferenceTypeFunctionWeights:
 		return frr.resolveByFunctionWeights(ctx, trigger.Namespace, &trigger.Spec.FunctionReference)
 	default:
@@ -96,20 +98,137 @@ func (frr *functionReferenceResolver) getFunction(ctx context.Context, namespace
 	return f, nil
 }
 
-// resolveByName simply looks up function by name in a namespace.
-func (frr *functionReferenceResolver) resolveByName(ctx context.Context, namespace, name string) (*resolveResult, error) {
-	f, err := frr.getFunction(ctx, namespace, name)
+// resolveByName looks up a "name"-type function reference. Plain references
+// (no Alias/Version) resolve straight to the live Function, unchanged from
+// pre-RFC-0025 behavior — functionMap is keyed by BackendKey(name, ""),
+// which is just name, so the result is byte-identical for unversioned
+// triggers. A Version pin resolves to that one immutable FunctionVersion
+// snapshot; an Alias resolves through the FunctionAlias's currently
+// effective target(s) — one target normally, two during a weighted rollout.
+func (frr *functionReferenceResolver) resolveByName(ctx context.Context, namespace string, ref fv1.FunctionReference) (*resolveResult, error) {
+	switch {
+	case ref.Version != "":
+		fn, err := frr.resolveVersion(ctx, namespace, ref.Name, ref.Version)
+		if err != nil {
+			return nil, err
+		}
+		return singleFunctionResult(routetable.BackendKey(ref.Name, ref.Version), fn), nil
+
+	case ref.Alias != "":
+		return frr.resolveByAlias(ctx, namespace, ref)
+
+	default:
+		f, err := frr.getFunction(ctx, namespace, ref.Name)
+		if err != nil {
+			return nil, err
+		}
+		return singleFunctionResult(routetable.BackendKey(f.Name, ""), f), nil
+	}
+}
+
+// singleFunctionResult wraps one resolved backend, keyed by BackendKey (or
+// plain name for unversioned backends, since BackendKey(name, "") == name).
+func singleFunctionResult(key string, fn *fv1.Function) *resolveResult {
+	return &resolveResult{
+		resolveResultType: resolveResultSingleFunction,
+		functionMap:       map[string]*fv1.Function{key: fn},
+	}
+}
+
+// resolveVersion resolves a FunctionVersion pin (by its CR name, "version")
+// into a versioned Function projection: it Gets the FunctionVersion,
+// validates it actually belongs to "name" (defense against a stale/
+// mismatched reference — a version name recycled under a different
+// function, or a hand-crafted trigger), Gets the live Function so the
+// projection carries its identity (UID), and hands both to
+// versioning.VersionedFunction. Every failure mode (missing version,
+// mismatched owner, missing live function) rides errFunctionNotFound so the
+// incremental apply path drops the route and marks the trigger unresolved
+// rather than treating it as a transient error.
+func (frr *functionReferenceResolver) resolveVersion(ctx context.Context, namespace, name, version string) (*fv1.Function, error) {
+	v := &fv1.FunctionVersion{}
+	err := frr.reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: version}, v)
+	if apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("function version %s/%s does not exist: %w", namespace, version, errFunctionNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v.Spec.FunctionName != name {
+		return nil, fmt.Errorf("function version %s/%s belongs to function %q, not %q: %w",
+			namespace, version, v.Spec.FunctionName, name, errFunctionNotFound)
+	}
+
+	live, err := frr.getFunction(ctx, namespace, name)
 	if err != nil {
 		return nil, err
 	}
 
-	rr := resolveResult{
-		resolveResultType: resolveResultSingleFunction,
-		functionMap: map[string]*fv1.Function{
-			f.Name: f,
-		},
+	return versioning.VersionedFunction(live, v), nil
+}
+
+// resolveByAlias resolves a FunctionReference.Alias pin: Gets the named
+// FunctionAlias, computes its effective target — Spec.Version when the
+// alias is name-pinned (known immediately, no need to wait on the alias
+// reconciler), else Status.ResolvedVersion (the reconciler's async
+// resolution of a digest-pinned alias) — and resolves that target's
+// FunctionVersion the same way a direct Version pin does. An alias that has
+// never resolved (empty target) rides errFunctionNotFound: the router keeps
+// the route unresolved rather than erroring the reconcile, exactly like a
+// missing function — a future alias-resolution event (the FunctionAlias
+// ROUTER reconciler, a later RFC-0025 task) or the periodic resync re-admits
+// it once resolution completes.
+//
+// A weighted alias (Spec.Weight != nil) resolves BOTH targets — the primary
+// at Weight, SecondaryVersion at 100-Weight — into a two-backend
+// resolveResultMultipleFunctions, functionMap and functionWeightDistribution
+// both keyed by each target's BackendKey.
+func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namespace string, ref fv1.FunctionReference) (*resolveResult, error) {
+	alias := &fv1.FunctionAlias{}
+	err := frr.reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Alias}, alias)
+	if apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("function alias %s/%s does not exist: %w", namespace, ref.Alias, errFunctionNotFound)
+	}
+	if err != nil {
+		return nil, err
 	}
 
+	target := alias.Spec.Version
+	if target == "" {
+		target = alias.Status.ResolvedVersion
+	}
+	if target == "" {
+		return nil, fmt.Errorf("function alias %s/%s has not resolved to a version yet: %w", namespace, ref.Alias, errFunctionNotFound)
+	}
+
+	primary, err := frr.resolveVersion(ctx, namespace, ref.Name, target)
+	if err != nil {
+		return nil, err
+	}
+	primaryKey := routetable.BackendKey(ref.Name, target)
+
+	if alias.Spec.Weight == nil {
+		return singleFunctionResult(primaryKey, primary), nil
+	}
+
+	secondary, err := frr.resolveVersion(ctx, namespace, ref.Name, alias.Spec.SecondaryVersion)
+	if err != nil {
+		return nil, err
+	}
+	secondaryKey := routetable.BackendKey(ref.Name, alias.Spec.SecondaryVersion)
+
+	weight := *alias.Spec.Weight
+	rr := resolveResult{
+		resolveResultType: resolveResultMultipleFunctions,
+		functionMap: map[string]*fv1.Function{
+			primaryKey:   primary,
+			secondaryKey: secondary,
+		},
+		functionWtDistributionList: []functionWeightDistribution{
+			{name: primaryKey, weight: weight, sumPrefix: weight},
+			{name: secondaryKey, weight: 100 - weight, sumPrefix: 100},
+		},
+	}
 	return &rr, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	config "github.com/fission/fission/pkg/featureconfig"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpmux"
@@ -168,7 +169,7 @@ func validateRouteTemplate(shape routeShape) error {
 // (RFC-0014) plus the per-trigger CORS wrap. fnTimeoutMap may be the global
 // map (one-shot buildMuxes) or a per-trigger map derived from the resolved
 // functions (incremental path) — the handler only ever looks up its own backends.
-func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[types.UID]int) http.Handler {
+func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *resolveResult, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
 	var streamIdleDefault time.Duration
 	if ts.tsRoundTripperParams != nil {
 		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
@@ -212,7 +213,7 @@ func (ts *HTTPTriggerSet) buildTriggerHandler(trigger *fv1.HTTPTrigger, rr *reso
 // buildInternalFunctionHandler constructs the internal listener's proxy
 // handler for one function (the /fission-function/... target every non-HTTP
 // trigger publishes to).
-func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeoutMap map[types.UID]int) http.Handler {
+func (ts *HTTPTriggerSet) buildInternalFunctionHandler(fn *fv1.Function, fnTimeoutMap map[crd.CacheKeyUG]int) http.Handler {
 	var streamIdleDefault time.Duration
 	if ts.tsRoundTripperParams != nil {
 		streamIdleDefault = ts.tsRoundTripperParams.streamIdleDefault
