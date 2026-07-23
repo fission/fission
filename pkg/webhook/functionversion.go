@@ -39,12 +39,14 @@ func (r *FunctionVersion) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return r.GenericWebhook.SetupWebhookWithManager(mgr, &v1.FunctionVersion{})
 }
 
-// user change verbs to add "create" if creation-time defaulting/validation
-// beyond the CEL/schema rules is ever needed here; the webhook rule below
-// registers only update;delete, so ValidateCreate never fires for this
-// resource today — create-time enforcement is CEL/schema-only.
+// create is included (matching Function's webhook posture) so
+// FunctionVersion.Validate() — including Snapshot.Validate()'s pod-spec
+// safety check (ValidatePodSpecSafety, Go-only, not CEL) — runs at CREATE
+// admission and not only on update/delete. Runtime MergePodSpec sanitization
+// backstops this, but rejecting an unsafe Snapshot at admission time is
+// cheap and catches it before it is ever persisted.
 //
-//+kubebuilder:webhook:path=/validate-fission-io-v1-functionversion,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functionversions,verbs=update;delete,versions=v1,name=vfunctionversion.fission.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-fission-io-v1-functionversion,mutating=false,failurePolicy=fail,sideEffects=None,groups=fission.io,resources=functionversions,verbs=create;update;delete,versions=v1,name=vfunctionversion.fission.io,admissionReviewVersions=v1
 
 var _ admission.Validator[*v1.FunctionVersion] = &FunctionVersion{}
 
