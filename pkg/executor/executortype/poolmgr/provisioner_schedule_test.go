@@ -192,7 +192,7 @@ func TestEffectiveTargetAt(t *testing.T) {
 				Target: 2,
 				Windows: []fv1.ProvisionedWindow{
 					{
-						Start:    "* 0 * * *",
+						Start:    "0 0 * * *",
 						Duration: "10m", // 10 minutes
 						Target:   0,
 						Name:     "sleepWindow",
@@ -208,13 +208,13 @@ func TestEffectiveTargetAt(t *testing.T) {
 				Target: 2,
 				Windows: []fv1.ProvisionedWindow{
 					{
-						Start:    "* 0 * * *",
+						Start:    "0 0 * * *",
 						Duration: "10m", // 10 minutes
 						Target:   0,
 						Name:     "sleepWindow",
 					},
 					{
-						Start:    "* 0 * * *",
+						Start:    "0 0 * * *",
 						Duration: "5m", // 5 minutes
 						Target:   1,
 						Name:     "activeWindow",
@@ -240,7 +240,7 @@ func TestEffectiveTargetAt(t *testing.T) {
 	}
 }
 
-func Test_windowActiveAt(t *testing.T) {
+func TestWindowActiveAt(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -249,23 +249,193 @@ func Test_windowActiveAt(t *testing.T) {
 		want    bool
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "window active at start",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "window active in the middle",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 0, 5, 0, 0, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "window not active in the end",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 0, 10, 0, 0, time.UTC),
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "window not active before start",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 1 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 0, 59, 59, 999999, time.UTC),
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "window not active",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 1 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 13, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "window active just before end",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * *",
+				Duration: "10m", // 10 minutes
+			},
+			now:     time.Date(2025, time.January, 1, 0, 9, 59, 999999, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "dense cron	window active",
+			window: fv1.ProvisionedWindow{
+				Start:    "* * * * * *",
+				Duration: "28h", // 28 hours
+			},
+			now:     time.Date(2025, time.January, 4, 0, 0, 0, 0, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+
+		// weekend tests
+
+		{
+			name: "window active on weekend",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * 6", // runs at midnight on Saturday
+				Duration: "48h",       // runs from saturday midnight to Monday midnight (12AM on Monday)
+			},
+			now:     time.Date(2025, time.January, 4, 13, 0, 0, 0, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "window inactive on weekday",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * 6", // runs at midnight on Saturday
+				Duration: "48h",       // runs from saturday midnight to Monday midnight (12AM on Monday)
+			},
+			now:     time.Date(2025, time.January, 6, 0, 0, 0, 0, time.UTC), // Monday 12AM
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "window inactive on wednesday",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 0 * * 6", // runs at midnight on Saturday
+				Duration: "48h",       // runs from saturday midnight to Monday midnight (12AM on Monday)
+			},
+			now:     time.Date(2025, time.January, 8, 0, 0, 0, 0, time.UTC), // Monday 12AM
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "active specific hours, combined days: Saturday",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at midnight on Saturday
+				Duration: "8h",          // runs from saturday midnight to Monday midnight (12AM on Monday)
+			},
+			now:     time.Date(2025, time.January, 4, 10, 0, 0, 0, time.UTC),
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name: "inactive specific hours, combined days: Sunday",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at 9AM on Saturday and Sunday
+				Duration: "8h",          // runs 8 hours 9AM to 5PM on Saturday and Sunday
+			},
+			now:     time.Date(2025, time.January, 5, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "inactive specific hours, combined days: Saturday",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at 9AM on Saturday and Sunday
+				Duration: "8h",          // runs 8 hours 9AM to 5PM on Saturday and Sunday
+			},
+			now:     time.Date(2025, time.January, 4, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: false,
+		},
+
+		// errors
+
+		{
+			name: "incorrect cron syntax throws error",
+			window: fv1.ProvisionedWindow{
+				Start:    "incorrect",
+				Duration: "8h",
+			},
+			now:     time.Date(2025, time.January, 4, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name: "incorrect Duration throws error",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at 9AM on Saturday and Sunday
+				Duration: "incorrect",
+			},
+			now:     time.Date(2025, time.January, 4, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name: "zero Duration throws error",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at 9AM on Saturday and Sunday
+				Duration: "0s",
+			},
+			now:     time.Date(2025, time.January, 4, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: true,
+		},
+		{
+			name: "negative Duration throws error",
+			window: fv1.ProvisionedWindow{
+				Start:    "0 9 * * 0,6", // runs at 9AM on Saturday and Sunday
+				Duration: "-1s",
+			},
+			now:     time.Date(2025, time.January, 4, 18, 0, 0, 0, time.UTC),
+			want:    false,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, gotErr := windowActiveAt(tt.window, tt.now)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("windowActiveAt() failed: %v", gotErr)
-				}
-				return
-			}
 			if tt.wantErr {
-				t.Fatal("windowActiveAt() succeeded unexpectedly")
+				require.Error(t, gotErr)
+			} else {
+				require.NoError(t, gotErr)
 			}
-			// TODO: update the condition below to compare got with tt.want.
-			if true {
-				t.Errorf("windowActiveAt() = %v, want %v", got, tt.want)
+			if got != tt.want {
+				t.Errorf("windowActiveAt(%+v,%v) = %v, want %v", tt.window, tt.now, got, tt.want)
 			}
 		})
 	}
