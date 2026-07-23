@@ -51,6 +51,17 @@ type View struct {
 // callers that construct a View ahead of the reconciler registration that
 // feeds it (see RegisterReconcilers) see "nothing retained" in the interim,
 // matching ListAvailableValue's pre-RFC-0025 behaviour.
+//
+// Boot-time race, deliberately fail-drain: the idle reaper's first tick is
+// immediate (wait.UntilWithContext) and is NOT gated on this View's first
+// Rebuild, so at executor startup an alias-retained non-latest generation can
+// briefly read as unretained. That direction is chosen on purpose — the worst
+// case is one avoidable cold start on the next rollback (self-healing), and
+// actual deletion is further gated by the per-function idle threshold
+// (minutes), which the first Rebuild comfortably beats. The opposite default
+// (retain-everything-until-synced) would turn a wedged informer into an
+// unbounded warm-pod leak. Do not "fix" this by inverting the default; if
+// reap timing ever changes, revisit this argument.
 func New() *View {
 	return &View{retained: make(map[retainKey]struct{})}
 }

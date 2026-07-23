@@ -59,7 +59,10 @@ func RegisterReconcilers(mgr ctrl.Manager, view *View) error {
 	// alias (Spec.PackageDigest resolved asynchronously to a version name).
 	// Alias events are rare (moved by a human, `spec apply`, or the
 	// version-control loop — never per-request), so admit every event rather
-	// than hand-picking which spec/status fields matter.
+	// than hand-picking which spec/status fields matter. Passing zero
+	// predicates here is unfiltered BY DESIGN: WithPredicates replaces the
+	// helper's GenerationChangedPredicate default, and an empty list means no
+	// filtering at all.
 	if err := controller.RegisterTenantScopedWithPredicates(mgr, &fv1.FunctionAlias{}, r, "executor-versionretain-alias", 0); err != nil {
 		return err
 	}
