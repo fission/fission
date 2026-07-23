@@ -193,7 +193,13 @@ func (inv *Invoker) execute(iv invocation) outcome {
 		return outcome{errorType: fv1.WorkflowErrPermanentError, cause: causeOf(err)}
 	}
 
-	url := inv.routerURL + utils.UrlForFunction(iv.stateSpec.Function.Name, iv.namespace)
+	// RFC-0025: append the alias/version suffix when the Task state's
+	// FunctionReference carries one; resolution stays entirely router-side.
+	suffix := iv.stateSpec.Function.Alias
+	if suffix == "" {
+		suffix = iv.stateSpec.Function.Version
+	}
+	url := inv.routerURL + utils.UrlForFunctionRef(iv.stateSpec.Function.Name, iv.namespace, suffix)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return outcome{errorType: fv1.WorkflowErrFunctionError, cause: causeOf(err)}

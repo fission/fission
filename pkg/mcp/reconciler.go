@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -16,7 +17,17 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/controller"
+	"github.com/fission/fission/pkg/versioning"
 )
+
+// errAliasUnresolved marks resolveEntry's "the alias exists but has nothing
+// resolvable behind it right now" outcome: the FunctionAlias/FunctionVersion
+// isn't found yet, or the alias has never resolved a target
+// (Spec.Version/Status.ResolvedVersion both empty). It is never a
+// reconcile-ending error -- Reconcile handles it by keeping the last-known
+// entry serving (or, if there is none yet, falling back to the live
+// function's own Tool config) rather than failing or removing the tool.
+var errAliasUnresolved = errors.New("function alias has not resolved a target yet")
 
 // FunctionToolReconciler keeps the in-memory tool registry and the shared MCP
 // server's tool set in sync with the Function CRDs. It mirrors the timer's
@@ -51,7 +62,31 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil
 	}
 
-	entry := toolEntryFromFunction(fn)
+	entry, err := r.resolveEntry(ctx, fn)
+	if errors.Is(err, errAliasUnresolved) {
+		if r.reg.HasFunction(req.NamespacedName) {
+			// Keep the last tool entry serving -- mirrors the router's own
+			// eventual-consistency posture for an alias mid-resolve (or
+			// momentarily broken) rather than yanking a working tool out from
+			// under an agent for a transient condition.
+			r.logger.V(1).Info("alias target unresolved; keeping last-known tool entry",
+				"function", req.NamespacedName, "alias", fn.Spec.Tool.Alias)
+			return ctrl.Result{}, nil
+		}
+		// Never resolved before: fall back to the live function's own Tool
+		// config so a tool is advertised immediately rather than staying
+		// invisible until the alias first resolves. Clear Alias so the entry
+		// proxies straight to the live function -- toolEntryFromFunction sets
+		// it from tc.Alias unconditionally, but routing tools/call through a
+		// ":<alias>" route the router has never materialized would just 404
+		// the whole time the alias stays unresolved, which defeats the point
+		// of advertising a working fallback tool at all.
+		entry = toolEntryFromFunction(fn)
+		entry.Alias = ""
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	res, oldName, evicted := r.reg.Upsert(entry)
 
 	if res == UpsertConflict {
@@ -87,6 +122,66 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Message: "exposed as MCP tool " + entry.ToolName,
 	})
 	return ctrl.Result{}, nil
+}
+
+// resolveEntry builds the ToolEntry to advertise for fn (which must carry a
+// non-nil Tool). A bare Tool (Alias empty) is built straight from the live
+// function, unchanged from pre-RFC-0025 behavior.
+//
+// An alias-addressed Tool (Alias set) is instead built from the ALIAS'S
+// RESOLVED VERSION's snapshot: Get the named FunctionAlias, compute its
+// effective target (Spec.Version if name-pinned, else
+// Status.ResolvedVersion -- the same precedence
+// pkg/router/functionReferenceResolver.go's resolveByAlias uses), Get that
+// FunctionVersion, and build the entry from
+// versioning.VersionedFunction(fn, v) -- toolEntryFromFunction works
+// unchanged on that projection, so a schema/description change published
+// into a new version is what tools/list actually advertises, not
+// necessarily what the live spec currently says. entry.Alias is then forced
+// to tc.Alias (the alias CR's own name, which this call just confirmed
+// exists) rather than trusting whatever the snapshot itself recorded, since
+// a stale snapshot's own Tool.Alias could in principle differ.
+//
+// Returns errAliasUnresolved (never wrapped with detail the caller needs)
+// when the alias or its target isn't resolvable yet -- see Reconcile for how
+// that is handled.
+func (r *FunctionToolReconciler) resolveEntry(ctx context.Context, fn *fv1.Function) (ToolEntry, error) {
+	tc := fn.Spec.Tool
+	if tc.Alias == "" {
+		return toolEntryFromFunction(fn), nil
+	}
+
+	alias := &fv1.FunctionAlias{}
+	err := r.client.Get(ctx, types.NamespacedName{Namespace: fn.Namespace, Name: tc.Alias}, alias)
+	if apierrors.IsNotFound(err) {
+		return ToolEntry{}, errAliasUnresolved
+	}
+	if err != nil {
+		return ToolEntry{}, err
+	}
+
+	target := alias.Spec.Version
+	if target == "" {
+		target = alias.Status.ResolvedVersion
+	}
+	if target == "" {
+		return ToolEntry{}, errAliasUnresolved
+	}
+
+	v := &fv1.FunctionVersion{}
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: fn.Namespace, Name: target}, v)
+	if apierrors.IsNotFound(err) {
+		// The version the alias named was GC'd (or never existed) between the
+		// alias resolving and this reconcile -- transient, not a hard error.
+		return ToolEntry{}, errAliasUnresolved
+	}
+	if err != nil {
+		return ToolEntry{}, err
+	}
+
+	entry := toolEntryFromFunction(versioning.VersionedFunction(fn, v))
+	entry.Alias = tc.Alias
+	return entry, nil
 }
 
 // removeTool drops a function's tool from the registry and the server if present.

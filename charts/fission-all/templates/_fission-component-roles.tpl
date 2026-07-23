@@ -154,6 +154,21 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # RFC-0025: an alias-addressed Tool (Function.Spec.Tool.Alias) resolves the
+  # tool entry from the alias's currently-resolved FunctionVersion snapshot
+  # (resolveEntry, pkg/mcp/reconciler.go), and FunctionAliasToolReconciler
+  # watches FunctionAlias to re-reconcile on a repoint. Read-only, same as
+  # every other Fission-CRD reader of these two types (executor, router) --
+  # the MCP server never writes either.
+  resources:
+  - functionaliases
+  - functionversions
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "statesvc-rules" }}
 rules:

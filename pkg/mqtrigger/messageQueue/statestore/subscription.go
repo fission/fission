@@ -70,12 +70,18 @@ func newSubscription(s *Statestore, trigger *fv1.MessageQueueTrigger) *subscript
 	if s.pollOverride > 0 {
 		poll = s.pollOverride
 	}
+	// RFC-0025: append the alias/version suffix when the reference carries
+	// one; resolution stays entirely router-side.
+	suffix := trigger.Spec.FunctionReference.Alias
+	if suffix == "" {
+		suffix = trigger.Spec.FunctionReference.Version
+	}
 	return &subscription{
 		logger:  s.logger.WithName(trigger.Name),
 		s:       s,
 		trigger: trigger,
 		stream:  mqpub.StreamForTopic(trigger.Namespace, trigger.Spec.Topic),
-		fnURL:   s.routerURL + "/" + strings.TrimPrefix(utils.UrlForFunction(trigger.Spec.FunctionReference.Name, trigger.Namespace), "/"),
+		fnURL:   s.routerURL + "/" + strings.TrimPrefix(utils.UrlForFunctionRef(trigger.Spec.FunctionReference.Name, trigger.Namespace, suffix), "/"),
 		poll:    poll,
 		done:    make(chan struct{}),
 	}
