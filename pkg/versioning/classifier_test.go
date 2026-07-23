@@ -6,6 +6,7 @@ package versioning
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -158,15 +159,24 @@ func TestRuntimeAffecting_IdenticalSpecsAreNeverAffecting(t *testing.T) {
 	assert.False(t, RuntimeAffecting(zero, zero), "zero-value specs must never be classified as runtime-affecting")
 }
 
-// TestRuntimeAffecting_GoldenTable is the field-by-field golden table: for
-// every AFFECTING field, a spec pair differing only in that field must
-// classify true; for every NOT-AFFECTING field, false.
-func TestRuntimeAffecting_GoldenTable(t *testing.T) {
-	tests := []struct {
-		name    string
-		mutate  func(*fv1.FunctionSpec)
-		affects bool
-	}{
+// goldenTableCase is one row of TestRuntimeAffecting_GoldenTable's table —
+// factored out (rather than a local literal inside the test func) so
+// TestRuntimeAffecting_GoldenTableCoversDecidedFields can cross-check case
+// names against affectingFields/notAffectingFields without duplicating the
+// table and risking the two drifting apart.
+type goldenTableCase struct {
+	name    string
+	mutate  func(*fv1.FunctionSpec)
+	affects bool
+}
+
+// goldenTableCases is the field-by-field golden table: for every AFFECTING
+// field, a spec pair differing only in that field must classify true; for
+// every NOT-AFFECTING field, false. See TestRuntimeAffecting_GoldenTable
+// (which runs it) and TestRuntimeAffecting_GoldenTableCoversDecidedFields
+// (which cross-checks its coverage).
+func goldenTableCases() []goldenTableCase {
+	return []goldenTableCase{
 		{"Environment", func(s *fv1.FunctionSpec) { s.Environment.Name = "env2" }, true},
 		{"Package.PackageRef", func(s *fv1.FunctionSpec) { s.Package.PackageRef.Name = "pkg2" }, true},
 		{"Package.FunctionName", func(s *fv1.FunctionSpec) { s.Package.FunctionName = "otherHandler" }, true},
@@ -205,8 +215,13 @@ func TestRuntimeAffecting_GoldenTable(t *testing.T) {
 		{"Versioning", func(s *fv1.FunctionSpec) { s.Versioning.Mode = fv1.VersioningMode("manual") }, false},
 		{"Versioning nil->set", func(s *fv1.FunctionSpec) { s.Versioning = nil }, false},
 	}
+}
 
-	for _, tc := range tests {
+// TestRuntimeAffecting_GoldenTable runs goldenTableCases: for every
+// AFFECTING field, a spec pair differing only in that field must classify
+// true; for every NOT-AFFECTING field, false.
+func TestRuntimeAffecting_GoldenTable(t *testing.T) {
+	for _, tc := range goldenTableCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			old := baseSpec()
 			mutated := *old.DeepCopy()
@@ -221,6 +236,44 @@ func TestRuntimeAffecting_GoldenTable(t *testing.T) {
 			// in the other direction (mutated -> old) gives the same verdict.
 			assert.Equal(t, tc.affects, RuntimeAffecting(mutated, old), "RuntimeAffecting(mutated, old) for field %q", tc.name)
 		})
+	}
+}
+
+// TestRuntimeAffecting_GoldenTableCoversDecidedFields closes the gap
+// TestRuntimeAffecting_FieldCoverage leaves open: FieldCoverage only proves
+// every FunctionSpec field is CATEGORIZED into affectingFields or
+// notAffectingFields (the "decided classification"), not that
+// TestRuntimeAffecting_GoldenTable actually EXERCISES it. A field added to
+// one of those sets (and to RuntimeAffecting's switch) but never given a
+// golden-table case would pass FieldCoverage while going completely
+// untested here — this is that cross-check.
+//
+// Golden-table case names for compound/nullable fields use a dotted or
+// suffixed form rather than the bare field name (e.g. "Package.PackageRef"
+// and "Package.FunctionName" for Package, "Streaming nil->set" alongside
+// "Streaming"), so a field is considered covered by any case name that IS
+// the field name, or that STARTS WITH the field name followed by '.' or ' '.
+func TestRuntimeAffecting_GoldenTableCoversDecidedFields(t *testing.T) {
+	cases := goldenTableCases()
+	caseNames := make([]string, 0, len(cases))
+	for _, tc := range cases {
+		caseNames = append(caseNames, tc.name)
+	}
+
+	covered := func(field string) bool {
+		for _, name := range caseNames {
+			if name == field || strings.HasPrefix(name, field+".") || strings.HasPrefix(name, field+" ") {
+				return true
+			}
+		}
+		return false
+	}
+
+	for field := range affectingFields {
+		assert.True(t, covered(field), "affectingFields member %q has no TestRuntimeAffecting_GoldenTable case exercising it", field)
+	}
+	for field := range notAffectingFields {
+		assert.True(t, covered(field), "notAffectingFields member %q has no TestRuntimeAffecting_GoldenTable case exercising it", field)
 	}
 }
 

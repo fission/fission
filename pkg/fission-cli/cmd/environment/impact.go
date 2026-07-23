@@ -19,6 +19,17 @@ import (
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
+// driftOtherEnv is impactRowForAlias's Drift verdict when the alias's
+// resolved FunctionVersion's snapshot references a DIFFERENT Environment
+// than the one `env impact` was queried for — e.g. the Function has since
+// been repointed at a new Environment, but this alias's resolved target was
+// published back when the Function still referenced the old one. Comparing
+// that version's EnvObservedGeneration (recorded against the old
+// Environment) to the QUERIED Environment's live Generation would be a
+// bogus comparison across two unrelated Environment identities, so this
+// value replaces True/False rather than a misleading generation diff.
+const driftOtherEnv = "OtherEnv"
+
 // ImpactRow is one row of `fission env impact`'s output: a Function that
 // references the named Environment, optionally paired with one of its
 // FunctionAliases and that alias's resolved target's env-drift verdict
@@ -84,7 +95,7 @@ func (opts *ImpactSubCommand) do(input cli.Input) error {
 	headers := []string{"FUNCTION", "ALIAS", "TARGET-VERSION", "ENV-OBSERVED-GEN", "LIVE-GEN", "DRIFT"}
 	row := func(r ImpactRow) []string {
 		obsGen := util.NoneValue
-		if r.Drift != util.NoneValue {
+		if r.Drift == "True" || r.Drift == "False" {
 			obsGen = fmt.Sprintf("%d", r.EnvObservedGeneration)
 		}
 		return []string{
@@ -161,6 +172,11 @@ func buildImpactRows(ctx context.Context, cl versioned.Interface, namespace stri
 // unresolved alias, or one whose resolved FunctionVersion can no longer be
 // read, is not assessable (util.NoneValue) — mirroring
 // AliasReconciler.applyEnvDrift's "absence means not assessable" contract.
+// A resolved FunctionVersion whose snapshot references a DIFFERENT
+// Environment than env gets driftOtherEnv instead of a generation
+// comparison: see driftOtherEnv's doc comment for why (a Function can be
+// repointed at a new Environment between publishes, leaving older,
+// still-aliased versions snapshotted against the old one).
 func impactRowForAlias(ctx context.Context, cl versioned.Interface, namespace string, env *fv1.Environment, fnName string, a fv1.FunctionAlias) ImpactRow {
 	row := ImpactRow{
 		Function:       fnName,
@@ -180,6 +196,11 @@ func impactRowForAlias(ctx context.Context, cl versioned.Interface, namespace st
 		return row
 	}
 
+	if !snapshotEnvMatches(v, namespace, env) {
+		row.Drift = driftOtherEnv
+		return row
+	}
+
 	row.EnvObservedGeneration = v.Spec.EnvObservedGeneration
 	if v.Spec.EnvObservedGeneration != env.Generation {
 		row.Drift = "True"
@@ -187,4 +208,24 @@ func impactRowForAlias(ctx context.Context, cl versioned.Interface, namespace st
 		row.Drift = "False"
 	}
 	return row
+}
+
+// snapshotEnvMatches reports whether v's Snapshot.Environment actually
+// resolves to env — the same publish.go:118 namespace-fallback logic
+// AliasReconciler.applyEnvDrift and `fn versions -o wide`'s
+// envDriftByVersion use (unset Snapshot Environment namespace means "the
+// function's own namespace"; namespace here is that namespace, since fns
+// was already scoped to it). A version's snapshot is the reference for what
+// Environment it was actually published against — the Function's CURRENT
+// Spec.Environment (what filterFunctionsByEnvironment matched on) can have
+// moved on since.
+func snapshotEnvMatches(v *fv1.FunctionVersion, namespace string, env *fv1.Environment) bool {
+	if v.Spec.Snapshot.Environment.Name != env.Name {
+		return false
+	}
+	envNS := v.Spec.Snapshot.Environment.Namespace
+	if envNS == "" {
+		envNS = namespace
+	}
+	return envNS == env.Namespace
 }
