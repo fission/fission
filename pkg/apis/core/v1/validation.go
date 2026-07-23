@@ -1179,10 +1179,6 @@ func (spec TimeTriggerSpec) Validate() error {
 
 	errs = errors.Join(errs, spec.FunctionReference.Validate())
 
-	if spec.Alias != "" {
-		errs = errors.Join(errs, ValidateKubeName("TimeTriggerSpec.Alias", spec.Alias))
-	}
-
 	return errs
 }
 

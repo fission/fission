@@ -457,20 +457,17 @@ func TestTimeTriggerSpecValidate(t *testing.T) {
 		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
 	}.Validate())
 
-	// RFC-0025: TimeTriggerSpec.Alias is a top-level field, distinct from the
-	// embedded FunctionReference.Alias (which lives at spec.functionref.alias).
+	// RFC-0025: TimeTriggerSpec has no Alias field of its own — the embedded
+	// FunctionReference (promoted as spec.Alias in Go, spec.functionref.alias
+	// in JSON) is the single home for it, so there is exactly one path and no
+	// shadowing. Its alias/version XOR rule must propagate through
+	// TimeTriggerSpec.Validate via spec.FunctionReference.Validate().
 	require.NoError(t, TimeTriggerSpec{
-		Cron:              "0 * * * *",
-		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
-		Alias:             "prod",
-	}.Validate(), "valid top-level alias accepted")
-	require.Error(t, TimeTriggerSpec{
-		Cron:              "0 * * * *",
-		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
-		Alias:             "Bad_Alias",
-	}.Validate(), "malformed top-level alias rejected")
-	// The embedded FunctionReference's own alias/version XOR rule must also
-	// propagate through TimeTriggerSpec.Validate via spec.FunctionReference.Validate().
+		Cron: "0 * * * *",
+		FunctionReference: FunctionReference{
+			Type: FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
+		},
+	}.Validate(), "valid alias on the embedded FunctionReference accepted")
 	require.Error(t, TimeTriggerSpec{
 		Cron: "0 * * * *",
 		FunctionReference: FunctionReference{
