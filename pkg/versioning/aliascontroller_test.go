@@ -115,6 +115,36 @@ func TestAliasReconcileNamePinnedVersionMissing(t *testing.T) {
 	assert.Equal(t, fv1.FunctionAliasReasonVersionNotFound, cond.Reason)
 }
 
+// TestAliasReconcileNamePinnedVersionDeletedKeepsLastResolved covers the
+// defense-in-depth path the webhook's create/update-time existence check
+// cannot: a name-pinned alias that already resolved successfully, whose
+// target FunctionVersion is later deleted out from under it. Resolution
+// must degrade to Resolved=False/VersionNotFound while leaving
+// ResolvedVersion at its last value -- the same "keep serving the last
+// resolved target" contract the digest-pinned unmatched path already
+// guarantees.
+func TestAliasReconcileNamePinnedVersionDeletedKeepsLastResolved(t *testing.T) {
+	fn := testFunction("hello", "fn-uid")
+	v := testVersion("hello", 1, "sha256:aaa")
+	alias := testAliasNamePinned("prod", "hello", v.Name)
+	r, c := newAliasReconciler(t, fn, v, alias)
+
+	reconcileAlias(t, r, "prod")
+	got := getAlias(t, c, "prod")
+	require.Equal(t, v.Name, got.Status.ResolvedVersion)
+	require.True(t, conditions.IsTrue(got.Status.Conditions, fv1.FunctionAliasConditionResolved))
+
+	require.NoError(t, c.Delete(t.Context(), v))
+
+	reconcileAlias(t, r, "prod")
+	final := getAlias(t, c, "prod")
+	assert.Equal(t, v.Name, final.Status.ResolvedVersion, "ResolvedVersion must stay at the last resolved target")
+	assert.False(t, conditions.IsTrue(final.Status.Conditions, fv1.FunctionAliasConditionResolved))
+	cond := conditions.Find(final.Status.Conditions, fv1.FunctionAliasConditionResolved)
+	require.NotNil(t, cond)
+	assert.Equal(t, fv1.FunctionAliasReasonVersionNotFound, cond.Reason)
+}
+
 func TestAliasReconcileDigestPinnedPicksHighestSequence(t *testing.T) {
 	fn := testFunction("hello", "fn-uid")
 	v1 := testVersion("hello", 1, "sha256:bbb")
@@ -403,6 +433,52 @@ func TestMapVersionToAliasesFiltersByFunctionAndRelevance(t *testing.T) {
 		names = append(names, req.Name)
 	}
 	assert.ElementsMatch(t, []string{"unresolved", "digest-match"}, names)
+}
+
+// TestMapVersionToAliasesEnqueuesResolvedNamePinnedAliasOnVersionEvent is the
+// regression test for the defense-in-depth gap: a name-pinned alias that is
+// already Resolved=True (so the "unresolved" clause never fires) and has no
+// PackageDigest (so "digestMatch" never fires either) must still be
+// re-enqueued by an event on the FunctionVersion it is pinned to -- in
+// particular its DELETE event, which is what lets Reconcile downgrade
+// ResolvedVersion's Resolved condition once the target is gone. The map
+// function receives the same last-known object on a Delete event as on
+// Create/Update, so this is exercised the same way regardless of which
+// event actually fired.
+func TestMapVersionToAliasesEnqueuesResolvedNamePinnedAliasOnVersionEvent(t *testing.T) {
+	v := testVersion("hello", 1, "sha256:aaa")
+
+	primaryPinned := testAliasNamePinned("primary", "hello", v.Name)
+	conditions.Set(&primaryPinned.Status.Conditions, metav1.Condition{
+		Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionTrue, Reason: fv1.FunctionAliasReasonResolved,
+	})
+	primaryPinned.Status.ResolvedVersion = v.Name
+
+	secondaryPinned := testAliasNamePinned("secondary", "hello", "hello-v9") // primary target unrelated
+	secondaryPinned.Spec.SecondaryVersion = v.Name
+	conditions.Set(&secondaryPinned.Status.Conditions, metav1.Condition{
+		Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionTrue, Reason: fv1.FunctionAliasReasonResolved,
+	})
+
+	unrelatedPinned := testAliasNamePinned("unrelated", "hello", "hello-v2") // pinned at a different version
+	conditions.Set(&unrelatedPinned.Status.Conditions, metav1.Condition{
+		Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionTrue, Reason: fv1.FunctionAliasReasonResolved,
+	})
+
+	otherFunctionPinned := testAliasNamePinned("other-fn", "goodbye", v.Name) // same version name, different function
+	conditions.Set(&otherFunctionPinned.Status.Conditions, metav1.Condition{
+		Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionTrue, Reason: fv1.FunctionAliasReasonResolved,
+	})
+
+	r, _ := newAliasReconciler(t, primaryPinned, secondaryPinned, unrelatedPinned, otherFunctionPinned)
+
+	reqs := r.mapVersionToAliases(t.Context(), v)
+
+	names := make([]string, 0, len(reqs))
+	for _, req := range reqs {
+		names = append(names, req.Name)
+	}
+	assert.ElementsMatch(t, []string{"primary", "secondary"}, names)
 }
 
 func TestAliasReconcileNotFoundIsNotAnError(t *testing.T) {
