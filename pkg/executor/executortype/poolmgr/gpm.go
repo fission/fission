@@ -658,11 +658,34 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
+				fnGenStr, ok9 := pod.Labels[fv1.FUNCTION_GENERATION]
 
-				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
+				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 || !ok9 {
 					gpm.logger.Info("failed to adopt pod for function due to lack of necessary information",
 						"pod", pod.Name, "labels", pod.Labels, "annotations", pod.Annotations,
 						"env", env.Name)
+					return
+				}
+
+				// fsCache keys on (UID, Generation), not ResourceVersion (see
+				// #3596 and this phase's UR->UG migration). A synthetic
+				// ObjectMeta left at the zero-value Generation would key this
+				// entry as (UID, 0), which no live Function (Generation >= 1)
+				// can ever match — GetByFunction would deterministically miss
+				// every adopted pod, leaking stale byFunction/byAddress
+				// entries until TTL reap. Parse it from the pod's
+				// FUNCTION_GENERATION label (stamped at specialization time,
+				// gp_pod.go's specializedPodLabels) and, like every other
+				// required field above, skip adoption rather than guess if
+				// it's missing or malformed — e.g. a pre-migration pod still
+				// alive during a rolling upgrade. A skipped pod isn't lost:
+				// it stays in the cluster and either gets adopted by an
+				// executor replica still running the old code, or is reaped
+				// as idle and replaced by a fresh cold start.
+				fnGen, perr := strconv.ParseInt(fnGenStr, 10, 64)
+				if perr != nil {
+					gpm.logger.Error(perr, "failed to adopt pod for function: unparsable function-generation label",
+						"pod", pod.Name, "value", fnGenStr)
 					return
 				}
 
@@ -673,6 +696,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 						Namespace:       fnNS,
 						UID:             k8sTypes.UID(fnUID),
 						ResourceVersion: fnRV,
+						Generation:      fnGen,
 					},
 					Environment: &env,
 					Address:     svcHost,
