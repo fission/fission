@@ -76,15 +76,15 @@ func runAdopt(t *testing.T, pod *apiv1.Pod) *fscache.FunctionServiceCache {
 }
 
 // TestAdoptSpecializedPodsPopulatesGeneration is the regression test for the
-// coordinator-flagged gap: the synthetic ObjectMeta adoptSpecializedPods
-// builds from pod labels/annotations must carry Generation (read from the
-// fv1.FUNCTION_GENERATION pod label) so the resulting fsCache entry is keyed
-// the same way (crd.CacheKeyUG = UID+Generation) as a live Function's
-// GetByFunction lookup. Pre-migration, the synthetic ObjectMeta's zero-value
-// Generation keyed the entry as (UID, 0), which no live Function
-// (Generation >= 1) could ever match — RefreshFuncPods' GetByFunction would
-// deterministically miss adopted pods, leaving stale byFunction/byAddress
-// entries with dead addresses until TTL reap.
+// synthetic ObjectMeta adoptSpecializedPods builds from pod labels/annotations:
+// it must carry Generation (read from the fv1.FUNCTION_GENERATION pod label)
+// so the resulting fsCache entry is keyed the same way (crd.CacheKeyUG =
+// UID+Generation) as a live Function's GetByFunction lookup. Pre-migration,
+// the synthetic ObjectMeta's zero-value Generation keyed the entry as
+// (UID, 0), which no live Function (Generation >= 1) could ever match —
+// RefreshFuncPods' GetByFunction would deterministically miss adopted pods,
+// leaving stale byFunction/byAddress entries with dead addresses until TTL
+// reap.
 func TestAdoptSpecializedPodsPopulatesGeneration(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	fsCache := runAdopt(t, pod)

@@ -313,10 +313,9 @@ func TestDeleteFunctionService(t *testing.T) {
 		assert.NoError(t, gpm.deleteFunctionService(t.Context(), fnForService("never-created", 1)))
 	})
 
-	// BLOCKER FIX 2: deleteFunctionService used to delete only the single
-	// unversioned functionServiceName(fn), orphaning every per-version
-	// Service on function delete. It must now List-and-delete every Service
-	// this function owns.
+	// deleteFunctionService must List-and-delete every Service this function
+	// owns, not just the single unversioned functionServiceName(fn) — deleting
+	// only that one would orphan every per-version Service on function delete.
 	t.Run("deletes every per-version service along with the unversioned one", func(t *testing.T) {
 		t.Parallel()
 		gpm, kubeClient := gpmForServiceTest(t)
@@ -362,8 +361,8 @@ func TestDeleteFunctionService(t *testing.T) {
 	})
 }
 
-// TestFnSvcEnsureKey pins the BLOCKER FIX 1 debounce key shape: (UID,
-// version) so two versions of one function never share a debounce window.
+// TestFnSvcEnsureKey pins the debounce key shape: (UID, version) so two
+// versions of one function never share a debounce window.
 func TestFnSvcEnsureKey(t *testing.T) {
 	t.Parallel()
 
@@ -379,8 +378,9 @@ func TestFnSvcEnsureKey(t *testing.T) {
 	assert.Equal(t, fnSvcEnsureKey(v1), fnSvcEnsureKey(v1), "the key is deterministic")
 }
 
-// TestMaybeEnsureFunctionServiceDebouncePerVersion is the BLOCKER FIX 1
-// regression: a debounced v1 ensure must never starve v2's ensure.
+// TestMaybeEnsureFunctionServiceDebouncePerVersion is the regression test for
+// the per-version debounce key: a debounced v1 ensure must never starve v2's
+// ensure.
 func TestMaybeEnsureFunctionServiceDebouncePerVersion(t *testing.T) {
 	t.Parallel()
 	gpm, kubeClient := gpmForServiceTest(t)
@@ -406,10 +406,10 @@ func TestMaybeEnsureFunctionServiceDebouncePerVersion(t *testing.T) {
 	assert.True(t, kerrors.IsNotFound(err), "v1 must remain debounced inside its window")
 }
 
-// TestDeleteFnSvcEnsuredForUID pins the companion fix to BLOCKER FIX 1:
-// markFuncDeleted only knows a UID, but the debounce map now keys on (UID,
-// version), so the sweep must find and remove every version's entry for
-// that UID and leave other UIDs' entries alone.
+// TestDeleteFnSvcEnsuredForUID pins the companion sweep: markFuncDeleted only
+// knows a UID, but the debounce map now keys on (UID, version), so the sweep
+// must find and remove every version's entry for that UID and leave other
+// UIDs' entries alone.
 func TestDeleteFnSvcEnsuredForUID(t *testing.T) {
 	t.Parallel()
 	gpm, _ := gpmForServiceTest(t)
