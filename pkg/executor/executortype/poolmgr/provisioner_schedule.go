@@ -39,7 +39,6 @@ func effectiveTargetAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (in
 		target = maxActiveTarget
 	}
 	return target, badWindows
-
 }
 
 // windowActiveAt reports whether window is open at instant now. robfig/cron's
@@ -65,19 +64,66 @@ func windowActiveAt(window fv1.ProvisionedWindow, now time.Time) (bool, error) {
 	if t.IsZero() || t.After(now) {
 		return false, nil
 	} else {
-		iterations := 0
-		for {
-			if iterations >= 100_000 {
-				return true, nil
-			}
-			t2 := sched.Next(t)
-			if t2.After(now) {
-				break
-			}
-			t = t2
-			iterations++
+		var capped bool
+		t, capped = lastSched(sched, t, now)
+		if capped {
+			return true, nil
 		}
 		return now.Sub(t) < dur, nil
 	}
+}
 
+func lastSched(sched cron.Schedule, t time.Time, now time.Time) (time.Time, bool) {
+	iterations := 0
+	for {
+		if iterations >= 100_000 {
+			return time.Time{}, true
+		}
+		t2 := sched.Next(t)
+		if t2.After(now) {
+			break
+		}
+		t = t2
+		iterations++
+	}
+	return t, false
+}
+
+func nextTransitionAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (time.Time, []error) {
+	badWindows := []error{}
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	var nextTransition time.Time
+	for _, window := range cfg.Windows {
+		var nextTime time.Time
+		sched, err := cronSpecParser.Parse(window.Start)
+		if err != nil {
+			badWindows = append(badWindows, fmt.Errorf("sched failed: window %s failed: %w", window.Name, err))
+			continue
+		}
+		if windowActive, err := windowActiveAt(window, now); err != nil {
+			badWindows = append(badWindows, err)
+			continue
+		} else if !windowActive {
+			nextTime = sched.Next(now)
+		} else if windowActive {
+			// ignoreing error since it's already been checked in windowActiveAt
+			dur, _ := time.ParseDuration(window.Duration)
+			t := sched.Next(now.Add(-dur)) // arbitrary long duration to find last start
+			if t.IsZero() || t.After(now) {
+				nextTime = sched.Next(now)
+			} else {
+				t, capped := lastSched(sched, t, now)
+				if capped {
+					nextTime = now
+				} else {
+					nextTime = t.Add(dur)
+				}
+			}
+		}
+		if nextTransition.IsZero() || nextTime.Before(nextTransition) {
+			nextTransition = nextTime
+		}
+	}
+
+	return nextTransition, badWindows
 }
