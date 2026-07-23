@@ -28,6 +28,10 @@ type Params struct {
 	Namespace       string
 	Function        string
 	FunctionTimeout int // seconds; 0 = platform default
+	// FunctionVersion is the resolved fv1.FUNCTION_VERSION label off the
+	// backend the invoking trigger resolved to (RFC-0025 Task 5); empty for
+	// an unversioned reference. Stamped verbatim into Envelope.FunctionVersion.
+	FunctionVersion string
 	Depth           int
 	DedupKey        string
 	// Policy is the resolved retry/age policy stamped into the envelope (zero
@@ -60,6 +64,7 @@ func Enqueue(ctx context.Context, q statestore.Queue, w http.ResponseWriter, r *
 		Version:         EnvelopeVersion,
 		Namespace:       p.Namespace,
 		Function:        p.Function,
+		FunctionVersion: p.FunctionVersion,
 		Method:          r.Method,
 		Path:            r.URL.Path,
 		Query:           r.URL.RawQuery,

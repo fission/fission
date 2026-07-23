@@ -589,7 +589,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		triggers.asyncInvoker.publishTopic = publishTopic
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
-		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
+		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil, logger.WithName("async_deliverer"))
 		// The dispatcher resolves each destination-chain hop's config from the
 		// Manager's Function cache (the fv1↔asyncinvoke mapping lives in async.go).
 		dispatcher := asyncinvoke.New(asyncinvoke.Options{

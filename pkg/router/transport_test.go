@@ -35,9 +35,15 @@ type scriptedResolver struct {
 	fromCache   bool
 	calls       atomic.Int64
 	invalidated atomic.Int64
+	// lastStickyKey records the stickyKey RoundTrip passed into the most
+	// recent Resolve call (RFC-0025 Task 5 test seam: proves the Admit-side
+	// key the resolver ranks endpoints by is exactly what the caller
+	// computed, e.g. what a weighted pick already consumed).
+	lastStickyKey atomic.Pointer[string]
 }
 
-func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function, _ string) (ResolvedEntry, error) {
+func (s *scriptedResolver) Resolve(_ context.Context, _ *fv1.Function, stickyKey string) (ResolvedEntry, error) {
+	s.lastStickyKey.Store(&stickyKey)
 	n := int(s.calls.Add(1)) - 1
 	if n >= len(s.answers) {
 		n = len(s.answers) - 1

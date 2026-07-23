@@ -62,6 +62,57 @@ func TestAsyncInvokerHandleAccepted(t *testing.T) {
 	assert.Equal(t, []byte("payload"), env.Body)
 }
 
+// TestAsyncInvokerHandleStampsFunctionVersion pins the RFC-0025 Task 5
+// enqueue-side stamp: when the resolved backend fn carries
+// fv1.FUNCTION_VERSION (versioning.VersionedFunction's label, set for any
+// alias- or version-pin resolve), handle() stamps it into the durable
+// envelope's FunctionVersion. An unversioned (bare-name) fn — no label —
+// stamps nothing, byte-identical to pre-Task-5 envelopes.
+func TestAsyncInvokerHandleStampsFunctionVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("versioned resolve stamps FunctionVersion", func(t *testing.T) {
+		t.Parallel()
+		q := routerMemQueue(t)
+		inv := &asyncInvoker{queue: q, logger: logr.Discard()}
+		fn := &fv1.Function{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "hello", Namespace: "ns",
+				Labels: map[string]string{fv1.FUNCTION_VERSION: "hello-v1"},
+			},
+		}
+		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
+		w := httptest.NewRecorder()
+		inv.handle(w, r, fn)
+		require.Equal(t, 202, w.Code)
+
+		l, err := q.Lease(t.Context(), asyncinvoke.DefaultQueue, 1, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l, 1)
+		env, err := asyncinvoke.Decode(l[0].Body)
+		require.NoError(t, err)
+		assert.Equal(t, "hello-v1", env.FunctionVersion)
+	})
+
+	t.Run("unversioned resolve stamps nothing", func(t *testing.T) {
+		t.Parallel()
+		q := routerMemQueue(t)
+		inv := &asyncInvoker{queue: q, logger: logr.Discard()}
+		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "ns"}}
+		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
+		w := httptest.NewRecorder()
+		inv.handle(w, r, fn)
+		require.Equal(t, 202, w.Code)
+
+		l, err := q.Lease(t.Context(), asyncinvoke.DefaultQueue, 1, time.Minute)
+		require.NoError(t, err)
+		require.Len(t, l, 1)
+		env, err := asyncinvoke.Decode(l[0].Body)
+		require.NoError(t, err)
+		assert.Empty(t, env.FunctionVersion)
+	})
+}
+
 func TestAsyncInvokerHandleDisabled501(t *testing.T) {
 	t.Parallel()
 	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
@@ -230,6 +281,28 @@ func TestDestinationsFromSpec(t *testing.T) {
 	assert.Equal(t, "errs", onF.Topic)
 	assert.Equal(t, fv1.MessageQueueTypeStatestore, onF.MQType)
 	assert.True(t, onF.IsTopic())
+}
+
+// TestDestinationsFromSpec_AliasVersion pins the RFC-0025 Task 5 mapping: a
+// function destination's Alias/Version pin (fv1.FunctionReference) carries
+// through to the envelope-side Destination's own Alias/Version fields.
+func TestDestinationsFromSpec_AliasVersion(t *testing.T) {
+	t.Parallel()
+	ic := &fv1.InvocationConfig{
+		OnSuccess: &fv1.DestinationRef{Function: &fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "next", Version: "next-v3",
+		}},
+		OnFailure: &fv1.DestinationRef{Function: &fv1.FunctionReference{
+			Type: fv1.FunctionReferenceTypeFunctionName, Name: "handler", Alias: "prod",
+		}},
+	}
+	onS, onF := destinationsFromSpec(ic, "ns")
+	require.NotNil(t, onS)
+	assert.Equal(t, "next-v3", onS.Version)
+	assert.Empty(t, onS.Alias)
+	require.NotNil(t, onF)
+	assert.Equal(t, "prod", onF.Alias)
+	assert.Empty(t, onF.Version)
 }
 
 func TestPolicyFromSpec(t *testing.T) {

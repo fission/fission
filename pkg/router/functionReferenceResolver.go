@@ -60,6 +60,23 @@ type (
 		// RouteSpec.Aliases so a FunctionAlias event can find and re-apply
 		// exactly the triggers resolving through it (TriggersForAlias).
 		Aliases []string
+		// stickySource is the Function whose Spec.State.Sticky config governs
+		// RFC-0023 sticky routing for this result (RFC-0025 Task 5). For a
+		// single-function result it is the resolved function itself (byte-
+		// identical to pre-Task-5 behavior, which read Sticky off the one
+		// backend in play). For a weighted FunctionAlias split it is the LIVE
+		// function, not either version snapshot's own recorded Spec: a
+		// snapshot's State.Sticky reflects whatever was live when THAT
+		// version was captured, which can differ between the primary and
+		// secondary snapshots (and from the function's current config) --
+		// the live function is the one stable source shared by the whole
+		// split, so the deterministic pick and the resolver's Admit ranking
+		// key off the same config regardless of which side wins. nil (the
+		// legacy FunctionReferenceTypeFunctionWeights canary, whose backends
+		// are distinct named functions with no single canonical config) means
+		// no sticky key is ever extracted, preserving that path's pre-Task-5
+		// pure-random pick.
+		stickySource *fv1.Function
 	}
 )
 
@@ -135,10 +152,13 @@ func (frr *functionReferenceResolver) resolveByName(ctx context.Context, namespa
 
 // singleFunctionResult wraps one resolved backend, keyed by BackendKey (or
 // plain name for unversioned backends, since BackendKey(name, "") == name).
+// stickySource is fn itself: there is only one backend in play, so its own
+// Spec.State.Sticky is unambiguously the sticky config for this result.
 func singleFunctionResult(key string, fn *fv1.Function) *resolveResult {
 	return &resolveResult{
 		resolveResultType: resolveResultSingleFunction,
 		functionMap:       map[string]*fv1.Function{key: fn},
+		stickySource:      fn,
 	}
 }
 
@@ -200,6 +220,16 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 		return nil, err
 	}
 
+	// The alias must actually target ref.Name. Checking here up front gives a
+	// clear, alias-scoped error; without it a mismatch would still be caught
+	// downstream by resolveVersion's own FunctionVersion-ownership check, but
+	// with a confusing message about the version belonging to a different
+	// function rather than the alias itself being the wrong one.
+	if alias.Spec.FunctionName != ref.Name {
+		return nil, fmt.Errorf("function alias %s/%s targets function %q, not %q: %w",
+			namespace, ref.Alias, alias.Spec.FunctionName, ref.Name, errFunctionNotFound)
+	}
+
 	target := alias.Spec.Version
 	if target == "" {
 		target = alias.Status.ResolvedVersion
@@ -220,11 +250,26 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 		return rr, nil
 	}
 
+	if alias.Spec.SecondaryVersion == "" {
+		// A weighted alias's SecondaryVersion is required by the webhook, but a
+		// hand-crafted CR can bypass it. Resolving that as errFunctionNotFound
+		// (rather than letting an empty-name Get surface as a transient reader
+		// error) drops the route cleanly instead of driving an endless requeue.
+		return nil, fmt.Errorf("function alias %s/%s is weighted but has no secondary version: %w", namespace, ref.Alias, errFunctionNotFound)
+	}
+
 	secondary, err := frr.resolveVersion(ctx, namespace, ref.Name, alias.Spec.SecondaryVersion)
 	if err != nil {
 		return nil, err
 	}
 	secondaryKey := routetable.BackendKey(ref.Name, alias.Spec.SecondaryVersion)
+
+	// Sticky routing config (RFC-0025 Task 5) is sourced from the LIVE
+	// function -- see the resolveResult.stickySource doc comment for why.
+	live, err := frr.getFunction(ctx, namespace, ref.Name)
+	if err != nil {
+		return nil, err
+	}
 
 	weight := *alias.Spec.Weight
 	rr := resolveResult{
@@ -237,7 +282,8 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 			{name: primaryKey, weight: weight, sumPrefix: weight},
 			{name: secondaryKey, weight: 100 - weight, sumPrefix: 100},
 		},
-		Aliases: []string{ref.Alias},
+		Aliases:      []string{ref.Alias},
+		stickySource: live,
 	}
 	return &rr, nil
 }

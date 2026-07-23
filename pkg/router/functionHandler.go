@@ -54,10 +54,18 @@ type functionHandler struct {
 	httpTrigger              *fv1.HTTPTrigger
 	functionMap              map[string]*fv1.Function
 	fnWeightDistributionList []functionWeightDistribution
-	tsRoundTripperParams     *tsRoundTripperParams
-	isDebugEnv               bool
-	structuredErrors         bool
-	accessLog                bool
+	// stickySource is the Function (RFC-0025 Task 5) whose Spec.State.Sticky
+	// governs sticky routing for this route: the single resolved function for
+	// an unweighted route, or the LIVE function for a weighted alias's split
+	// (see resolveResult.stickySource). nil for the legacy
+	// FunctionReferenceTypeFunctionWeights canary, which has no single
+	// canonical sticky config and so never extracts a key (pure random pick,
+	// unchanged from pre-Task-5 behavior).
+	stickySource         *fv1.Function
+	tsRoundTripperParams *tsRoundTripperParams
+	isDebugEnv           bool
+	structuredErrors     bool
+	accessLog            bool
 	// functionTimeoutMap and policyByUID are keyed by crd.CacheKeyUG (UID,
 	// Generation), not UID alone: an RFC-0025 versioned backend (a weighted
 	// alias's primary/secondary target, or the internal route's fresh
@@ -126,6 +134,16 @@ func (fh functionHandler) asyncRequested(request *http.Request) bool {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
+	// RFC-0023/0025: extract the sticky key ONCE, before any per-request
+	// backend pick, off the resolution's stable sticky-config source
+	// (fh.stickySource -- the live function for a weighted alias's split, the
+	// single resolved function otherwise; see resolveResult.stickySource).
+	// The SAME key is then used both for the weighted pick below and for the
+	// round tripper's Admit ranking (transport.go, via RetryingRoundTripper.
+	// stickyKey) -- computing it once and passing it down is what guarantees
+	// pick and admit can never disagree.
+	stickyKey := stickyKeyFromRequest(fh.stickySource, request)
+
 	if len(fh.fnWeightDistributionList) > 0 {
 		// Weighted backend selection: the legacy FunctionReferenceTypeFunctionWeights
 		// canary AND an RFC-0025 weighted FunctionAlias (Spec.Weight != nil) both
@@ -138,7 +156,11 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		// the identical split an HTTPTrigger referencing the alias would —
 		// "weighted aliases work uniformly on all trigger types for free,
 		// because the weighted pick happens router-side" (RFC-0025).
-		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
+		//
+		// stickyKey is "" for the legacy canary (stickySource is nil there),
+		// so getCanaryBackend falls back to its pre-Task-5 random pick; for a
+		// keyed request against a weighted alias, the pick is deterministic.
+		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList, stickyKey)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",
 				"fnMap", fh.functionMap,
@@ -198,6 +220,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		isDebugEnv:  fh.isDebugEnv,
 		funcTimeout: time.Duration(fnTimeout) * time.Second,
 		policy:      policy,
+		stickyKey:   stickyKey,
 	}
 
 	start := time.Now()

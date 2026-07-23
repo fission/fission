@@ -56,6 +56,16 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 		Namespace:       fn.Namespace,
 		Function:        fn.Name,
 		FunctionTimeout: cfg.FunctionTimeout,
+		// FunctionVersion (RFC-0025 Task 5): fn is the resolver's already-
+		// resolved backend (functionHandler.function, possibly the weighted
+		// pick), which carries fv1.FUNCTION_VERSION only when the invoking
+		// trigger resolved through an alias or a direct version pin --
+		// versioning.VersionedFunction stamps it, an unversioned bare-name
+		// resolve never sets it. Reading it off fn (rather than threading the
+		// trigger's own reference through) is what makes this apply uniformly
+		// to every path that reaches handle(), including the internal
+		// `:<alias>`/`:<version>` routes with no HTTPTrigger at all.
+		FunctionVersion: fn.Labels[fv1.FUNCTION_VERSION],
 		DedupKey:        r.Header.Get(asyncinvoke.HeaderDedupKey),
 		// Depth stays 0: a public caller must not seed the destination-chain depth
 		// (it is derived from the signed internal replay, not the request), so the
@@ -155,7 +165,17 @@ func destFromRef(ref *fv1.DestinationRef, fnNamespace string) *asyncinvoke.Desti
 	case ref == nil:
 		return nil
 	case ref.Function != nil:
-		return &asyncinvoke.Destination{FunctionNamespace: fnNamespace, FunctionName: ref.Function.Name}
+		// Alias/Version (RFC-0025) mirror FunctionReference's own mutually
+		// exclusive pair; carried through so fireDestination can suffix the
+		// delivery URL with `:<alias>`/`:<version>` when the destination
+		// itself is pinned, exactly like a trigger referencing an alias or
+		// version would resolve.
+		return &asyncinvoke.Destination{
+			FunctionNamespace: fnNamespace,
+			FunctionName:      ref.Function.Name,
+			Alias:             ref.Function.Alias,
+			Version:           ref.Function.Version,
+		}
 	case ref.Topic != nil:
 		// Topics are namespace-scoped (RFC-0027): the destination inherits the
 		// source function's namespace, exactly like function destinations (R6).
