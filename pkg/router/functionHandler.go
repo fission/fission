@@ -134,14 +134,22 @@ func (fh functionHandler) asyncRequested(request *http.Request) bool {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	// RFC-0023/0025: extract the sticky key ONCE, before any per-request
-	// backend pick, off the resolution's stable sticky-config source
-	// (fh.stickySource -- the live function for a weighted alias's split, the
-	// single resolved function otherwise; see resolveResult.stickySource).
-	// The SAME key is then used both for the weighted pick below and for the
-	// round tripper's Admit ranking (transport.go, via RetryingRoundTripper.
+	// RFC-0023/0025: extract the sticky key off the resolution's stable
+	// sticky-config source (fh.stickySource -- the live function for any
+	// alias resolution, the single resolved function otherwise; see
+	// resolveResult.stickySource) BEFORE any per-request backend pick. The
+	// SAME key then drives both the weighted pick below and the round
+	// tripper's Admit ranking (transport.go, via RetryingRoundTripper.
 	// stickyKey) -- computing it once and passing it down is what guarantees
-	// pick and admit can never disagree.
+	// the two can never disagree for a weighted alias.
+	//
+	// fh.stickySource is nil for the legacy FunctionReferenceTypeFunctionWeights
+	// canary (its backends are distinct named functions, each with its own
+	// independent StickyConfig, so there is no single config to key the PICK
+	// on) -- stickyKey starts "" there and getCanaryBackend falls back to its
+	// pre-Task-5 random pick. The pre-Task-5 Admit-side behavior (honor
+	// whichever backend the pick landed on) is restored below, AFTER the
+	// pick, once fh.function is known.
 	stickyKey := stickyKeyFromRequest(fh.stickySource, request)
 
 	if len(fh.fnWeightDistributionList) > 0 {
@@ -157,9 +165,10 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		// "weighted aliases work uniformly on all trigger types for free,
 		// because the weighted pick happens router-side" (RFC-0025).
 		//
-		// stickyKey is "" for the legacy canary (stickySource is nil there),
-		// so getCanaryBackend falls back to its pre-Task-5 random pick; for a
-		// keyed request against a weighted alias, the pick is deterministic.
+		// stickyKey is "" for the legacy canary going in (stickySource is nil
+		// there), so getCanaryBackend falls back to its pre-Task-5 random
+		// pick; for a keyed request against a weighted alias, the pick is
+		// deterministic.
 		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList, stickyKey)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",
@@ -170,6 +179,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 		fh.function = fn
 		fh.logger.V(1).Info("chosen function backend's metadata", "metadata", fh.function)
+
+		// Legacy canary Admit-side restore (see the top-of-function comment):
+		// fh.stickySource is nil, so stickyKey is still "" here -- recompute
+		// it from the just-chosen fn, restoring the pre-Task-5 behavior of
+		// honoring whichever backend's own StickyConfig the random pick
+		// landed on. Safe to overwrite: the pick above was never keyed
+		// (stickyKey was "" going in), so there is no pick/admit disagreement
+		// to reintroduce.
+		if fh.stickySource == nil {
+			stickyKey = stickyKeyFromRequest(fn, request)
+		}
 	}
 
 	// url path

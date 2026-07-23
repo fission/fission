@@ -61,21 +61,34 @@ type (
 		// exactly the triggers resolving through it (TriggersForAlias).
 		Aliases []string
 		// stickySource is the Function whose Spec.State.Sticky config governs
-		// RFC-0023 sticky routing for this result (RFC-0025 Task 5). For a
-		// single-function result it is the resolved function itself (byte-
-		// identical to pre-Task-5 behavior, which read Sticky off the one
-		// backend in play). For a weighted FunctionAlias split it is the LIVE
-		// function, not either version snapshot's own recorded Spec: a
-		// snapshot's State.Sticky reflects whatever was live when THAT
-		// version was captured, which can differ between the primary and
-		// secondary snapshots (and from the function's current config) --
-		// the live function is the one stable source shared by the whole
-		// split, so the deterministic pick and the resolver's Admit ranking
-		// key off the same config regardless of which side wins. nil (the
-		// legacy FunctionReferenceTypeFunctionWeights canary, whose backends
-		// are distinct named functions with no single canonical config) means
-		// no sticky key is ever extracted, preserving that path's pre-Task-5
-		// pure-random pick.
+		// RFC-0023 sticky routing for this result (RFC-0025 Task 5).
+		//
+		// For a plain (non-alias) single-function result -- resolveByName's
+		// default case, or a direct Version pin -- it is the resolved
+		// function itself, set by singleFunctionResult (byte-identical to
+		// pre-Task-5 behavior, which read Sticky off the one backend in
+		// play).
+		//
+		// For ANY alias resolution -- resolveByAlias, weighted or not -- it
+		// is the LIVE function, overriding singleFunctionResult's default in
+		// the unweighted case. Two reasons: (1) a version snapshot's
+		// State.Sticky reflects whatever was live when THAT version was
+		// captured, which can differ from the function's current config, and
+		// for a weighted split can differ BETWEEN the primary and secondary
+		// snapshots, so the live function is the one source both sides (and
+		// the resolver's Admit ranking) can key off consistently; (2) using
+		// live for the unweighted case too means adding or removing Weight on
+		// an alias never changes which config the sticky key is computed
+		// against, so it never silently re-shuffles an in-flight session's
+		// pick as a side effect of an unrelated rollout edit.
+		//
+		// nil for the legacy FunctionReferenceTypeFunctionWeights canary
+		// (resolveByFunctionWeights): its backends are distinct named
+		// functions with no single canonical config, so no sticky key is
+		// extracted for the PICK -- functionHandler.handler() separately
+		// restores the pre-Task-5 Admit-side behavior for that path by
+		// recomputing the key from whichever backend the (unkeyed, random)
+		// pick lands on.
 		stickySource *fv1.Function
 	}
 )
@@ -152,8 +165,11 @@ func (frr *functionReferenceResolver) resolveByName(ctx context.Context, namespa
 
 // singleFunctionResult wraps one resolved backend, keyed by BackendKey (or
 // plain name for unversioned backends, since BackendKey(name, "") == name).
-// stickySource is fn itself: there is only one backend in play, so its own
-// Spec.State.Sticky is unambiguously the sticky config for this result.
+// stickySource defaults to fn itself -- correct for a plain (non-alias)
+// resolve, where fn IS the only backend in play. resolveByAlias's unweighted
+// branch overrides this to the live function after calling in (see
+// resolveResult.stickySource's doc comment for why an alias always uses
+// live, even unweighted).
 func singleFunctionResult(key string, fn *fv1.Function) *resolveResult {
 	return &resolveResult{
 		resolveResultType: resolveResultSingleFunction,
@@ -244,9 +260,24 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 	}
 	primaryKey := routetable.BackendKey(ref.Name, target)
 
+	// Sticky routing config (RFC-0025 Task 5) is sourced from the LIVE
+	// function for EVERY alias resolution -- weighted or not -- not the
+	// resolved snapshot's own recorded Spec (see the resolveResult.
+	// stickySource doc comment for the weighted-split rationale). Using the
+	// same source unweighted keeps the sticky key's owning config identical
+	// before and after a Weight edit turns a name-pinned alias into a
+	// weighted split (or back): re-keying which config the hash is computed
+	// against on that edit would silently re-shuffle every in-flight
+	// session's pick, even though nothing about ITS request changed.
+	live, err := frr.getFunction(ctx, namespace, ref.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	if alias.Spec.Weight == nil {
 		rr := singleFunctionResult(primaryKey, primary)
 		rr.Aliases = []string{ref.Alias}
+		rr.stickySource = live
 		return rr, nil
 	}
 
@@ -263,13 +294,6 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 		return nil, err
 	}
 	secondaryKey := routetable.BackendKey(ref.Name, alias.Spec.SecondaryVersion)
-
-	// Sticky routing config (RFC-0025 Task 5) is sourced from the LIVE
-	// function -- see the resolveResult.stickySource doc comment for why.
-	live, err := frr.getFunction(ctx, namespace, ref.Name)
-	if err != nil {
-		return nil, err
-	}
 
 	weight := *alias.Spec.Weight
 	rr := resolveResult{

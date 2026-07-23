@@ -420,9 +420,14 @@ func (d *Dispatcher) fireDestination(ctx context.Context, dest *Destination, dep
 		return
 	}
 	env := Envelope{
-		Version:         EnvelopeVersion,
-		Namespace:       dest.FunctionNamespace,
-		Function:        dest.functionRouteName(),
+		Version:   EnvelopeVersion,
+		Namespace: dest.FunctionNamespace,
+		Function:  dest.functionRouteName(),
+		// dest.Version rides FunctionVersion, not a baked-in URL suffix, so a
+		// version-pinned destination gets the SAME 404-fallback machinery a
+		// primary invocation's version pin gets (see Destination.Version's
+		// doc comment for why this must not dead-letter on routine GC).
+		FunctionVersion: dest.Version,
 		Method:          http.MethodPost,
 		Headers:         map[string]string{"Content-Type": "application/json"},
 		Body:            body,
