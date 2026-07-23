@@ -208,6 +208,37 @@ func TestResolverFromExecutorReReadsCurrentFunction(t *testing.T) {
 	assert.Equal(t, "2", exec.gotFn.ResourceVersion)
 }
 
+// TestResolverVersionedProjectionPassesThrough guards the RFC-0025 pin:
+// a version-pinned projection (fv1.FUNCTION_VERSION label present) must reach
+// the executor AS-IS — Spec, Generation, and label intact — even when the
+// Manager cache holds a diverged live Function. The version snapshot is
+// immutable, so the currentFunction staleness re-read must not apply;
+// substituting the live Function specializes the wrong version's code.
+func TestResolverVersionedProjectionPassesThrough(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+
+	live := fnWithPkg("7", "pkg-live-v2") // what the Manager cache holds (diverged)
+	live.Generation = 2
+
+	// The alias/version-pinned projection versioning.VersionedFunction builds:
+	// same identity, snapshot Spec, pinned Generation, version label.
+	pinned := fnWithPkg("7", "pkg-snapshot-v1")
+	pinned.Generation = 1
+	pinned.Labels = map[string]string{fv1.FUNCTION_VERSION: "fn-v1"}
+
+	reader := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(live).Build()
+	exec := &recordingExecutor{}
+	r := &executorResolver{logger: logger, reader: reader, executor: exec}
+
+	_, err := r.fromExecutor(t.Context(), pinned)
+	require.NoError(t, err)
+	require.NotNil(t, exec.gotFn)
+	assert.Same(t, pinned, exec.gotFn, "the projection must pass through unmodified — no re-read substitution")
+	assert.Equal(t, "pkg-snapshot-v1", exec.gotFn.Spec.Package.PackageRef.Name, "executor must get the pinned snapshot spec, not the live spec")
+	assert.Equal(t, int64(1), exec.gotFn.Generation, "executor must get the pinned generation")
+	assert.Equal(t, "fn-v1", exec.gotFn.Labels[fv1.FUNCTION_VERSION], "the version label must survive to the executor")
+}
+
 // TestResolverFromExecutorFallsBackToSnapshot: with no reader the captured
 // snapshot is used.
 func TestResolverFromExecutorFallsBackToSnapshot(t *testing.T) {
