@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/cache"
 )
 
@@ -23,10 +24,22 @@ type (
 
 	// metav1.ObjectMeta is not hashable, so we make a hashable copy
 	// of the subset of its fields that are identifiable.
+	//
+	// Generation replaces ResourceVersion (see #3596): ResourceVersion moves
+	// on status-only writes, not just spec changes, and the router's
+	// informer cache can lag the executor's/other components' view — an
+	// RV-keyed lookup would miss the entry assign() populated under an
+	// earlier RV of the same content, splitting one function's cache entry
+	// across RV churn. Generation only increments on spec changes.
+	//
+	// Version carries the RFC-0025 phase-3 FunctionVersion label
+	// (fv1.FUNCTION_VERSION) so the key's shape only needs to change once;
+	// it is empty for every function until versioned routing lands.
 	metadataKey struct {
-		Name            string
-		Namespace       string
-		ResourceVersion string
+		Name       string
+		Namespace  string
+		Generation int64
+		Version    string
 	}
 )
 
@@ -39,9 +52,10 @@ func makeFunctionServiceMap(logger logr.Logger, expiry time.Duration) *functionS
 
 func keyFromMetadata(m *metav1.ObjectMeta) *metadataKey {
 	return &metadataKey{
-		Name:            m.Name,
-		Namespace:       m.Namespace,
-		ResourceVersion: m.ResourceVersion,
+		Name:       m.Name,
+		Namespace:  m.Namespace,
+		Generation: m.Generation,
+		Version:    m.Labels[fv1.FUNCTION_VERSION],
 	}
 }
 

@@ -64,8 +64,13 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 	}
 
 	fnMeta := &fn.ObjectMeta
+	// Dedup key is UID+Generation, not ResourceVersion (see #3596):
+	// ResourceVersion moves on status-only writes, and this component's
+	// informer cache can lag another component's view, so an RV-keyed
+	// throttler key could split one function's in-flight specialization
+	// across concurrent callers observing different RVs of the same spec.
 	recordObj, err := r.throttler.RunOnce(
-		crd.CacheKeyURFromMeta(fnMeta).String(),
+		crd.CacheKeyUGFromMeta(fnMeta).String(),
 		func(firstToTheLock bool) (any, error) {
 			if !firstToTheLock {
 				svcURL, err := r.fromCache(fn)
@@ -154,7 +159,7 @@ func (r *executorResolver) currentFunction(ctx context.Context, fn *fv1.Function
 // uncoalesced RPCs is the very thing the throttler exists to prevent.
 func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function) (*url.URL, error) {
 	recordObj, err := r.throttler.RunOnce(
-		crd.CacheKeyURFromMeta(&fn.ObjectMeta).String(),
+		crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(),
 		func(firstToTheLock bool) (any, error) {
 			if !firstToTheLock {
 				svcURL, err := r.fromCache(fn)
