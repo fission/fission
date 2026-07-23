@@ -80,6 +80,19 @@ type ProvisionerConfig struct {
 // The provisioner reuses gpm.GetFuncSvc — the full cold-start flow — so eager
 // pods are byte-identical to on-demand pods: same cache entries, same headless
 // Service membership, same router EndpointSlice visibility. Zero router changes.
+//
+// Provisioned concurrency targets the function's LATEST generation only
+// (RFC-0025): listPods/countProvisionedPods filter on the live Function's
+// current fv1.FUNCTION_GENERATION, so a stale-generation pod left behind by a
+// function update never counts toward ready and never blocks warming the new
+// generation. Keeping an older generation warm for versioned/alias traffic
+// (a FunctionAlias still pinned to a prior FunctionVersion) is NOT this
+// provisioner's job — that pinning is the idle reaper's alias-retention
+// concern (pkg/executor/reaper/idle + versionretain.View.Retained), which
+// exempts a retained (uid, generation) pair from reaping independent of the
+// fission.io/provisioned label. Label-clearing paths (clearProvisionedLabels,
+// disableProvisioningLocked) deliberately do NOT filter by generation — see
+// their doc comments.
 type Provisioner struct {
 	logger           logr.Logger
 	gpm              funcSvcGetter
@@ -276,16 +289,44 @@ func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Funct
 	}
 }
 
-func (p *Provisioner) listPods(ctx context.Context, fn *fv1.Function) (corev1.PodList, error) {
+// provisionedPodLabels builds the label selector shared by every provisioned-
+// pod list in this file. includeGeneration additionally requires
+// fv1.FUNCTION_GENERATION to equal fn's current generation, restricting
+// matches to pods specialized for the LIVE generation only.
+//
+// includeGeneration=true is for the count/list-for-target path
+// (countProvisionedPods): a function update bumps fn.Generation, so
+// pods specialized under the previous generation stop matching and stop
+// counting toward the target — the provisioner immediately starts warming
+// the new generation instead of treating stale pods as already-satisfying
+// it.
+//
+// includeGeneration=false is for the label-clearing paths
+// (clearProvisionedLabels, disableProvisioningLocked): they must find
+// provisioned pods from EVERY generation, including generations the live
+// Function object no longer describes. If clearing were also
+// generation-filtered, a stale-generation pod's fission.io/provisioned label
+// would never be found again once its generation aged out of the selector —
+// leaking the label (and, once a future per-pod reaper check replaces
+// idle.go's current per-function exemption, leaking reaper-exemption too).
+func provisionedPodLabels(fn *fv1.Function, includeGeneration bool) map[string]string {
+	labelMap := map[string]string{
+		fv1.FUNCTION_UID:      string(fn.UID),
+		fv1.SERVED_LABEL:      fv1.SERVED_VALUE,
+		fv1.PROVISIONED_LABEL: fv1.PROVISIONED_VALUE,
+	}
+	if includeGeneration {
+		labelMap[fv1.FUNCTION_GENERATION] = strconv.FormatInt(fn.Generation, 10)
+	}
+	return labelMap
+}
+
+func (p *Provisioner) listPods(ctx context.Context, fn *fv1.Function, includeGeneration bool) (corev1.PodList, error) {
 	podList := corev1.PodList{}
-	labelMap := map[string]string{}
-	labelMap[fv1.FUNCTION_UID] = string(fn.UID)
-	labelMap[fv1.SERVED_LABEL] = fv1.SERVED_VALUE
-	labelMap[fv1.PROVISIONED_LABEL] = fv1.PROVISIONED_VALUE
 	err := p.crClient.List(
 		ctx,
 		&podList,
-		client.MatchingLabels(labelMap),
+		client.MatchingLabels(provisionedPodLabels(fn, includeGeneration)),
 	)
 	if err != nil {
 		return podList, err
@@ -301,8 +342,15 @@ func (p *Provisioner) clearProvisionedLabel(ctx context.Context, pod *corev1.Pod
 
 // clearProvisionedLabels removes the "max" number of provisioned label from the oldest pods of the given function.
 // to clear all provisioned labels, set max to -1.
+//
+// Lists across ALL generations (see provisionedPodLabels), not just the
+// live one: a stale-generation pod's provisioned label must still be
+// reachable for clearing, most importantly via disableProvisioningLocked's
+// max=-1 call when ProvisionedConcurrency is removed from the spec — that
+// call must clear every provisioned pod the function ever had, not just
+// pods at its current generation.
 func (p *Provisioner) clearProvisionedLabels(ctx context.Context, fn *fv1.Function, max int) {
-	podList, err := p.listPods(ctx, fn)
+	podList, err := p.listPods(ctx, fn, false)
 	if err != nil {
 		p.logger.Error(err, "Unable to list pods", "function", fn.Name, "namespace", fn.Namespace)
 		return
@@ -389,8 +437,12 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 	return nil
 }
 
+// countProvisionedPods counts ready+running provisioned pods at fn's
+// CURRENT generation only (see provisionedPodLabels) — provisioned
+// concurrency targets the latest generation; see the Provisioner doc
+// comment.
 func (p *Provisioner) countProvisionedPods(ctx context.Context, fn *fv1.Function) (int, error) {
-	podList, err := p.listPods(ctx, fn)
+	podList, err := p.listPods(ctx, fn, true)
 	if err != nil {
 		return 0, err
 	}
