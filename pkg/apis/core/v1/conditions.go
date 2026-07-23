@@ -92,6 +92,22 @@ const (
 	// FunctionAliasReasonDigestUnmatched (digest-pinned target not yet — or
 	// no longer — recorded by any FunctionVersion) otherwise.
 	FunctionAliasConditionResolved = "Resolved"
+	// FunctionAliasConditionEnvDrift surfaces the RFC-0025 "Environment &
+	// Package changes across the version boundary" gap: an Environment
+	// update bumps no Function Generation and recycles pods under EVERY
+	// version, so a version's pinned code+config can silently run against a
+	// runtime that has moved on since publish. True with reason
+	// FunctionAliasReasonEnvGenerationDrift means the resolved target
+	// FunctionVersion's EnvObservedGeneration (recorded at publish) no
+	// longer matches the live Environment's Generation — the alias is
+	// observably drifted, not blocked; rollback restores code/config, never
+	// the runtime. False with reason FunctionAliasReasonEnvCurrent means
+	// they still match. The condition is REMOVED (absent, not False) when
+	// drift is not assessable at all: the alias is unresolved, its target
+	// FunctionVersion is missing, or the Environment it names is missing —
+	// absence reads as "cannot tell", which is distinct from "checked, no
+	// drift".
+	FunctionAliasConditionEnvDrift = "EnvDrift"
 )
 
 // Standard Reason values written alongside each condition. PascalCase per
@@ -184,4 +200,7 @@ const (
 	FunctionAliasReasonResolved        = "Resolved"
 	FunctionAliasReasonVersionNotFound = "VersionNotFound"
 	FunctionAliasReasonDigestUnmatched = "DigestUnmatched"
+	// EnvDrift condition reasons.
+	FunctionAliasReasonEnvGenerationDrift = "EnvGenerationDrift" // live Environment Generation has moved past the resolved version's EnvObservedGeneration
+	FunctionAliasReasonEnvCurrent         = "EnvCurrent"         // live Environment Generation still matches the resolved version's EnvObservedGeneration
 )

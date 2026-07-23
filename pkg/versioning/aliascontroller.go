@@ -65,17 +65,25 @@ func RegisterAliasReconciler(mgr ctrl.Manager, logger logr.Logger) error {
 	// patches never re-trigger themselves via the .For() watch.
 	aliasPredicates := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
 	var versionPredicates []predicate.Predicate
+	// Environment is watched with GenerationChangedPredicate only (no status
+	// subresource splits Generation from spec writes here, unlike
+	// FunctionAlias): an env update is exactly what the EnvDrift condition
+	// exists to surface.
+	envPredicates := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
 	if utils.CrdWatchClusterWide() {
 		mp := controller.MembershipPredicate(utils.DefaultNSResolver())
 		aliasPredicates = append(aliasPredicates, mp)
 		versionPredicates = append(versionPredicates, mp)
+		envPredicates = append(envPredicates, mp)
 	}
 
 	b := builder.ControllerManagedBy(mgr).
 		Named("versioning-alias").
 		For(&fv1.FunctionAlias{}, builder.WithPredicates(aliasPredicates...)).
 		Watches(&fv1.FunctionVersion{}, handler.EnqueueRequestsFromMapFunc(r.mapVersionToAliases),
-			builder.WithPredicates(versionPredicates...))
+			builder.WithPredicates(versionPredicates...)).
+		Watches(&fv1.Environment{}, handler.EnqueueRequestsFromMapFunc(r.mapEnvToAliases),
+			builder.WithPredicates(envPredicates...))
 
 	if utils.CrdWatchClusterWide() {
 		b = b.Watches(&fv1.FissionTenant{},
@@ -128,6 +136,55 @@ func (r *AliasReconciler) mapVersionToAliases(ctx context.Context, obj client.Ob
 		unresolved := !conditions.IsTrue(a.Status.Conditions, fv1.FunctionAliasConditionResolved)
 		namePinnedMatch := a.Spec.Version == v.Name || a.Spec.SecondaryVersion == v.Name
 		if digestMatch || unresolved || namePinnedMatch {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
+		}
+	}
+	return reqs
+}
+
+// mapEnvToAliases enqueues every FunctionAlias, ACROSS ALL NAMESPACES, whose
+// currently-resolved target FunctionVersion's snapshot references the
+// Environment event — Environments are frequently referenced from a
+// different namespace than the Function/Alias/Version (Snapshot.Environment
+// carries its own Namespace field; see applyEnvDrift's envNS fallback), so
+// this cannot be scoped to the event's own namespace the way
+// mapVersionToAliases is. There is no index from Environment identity to
+// alias, so this Lists every FunctionAlias cluster-wide and Gets each one's
+// resolved FunctionVersion to compare — alias counts are small (RFC-0025
+// design note), and this only runs on an Environment Generation change, not
+// on the hot path. Aliases that have never resolved are skipped: they have
+// no target version to compare against, matching applyEnvDrift's own
+// "not assessable" handling for that case.
+func (r *AliasReconciler) mapEnvToAliases(ctx context.Context, obj client.Object) []reconcile.Request {
+	env, ok := obj.(*fv1.Environment)
+	if !ok {
+		return nil
+	}
+
+	aliases := &fv1.FunctionAliasList{}
+	if err := r.client.List(ctx, aliases); err != nil {
+		r.logger.V(1).Info("failed to list function aliases for environment watch",
+			"namespace", env.Namespace, "name", env.Name, "error", err)
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for i := range aliases.Items {
+		a := &aliases.Items[i]
+		if a.Status.ResolvedVersion == "" {
+			continue
+		}
+
+		v := &fv1.FunctionVersion{}
+		if err := r.client.Get(ctx, client.ObjectKey{Namespace: a.Namespace, Name: a.Status.ResolvedVersion}, v); err != nil {
+			continue
+		}
+
+		envNS := v.Spec.Snapshot.Environment.Namespace
+		if envNS == "" {
+			envNS = a.Namespace
+		}
+		if v.Spec.Snapshot.Environment.Name == env.Name && envNS == env.Namespace {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
 		}
 	}
@@ -340,10 +397,84 @@ func (r *AliasReconciler) writeStatus(ctx context.Context, alias *fv1.FunctionAl
 		changed = true
 	}
 
+	driftChanged, err := r.applyEnvDrift(ctx, alias, resolvedVersion, resolvedOK)
+	if err != nil {
+		return err
+	}
+	if driftChanged {
+		changed = true
+	}
+
 	if !changed {
 		return nil
 	}
 	return r.client.Status().Patch(ctx, alias, client.MergeFrom(original))
+}
+
+// applyEnvDrift sets or removes the EnvDrift condition on alias (in-memory;
+// the caller folds this into its own status patch) and reports whether it
+// changed anything. Drift is assessable only once resolution succeeded AND
+// both the target FunctionVersion and the Environment it was published
+// against can still be read — any of those being unavailable removes the
+// condition rather than reporting a stale True/False, per
+// FunctionAliasConditionEnvDrift's "absence means not assessable" contract.
+func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.FunctionAlias, resolvedVersion string, resolvedOK bool) (bool, error) {
+	if !resolvedOK || resolvedVersion == "" {
+		return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+	}
+
+	v := &fv1.FunctionVersion{}
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: alias.Namespace, Name: resolvedVersion}, v); err != nil {
+		if apierrors.IsNotFound(err) {
+			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+		}
+		return false, fmt.Errorf("versioning: getting function version %s/%s for alias %s/%s env-drift check: %w",
+			alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
+	}
+
+	// Mirrors publish.go:118's envNS fallback: an unset Snapshot Environment
+	// namespace means "same namespace as the function", and a FunctionAlias
+	// always lives in its Function's namespace (repairMetadata Gets the
+	// Function from alias.Namespace) — so alias.Namespace stands in for the
+	// function's namespace here.
+	envNS := v.Spec.Snapshot.Environment.Namespace
+	if envNS == "" {
+		envNS = alias.Namespace
+	}
+
+	env := &fv1.Environment{}
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: envNS, Name: v.Spec.Snapshot.Environment.Name}, env); err != nil {
+		if apierrors.IsNotFound(err) {
+			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+		}
+		return false, fmt.Errorf("versioning: getting environment %s/%s referenced by function version %s/%s for alias %s/%s env-drift check: %w",
+			envNS, v.Spec.Snapshot.Environment.Name, alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
+	}
+
+	drift := v.Spec.EnvObservedGeneration != env.Generation
+	imageChanged := v.Spec.EnvRuntimeImage != "" && env.Spec.Runtime.Image != "" && v.Spec.EnvRuntimeImage != env.Spec.Runtime.Image
+
+	status := metav1.ConditionFalse
+	reason := fv1.FunctionAliasReasonEnvCurrent
+	message := fmt.Sprintf("environment %s/%s generation %d matches version %q's recorded generation %d",
+		envNS, env.Name, env.Generation, resolvedVersion, v.Spec.EnvObservedGeneration)
+	if drift {
+		status = metav1.ConditionTrue
+		reason = fv1.FunctionAliasReasonEnvGenerationDrift
+		message = fmt.Sprintf("environment %s/%s has drifted: version %q was published under generation %d, live environment is generation %d",
+			envNS, env.Name, resolvedVersion, v.Spec.EnvObservedGeneration, env.Generation)
+		if imageChanged {
+			message += fmt.Sprintf("; runtime image also changed from %q to %q", v.Spec.EnvRuntimeImage, env.Spec.Runtime.Image)
+		}
+	}
+
+	return conditions.Set(&alias.Status.Conditions, metav1.Condition{
+		Type:               fv1.FunctionAliasConditionEnvDrift,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: alias.Generation,
+	}), nil
 }
 
 // bestEffortDigest fetches name's FunctionVersion to record its digest on an
