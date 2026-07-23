@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	executorUtil "github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
@@ -83,25 +83,6 @@ func functionServicesEnabled() bool {
 // every ensure).
 var warnBadGateOnce sync.Once
 
-// versionSuffixPattern matches the "-v<seq>" tail of a FunctionVersion's
-// name (minted as "<fn>-v<sequence>" by versioning.Publish).
-var versionSuffixPattern = regexp.MustCompile(`-v[0-9]+$`)
-
-// versionServiceSuffix derives the bounded suffix functionServiceName adds
-// for a published version: the version label's own "-v<seq>" tail when it
-// matches the expected shape, or a short deterministic hash-derived
-// fallback otherwise -- so a version label that (by bug or hand-edit)
-// doesn't end in "-v<seq>" can never blow the Service name's 63-char budget
-// open-ended. Either way the result is a handful of bytes, bounded
-// independent of the label's own length.
-func versionServiceSuffix(versionLabel string) string {
-	if m := versionSuffixPattern.FindString(versionLabel); m != "" {
-		return m
-	}
-	h := sha256.Sum256([]byte(versionLabel))
-	return "-v" + hex.EncodeToString(h[:])[:8]
-}
-
 // functionServiceName returns the deterministic name of a function's headless
 // Service (RFC-0002): fn-<name>-<uid8>, truncated to fit the 63-char Service
 // name limit. uid8 is the first 8 hex chars of sha256(uid) so the name stays
@@ -118,7 +99,7 @@ func functionServiceName(fn *fv1.Function) string {
 
 	suffix := ""
 	if v := fn.Labels[fv1.FUNCTION_VERSION]; v != "" {
-		suffix = versionServiceSuffix(v)
+		suffix = executorUtil.VersionSuffix(v)
 	}
 
 	name := fn.Name
