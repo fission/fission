@@ -646,22 +646,38 @@ func (sc *StateConfig) Validate() error {
 	return errs
 }
 
-// Validate checks the provisioned concurrency config. In PR 1 only the base
-// Target is meaningful — Windows is accepted in the CRD schema (for PR 2
-// stability) but rejected here until the schedule parser is implemented.
-// CEL already enforces Target >= 1 and the poolmgr-only constraint; this is
-// defense-in-depth and the one check CEL cannot express (Windows empty).
+// Validate checks the provisioned concurrency config.
 func (pc *ProvisionedConcurrencyConfig) Validate() error {
 	var errs error
 	if pc.Target < 1 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Target", pc.Target, "must be >= 1"))
 	}
 
-	if len(pc.Windows) > 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", len(pc.Windows),
-			"scheduled windows are not yet supported (RFC-0026 PR 2)"))
+	windows := make(map[string]struct{})
+	for i, window := range pc.Windows {
+		if len(window.Name) == 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "name is required"))
+		}
+		if err := IsValidCronSpec(window.Start); err != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "start is invalid: "+err.Error(), "window name: "+window.Name))
+		}
+		d, err := time.ParseDuration(window.Duration)
+		if err != nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "duration is invalid: "+err.Error(), "window name: "+window.Name))
+		}
+		if d <= 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "duration must be > 0", "window name: "+window.Name))
+		}
+		if _, ok := windows[window.Name]; ok {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "name must be unique", "window name: "+window.Name))
+		}
+		if window.Target < 0 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "window target must be >= 0", "window name: "+window.Name))
+		}
+		if window.Name != "" {
+			windows[window.Name] = struct{}{}
+		}
 	}
-
 	return errs
 }
 

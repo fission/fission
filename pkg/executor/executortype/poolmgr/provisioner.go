@@ -94,11 +94,68 @@ type Provisioner struct {
 	inflight sync.Map // map[types.UID]*atomic.Int32
 
 	reconcileLocks sync.Map // map[types.UID]*sync.Mutex
+
+	timers sync.Map // map[types.UID]*fnSchedule
 }
 
 func (p *Provisioner) lockFor(fnUID types.UID) *sync.Mutex {
 	lock, _ := p.reconcileLocks.LoadOrStore(fnUID, &sync.Mutex{})
 	return lock.(*sync.Mutex)
+}
+
+func (p *Provisioner) scheduleFor(fn *fv1.Function) *fnSchedule {
+	sched, _ := p.timers.LoadOrStore(fn.UID, &fnSchedule{name: fn.Name, namespace: fn.Namespace})
+	return sched.(*fnSchedule)
+}
+
+func (p *Provisioner) armTransition(fn *fv1.Function) {
+	sched := p.scheduleFor(fn)
+	sched.mu.Lock()
+	var next time.Time
+	defer sched.mu.Unlock()
+	now := time.Now()
+	if (sched.generation != fn.Generation) || len(sched.windows) == 0 {
+		sched.reBuildWindows(fn, p.logger)
+		sched.generation = fn.Generation
+	}
+	for _, pw := range sched.windows {
+		if pw == nil || pw.capped {
+			continue
+		}
+		var candidate time.Time
+		if pw.activeUntil.IsZero() {
+			candidate = pw.nextOpen
+		} else {
+			candidate = pw.activeUntil
+		}
+		if next.IsZero() || candidate.Before(next) {
+			next = candidate
+		}
+	}
+	if next.IsZero() || !next.After(now) {
+		return
+	}
+	delay := time.Until(next)
+	if sched.timer == nil {
+		sched.timer = time.AfterFunc(delay, func() {
+			ctx := context.Background()
+			name, namespace := fn.Name, fn.Namespace
+			fn, err := p.fissionClient.CoreV1().Functions(namespace).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				p.logger.Error(err, "error fetching latest function", "function", name, "namespace", namespace)
+				return
+			}
+			executorType := fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+			if fn.Spec.ProvisionedConcurrency == nil || (executorType != fv1.ExecutorTypePoolmgr && executorType != "") {
+				p.logger.Info("concurrency not available for this function", "function", name, "namespace", namespace, "concurrency", fn.Spec.ProvisionedConcurrency, "execution_strategy", fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType)
+				return
+			}
+			p.reconcileFunction(ctx, fn)
+			p.armTransition(fn)
+		})
+	} else {
+		sched.timer.Reset(delay)
+	}
 }
 
 // ProvisionerConfigFromEnv builds ProvisionerConfig from
@@ -156,6 +213,7 @@ func NewProvisioner(
 		config:           config,
 		inflight:         sync.Map{},
 		reconcileLocks:   sync.Map{},
+		timers:           sync.Map{},
 	}
 }
 
@@ -263,6 +321,7 @@ func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Funct
 	if err := p.updateFunctionStatus(ctx, fn, ready, target, specTarget); err != nil {
 		p.logger.Error(err, "Unable to update status of the function", "function", fn.Name, "namespace", fn.Namespace, "ready", ready, "target", target)
 	}
+	p.armTransition(fn)
 }
 
 func (p *Provisioner) listPods(ctx context.Context, fn *fv1.Function) (corev1.PodList, error) {
@@ -461,10 +520,18 @@ func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function
 	})
 }
 
-// computes the effectiveTarget: minimum of provisioned concurreny target
-// and max per function. The schedule will be added in PR2
+// effectiveTarget resolves the function's effective provisioned target via
+// effectiveTargetAt (base Target, overridden by any active schedule window),
+// logs any windows that failed to evaluate, and clamps to the namespace-wide
+// MaxPerFunction cap.
 func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
-	return min(fn.Spec.ProvisionedConcurrency.Target, p.config.MaxPerFunction)
+	target, errs := effectiveTargetAt(fn.Spec.ProvisionedConcurrency, time.Now())
+	if len(errs) > 0 {
+		for _, e := range errs {
+			p.logger.Error(e, e.Error())
+		}
+	}
+	return min(target, p.config.MaxPerFunction)
 }
 
 // disableProvisioning clears all provisioned labels, zeroes the function's
@@ -484,6 +551,13 @@ func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function)
 func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
+	if v, ok := p.timers.Load(fn.UID); ok {
+		sched := v.(*fnSchedule)
+		if sched.timer != nil {
+			sched.timer.Stop()
+		}
+	}
+	p.timers.Delete(fn.UID)
 	if err := p.updateFunctionStatus(ctx, fn, 0, 0, 0); err != nil {
 		p.logger.Error(err, "Unable to update status of the function",
 			"function", fn.Name, "namespace", fn.Namespace)
@@ -496,4 +570,11 @@ func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Fun
 func (p *Provisioner) forget(fnUID types.UID) {
 	p.reconcileLocks.Delete(fnUID)
 	p.inflight.Delete(fnUID)
+	if v, ok := p.timers.Load(fnUID); ok {
+		sched := v.(*fnSchedule)
+		if sched.timer != nil {
+			sched.timer.Stop()
+		}
+	}
+	p.timers.Delete(fnUID)
 }
