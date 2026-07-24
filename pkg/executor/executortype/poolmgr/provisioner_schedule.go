@@ -83,6 +83,9 @@ func (f *fnSchedule) reBuildWindows(fn *fv1.Function, logger logr.Logger) {
 // kubectl write bypassing admission) are skipped rather than aborting the
 // whole evaluation, and returned in badWindows for the caller to log.
 func effectiveTargetAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (int, []error) {
+	if cfg == nil {
+		return 0, nil
+	}
 	target := cfg.Target
 	badWindows := []error{}
 	maxActiveTarget := 0
