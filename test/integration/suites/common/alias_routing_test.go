@@ -843,7 +843,11 @@ func TestAliasAsyncVersionPin(t *testing.T) {
 		}
 		assert.Greaterf(c, strings.Count(logs, "async-pin-v1"), v1Baseline,
 			"async delivery must execute against the enqueue-time version (v1)")
-	}, 3*time.Minute, 3*time.Second)
+		// 5m window: the redelivery rides RFC-0024's exponential backoff, and
+		// on a contended CI runner the second attempt has been observed to
+		// land past a 3m window (leg flake 2026-07-24). The poll exits as
+		// soon as the count moves — the wide window only bounds the worst case.
+	}, 5*time.Minute, 5*time.Second)
 
 	finalV2 := strings.Count(af.ns.FunctionLogs(t, ctx, af.FnName), "async-pin-v2")
 	assert.Equalf(t, v2Baseline, finalV2,
