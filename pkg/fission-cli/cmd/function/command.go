@@ -254,7 +254,7 @@ func Commands() *cobra.Command {
 
 	publishCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "publish",
-		Short: "Publish the function's current spec as an immutable FunctionVersion (RFC-0025)",
+		Short: "Publish the function's current spec as an immutable version",
 	}, Publish, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.PublishDescription, flag.PublishWait, flag.WaitTimeout, flag.Output},
@@ -262,7 +262,7 @@ func Commands() *cobra.Command {
 
 	versionsCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "versions",
-		Short: "List a function's published FunctionVersions (RFC-0025)",
+		Short: "List a function's published versions",
 	}, Versions, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.Output},
