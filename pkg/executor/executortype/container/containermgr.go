@@ -625,10 +625,12 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	var multierr error
 
-	// GetByFunction uses resource version as part of cache key, however,
-	// the resource version in function metadata will be changed when a function
-	// is deleted and cause Container backend fails to delete the entry.
-	// Use GetByFunctionUID instead of GetByFunction here to find correct
+	// GetByFunction now keys on UID+Generation (see #3596), not
+	// ResourceVersion, but the fn passed in on delete can still carry a
+	// Generation the cache entry was never keyed under (e.g. a delete
+	// racing a spec update, or a stale informer snapshot) — GetByFunctionUID
+	// is the UID-only lookup that doesn't depend on the caller's metadata
+	// matching the cached entry's, so it's used here to find the correct
 	// fsvc entry.
 	objName := caaf.getObjName(fn)
 	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
