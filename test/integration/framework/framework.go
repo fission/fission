@@ -171,7 +171,11 @@ func newSignedClient(secret []byte, reg *portless.Registry, svc hmacauth.Service
 	if len(secret) > 0 {
 		transport = hmacauth.NewServiceSigningTransport(secret, svc, reg.DefaultTransport(), prefix)
 	}
-	return &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(transport)}
+	// 120s: this cap must cover a full poolmgr cold start (env pod scheduling
+	// + specialization) on a contended single-node CI runner — a direct
+	// /v2/getServiceForFunction POST was observed exceeding a 30s cap there.
+	// It is a ceiling, not a wait: fast paths are unaffected.
+	return &http.Client{Timeout: 120 * time.Second, Transport: reg.WrapRoundTripper(transport)}
 }
 
 // newRegistry builds the portless registry backing all framework HTTP
