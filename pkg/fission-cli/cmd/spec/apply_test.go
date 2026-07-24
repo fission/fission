@@ -8,9 +8,16 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	k8stesting "k8s.io/client-go/testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
 // TestPackageEqual exercises the equal() closure used by applyPackages to decide
@@ -253,4 +260,158 @@ func TestPackageRetriggerDecision(t *testing.T) {
 			}
 		})
 	}
+}
+
+// aliasFR builds a minimal FissionResources carrying the given aliases,
+// stamped with the test deployment UID (mirrors frWith in resourcetype_test.go).
+func aliasFR(aliases ...fv1.FunctionAlias) *FissionResources {
+	fr := &FissionResources{FunctionAliases: aliases}
+	fr.DeploymentConfig.UID = testDeployUID
+	fr.DeploymentConfig.Name = "test-deploy"
+	return fr
+}
+
+// TestApplyFunctionAliasesCreateSetsOwnerRefWhenFunctionExists exercises the
+// create closure's ownerRef wiring: when the target Function already exists
+// on the cluster, the created alias must carry an ownerRef pinning its UID
+// (mirrors `fission alias create`'s functionOwnerRef), so it is garbage
+// collected along with the Function.
+func TestApplyFunctionAliasesCreateSetsOwnerRefWhenFunctionExists(t *testing.T) {
+	fn := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: types.UID("fn-uid")},
+	}
+	fc := fissionfake.NewSimpleClientset(fn) //nolint:staticcheck // FunctionAlias SMD schema not yet generated for NewClientset, see k8s#126850
+	fr := aliasFR(fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+	})
+
+	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false)
+	require.NoError(t, err)
+	require.Len(t, ras.Created, 1)
+
+	got, err := fc.CoreV1().FunctionAliases("default").Get(t.Context(), "prod", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Len(t, got.OwnerReferences, 1)
+	assert.Equal(t, "Function", got.OwnerReferences[0].Kind)
+	assert.Equal(t, "hello", got.OwnerReferences[0].Name)
+	assert.Equal(t, types.UID("fn-uid"), got.OwnerReferences[0].UID)
+	// The generic reconciler stamps the deployment-UID annotation on every
+	// spec-applied object; that's what makes the alias prunable later.
+	assert.Equal(t, testDeployUID, got.Annotations[FISSION_DEPLOYMENT_UID_KEY])
+	// applyFunctionAliases stamps the function-name label on the desired
+	// object before create, mirroring `fission alias create`.
+	assert.Equal(t, "hello", got.Labels[fv1.VersionFunctionNameLabel])
+}
+
+// TestApplyFunctionAliasesCreateWithoutFunctionIsUnowned covers the
+// eventual-consistency path: a digest-pinned alias may be applied before its
+// Function exists. The create must still succeed, just without an ownerRef.
+func TestApplyFunctionAliasesCreateWithoutFunctionIsUnowned(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck // see k8s#126850
+	fr := aliasFR(fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Spec:       fv1.FunctionAliasSpec{FunctionName: "not-yet-created", PackageDigest: "sha256:" + repeatHexChar('a', 64)},
+	})
+
+	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false)
+	require.NoError(t, err)
+	require.Len(t, ras.Created, 1)
+
+	got, err := fc.CoreV1().FunctionAliases("default").Get(t.Context(), "prod", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, got.OwnerReferences)
+}
+
+func repeatHexChar(c byte, n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = c
+	}
+	return string(b)
+}
+
+// TestApplyFunctionAliasesUpdateInPlacePreservesStatus proves the update
+// closure changes spec.* without ever deleting the object (a delete-recreate
+// would lose the alias's UID and its controller-written status), and that it
+// never touches Status directly — that's the /status subresource, owned by
+// the alias-reconciler.
+func TestApplyFunctionAliasesUpdateInPlacePreservesStatus(t *testing.T) {
+	existing := &fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "prod",
+			Namespace:       "default",
+			UID:             types.UID("alias-uid-1"),
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Function", Name: "hello", UID: types.UID("fn-uid")}},
+			Annotations:     map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		},
+		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+	}
+	fc := fissionfake.NewSimpleClientset(existing) //nolint:staticcheck // see k8s#126850
+
+	// A delete would break the "update in place" contract; fail loudly if the
+	// apply ever issues one.
+	fc.PrependReactor("delete", "functionaliases", func(k8stesting.Action) (bool, runtime.Object, error) {
+		t.Fatal("update-in-place must not delete the FunctionAlias")
+		return false, nil, nil
+	})
+
+	fr := aliasFR(fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		// spec.Version changed -- this is the update trigger.
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
+	})
+
+	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false)
+	require.NoError(t, err)
+	require.Len(t, ras.Updated, 1)
+	require.Empty(t, ras.Created)
+
+	got, err := fc.CoreV1().FunctionAliases("default").Get(t.Context(), "prod", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "hello-v2", got.Spec.Version, "spec must be updated")
+	assert.Equal(t, "hello-v1", got.Status.ResolvedVersion, "status must survive the spec update untouched")
+	assert.Equal(t, types.UID("alias-uid-1"), got.UID, "identity must survive: never delete-recreate")
+	require.Len(t, got.OwnerReferences, 1, "ownerRef set at create time must survive an unrelated spec update")
+	assert.Equal(t, "hello", got.OwnerReferences[0].Name)
+	// The function-name label is stamped on the desired object every apply,
+	// so it comes through *cur = *d on the update-in-place path too, and
+	// stays stable across the resulting no-op re-apply (both sides of
+	// isObjectMetaEqual now see it).
+	assert.Equal(t, "hello", got.Labels[fv1.VersionFunctionNameLabel])
+}
+
+// TestApplyFunctionAliasesPruneOnlyWithDeploymentUID proves --delete only
+// removes aliases this spec deployment owns (carrying its deployment-UID
+// annotation); an alias without it (or with a different deployment's UID) is
+// left alone, matching every other spec-managed kind's prune semantics.
+func TestApplyFunctionAliasesPruneOnlyWithDeploymentUID(t *testing.T) {
+	owned := &fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "owned", Namespace: "default",
+			Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		},
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+	}
+	foreign := &fv1.FunctionAlias{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "foreign", Namespace: "default",
+			// No deployment-UID annotation: not owned by this spec deployment.
+		},
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+	}
+	fc := fissionfake.NewSimpleClientset(owned, foreign) //nolint:staticcheck // see k8s#126850
+
+	fr := aliasFR() // empty desired state: both aliases are absent from the spec
+	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, true /* delete */, false, false)
+	require.NoError(t, err)
+	require.Len(t, ras.Deleted, 1)
+	assert.Equal(t, "owned", ras.Deleted[0].Name)
+
+	_, err = fc.CoreV1().FunctionAliases("default").Get(t.Context(), "owned", metav1.GetOptions{})
+	assert.Error(t, err, "owned alias must be pruned")
+
+	_, err = fc.CoreV1().FunctionAliases("default").Get(t.Context(), "foreign", metav1.GetOptions{})
+	assert.NoError(t, err, "foreign alias must survive prune")
 }

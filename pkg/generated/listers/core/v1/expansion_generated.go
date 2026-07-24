@@ -34,6 +34,22 @@ type FunctionListerExpansion interface{}
 // FunctionNamespaceLister.
 type FunctionNamespaceListerExpansion interface{}
 
+// FunctionAliasListerExpansion allows custom methods to be added to
+// FunctionAliasLister.
+type FunctionAliasListerExpansion interface{}
+
+// FunctionAliasNamespaceListerExpansion allows custom methods to be added to
+// FunctionAliasNamespaceLister.
+type FunctionAliasNamespaceListerExpansion interface{}
+
+// FunctionVersionListerExpansion allows custom methods to be added to
+// FunctionVersionLister.
+type FunctionVersionListerExpansion interface{}
+
+// FunctionVersionNamespaceListerExpansion allows custom methods to be added to
+// FunctionVersionNamespaceLister.
+type FunctionVersionNamespaceListerExpansion interface{}
+
 // HTTPTriggerListerExpansion allows custom methods to be added to
 // HTTPTriggerLister.
 type HTTPTriggerListerExpansion interface{}

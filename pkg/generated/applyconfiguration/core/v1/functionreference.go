@@ -29,6 +29,21 @@ type FunctionReferenceApplyConfiguration struct {
 	// estimator can price the regex — without it, embedding the type
 	// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
 	Name *string `json:"name,omitempty"`
+	// Alias, when set, targets a FunctionAlias by name instead of the live
+	// Function directly (RFC-0025): the alias is a movable pointer that the
+	// router resolves at request time to whatever FunctionVersion it
+	// currently points at, so repointing the alias (e.g. for a canary
+	// rollout or a rollback) redirects traffic without touching this
+	// reference. Valid only when Type is "name"; mutually exclusive with
+	// Version. Empty (the default) preserves today's behavior: route
+	// straight to the live Function.
+	Alias *string `json:"alias,omitempty"`
+	// Version, when set, pins this reference to one FunctionVersion CR by
+	// name (RFC-0025) — an immutable published snapshot that never moves,
+	// unlike Alias. Valid only when Type is "name"; mutually exclusive
+	// with Alias. Empty (the default) preserves today's behavior: route
+	// straight to the live Function.
+	Version *string `json:"version,omitempty"`
 	// Function Reference by weight. this map contains function name as key and its weight
 	// as the value. This is for canary upgrade purpose.
 	FunctionWeights map[string]int `json:"functionweights,omitempty"`
@@ -53,6 +68,22 @@ func (b *FunctionReferenceApplyConfiguration) WithType(value corev1.FunctionRefe
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *FunctionReferenceApplyConfiguration) WithName(value string) *FunctionReferenceApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithAlias sets the Alias field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Alias field is set to the value of the last call.
+func (b *FunctionReferenceApplyConfiguration) WithAlias(value string) *FunctionReferenceApplyConfiguration {
+	b.Alias = &value
+	return b
+}
+
+// WithVersion sets the Version field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Version field is set to the value of the last call.
+func (b *FunctionReferenceApplyConfiguration) WithVersion(value string) *FunctionReferenceApplyConfiguration {
+	b.Version = &value
 	return b
 }
 

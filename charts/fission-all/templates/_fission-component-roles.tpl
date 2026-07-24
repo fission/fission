@@ -27,6 +27,48 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # RFC-0025 versioning controllers (pkg/versioning: alias resolver,
+  # auto-publish, retention GC — all on this Manager). functions: get-only,
+  # for the ownerRef repair (never lists/watches Functions — it only Gets
+  # the one a FunctionAlias names). functionversions: read for name-/digest-
+  # pin resolution, create for auto-publish minting, delete for retention GC
+  # (the GC's skip-on-Forbidden handling makes a missing delete grant a
+  # SILENT no-op — do not remove). functionaliases: read/write the objects
+  # it reconciles, plus /status for ResolvedVersion, History and the
+  # Resolved condition.
+  resources:
+  - functions
+  verbs:
+  - get
+- apiGroups:
+  - fission.io
+  resources:
+  - functionversions
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases/status
+  verbs:
+  - get
+  - update
+  - patch
 {{- end }}
 {{- define "executor-rules" }}
 rules:
@@ -54,6 +96,20 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # Read-only, RFC-0025: the executor's versionretain.View watches these to
+  # know which (function UID, generation) pins a live FunctionAlias still
+  # references, so the idle reaper does not drain a warm pool an alias points
+  # at just because a newer generation exists. The executor never writes
+  # either type.
+  resources:
+  - functionversions
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "kubewatcher-rules" }}
 rules:
@@ -103,6 +159,21 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # RFC-0025: an alias-addressed Tool (Function.Spec.Tool.Alias) resolves the
+  # tool entry from the alias's currently-resolved FunctionVersion snapshot
+  # (resolveEntry, pkg/mcp/reconciler.go), and FunctionAliasToolReconciler
+  # watches FunctionAlias to re-reconcile on a repoint. Read-only, same as
+  # every other Fission-CRD reader of these two types (executor, router) --
+  # the MCP server never writes either.
+  resources:
+  - functionaliases
+  - functionversions
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "statesvc-rules" }}
 rules:
@@ -251,7 +322,9 @@ rules:
   resources:
   - canaryconfigs
   - environments
+  - functionaliases
   - functions
+  - functionversions
   - httptriggers
   - kuberneteswatchtriggers
   - messagequeuetriggers
@@ -287,6 +360,18 @@ rules:
   - get
   - update
   - patch
+- apiGroups:
+  - fission.io
+  # Read-only, RFC-0025: the router watches these to resolve function aliases
+  # and version-pinned targets during request routing. The router never writes
+  # either type.
+  resources:
+  - functionversions
+  - functionaliases
+  verbs:
+  - get
+  - list
+  - watch
 {{- end }}
 {{- define "storagesvc-rules" }}
 rules:
@@ -347,4 +432,25 @@ rules:
   - get
   - update
   - patch
+# RFC-0025 phase 5 alias-mode shim: reads go through the manager's uncached
+# apiReader (m.apiReader.Get), not the cache-backed client, so — unlike
+# httptriggers/canaryconfigs above — no informer is started and list/watch
+# are not needed; get+update on functionaliases (validate then step
+# Weight/SecondaryVersion/Version) and get on functionversions (validate
+# CanaryConfigSpec.NewFunction/OldFunction are FunctionVersions of the
+# alias's function) are sufficient. See pkg/canaryconfigmgr's
+# validateAliasRollout/updateFunctionAliasWithRetries.
+- apiGroups:
+  - fission.io
+  resources:
+  - functionaliases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - fission.io
+  resources:
+  - functionversions
+  verbs:
+  - get
 {{- end }}

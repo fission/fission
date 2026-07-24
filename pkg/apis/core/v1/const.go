@@ -115,6 +115,12 @@ const (
 	ExecutorTypeContainer ExecutorType = "container"
 )
 
+// RFC-0025 function versioning modes.
+const (
+	VersioningModeAuto   VersioningMode = "auto"
+	VersioningModeManual VersioningMode = "manual"
+)
+
 // RFC-0023 keyed-state defaults and sticky-routing sources.
 const (
 	StickySourceHeader     StickySource = "header"
@@ -217,6 +223,12 @@ const (
 	// includes it so stale-generation pods drop out of the EndpointSlices on a
 	// function update (the executor-side equivalent is CacheKeyUG keying).
 	FUNCTION_GENERATION = "fission.io/function-generation"
+	// FUNCTION_VERSION labels a Function with the published FunctionVersion
+	// name it was specialized from (RFC-0025 phase 3). Empty for every
+	// function until versioned routing lands; carried in
+	// pkg/router/functionServiceMap.go's metadataKey now so the key's shape
+	// doesn't change twice.
+	FUNCTION_VERSION = "fission.io/function-version"
 	// SERVED_LABEL gates a specialized pod's membership in its function
 	// Service: pool pods pass readiness probes before specialization, so the
 	// label is set only by the post-specialization patch — without it the
@@ -246,6 +258,36 @@ const (
 	// See Function.StrictConcurrencyEnforcement.
 	ConcurrencyEnforcementAnnotation = "fission.io/concurrency-enforcement"
 	ConcurrencyEnforcementStrict     = "strict"
+
+	// RFC-0025 function version/alias ownership labels. VersionFunctionNameLabel
+	// and VersionFunctionUIDLabel are both stamped on every FunctionVersion by
+	// the publish engine (pkg/versioning). FunctionAlias objects get
+	// VersionFunctionNameLabel only — stamped by `fission alias create` and
+	// `spec apply` — never VersionFunctionUIDLabel: an alias's target Function
+	// UID is only known when the create call can Get() the Function, and
+	// stamping it conditionally would make the label's presence differ between
+	// the desired (spec-applied) and live object, defeating equality checks and
+	// causing a perpetual update loop. Name is deterministic from
+	// spec.FunctionName and always stampable, so it is the only label aliases
+	// carry. alias→function filtering stays client-side today regardless (see
+	// functionalias/list.go) because aliases created before this label existed,
+	// or by hand, would be silently dropped from a selector-based List; a
+	// phase-3 reconciler backfilling the label onto every legacy FunctionAlias
+	// is what lets that filter flip to a label selector.
+	VersionFunctionNameLabel = "fission.io/function-name"
+	VersionFunctionUIDLabel  = "fission.io/function-uid"
+)
+
+// SpecDeploymentUIDAnnotation and SpecDeploymentNameAnnotation are written by
+// `fission spec apply` to mark spec-managed objects: control-plane components
+// treat their presence as Git ownership of the object. This is a
+// control-plane contract, not just a CLI implementation detail — both
+// canaryconfigmgr (treats a spec-managed FunctionAlias as ineligible for a
+// canary rollout) and the `fission function rollback` gate (refuses to
+// repoint a spec-managed alias without --detach) key off the annotation.
+const (
+	SpecDeploymentUIDAnnotation  = "fission-uid"
+	SpecDeploymentNameAnnotation = "fission-name"
 )
 
 const (

@@ -30,6 +30,10 @@ func TestToolConfigValidate(t *testing.T) {
 		{"schema not an object", ToolConfig{Description: "d", InputSchema: rawSchema(`["type"]`)}, true},
 		{"schema missing type", ToolConfig{Description: "d", InputSchema: rawSchema(`{"properties":{}}`)}, true},
 		{"schema not json", ToolConfig{Description: "d", InputSchema: rawSchema(`{bad`)}, true},
+		// RFC-0025: Alias is a format-only kube-name check (no existence check
+		// — aliases are eventually consistent).
+		{"valid alias ok", ToolConfig{Description: "d", Alias: "prod"}, false},
+		{"malformed alias rejected", ToolConfig{Description: "d", Alias: "Bad_Alias"}, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -70,6 +74,15 @@ func TestFunctionSpecValidateTool(t *testing.T) {
 		spec.Tool = &ToolConfig{} // missing description
 		if err := spec.Validate(); err == nil {
 			t.Fatalf("expected error for exposed tool without description")
+		}
+	})
+
+	t.Run("invalid tool alias surfaced", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Tool = &ToolConfig{Description: "d", Alias: "Bad_Alias"}
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("expected error for malformed tool alias")
 		}
 	})
 }

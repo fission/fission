@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 const (
@@ -140,6 +141,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
 		return fmt.Errorf("unable to register package reconciler: %w", err)
 	}
+
+	// RFC-0025 Phase 3: the leader-elected alias resolver. It lives in
+	// pkg/versioning (not this package) because it is a pure controller over
+	// FunctionAlias/FunctionVersion with no builder/package dependency;
+	// buildermgr hosts it purely because it is already a leader-elected
+	// Manager watching this namespace set — any single-leader Manager would do.
+	if err := versioning.RegisterAliasReconciler(mgr, bmLogger); err != nil {
+		return fmt.Errorf("unable to register function alias reconciler: %w", err)
+	}
+
+	// RFC-0025 part 1 carve-out: the auto-publish and retention-GC
+	// controllers (Phase 4) are registered here in the follow-up lifecycle
+	// PR; part 1 ships only the alias resolver above.
 
 	// Cross-process propagation: under dynamic tenancy keep buildermgr's resolver
 	// in step with the FissionTenant set so a runtime-onboarded namespace's

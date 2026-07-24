@@ -45,6 +45,18 @@ spec:
                   The reference to a function for kubewatcher to invoke with
                   when receiving events.
                 properties:
+                  alias:
+                    description: |-
+                      Alias, when set, targets a FunctionAlias by name instead of the live
+                      Function directly (RFC-0025): the alias is a movable pointer that the
+                      router resolves at request time to whatever FunctionVersion it
+                      currently points at, so repointing the alias (e.g. for a canary
+                      rollout or a rollback) redirects traffic without touching this
+                      reference. Valid only when Type is "name"; mutually exclusive with
+                      Version. Empty (the default) preserves today's behavior: route
+                      straight to the live Function.
+                    maxLength: 63
+                    type: string
                   functionweights:
                     additionalProperties:
                       type: integer
@@ -75,6 +87,15 @@ spec:
                     - name
                     - function-weights
                     type: string
+                  version:
+                    description: |-
+                      Version, when set, pins this reference to one FunctionVersion CR by
+                      name (RFC-0025) — an immutable published snapshot that never moves,
+                      unlike Alias. Valid only when Type is "name"; mutually exclusive
+                      with Alias. Empty (the default) preserves today's behavior: route
+                      straight to the live Function.
+                    maxLength: 63
+                    type: string
                 required:
                 - name
                 - type
@@ -84,6 +105,22 @@ spec:
                     alphanumeric or '-', start/end alphanumeric, max 63 chars) when
                     type is 'name'
                   rule: self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))
+                - message: functionref.alias and functionref.version are mutually
+                    exclusive
+                  rule: '!((has(self.alias) && self.alias != '''') && (has(self.version)
+                    && self.version != ''''))'
+                - message: functionref.alias is only valid when type is 'name'
+                  rule: '!(has(self.alias) && self.alias != '''') || self.type ==
+                    ''name'''
+                - message: functionref.version is only valid when type is 'name'
+                  rule: '!(has(self.version) && self.version != '''') || self.type
+                    == ''name'''
+                - message: functionref.alias must be a valid DNS1123 label (lowercase
+                    alphanumeric or '-', start/end alphanumeric, max 63 chars)
+                  rule: '!(has(self.alias) && self.alias != '''') || self.alias.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
+                - message: functionref.version must be a valid DNS1123 label (lowercase
+                    alphanumeric or '-', start/end alphanumeric, max 63 chars)
+                  rule: '!(has(self.version) && self.version != '''') || self.version.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'')'
               labelselector:
                 additionalProperties:
                   type: string

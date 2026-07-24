@@ -252,13 +252,32 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.Output},
 	})
 
+	publishCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "publish",
+		Short: "Publish the function's current spec as an immutable FunctionVersion (RFC-0025)",
+	}, Publish, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.PublishDescription, flag.PublishWait, flag.WaitTimeout, flag.Output},
+	})
+
+	versionsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "versions",
+		Short: "List a function's published FunctionVersions (RFC-0025)",
+	}, Versions, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.Output},
+	})
+
+	// RFC-0025 part 1 carve-out: `rollback` and `gc-versions` are registered
+	// in the follow-up lifecycle PR alongside the controllers they drive.
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, DLQCommands(), StateCommands())
+		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, publishCmd, versionsCmd,
+		DLQCommands(), StateCommands())
 
 	return command
 }
