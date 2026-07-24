@@ -6,12 +6,73 @@ package poolmgr
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
+
+type perWindow struct {
+	name        string
+	schedule    cron.Schedule
+	activeUntil time.Time
+	nextOpen    time.Time
+	capped      bool
+}
+
+type fnSchedule struct {
+	name       string
+	namespace  string
+	generation int64
+	windows    map[string]*perWindow
+	timer      *time.Timer
+	mu         sync.Mutex
+}
+
+func (f *fnSchedule) reBuildWindows(fn *fv1.Function, logger logr.Logger) {
+	f.windows = make(map[string]*perWindow)
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	for _, window := range fn.Spec.ProvisionedConcurrency.Windows {
+		sched, err := cronSpecParser.Parse(window.Start)
+		if err != nil {
+			logger.Error(err, "cron parser failed to parse", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		}
+		dur, err := time.ParseDuration(window.Duration)
+		if err != nil {
+			logger.Error(err, "time duration parse failed to parse", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		} else if dur <= 0 {
+			logger.Error(fmt.Errorf("window duration must be positive"), "time duration must >0", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		}
+		now := time.Now()
+		pw := &perWindow{name: window.Name, schedule: sched}
+		t := sched.Next(now.Add(-dur))
+		if t.IsZero() || t.After(now) {
+			// window not active
+			pw.activeUntil = time.Time{}
+			pw.nextOpen = sched.Next(now)
+		} else {
+			// window active
+			t, capped := lastSched(sched, t, now)
+			pw.capped = capped
+			if capped {
+				pw.activeUntil = time.Time{}
+			} else {
+				pw.activeUntil = t.Add(dur)
+			}
+			pw.nextOpen = time.Time{}
+		}
+		f.windows[window.Name] = pw
+	}
+}
 
 // effectiveTargetAt returns the effective provisioned target for cfg at
 // instant now: cfg.Target if no window is currently active, or the max
