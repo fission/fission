@@ -149,18 +149,26 @@ func newTestProvisionerWithPods(t *testing.T, pods ...*corev1.Pod) *Provisioner 
 	return p
 }
 
-// readyPod builds a Pod with the provisioned/served/functionUid labels,
+// readyPod builds a Pod with the provisioned/served/functionUid labels
+// (generation "1", matching provisionedFn's default fn.Generation),
 // Running phase, an IP, and a ready container — the shape
 // countProvisionedPods expects to count.
 func readyPod(name, fnUID string) *corev1.Pod {
+	return readyPodGen(name, fnUID, "1")
+}
+
+// readyPodGen is readyPod with an explicit fv1.FUNCTION_GENERATION label, for
+// tests exercising the provisioner's generation filter.
+func readyPodGen(name, fnUID, generation string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 			Labels: map[string]string{
-				fv1.FUNCTION_UID:      fnUID,
-				fv1.SERVED_LABEL:      fv1.SERVED_VALUE,
-				fv1.PROVISIONED_LABEL: fv1.PROVISIONED_VALUE,
+				fv1.FUNCTION_UID:        fnUID,
+				fv1.FUNCTION_GENERATION: generation,
+				fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
+				fv1.PROVISIONED_LABEL:   fv1.PROVISIONED_VALUE,
 			},
 		},
 		Status: corev1.PodStatus{
@@ -387,6 +395,98 @@ func TestProvisioner_countProvisionedPods(t *testing.T) {
 		got, err := p.countProvisionedPods(t.Context(), fn)
 		require.NoError(t, err)
 		assert.Equal(t, 3, got)
+	})
+}
+
+// ---------------------------------------------------------------------------
+// generation transition: after a function update bumps Generation, gen-1
+// provisioned pods must stop counting toward the target (countProvisionedPods
+// is generation-filtered) but must still be reachable by the label-clearing
+// paths (clearProvisionedLabels / disableProvisioning are NOT
+// generation-filtered).
+// ---------------------------------------------------------------------------
+
+func TestProvisioner_generationTransition(t *testing.T) {
+	const uid = "u1"
+
+	// fn is now at generation 2 (e.g. after a spec update); the seeded pods
+	// were specialized under generation 1 and still carry that label.
+	fnGen2 := provisionedFnWithUID("fn", uid, 3)
+	fnGen2.Generation = 2
+
+	genOnePods := []*corev1.Pod{
+		readyPodGen("gen1-a", uid, "1"),
+		readyPodGen("gen1-b", uid, "1"),
+	}
+
+	t.Run("countProvisionedPods ignores stale-generation pods", func(t *testing.T) {
+		p := newTestProvisionerWithPods(t, genOnePods...)
+		got, err := p.countProvisionedPods(t.Context(), fnGen2)
+		require.NoError(t, err)
+		assert.Equal(t, 0, got, "gen-1 pods must not count toward the gen-2 target")
+	})
+
+	t.Run("countProvisionedPods counts only pods matching the current generation", func(t *testing.T) {
+		mixed := []*corev1.Pod{
+			readyPodGen("gen1-a", uid, "1"),
+			readyPodGen("gen2-a", uid, "2"),
+			readyPodGen("gen2-b", uid, "2"),
+		}
+		p := newTestProvisionerWithPods(t, mixed...)
+		got, err := p.countProvisionedPods(t.Context(), fnGen2)
+		require.NoError(t, err)
+		assert.Equal(t, 2, got, "only the two gen-2 pods count")
+	})
+
+	t.Run("clearProvisionedLabels still finds and clears gen-1 pods", func(t *testing.T) {
+		p := newTestProvisionerWithPods(t, genOnePods...)
+		p.clearProvisionedLabels(t.Context(), fnGen2, -1)
+		for _, name := range []string{"gen1-a", "gen1-b"} {
+			got := getPod(t, p, name)
+			assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared despite generation mismatch", name)
+		}
+	})
+
+	t.Run("disableProvisioning still finds and clears gen-1 pods", func(t *testing.T) {
+		p := newTestProvisionerWithPods(t, genOnePods...)
+		p.crClient = crfake.NewClientBuilder().WithScheme(scheme()).
+			WithObjects(toClientObjects(genOnePods...)...).WithObjects(fnGen2).Build()
+		p.fissionClient = fClient.NewSimpleClientset(fnGen2) //nolint:staticcheck
+
+		p.disableProvisioning(t.Context(), fnGen2)
+
+		for _, name := range []string{"gen1-a", "gen1-b"} {
+			got := getPod(t, p, name)
+			assert.NotContains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s cleared by disableProvisioning", name)
+		}
+	})
+
+	t.Run("reconcileFunction on a bumped generation warms the new generation without touching gen-1 labels", func(t *testing.T) {
+		// ready(gen-2)=0 < target=3 fires eager specializations rather than
+		// treating the gen-1 pods as already satisfying the target; the
+		// gen-1 pods' labels are untouched by the warming branch (only the
+		// excess/clear branch touches labels).
+		block := make(chan struct{})
+		defer close(block)
+		gpm := &fakeGPM{
+			block: block,
+			svc: &fscache.FuncSvc{
+				KubernetesObjects: []corev1.ObjectReference{podRef("p", "default")},
+			},
+		}
+		p := newTestProvisionerWithGPM(t, gpm, fnGen2, genOnePods...)
+		p.config.MaxInflightPerFunction = 4
+
+		p.reconcileFunction(t.Context(), fnGen2)
+
+		require.Eventually(t, func() bool {
+			return gpm.calls.Load() == 3
+		}, 2*time.Second, 10*time.Millisecond, "delta=3 eager calls fired for the new generation")
+
+		for _, name := range []string{"gen1-a", "gen1-b"} {
+			got := getPod(t, p, name)
+			assert.Contains(t, got.Labels, fv1.PROVISIONED_LABEL, "%s label untouched by the warming branch", name)
+		}
 	})
 }
 

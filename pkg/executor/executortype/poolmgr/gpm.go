@@ -77,7 +77,7 @@ type (
 		nsResolver       *utils.NamespaceResolver
 
 		fissionClient  versioned.Interface
-		functionEnv    *cache.Cache[crd.CacheKeyUR, *fv1.Environment]
+		functionEnv    *cache.Cache[crd.CacheKeyUG, *fv1.Environment]
 		fsCache        *fscache.FunctionServiceCache
 		instanceID     string
 		requestChannel chan *request
@@ -128,10 +128,14 @@ type (
 		// functions are addressed via Istio services instead.
 		functionServicesEnabled bool
 
-		// fnSvcEnsured debounces ensureFunctionService per function UID (see
-		// maybeEnsureFunctionService): map[types.UID]time.Time of the last
-		// successful-or-in-flight ensure. Entries are dropped on function
-		// delete and on ensure failure (so the next request retries).
+		// fnSvcEnsured debounces ensureFunctionService per (function UID,
+		// version) -- see fnSvcKey: map[fnSvcKey]time.Time keyed on the
+		// struct (uid, versionLabel) pair (unversioned functions get
+		// version==""), holding the last successful-or-in-flight ensure per
+		// key so one version's debounce window never starves another's
+		// (RFC-0025). Entries are dropped on function delete
+		// (deleteFnSvcEnsuredForUID sweeps every version's entry for the
+		// UID) and on ensure failure (so the next request retries).
 		fnSvcEnsured sync.Map
 
 		// provisioner maintains warm specialized pods for functions opted
@@ -139,6 +143,15 @@ type (
 		// disabled (no env var config — see Step 9). Set in
 		// RegisterReconcilers after crClient is available.
 		provisioner *Provisioner
+
+		// retainedFn reports whether a live FunctionAlias still references a
+		// (function UID, generation) pin (RFC-0025 versionretain.View.Retained),
+		// forwarded to the idle reaper's PoolDeleteStrategy so it can exempt
+		// that generation from the "drain everything but the latest" rule. Set
+		// once via SetVersionRetain, from start.go, after the view is
+		// constructed; nil (never set — e.g. in tests) keeps the pre-RFC-0025
+		// behaviour.
+		retainedFn func(uid k8sTypes.UID, gen int64) bool
 	}
 	request struct {
 		requestType
@@ -194,7 +207,7 @@ func MakeGenericPoolManager(ctx context.Context,
 		nsResolver:                 utils.DefaultNSResolver(),
 		metricsClient:              metricsClient,
 		fissionClient:              fissionClient,
-		functionEnv:                cache.MakeCache[crd.CacheKeyUR, *fv1.Environment](10*time.Second, 0),
+		functionEnv:                cache.MakeCache[crd.CacheKeyUG, *fv1.Environment](10*time.Second, 0),
 		fsCache:                    fscache.MakeFunctionServiceCache(gpmLogger),
 		instanceID:                 instanceID,
 		requestChannel:             make(chan *request),
@@ -658,11 +671,34 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
+				fnGenStr, ok9 := pod.Labels[fv1.FUNCTION_GENERATION]
 
-				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
+				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 || !ok9 {
 					gpm.logger.Info("failed to adopt pod for function due to lack of necessary information",
 						"pod", pod.Name, "labels", pod.Labels, "annotations", pod.Annotations,
 						"env", env.Name)
+					return
+				}
+
+				// fsCache keys on (UID, Generation), not ResourceVersion (see
+				// #3596 and this phase's UR->UG migration). A synthetic
+				// ObjectMeta left at the zero-value Generation would key this
+				// entry as (UID, 0), which no live Function (Generation >= 1)
+				// can ever match — GetByFunction would deterministically miss
+				// every adopted pod, leaking stale byFunction/byAddress
+				// entries until TTL reap. Parse it from the pod's
+				// FUNCTION_GENERATION label (stamped at specialization time,
+				// gp_pod.go's specializedPodLabels) and, like every other
+				// required field above, skip adoption rather than guess if
+				// it's missing or malformed — e.g. a pre-migration pod still
+				// alive during a rolling upgrade. A skipped pod isn't lost:
+				// it stays in the cluster and either gets adopted by an
+				// executor replica still running the old code, or is reaped
+				// as idle and replaced by a fresh cold start.
+				fnGen, perr := strconv.ParseInt(fnGenStr, 10, 64)
+				if perr != nil {
+					gpm.logger.Error(perr, "failed to adopt pod for function: unparsable function-generation label",
+						"pod", pod.Name, "value", fnGenStr)
 					return
 				}
 
@@ -673,6 +709,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 						Namespace:       fnNS,
 						UID:             k8sTypes.UID(fnUID),
 						ResourceVersion: fnRV,
+						Generation:      fnGen,
 					},
 					Environment: &env,
 					Address:     svcHost,
@@ -896,7 +933,21 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyUG) {
 	gpm.fsCache.MarkFuncDeleted(key)
-	gpm.fnSvcEnsured.Delete(key.UID)
+	gpm.deleteFnSvcEnsuredForUID(key.UID)
+}
+
+// deleteFnSvcEnsuredForUID drops every fnSvcEnsured debounce entry for a
+// deleted function's UID, across every version -- fnSvcKey composes (UID,
+// version), and a delete only knows the UID (crd.CacheKeyUG carries no
+// version), so a plain Delete(uid) can no longer find every per-version key.
+// Cost is one full Range per function delete, an infrequent path.
+func (gpm *GenericPoolManager) deleteFnSvcEnsuredForUID(uid k8sTypes.UID) {
+	gpm.fnSvcEnsured.Range(func(k, _ any) bool {
+		if key, ok := k.(fnSvcKey); ok && key.uid == uid {
+			gpm.fnSvcEnsured.Delete(k)
+		}
+		return true
+	})
 }
 
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
@@ -1032,7 +1083,12 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// Cached ?
 	// TODO: the cache should be able to search by <env name, fn namespace> instead of function metadata.
-	result, err := gpm.functionEnv.Get(crd.CacheKeyURFromMeta(&fn.ObjectMeta))
+	// Keyed on UID+Generation, not ResourceVersion (see #3596): the
+	// function's environment reference only changes on a spec update, so
+	// keying on RV (which also moves on status-only writes) would miss
+	// this cache on every status update and re-fetch the environment for
+	// no reason.
+	result, err := gpm.functionEnv.Get(crd.CacheKeyUGFromMeta(&fn.ObjectMeta))
 	if err == nil {
 		return result, nil
 	}
@@ -1049,7 +1105,7 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 
 	// cache for future lookups
 	m := fn.ObjectMeta
-	_, err = gpm.functionEnv.Set(crd.CacheKeyURFromMeta(&m), env)
+	_, err = gpm.functionEnv.Set(crd.CacheKeyUGFromMeta(&m), env)
 	if err != nil {
 		gpm.logger.Error(err,
 			"failed to set the key", "function", fn.Name,
@@ -1062,7 +1118,17 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // pods), run by the shared idle reaper.
 func (gpm *GenericPoolManager) IdleStrategy() idle.Strategy {
 	return idle.NewPoolDeleteStrategy(gpm.logger, gpm.fissionClient, gpm.fsCache, gpm.kubernetesClient,
-		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled)
+		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled, gpm.retainedFn)
+}
+
+// SetVersionRetain wires the RFC-0025 alias-retain view's Retained method (or
+// any equivalent func) into the idle reaper's drain decision — see
+// IdleStrategy and idle.PoolDeleteStrategy.retained. Called once from
+// start.go after both the pool manager and the view exist. Not calling it
+// (e.g. in tests that construct a GenericPoolManager directly) keeps the
+// pre-RFC-0025 behaviour: every non-latest generation drains.
+func (gpm *GenericPoolManager) SetVersionRetain(retained func(uid k8sTypes.UID, gen int64) bool) {
+	gpm.retainedFn = retained
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event

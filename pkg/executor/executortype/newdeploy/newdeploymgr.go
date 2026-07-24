@@ -814,10 +814,12 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	var errs error
 
-	// GetByFunction uses resource version as part of cache key, however,
-	// the resource version in function metadata will be changed when a function
-	// is deleted and cause newdeploy backend fails to delete the entry.
-	// Use GetByFunctionUID instead of GetByFunction here to find correct
+	// GetByFunction now keys on UID+Generation (see #3596), not
+	// ResourceVersion, but the fn passed in on delete can still carry a
+	// Generation the cache entry was never keyed under (e.g. a delete
+	// racing a spec update, or a stale informer snapshot) — GetByFunctionUID
+	// is the UID-only lookup that doesn't depend on the caller's metadata
+	// matching the cached entry's, so it's used here to find the correct
 	// fsvc entry.
 	objName := deploy.getObjName(fn)
 	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
@@ -844,29 +846,15 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	return errs
 }
 
-// getObjName returns a unique name for kubernetes objects of function
+// getObjName returns a unique name for kubernetes objects of function. A
+// versioned Function (fv1.FUNCTION_VERSION label present, RFC-0025) gets a
+// name suffixed with the version's bounded "-v<seq>" tail so each published
+// version's Deployment/Service/HPA is distinct; see
+// executorUtils.VersionedObjName for the truncation budget that keeps the
+// whole name within the Kubernetes 63-char limit either way. The
+// unversioned path is byte-identical to the pre-RFC-0025 behaviour.
 func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
-	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.UID[len(fn.UID)-17:]
-	var functionMetadata string
-	if len(fn.Name)+len(fn.Namespace) < 35 {
-		functionMetadata = fn.Name + "-" + fn.Namespace
-	} else {
-		if len(fn.Name) > 17 {
-			functionMetadata = fn.Name[:17]
-		} else {
-			functionMetadata = fn.Name
-		}
-		if len(fn.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
-		} else {
-			functionMetadata = functionMetadata + "-" + fn.Namespace
-		}
-	}
-	// constructed name should be 63 characters long, as it is a valid k8s name
-	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
-	// with newdeploy 10 character prefix
-	return strings.ToLower(fmt.Sprintf("newdeploy-%s-%s", functionMetadata, uid))
+	return executorUtils.VersionedObjName("newdeploy-", fn)
 }
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {

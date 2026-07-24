@@ -160,4 +160,23 @@ func TestToolEntryFromFunction(t *testing.T) {
 		assert.Equal(t, "search", e.ToolName)
 		assert.JSONEq(t, raw, string(e.InputSchema))
 	})
+
+	t.Run("carries Alias through from the passed-in function", func(t *testing.T) {
+		t.Parallel()
+		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{Description: "d", Alias: "blue"}))
+		assert.Equal(t, "blue", e.Alias)
+	})
+}
+
+func TestRegistryHasFunction(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	nn := types.NamespacedName{Namespace: "default", Name: "fn1"}
+	assert.False(t, r.HasFunction(nn), "nothing registered yet")
+
+	r.Upsert(entry("default", "fn1", "t1"))
+	assert.True(t, r.HasFunction(nn))
+
+	r.RemoveByFunction(nn)
+	assert.False(t, r.HasFunction(nn), "removed function is no longer present")
 }

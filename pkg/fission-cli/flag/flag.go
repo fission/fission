@@ -308,4 +308,27 @@ var (
 	TenantFunctionNamespace = Flag{Type: String, Name: flagkey.TenantFunctionNamespace, Usage: "Namespace where this tenant's function pods run (defaults to the tenant namespace)"}
 	TenantBuilderNamespace  = Flag{Type: String, Name: flagkey.TenantBuilderNamespace, Usage: "Namespace where this tenant's builder pods run (defaults to the tenant namespace)"}
 	TenantForce             = Flag{Type: Bool, Name: flagkey.TenantForce, Usage: "Disable the tenant even if it still has functions/triggers (they will stop being served)", DefaultValue: false}
+
+	// RFC-0025 `fission fn publish`.
+	PublishDescription = Flag{Type: String, Name: flagkey.PublishDescription, Usage: "Human-readable description recorded on the minted FunctionVersion"}
+	PublishWait        = Flag{Type: Bool, Name: flagkey.PublishWait, Usage: "Wait for the function's referenced package build to finish before publishing (see --timeout)"}
+
+	// RFC-0025 `fission alias` (FunctionAlias) commands.
+	AliasName             = Flag{Type: String, Name: flagkey.AliasName, Usage: "Name for the function alias"}
+	AliasFunction         = Flag{Type: String, Name: flagkey.AliasFunction, Usage: "Function this alias points at"}
+	AliasVersion          = Flag{Type: String, Name: flagkey.AliasVersion, Usage: "FunctionVersion name the alias resolves to (exactly one of --version/--package-digest)"}
+	AliasPackageDigest    = Flag{Type: String, Name: flagkey.AliasPackageDigest, Usage: "Package digest (sha256:<hex>) the alias resolves to declaratively (exactly one of --version/--package-digest)"}
+	AliasWeight           = Flag{Type: Int, Name: flagkey.AliasWeight, Usage: "Percentage (0-100) of traffic served by the primary target; the remainder goes to --secondary-version"}
+	AliasSecondaryVersion = Flag{Type: String, Name: flagkey.AliasSecondaryVersion, Usage: "Secondary FunctionVersion name receiving the 100-minus-weight remainder of traffic"}
+	AliasClearWeight      = Flag{Type: Bool, Name: flagkey.AliasClearWeight, Usage: "Clear the weighted split (drop --weight and --secondary-version)"}
+	AliasWait             = Flag{Type: Bool, Name: flagkey.AliasWait, Usage: "Wait for the alias to resolve to its updated target (see --timeout)"}
+
+	// RFC-0025 `fission fn rollback`.
+	FnRollbackAlias  = Flag{Type: String, Name: flagkey.FnRollbackAlias, Usage: "FunctionAlias to roll back"}
+	FnRollbackTo     = Flag{Type: String, Name: flagkey.FnRollbackTo, Usage: "Explicit FunctionVersion name to roll back to (default: the alias's previous target, Status.History's last entry)"}
+	FnRollbackDetach = Flag{Type: Bool, Name: flagkey.FnRollbackDetach, Usage: "Strip `fission spec` (Git) ownership annotations from the alias so a future `spec apply` does not revert the rollback"}
+	FnRollbackWait   = Flag{Type: Bool, Name: flagkey.FnRollbackWait, Usage: "Wait for the alias to resolve to the rollback target (see --timeout)"}
+
+	// RFC-0025 `fission fn gc-versions`.
+	GCVersionsKeep = Flag{Type: Int, Name: flagkey.GCVersionsKeep, Usage: "Override the retain count for this sweep (default: the function's Spec.Versioning.Retain, or 10)"}
 )

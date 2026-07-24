@@ -119,7 +119,7 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 	t.Parallel()
 	newStrategy := func() (*PoolDeleteStrategy, *fscache.FunctionServiceCache) {
 		fc := fscache.MakeFunctionServiceCache(logr.Discard())
-		s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, k8sfake.NewSimpleClientset(), 2*time.Minute, 5*time.Second, false)
+		s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, k8sfake.NewSimpleClientset(), 2*time.Minute, 5*time.Second, false, nil)
 		s.envUIDs = map[types.UID]struct{}{}
 		s.fnByUID = map[types.UID]fv1.Function{}
 		return s, fc
@@ -283,7 +283,7 @@ func TestPoolDeleteStrategy_DrainThenDelete(t *testing.T) {
 	}
 	kc := k8sfake.NewSimpleClientset(pod)
 	fc := fscache.MakeFunctionServiceCache(logr.Discard())
-	s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, kc, 2*time.Minute, 5*time.Second, true)
+	s := NewPoolDeleteStrategy(logr.Discard(), nil, fc, kc, 2*time.Minute, 5*time.Second, true, nil)
 	s.fnByUID = map[types.UID]fv1.Function{}
 
 	f := &fscache.FuncSvc{

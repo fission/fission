@@ -63,27 +63,38 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		return fmt.Errorf("error finding http trigger referenced in the canary config: %w", err)
 	}
 
-	// check that the trigger has function reference type function weights
-	if htTrigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionWeights {
-		return errors.New("canary config cannot be created for http triggers that do not reference functions by weights")
-	}
+	// ALIAS MODE (RFC-0025): an HTTPTrigger referencing a FunctionAlias drives
+	// the rollout by stepping FunctionAlias.Weight instead of
+	// HTTPTrigger.FunctionWeights (see pkg/canaryconfigmgr's alias-mode
+	// branch). --newfn/--oldfn then name FunctionVersions of the alias's
+	// function, not functions — the weights-map checks below don't apply.
+	if htTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName && htTrigger.Spec.FunctionReference.Alias != "" {
+		if err := opts.validateAliasTargets(input, fnNs, htTrigger.Spec.FunctionReference.Alias, newFunc, oldFunc); err != nil {
+			return err
+		}
+	} else {
+		// check that the trigger has function reference type function weights
+		if htTrigger.Spec.FunctionReference.Type != fv1.FunctionReferenceTypeFunctionWeights {
+			return errors.New("canary config cannot be created for http triggers that do not reference functions by weights or a function alias")
+		}
 
-	// check that the trigger references same functions in the function weights
-	_, ok := htTrigger.Spec.FunctionReference.FunctionWeights[newFunc]
-	if !ok {
-		return fmt.Errorf("HTTP Trigger doesn't reference the function %s in Canary Config", newFunc)
-	}
+		// check that the trigger references same functions in the function weights
+		_, ok := htTrigger.Spec.FunctionReference.FunctionWeights[newFunc]
+		if !ok {
+			return fmt.Errorf("HTTP Trigger doesn't reference the function %s in Canary Config", newFunc)
+		}
 
-	_, ok = htTrigger.Spec.FunctionReference.FunctionWeights[oldFunc]
-	if !ok {
-		return fmt.Errorf("HTTP Trigger doesn't reference the function %s in Canary Config", oldFunc)
-	}
+		_, ok = htTrigger.Spec.FunctionReference.FunctionWeights[oldFunc]
+		if !ok {
+			return fmt.Errorf("HTTP Trigger doesn't reference the function %s in Canary Config", oldFunc)
+		}
 
-	// check that the functions exist in the same namespace
-	fnList := []string{newFunc, oldFunc}
-	err = util.CheckFunctionExistence(input.Context(), opts.Client(), fnList, fnNs)
-	if err != nil {
-		return fmt.Errorf("error checking functions existence: %w", err)
+		// check that the functions exist in the same namespace
+		fnList := []string{newFunc, oldFunc}
+		err = util.CheckFunctionExistence(input.Context(), opts.Client(), fnList, fnNs)
+		if err != nil {
+			return fmt.Errorf("error checking functions existence: %w", err)
+		}
 	}
 
 	// finally create canaryCfg in the same namespace as the functions referenced
@@ -104,6 +115,42 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		Status: fv1.CanaryConfigStatus{
 			Status: fv1.CanaryConfigStatusPending,
 		},
+	}
+
+	return nil
+}
+
+// validateAliasTargets checks that the alias is already pointing at oldFunc
+// and that newFunc/oldFunc each name a FunctionVersion belonging to
+// aliasName's function — the alias-mode equivalent of the FunctionWeights-map
+// membership checks in complete(). Mirrors pkg/canaryconfigmgr's
+// validateAliasRollout, run client-side at create time so a typo'd
+// --newfn/--oldfn, or an alias that isn't currently pointing at --oldfn, is
+// caught immediately instead of silently failing the rollout at the first
+// reconcile.
+func (opts *CreateSubCommand) validateAliasTargets(input cli.Input, ns, aliasName, newFunc, oldFunc string) error {
+	alias, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(ns).Get(input.Context(), aliasName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("error finding function alias '%s' referenced by http trigger: %w", aliasName, err)
+	}
+
+	// Start-state precondition: the RFC's "OLD stays primary throughout" role
+	// mapping requires the alias to already point at --oldfn before the
+	// rollout starts — the controller never establishes this for you.
+	if alias.Spec.Version != oldFunc {
+		return fmt.Errorf("function alias '%s' currently points at '%s', expected --oldfn '%s' — repoint the alias or fix --oldfn",
+			aliasName, alias.Spec.Version, oldFunc)
+	}
+
+	for _, versionName := range []string{newFunc, oldFunc} {
+		v, err := opts.Client().FissionClientSet.CoreV1().FunctionVersions(ns).Get(input.Context(), versionName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error finding function version '%s' referenced in canary config: %w", versionName, err)
+		}
+		if v.Spec.FunctionName != alias.Spec.FunctionName {
+			return fmt.Errorf("function version '%s' belongs to function '%s', not function alias '%s's function '%s'",
+				versionName, v.Spec.FunctionName, aliasName, alias.Spec.FunctionName)
+		}
 	}
 
 	return nil

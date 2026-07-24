@@ -72,13 +72,25 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.EnvExecutorType},
 	})
 
+	impactCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "impact",
+		Short: "Show functions and aliases affected by this environment, and their env-drift status",
+		Long: "List every function that references this environment and, for each of its aliases, whether the " +
+			"alias's resolved version was published under an environment generation the live environment has " +
+			"since moved past (RFC-0025 env drift) — the batch, ahead-of-an-update view of `fission fn describe`'s " +
+			"per-alias EnvDrift condition.",
+	}, Impact, flag.FlagSet{
+		Required: []flag.Flag{flag.EnvName},
+		Optional: []flag.Flag{flag.Output},
+	})
+
 	command := &cobra.Command{
 		Use:     "environment",
 		Aliases: []string{"env"},
 		Short:   "Create, update and manage environments",
 	}
 
-	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, listPodsCmd)
+	command.AddCommand(createCmd, getCmd, updateCmd, deleteCmd, listCmd, listPodsCmd, impactCmd)
 
 	return command
 }

@@ -252,13 +252,54 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{flag.Output},
 	})
 
+	publishCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "publish",
+		Short: "Publish the function's current spec as an immutable FunctionVersion (RFC-0025)",
+	}, Publish, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.PublishDescription, flag.PublishWait, flag.WaitTimeout, flag.Output},
+	})
+
+	versionsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "versions",
+		Short: "List a function's published FunctionVersions (RFC-0025)",
+	}, Versions, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.Output},
+	})
+
+	rollbackCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "rollback",
+		Short: "Roll a function alias back to a previous FunctionVersion (RFC-0025)",
+		Long: "Repoint a FunctionAlias at a previously resolved FunctionVersion: by default the alias's " +
+			"previous target (Status.History's last entry), or an explicit --to version. Always a full " +
+			"repoint — clears Weight/SecondaryVersion, so a rollback issued mid-canary stops the traffic " +
+			"split rather than only rolling back the primary target. Refuses to touch an alias managed by " +
+			"`fission spec` (Git) unless --detach.",
+	}, Rollback, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName, flag.FnRollbackAlias},
+		Optional: []flag.Flag{flag.FnRollbackTo, flag.FnRollbackDetach, flag.FnRollbackWait, flag.WaitTimeout},
+	})
+
+	gcVersionsCmd := wrapper.SubCommand(&cobra.Command{
+		Use:   "gc-versions",
+		Short: "Sweep a function's old FunctionVersions down to its retain floor (RFC-0025)",
+		Long: "Runs one on-demand retention-GC sweep, the same engine the buildermgr-hosted controller runs " +
+			"automatically. Never deletes a version referenced by any FunctionAlias, or the newest/only " +
+			"version, however low --keep is set.",
+	}, GCVersions, flag.FlagSet{
+		Required: []flag.Flag{flag.FnName},
+		Optional: []flag.Flag{flag.GCVersionsKeep},
+	})
+
 	command := &cobra.Command{
 		Use:     "function",
 		Aliases: []string{"fn"},
 		Short:   "Create, update and manage functions",
 	}
 	command.AddCommand(createCmd, getCmd, getmetaCmd, describeCmd, updateCmd, deleteCmd, listCmd, logsCmd, testCmd,
-		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, DLQCommands(), StateCommands())
+		runLocalCmd, runContainerCmd, updateContainerCmd, listPodsCmd, waitCmd, toolsCmd, publishCmd, versionsCmd,
+		rollbackCmd, gcVersionsCmd, DLQCommands(), StateCommands())
 
 	return command
 }

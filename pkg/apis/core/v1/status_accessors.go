@@ -39,3 +39,5 @@ func (ft *FissionTenant) GetConditions() *[]metav1.Condition { return &ft.Status
 func (w *Workflow) GetConditions() *[]metav1.Condition { return &w.Status.Conditions }
 
 func (wr *WorkflowRun) GetConditions() *[]metav1.Condition { return &wr.Status.Conditions }
+
+func (fa *FunctionAlias) GetConditions() *[]metav1.Condition { return &fa.Status.Conditions }

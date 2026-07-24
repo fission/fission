@@ -331,6 +331,25 @@ func TestWorkflowSpecValidate(t *testing.T) {
 			}
 			s.States["a"] = st
 		}, "by name"},
+		{"task with alias reference rejected", func(s *WorkflowSpec) {
+			// RFC-0025 explicitly defers a Task state's alias/version
+			// semantics; FunctionReference.Validate() alone would accept
+			// this (it's legal on HTTPTriggers/TimeTriggers/etc.), so the
+			// rejection must come from the workflow-level guard.
+			st := s.States["a"]
+			st.Function = &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn", Alias: "blue"}
+			s.States["a"] = st
+		}, "not yet supported"},
+		{"task with version reference rejected", func(s *WorkflowSpec) {
+			st := s.States["a"]
+			st.Function = &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn", Version: "fn-v3"}
+			s.States["a"] = st
+		}, "not yet supported"},
+		{"task with bare name reference still accepted", func(s *WorkflowSpec) {
+			st := s.States["a"]
+			st.Function = &FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "fn"}
+			s.States["a"] = st
+		}, ""},
 		{"valid parallel", func(s *WorkflowSpec) {
 			s.States["fan"] = WorkflowState{
 				Type: WorkflowStateParallel,

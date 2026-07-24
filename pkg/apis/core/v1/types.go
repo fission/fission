@@ -10,6 +10,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -724,6 +725,163 @@ type (
 	}
 
 	//
+	// Function versions & aliases (RFC-0025)
+	//
+
+	// FunctionVersion is an immutable snapshot of a Function's spec at publish
+	// time (RFC-0025). Versions are minted by the version-control loop (auto
+	// mode) or `fission fn publish` (manual mode) and are never mutated after
+	// creation — only garbage collected once unreferenced by any FunctionAlias
+	// and beyond the retain floor. FunctionVersion carries no Status: its
+	// content is fixed at creation, so there is nothing to reconcile.
+	// +genclient
+	// +kubebuilder:object:root=true
+	// +kubebuilder:resource:scope="Namespaced",shortName={fnver}
+	// +kubebuilder:printcolumn:name="Sequence",type=integer,JSONPath=`.spec.sequence`
+	// +kubebuilder:printcolumn:name="PackageDigest",type=string,JSONPath=`.spec.packageDigest`
+	// +kubebuilder:printcolumn:name="PublishedAt",type=date,JSONPath=`.spec.publishedAt`
+	FunctionVersion struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              FunctionVersionSpec `json:"spec"`
+	}
+
+	// FunctionVersionList is a list of FunctionVersions.
+	// +kubebuilder:object:root=true
+	FunctionVersionList struct {
+		metav1.TypeMeta `json:",inline"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []FunctionVersion `json:"items"`
+	}
+
+	// FunctionAlias is a mutable, named pointer at one (or, during a weighted
+	// rollout, two) FunctionVersion(s) of a Function (RFC-0025). Aliases are
+	// what triggers reference in production; moving an alias is how a rollout
+	// or rollback happens without touching the trigger.
+	// +genclient
+	// +kubebuilder:object:root=true
+	// +kubebuilder:subresource:status
+	// +kubebuilder:resource:scope="Namespaced",shortName={fnalias}
+	// +kubebuilder:printcolumn:name="Function",type=string,JSONPath=`.spec.functionName`
+	// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
+	// +kubebuilder:printcolumn:name="Weight",type=integer,JSONPath=`.spec.weight`
+	// +kubebuilder:printcolumn:name="ResolvedVersion",type=string,JSONPath=`.status.resolvedVersion`
+	FunctionAlias struct {
+		metav1.TypeMeta   `json:",inline"`
+		metav1.ObjectMeta `json:"metadata"`
+		Spec              FunctionAliasSpec `json:"spec"`
+		// +optional
+		Status FunctionAliasStatus `json:"status,omitempty"`
+	}
+
+	// FunctionAliasList is a list of FunctionAliases.
+	// +kubebuilder:object:root=true
+	FunctionAliasList struct {
+		metav1.TypeMeta `json:",inline"`
+		metav1.ListMeta `json:"metadata"`
+		Items           []FunctionAlias `json:"items"`
+	}
+
+	// VersioningMode selects when versions are minted.
+	// +kubebuilder:validation:Enum=auto;manual
+	VersioningMode string
+
+	// VersioningConfig opts a Function into RFC-0025 immutable version
+	// snapshots and named aliases.
+	VersioningConfig struct {
+		// Mode auto (default) mints a version on every runtime-affecting
+		// update once the referenced package build succeeds; manual mints
+		// only on explicit `fission fn publish`.
+		// +kubebuilder:default:=auto
+		// +optional
+		Mode VersioningMode `json:"mode,omitempty"`
+		// Retain bounds unaliased version history per function (GC floor 1).
+		// Defaults to 10. Alias-referenced versions are never GC'd.
+		// +kubebuilder:validation:Minimum=1
+		// +optional
+		Retain *int `json:"retain,omitempty"`
+	}
+
+	// FunctionVersionSpec is the immutable snapshot recorded by one publish.
+	FunctionVersionSpec struct {
+		// +kubebuilder:validation:MaxLength=63
+		FunctionName string `json:"functionName"`
+		// FunctionUID and FunctionGeneration pin the executor identity of this
+		// snapshot: (UID, Generation) is the pool/cache key (crd.CacheKeyUG),
+		// so a version is a generation pin, not a new identity.
+		FunctionUID        types.UID `json:"functionUID"`
+		FunctionGeneration int64     `json:"functionGeneration"`
+		// +kubebuilder:validation:Minimum=1
+		Sequence int64 `json:"sequence"`
+		// Snapshot is the function spec at publish time with Versioning
+		// zeroed (never nested) and, for legacy packages, PackageRef
+		// repointed at the version-owned snapshot Package.
+		Snapshot FunctionSpec `json:"snapshot"`
+		// PackageDigest pins content: the OCI digest or sha256:<archive checksum>.
+		PackageDigest string `json:"packageDigest"`
+		// Environment observation at publish time (observational, not pinning).
+		// +optional
+		EnvObservedGeneration int64 `json:"envObservedGeneration,omitempty"`
+		// +optional
+		EnvRuntimeImage string      `json:"envRuntimeImage,omitempty"`
+		PublishedAt     metav1.Time `json:"publishedAt"`
+	}
+
+	// Repo convention (types.go:755,778,955): guard BOTH absent and explicit-empty on optional strings.
+	// +kubebuilder:validation:XValidation:rule="(has(self.version) && self.version != '') != (has(self.packageDigest) && self.packageDigest != '')",message="exactly one of version and packageDigest must be set"
+	// +kubebuilder:validation:XValidation:rule="!has(self.weight) || (has(self.secondaryVersion) && self.secondaryVersion != '')",message="weight requires secondaryVersion"
+	// +kubebuilder:validation:XValidation:rule="!has(self.secondaryVersion) || self.secondaryVersion == '' || !has(self.version) || self.secondaryVersion != self.version",message="secondaryVersion must differ from version"
+	FunctionAliasSpec struct {
+		// +kubebuilder:validation:MaxLength=63
+		FunctionName string `json:"functionName"`
+		// Version pins by FunctionVersion name (imperative path). XOR PackageDigest.
+		// +optional
+		Version string `json:"version,omitempty"`
+		// PackageDigest pins declaratively (GitOps): resolved asynchronously to
+		// the FunctionVersion that recorded this digest; eventually consistent.
+		// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
+		// +optional
+		PackageDigest string `json:"packageDigest,omitempty"`
+		// Weight (0-100) served by the primary target; nil = 100%.
+		// +kubebuilder:validation:Minimum=0
+		// +kubebuilder:validation:Maximum=100
+		// +optional
+		Weight *int `json:"weight,omitempty"`
+		// SecondaryVersion receives 100-Weight. Name-pinned only.
+		// +optional
+		SecondaryVersion string `json:"secondaryVersion,omitempty"`
+	}
+
+	// AliasTargetRecord is one entry in FunctionAliasStatus.History: a
+	// previously resolved target, kept for audit / rollback visibility.
+	AliasTargetRecord struct {
+		Version       string      `json:"version"`
+		PackageDigest string      `json:"packageDigest,omitempty"`
+		SwitchedAt    metav1.Time `json:"switchedAt"`
+	}
+
+	// FunctionAliasStatus describes the observed state of a FunctionAlias.
+	FunctionAliasStatus struct {
+		// ResolvedVersion is the FunctionVersion name this alias currently
+		// resolves to (always name-pinned, even when Spec.PackageDigest
+		// declares the target declaratively).
+		// +optional
+		ResolvedVersion string `json:"resolvedVersion,omitempty"`
+
+		// History is a bounded tail of previously resolved targets, most
+		// recent last.
+		// +optional
+		History []AliasTargetRecord `json:"history,omitempty"`
+
+		// +optional
+		// +patchMergeKey=type
+		// +patchStrategy=merge
+		// +listType=map
+		// +listMapKey=type
+		Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	}
+
+	//
 	// Functions and packages
 	//
 
@@ -1074,6 +1232,13 @@ type (
 		// +optional
 		ProvisionedConcurrency *ProvisionedConcurrencyConfig `json:"provisionedConcurrency,omitempty"`
 
+		// Versioning, when non-nil, opts this function into RFC-0025 immutable
+		// version snapshots and named aliases. Presence is the on switch (like
+		// Streaming and Tool): nil (the default) means exactly today's mutable
+		// in-place behavior. Additive and backward compatible.
+		// +optional
+		Versioning *VersioningConfig `json:"versioning,omitempty"`
+
 		// Podspec specifies podspec to use for executor type container based functions
 		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
@@ -1116,6 +1281,7 @@ type (
 	// Presence of the enclosing FunctionSpec.Tool is the on switch — there is no
 	// separate enabled flag, so the in-memory zero value and the stored object
 	// never disagree (the same rationale as StreamingConfig).
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.alias.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="tool.alias must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
 	ToolConfig struct {
 		// Description is the human/agent-facing tool description surfaced in the MCP
 		// tools/list response. Required.
@@ -1135,6 +1301,17 @@ type (
 		// +optional
 		// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]{1,64}$`
 		ToolName string `json:"toolName,omitempty"`
+
+		// Alias, when set, targets a FunctionAlias by name (RFC-0025) instead of
+		// the live Function: the MCP registry serves the tool from the alias's
+		// currently-resolved FunctionVersion snapshot, and tools/call is proxied
+		// to the ":<alias>" route rather than straight to the live Function.
+		// Empty (the default) preserves today's behavior. Router/registry-side
+		// resolution lands in a later RFC-0025 task — until then this field is
+		// accepted but inert.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Alias string `json:"alias,omitempty"`
 	}
 
 	// StateConfig declares a function's keyed-state keyspace and quotas
@@ -1422,6 +1599,11 @@ type (
 
 	// FunctionReference refers to a function
 	// +kubebuilder:validation:XValidation:rule="self.type != 'name' || (self.name.size() <= 63 && self.name.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="functionref.name must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars) when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!((has(self.alias) && self.alias != '') && (has(self.version) && self.version != ''))",message="functionref.alias and functionref.version are mutually exclusive"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.type == 'name'",message="functionref.alias is only valid when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.version) && self.version != '') || self.type == 'name'",message="functionref.version is only valid when type is 'name'"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.alias) && self.alias != '') || self.alias.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="functionref.alias must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
+	// +kubebuilder:validation:XValidation:rule="!(has(self.version) && self.version != '') || self.version.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$')",message="functionref.version must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 63 chars)"
 	FunctionReference struct {
 		// Type indicates whether this function reference is by name or selector. For now,
 		// the only supported reference type is by "name".  Future reference types:
@@ -1440,6 +1622,27 @@ type (
 		// under a map (WorkflowSpec.States) blows the per-CRD cost budget.
 		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
+
+		// Alias, when set, targets a FunctionAlias by name instead of the live
+		// Function directly (RFC-0025): the alias is a movable pointer that the
+		// router resolves at request time to whatever FunctionVersion it
+		// currently points at, so repointing the alias (e.g. for a canary
+		// rollout or a rollback) redirects traffic without touching this
+		// reference. Valid only when Type is "name"; mutually exclusive with
+		// Version. Empty (the default) preserves today's behavior: route
+		// straight to the live Function.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Alias string `json:"alias,omitempty"`
+
+		// Version, when set, pins this reference to one FunctionVersion CR by
+		// name (RFC-0025) — an immutable published snapshot that never moves,
+		// unlike Alias. Valid only when Type is "name"; mutually exclusive
+		// with Alias. Empty (the default) preserves today's behavior: route
+		// straight to the live Function.
+		// +kubebuilder:validation:MaxLength=63
+		// +optional
+		Version string `json:"version,omitempty"`
 
 		// Function Reference by weight. this map contains function name as key and its weight
 		// as the value. This is for canary upgrade purpose.
@@ -1961,7 +2164,12 @@ type (
 		// Cron schedule
 		Cron string `json:"cron"`
 
-		// The reference to function
+		// The reference to function. Alias is read from the embedded
+		// FunctionReference.Alias (RFC-0025) — TimeTriggerSpec has no field of
+		// its own for it, so there is exactly one JSON path (spec.functionref.alias)
+		// and one Go path (spec.Alias, promoted) for the concept, never two
+		// competing ones. The timer publisher (a later RFC-0025 task) reads it
+		// the same way timer.go:80 already reads the promoted spec.Name today.
 		FunctionReference `json:"functionref"`
 
 		// HTTP Method for trigger, ex : GET, POST, PUT, DELETE, HEAD (default: "POST")

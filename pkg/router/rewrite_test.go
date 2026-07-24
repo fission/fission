@@ -111,13 +111,99 @@ func TestRewriteFunctionURL(t *testing.T) {
 			req := httptest.NewRequest("GET", tt.reqURL, nil)
 			wantQuery := req.URL.RawQuery
 
-			rewriteFunctionURL(logr.Discard(), req, tt.trigger, &tt.fnMeta, svcURL)
+			rewriteFunctionURL(logr.Discard(), req, tt.trigger, functionURLBases(&tt.fnMeta), svcURL)
 
 			assert.Equal(t, tt.wantPath, req.URL.Path)
 			assert.Equal(t, "http", req.URL.Scheme)
 			assert.Equal(t, "10.1.2.3:8888", req.URL.Host)
 			assert.Equal(t, "10.1.2.3:8888", req.Host)
 			assert.Equal(t, wantQuery, req.URL.RawQuery, "query string must be left intact")
+		})
+	}
+}
+
+// TestRewriteFunctionURLSuffixAware pins the RFC-0025 fix: a direct internal
+// invocation through a materialized `:<alias>`/`:<version>` route must strip
+// the WHOLE "/fission-function/[<ns>/]<name>:<suffix>" prefix, leaving the
+// exact same pod-visible path a plain (unsuffixed) invocation would get —
+// across every grammar form internalRouteExactURLs registers (folded/
+// qualified × default/non-default namespace) and with/without a subpath.
+// Before the fix: the folded and non-default-qualified forms left a garbage
+// "/:<suffix>" leading segment, and the qualified-default form dropped the
+// path (and subpath) entirely.
+func TestRewriteFunctionURLSuffixAware(t *testing.T) {
+	t.Parallel()
+	svcURL, err := url.Parse("http://10.1.2.3:8888")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		fnMeta   metav1.ObjectMeta
+		reqURL   string
+		wantPath string
+	}{
+		{
+			name:     "folded default ns, alias suffix, no subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/hello:prod",
+			wantPath: "/",
+		},
+		{
+			name:     "folded default ns, alias suffix, with subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/hello:prod/orders/5",
+			wantPath: "/orders/5",
+		},
+		{
+			name:     "qualified default ns, alias suffix, no subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/default/hello:prod",
+			wantPath: "/",
+		},
+		{
+			name:     "qualified default ns, alias suffix, with subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/default/hello:prod/orders/5",
+			wantPath: "/orders/5",
+		},
+		{
+			name:     "non-default ns, alias suffix, no subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "myns"},
+			reqURL:   "http://router.example/fission-function/myns/hello:prod",
+			wantPath: "/",
+		},
+		{
+			name:     "non-default ns, alias suffix, with subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "myns"},
+			reqURL:   "http://router.example/fission-function/myns/hello:prod/orders/5",
+			wantPath: "/orders/5",
+		},
+		{
+			name:     "folded default ns, version suffix, with subpath",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/hello:hello-v1/orders/5",
+			wantPath: "/orders/5",
+		},
+		{
+			name:     "no suffix still works (regression guard)",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/hello/orders/5",
+			wantPath: "/orders/5",
+		},
+		{
+			name:     "different function's name is not a false-positive substring match",
+			fnMeta:   metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+			reqURL:   "http://router.example/fission-function/helloworld",
+			wantPath: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest("GET", tt.reqURL, nil)
+			rewriteFunctionURL(logr.Discard(), req, nil, functionURLBases(&tt.fnMeta), svcURL)
+			assert.Equal(t, tt.wantPath, req.URL.Path)
 		})
 	}
 }

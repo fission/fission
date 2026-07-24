@@ -28,8 +28,11 @@ import (
 )
 
 const (
-	FISSION_DEPLOYMENT_NAME_KEY = "fission-name"
-	FISSION_DEPLOYMENT_UID_KEY  = "fission-uid"
+	// FISSION_DEPLOYMENT_NAME_KEY and FISSION_DEPLOYMENT_UID_KEY are aliases
+	// of the fv1 spec-ownership annotation consts, kept under their original
+	// exported names since other spec code already references them.
+	FISSION_DEPLOYMENT_NAME_KEY = fv1.SpecDeploymentNameAnnotation
+	FISSION_DEPLOYMENT_UID_KEY  = fv1.SpecDeploymentUIDAnnotation
 
 	SPEC_API_VERSION          = "fission.io/v1"
 	ARCHIVE_URL_PREFIX string = "archive://"
@@ -101,7 +104,12 @@ type (
 		TimeTriggers            []fv1.TimeTrigger
 		MessageQueueTriggers    []fv1.MessageQueueTrigger
 		Workflows               []fv1.Workflow
-		ArchiveUploadSpecs      []types.ArchiveUploadSpec
+		// FunctionAliases are spec-managed (RFC-0025 Phase 1 Task 6). The
+		// FunctionVersion they resolve is deliberately NOT spec-managed: it is
+		// controller-owned publish history, minted by the version-control loop
+		// or `fission fn publish`, never declared in a spec file.
+		FunctionAliases    []fv1.FunctionAlias
+		ArchiveUploadSpecs []types.ArchiveUploadSpec
 
 		SourceMap SourceMap
 	}
@@ -321,6 +329,12 @@ func crdToYaml(resource any) (metav1.ObjectMeta, string, []byte, error) {
 		meta = typedres.ObjectMeta
 		kind = typedres.Kind
 		data, err = yaml.Marshal(typedres)
+	case fv1.FunctionAlias:
+		typedres.APIVersion = fv1.CRD_VERSION
+		typedres.Kind = "FunctionAlias"
+		meta = typedres.ObjectMeta
+		kind = typedres.Kind
+		data, err = yaml.Marshal(typedres)
 	default:
 		err = fmt.Errorf("unknown object type '%v'", typedres)
 	}
@@ -537,6 +551,25 @@ func (fr *FissionResources) Validate(input cli.Input, client cmd.Client) ([]stri
 		errs = errors.Join(errs, t.Validate())
 	}
 
+	// check function refs from FunctionAliases. This is informational, not an
+	// error: a digest-pinned alias (spec.PackageDigest) may legitimately be
+	// applied before the Function and its first FunctionVersion exist yet —
+	// RFC-0025 resolves it asynchronously once a matching version is published
+	// (eventual consistency) — so a dangling ref is a warning, mirroring the
+	// "unreferenced function" leniency below rather than the hard errors used
+	// for package/archive refs.
+	for _, a := range fr.FunctionAliases {
+		fnMeta := &metav1.ObjectMeta{Namespace: a.Namespace, Name: a.Spec.FunctionName}
+		if _, ok := functions[k8sCache.MetaObjectToName(fnMeta).String()]; !ok {
+			warnings = append(warnings, fmt.Sprintf(
+				"%v: FunctionAlias '%v' references unknown function '%v' in the spec set",
+				fr.SourceMap.Locations["FunctionAlias"][a.Namespace][a.Name],
+				a.Name,
+				a.Spec.FunctionName))
+		}
+		errs = errors.Join(errs, a.Validate())
+	}
+
 	// we do not error on unreferenced functions (you can call a function through workflows,
 	// `fission function test`, etc.)
 
@@ -662,6 +695,8 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 		}
 	case "MessageQueueTrigger":
 		obj, err = parseResource[fv1.MessageQueueTrigger](b, tm.Kind, loc, commitLabelVal, &fr.MessageQueueTriggers)
+	case "FunctionAlias":
+		obj, err = parseResource[fv1.FunctionAlias](b, tm.Kind, loc, commitLabelVal, &fr.FunctionAliases)
 
 	// The following are not CRDs.
 
@@ -795,6 +830,13 @@ func (fr *FissionResources) ExistsInSpecs(resource any) (bool, error) {
 		}
 	case fv1.Workflow:
 		for _, obj := range fr.Workflows {
+			if obj.Name == typedres.Name &&
+				obj.Namespace == typedres.Namespace {
+				return true, nil
+			}
+		}
+	case fv1.FunctionAlias:
+		for _, obj := range fr.FunctionAliases {
 			if obj.Name == typedres.Name &&
 				obj.Namespace == typedres.Namespace {
 				return true, nil

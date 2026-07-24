@@ -32,6 +32,14 @@ func (c *FakeCoreV1) Functions(namespace string) v1.FunctionInterface {
 	return newFakeFunctions(c, namespace)
 }
 
+func (c *FakeCoreV1) FunctionAliases(namespace string) v1.FunctionAliasInterface {
+	return newFakeFunctionAliases(c, namespace)
+}
+
+func (c *FakeCoreV1) FunctionVersions(namespace string) v1.FunctionVersionInterface {
+	return newFakeFunctionVersions(c, namespace)
+}
+
 func (c *FakeCoreV1) HTTPTriggers(namespace string) v1.HTTPTriggerInterface {
 	return newFakeHTTPTriggers(c, namespace)
 }

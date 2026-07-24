@@ -11,6 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -82,6 +85,100 @@ func TestProcessFiresOnSuccessFunctionDestination(t *testing.T) {
 	assert.Equal(t, []byte("orig"), re.RequestPayload)
 	assert.Equal(t, []byte("resp"), re.ResponsePayload)
 	assert.Equal(t, 200, re.ResponseContext.StatusCode)
+}
+
+// TestProcessFiresFunctionDestination_VersionPinned pins the RFC-0025
+// Task 5 destination-invoke behavior for a Version pin: UNLIKE Alias, the
+// version is NOT baked into the fired envelope's Function as a `:<version>`
+// suffix -- it rides FunctionVersion instead (bare Function name), so the
+// eventual delivery gets the deliverer's 404-fallback machinery rather than
+// dead-lettering the first time ordinary retain-N GC removes that specific
+// version's route (see Destination.Version's doc comment for why baking the
+// suffix in directly would be wrong here).
+func TestProcessFiresFunctionDestination_VersionPinned(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	now := time.Unix(1_000_000, 0)
+	d := destDispatcher(q, scriptedDeliverer{DeliveryResult{StatusCode: 200}}, now,
+		resolverFor(FunctionConfig{}))
+
+	_, msg := leaseOne(t, q, Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: []byte("orig"),
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next", Version: "next-v2"},
+	})
+	d.process(context.Background(), msg)
+
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1)
+	destEnv, err := Decode(l[0].Body)
+	require.NoError(t, err)
+	assert.Equal(t, "next", destEnv.Function, "bare name -- the version is NOT suffixed onto Function")
+	assert.Equal(t, "next-v2", destEnv.FunctionVersion, "the version pin rides FunctionVersion instead")
+}
+
+// TestProcessVersionPinnedDestinationDelivery_FallsBackNotDeadLettered is
+// the end-to-end proof for the fix above: a destination-fired envelope whose
+// pinned version's route has been GC'd (404 on the versioned URL) falls back
+// to the bare-name route and SUCCEEDS -- acked, not killed/dead-lettered --
+// exactly like a primary invocation's version-pinned 404 fallback
+// (TestHTTPDelivererVersionPinned_FallsBackOnNotFound in deliverer_test.go).
+// Before this fix, a Version-pinned destination's `:<version>` suffix was
+// baked directly into Function with no fallback: any 404 on that route
+// (routine, since retain-N GC does not track destination references) would
+// dead-letter every single fire permanently.
+func TestProcessVersionPinnedDestinationDelivery_FallsBackNotDeadLettered(t *testing.T) {
+	t.Parallel()
+	var attempts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts = append(attempts, r.URL.Path)
+		if strings.Contains(r.URL.Path, ":") {
+			w.WriteHeader(http.StatusNotFound) // the pinned version's route was GC'd
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rq := &recordingQueue{}
+	now := time.Unix(1_000_000, 0)
+	deliverer := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	d := newTestDispatcher(rq, deliverer, now)
+
+	// The envelope fireDestination would enqueue for a Version-pinned
+	// destination: bare Function, the pin on FunctionVersion.
+	env := Envelope{EnqueueTime: now, Namespace: "ns", Function: "next", FunctionVersion: "next-vGONE"}
+	d.process(context.Background(), leasedMsg(t, env, 1))
+
+	require.Len(t, attempts, 2, "versioned attempt then bare fallback, within one process() call")
+	assert.Contains(t, attempts[0], ":next-vGONE")
+	assert.Equal(t, "/fission-function/ns/next", attempts[1])
+	assert.Equal(t, []string{"receipt-x"}, rq.acks, "the fallback succeeded: acked")
+	assert.Empty(t, rq.kills, "must NOT dead-letter a version pinned to a routinely GC'd route")
+	assert.Empty(t, rq.nacks)
+}
+
+// TestProcessFiresFunctionDestination_AliasPinned mirrors the version case
+// for an Alias-pinned destination.
+func TestProcessFiresFunctionDestination_AliasPinned(t *testing.T) {
+	t.Parallel()
+	q := memQueue(t)
+	now := time.Unix(1_000_000, 0)
+	d := destDispatcher(q, scriptedDeliverer{DeliveryResult{StatusCode: 200}}, now,
+		resolverFor(FunctionConfig{}))
+
+	_, msg := leaseOne(t, q, Envelope{
+		Version: EnvelopeVersion, Namespace: "ns", Function: "src", EnqueueTime: now, Body: []byte("orig"),
+		OnSuccess: &Destination{FunctionNamespace: "ns", FunctionName: "next", Alias: "prod"},
+	})
+	d.process(context.Background(), msg)
+
+	l, err := q.Lease(t.Context(), DefaultQueue, 1, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, l, 1)
+	destEnv, err := Decode(l[0].Body)
+	require.NoError(t, err)
+	assert.Equal(t, "next:prod", destEnv.Function, "the fired envelope's Function carries the :<alias> suffix")
 }
 
 func TestProcessFiresOnFailureOn4xx(t *testing.T) {

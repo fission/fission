@@ -167,11 +167,11 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	for range 2 {
 		fsc.MarkAvailable(key, fsvc.Address)
 	}
-	vals, err := fsc.ListOldForPool(30 * time.Second)
+	vals, err := fsc.ListOldForPool(30*time.Second, nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(vals))
 
-	vals, err = fsc.ListOldForPool(0)
+	vals, err = fsc.ListOldForPool(0, nil)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(vals))
 
@@ -179,7 +179,7 @@ func TestFunctionServiceNewCache(t *testing.T) {
 	fn.Spec.RetainPods = 2
 	fsc.AddFunc(ctx, *fsvc, 10, fn.GetRetainPods())
 
-	vals, err = fsc.ListOldForPool(0)
+	vals, err = fsc.ListOldForPool(0, nil)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(vals))
 }
@@ -227,7 +227,7 @@ func TestFunctionServiceCacheConcurrentTouchAndList(t *testing.T) {
 				case 1:
 					_, _ = fsc.ListOld(time.Millisecond)
 				case 2:
-					_, _ = fsc.ListOldForPool(time.Millisecond)
+					_, _ = fsc.ListOldForPool(time.Millisecond, nil)
 				case 3:
 					fsc.Log()
 				}
@@ -264,6 +264,55 @@ func TestListOldPartialReturnOnDanglingIndex(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("ListOld hung on a dangling byFunctionUID entry (the actor-wedge regression)")
 	}
+}
+
+// TestGetByFunctionStatusOnlyResourceVersionBump locks the #3596
+// status-churn fix at the byFunction cache: ResourceVersion moves on
+// status-only writes (not just spec changes), so a status-only bump
+// observed by a later caller must still hit the entry Add() populated for
+// an earlier RV of the same UID+Generation — an RV-keyed lookup would miss
+// it and, worse, Add() would create a second entry for the "same" function.
+func TestGetByFunctionStatusOnlyResourceVersionBump(t *testing.T) {
+	fsc := MakeFunctionServiceCache(loggerfactory.GetLogger())
+	require.NotNil(t, fsc)
+
+	before := &metav1.ObjectMeta{
+		Name:            "foo",
+		UID:             types.UID("fn-uid-1"),
+		Generation:      1,
+		ResourceVersion: "100",
+	}
+	now := time.Now()
+	fsvc := FuncSvc{
+		Function: before,
+		Address:  "10.5.5.5:8888",
+		Ctime:    now,
+		Atime:    now,
+	}
+	_, err := fsc.Add(fsvc)
+	require.NoError(t, err)
+
+	// Same object, later observed with a bumped ResourceVersion (a
+	// status-only update) but unchanged UID+Generation.
+	after := &metav1.ObjectMeta{
+		Name:            "foo",
+		UID:             types.UID("fn-uid-1"),
+		Generation:      1,
+		ResourceVersion: "200",
+	}
+
+	got, err := fsc.GetByFunction(after)
+	require.NoError(t, err, "status-only RV bump must not miss the byFunction cache entry")
+	require.Equal(t, fsvc.Address, got.Address)
+
+	// Adding again under the post-status-update metadata must overwrite the
+	// existing entry (IsNameExistError / Add's existing-entry path), not
+	// create a second one.
+	fsvc2 := fsvc
+	fsvc2.Function = after
+	existing, err := fsc.Add(fsvc2)
+	require.NoError(t, err)
+	require.NotNil(t, existing, "Add under a status-only-bumped RV must report the pre-existing entry, not silently create a duplicate")
 }
 
 // TestTouchByAddressPoolCacheFallback locks the RFC-0002 tap-liveness fix at

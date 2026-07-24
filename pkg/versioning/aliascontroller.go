@@ -1,0 +1,549 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package versioning
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/conditions"
+	"github.com/fission/fission/pkg/controller"
+	"github.com/fission/fission/pkg/utils"
+)
+
+// aliasHistoryLimit bounds FunctionAliasStatus.History (types.go: "a bounded
+// tail ... most recent last"). Oldest entries are dropped from the front once
+// the cap is exceeded.
+const aliasHistoryLimit = 10
+
+// AliasReconciler resolves each FunctionAlias's spec target — name-pinned
+// (Spec.Version) or digest-pinned (Spec.PackageDigest) — to a concrete
+// FunctionVersion, writing Status.ResolvedVersion/Conditions and a bounded
+// switch history. It also repairs two pieces of metadata that can drift or
+// start out missing: the ownerRef back to the named Function and the
+// VersionFunctionNameLabel used for alias→function filtering.
+//
+// It is registered directly via builder.ControllerManagedBy (not
+// controller.RegisterTenantScoped) because, beyond FunctionAlias spec
+// events, it must also watch FunctionVersion: a version appearing after the
+// alias was created is what flips a digest-pinned alias's Resolved condition
+// from False to True, and RegisterTenantScoped has no hook for a second
+// watched type. See pkg/executor/funcreconciler for the same pattern.
+type AliasReconciler struct {
+	logger logr.Logger
+	client client.Client
+}
+
+// RegisterAliasReconciler wires the RFC-0025 alias resolver onto mgr. Under
+// dynamic/cluster-wide tenancy (utils.CrdWatchClusterWide) both watches are
+// additionally scoped to live tenant namespaces via
+// controller.MembershipPredicate, and a FissionTenant watch re-converges a
+// namespace's aliases on onboarding — mirroring
+// pkg/controller.RegisterTenantScoped for the types this reconciler cannot
+// register through that helper.
+func RegisterAliasReconciler(mgr ctrl.Manager, logger logr.Logger) error {
+	r := &AliasReconciler{
+		logger: logger.WithName("alias_reconciler"),
+		client: mgr.GetClient(),
+	}
+
+	// GenerationChangedPredicate drops our own status-only writes (Status is
+	// a subresource; it never bumps Generation), so this reconciler's status
+	// patches never re-trigger themselves via the .For() watch.
+	aliasPredicates := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
+	var versionPredicates []predicate.Predicate
+	// Environment is watched with GenerationChangedPredicate only (no status
+	// subresource splits Generation from spec writes here, unlike
+	// FunctionAlias): an env update is exactly what the EnvDrift condition
+	// exists to surface.
+	envPredicates := []predicate.Predicate{predicate.GenerationChangedPredicate{}}
+	if utils.CrdWatchClusterWide() {
+		mp := controller.MembershipPredicate(utils.DefaultNSResolver())
+		aliasPredicates = append(aliasPredicates, mp)
+		versionPredicates = append(versionPredicates, mp)
+		envPredicates = append(envPredicates, mp)
+	}
+
+	b := builder.ControllerManagedBy(mgr).
+		Named("versioning-alias").
+		For(&fv1.FunctionAlias{}, builder.WithPredicates(aliasPredicates...)).
+		Watches(&fv1.FunctionVersion{}, handler.EnqueueRequestsFromMapFunc(r.mapVersionToAliases),
+			builder.WithPredicates(versionPredicates...)).
+		Watches(&fv1.Environment{}, handler.EnqueueRequestsFromMapFunc(r.mapEnvToAliases),
+			builder.WithPredicates(envPredicates...))
+
+	if utils.CrdWatchClusterWide() {
+		b = b.Watches(&fv1.FissionTenant{},
+			controller.TenantReenqueueHandler(mgr.GetAPIReader(), mgr.GetScheme(), &fv1.FunctionAlias{}),
+			builder.WithPredicates(controller.TenantOnboardPredicate()))
+	}
+
+	return b.Complete(r)
+}
+
+// mapVersionToAliases enqueues every FunctionAlias in a FunctionVersion
+// event's namespace that could plausibly be affected by it: one whose
+// Spec.PackageDigest matches the version's recorded digest (a digest-pinned
+// alias's exact resolution target just appeared), one that is not currently
+// Resolved (its unmatched target may now resolve — covers both digest-pinned
+// aliases waiting on any matching version and name-pinned aliases waiting on
+// a version that was recreated under the same name), or one that is
+// name-pinned directly at this version (Spec.Version or Spec.SecondaryVersion
+// == v.Name) regardless of its current resolved state — this last clause is
+// what re-checks a RESOLVED name-pinned alias on its target's DELETE event:
+// without it, a Resolved=True name-pinned alias would never be re-enqueued
+// when its FunctionVersion is removed (digestMatch never fires — it has no
+// PackageDigest — and unresolved never fires — it is already Resolved), so
+// ResolvedVersion would keep pointing at a version that no longer exists
+// until some unrelated event happened to touch the alias. The webhook
+// already blocks creating/updating an alias to name-pin a nonexistent
+// version; this is the defense-in-depth path for a version deleted out from
+// under an alias that already resolved successfully. Aliases for a
+// different function are always skipped.
+func (r *AliasReconciler) mapVersionToAliases(ctx context.Context, obj client.Object) []reconcile.Request {
+	v, ok := obj.(*fv1.FunctionVersion)
+	if !ok {
+		return nil
+	}
+
+	aliases := &fv1.FunctionAliasList{}
+	if err := r.client.List(ctx, aliases, client.InNamespace(v.Namespace)); err != nil {
+		r.logger.V(1).Info("failed to list function aliases for function version watch",
+			"namespace", v.Namespace, "version", v.Name, "error", err)
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for i := range aliases.Items {
+		a := &aliases.Items[i]
+		if a.Spec.FunctionName != v.Spec.FunctionName {
+			continue
+		}
+		digestMatch := a.Spec.PackageDigest != "" && a.Spec.PackageDigest == v.Spec.PackageDigest
+		unresolved := !conditions.IsTrue(a.Status.Conditions, fv1.FunctionAliasConditionResolved)
+		namePinnedMatch := a.Spec.Version == v.Name || a.Spec.SecondaryVersion == v.Name
+		if digestMatch || unresolved || namePinnedMatch {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
+		}
+	}
+	return reqs
+}
+
+// mapEnvToAliases enqueues every FunctionAlias, ACROSS ALL NAMESPACES, whose
+// currently-resolved target FunctionVersion's snapshot references the
+// Environment event — Environments are frequently referenced from a
+// different namespace than the Function/Alias/Version (Snapshot.Environment
+// carries its own Namespace field; see applyEnvDrift's envNS fallback), so
+// this cannot be scoped to the event's own namespace the way
+// mapVersionToAliases is. There is no index from Environment identity to
+// alias, so this Lists every FunctionAlias cluster-wide and Gets each one's
+// resolved FunctionVersion to compare — alias counts are small (RFC-0025
+// design note), and this only runs on an Environment Generation change, not
+// on the hot path. Aliases that have never resolved are skipped: they have
+// no target version to compare against, matching applyEnvDrift's own
+// "not assessable" handling for that case.
+func (r *AliasReconciler) mapEnvToAliases(ctx context.Context, obj client.Object) []reconcile.Request {
+	env, ok := obj.(*fv1.Environment)
+	if !ok {
+		return nil
+	}
+
+	aliases := &fv1.FunctionAliasList{}
+	if err := r.client.List(ctx, aliases); err != nil {
+		r.logger.V(1).Info("failed to list function aliases for environment watch",
+			"namespace", env.Namespace, "name", env.Name, "error", err)
+		return nil
+	}
+
+	var reqs []reconcile.Request
+	for i := range aliases.Items {
+		a := &aliases.Items[i]
+		if a.Status.ResolvedVersion == "" {
+			continue
+		}
+
+		v := &fv1.FunctionVersion{}
+		if err := r.client.Get(ctx, client.ObjectKey{Namespace: a.Namespace, Name: a.Status.ResolvedVersion}, v); err != nil {
+			continue
+		}
+
+		envNS := v.Spec.Snapshot.Environment.Namespace
+		if envNS == "" {
+			envNS = a.Namespace
+		}
+		if v.Spec.Snapshot.Environment.Name == env.Name && envNS == env.Namespace {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
+		}
+	}
+	return reqs
+}
+
+// Reconcile repairs alias metadata (ownerRef + label), resolves its spec
+// target, and persists the outcome. Every step is guarded to a no-op write
+// when nothing changed, so a reconcile driven by an unrelated event (or a
+// duplicate delivery) performs zero API calls beyond the initial Get.
+func (r *AliasReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	alias := &fv1.FunctionAlias{}
+	if err := r.client.Get(ctx, req.NamespacedName, alias); err != nil {
+		if apierrors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+		return reconcile.Result{}, err
+	}
+
+	if err := r.repairMetadata(ctx, alias); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	resolvedVersion, resolvedOK, reason, err := r.resolve(ctx, alias)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err := r.writeStatus(ctx, alias, resolvedVersion, resolvedOK, reason); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// repairMetadata backfills VersionFunctionNameLabel and repairs a
+// missing/stale-UID ownerRef to the named Function, in a single guarded
+// Update — a no-op when both are already correct. The Function is allowed to
+// be absent (a dangling alias, or one that races Function creation): the
+// ownerRef is simply left as-is in that case rather than treated as an
+// error.
+func (r *AliasReconciler) repairMetadata(ctx context.Context, alias *fv1.FunctionAlias) error {
+	changed := false
+
+	if alias.Labels[fv1.VersionFunctionNameLabel] != alias.Spec.FunctionName {
+		if alias.Labels == nil {
+			alias.Labels = make(map[string]string, 1)
+		}
+		alias.Labels[fv1.VersionFunctionNameLabel] = alias.Spec.FunctionName
+		changed = true
+	}
+
+	fn := &fv1.Function{}
+	err := r.client.Get(ctx, client.ObjectKey{Namespace: alias.Namespace, Name: alias.Spec.FunctionName}, fn)
+	switch {
+	case err == nil:
+		want := fv1.FunctionOwnerRef(fn)
+		if !hasOwnerRef(alias.OwnerReferences, want) {
+			alias.OwnerReferences = upsertOwnerRef(alias.OwnerReferences, want)
+			changed = true
+		}
+	case apierrors.IsNotFound(err):
+		// Tolerate: nothing to repair against.
+	default:
+		return fmt.Errorf("versioning: getting function %s/%s for alias %s/%s ownerRef repair: %w",
+			alias.Namespace, alias.Spec.FunctionName, alias.Namespace, alias.Name, err)
+	}
+
+	if !changed {
+		return nil
+	}
+	if err := r.client.Update(ctx, alias); err != nil {
+		return fmt.Errorf("versioning: updating alias %s/%s metadata: %w", alias.Namespace, alias.Name, err)
+	}
+	return nil
+}
+
+// hasOwnerRef reports whether refs already contains want, matched on
+// Kind+Name+UID (an exact, non-stale reference).
+func hasOwnerRef(refs []metav1.OwnerReference, want metav1.OwnerReference) bool {
+	for _, ref := range refs {
+		if ref.Kind == want.Kind && ref.Name == want.Name && ref.UID == want.UID {
+			return true
+		}
+	}
+	return false
+}
+
+// upsertOwnerRef replaces the first same-Kind+Name reference (a stale UID,
+// e.g. the Function was deleted and recreated) with want, or appends want
+// when no such reference exists (missing case).
+func upsertOwnerRef(refs []metav1.OwnerReference, want metav1.OwnerReference) []metav1.OwnerReference {
+	for i, ref := range refs {
+		if ref.Kind == want.Kind && ref.Name == want.Name {
+			refs[i] = want
+			return refs
+		}
+	}
+	return append(refs, want)
+}
+
+// resolve computes alias's current effective target. Name-pinned
+// (Spec.Version) resolves to that FunctionVersion iff it still exists — a
+// version can be garbage collected out from under a stale name-pinned alias.
+// Digest-pinned (Spec.PackageDigest) resolves to the highest-Sequence
+// FunctionVersion belonging to Spec.FunctionName whose recorded digest
+// matches; ties cannot occur (Sequence is strictly increasing per function).
+// A miss on either path reports ok=false without an error — the caller
+// leaves Status.ResolvedVersion untouched, so the alias keeps serving its
+// last resolved target (eventual consistency: the router does not need to
+// know why resolution is currently unmet).
+func (r *AliasReconciler) resolve(ctx context.Context, alias *fv1.FunctionAlias) (resolvedVersion string, ok bool, reason string, err error) {
+	switch {
+	case alias.Spec.Version != "":
+		v := &fv1.FunctionVersion{}
+		getErr := r.client.Get(ctx, client.ObjectKey{Namespace: alias.Namespace, Name: alias.Spec.Version}, v)
+		switch {
+		case getErr == nil:
+			return v.Name, true, fv1.FunctionAliasReasonResolved, nil
+		case apierrors.IsNotFound(getErr):
+			return "", false, fv1.FunctionAliasReasonVersionNotFound, nil
+		default:
+			return "", false, "", fmt.Errorf("versioning: getting function version %s/%s for alias %s/%s: %w",
+				alias.Namespace, alias.Spec.Version, alias.Namespace, alias.Name, getErr)
+		}
+
+	case alias.Spec.PackageDigest != "":
+		versions := &fv1.FunctionVersionList{}
+		if err := r.client.List(ctx, versions, client.InNamespace(alias.Namespace),
+			client.MatchingLabels{fv1.VersionFunctionNameLabel: alias.Spec.FunctionName}); err != nil {
+			return "", false, "", fmt.Errorf("versioning: listing function versions for function %s/%s: %w",
+				alias.Namespace, alias.Spec.FunctionName, err)
+		}
+		var best *fv1.FunctionVersion
+		for i := range versions.Items {
+			v := &versions.Items[i]
+			if v.Spec.FunctionName != alias.Spec.FunctionName || v.Spec.PackageDigest != alias.Spec.PackageDigest {
+				continue
+			}
+			if best == nil || v.Spec.Sequence > best.Spec.Sequence {
+				best = v
+			}
+		}
+		if best == nil {
+			return "", false, fv1.FunctionAliasReasonDigestUnmatched, nil
+		}
+		return best.Name, true, fv1.FunctionAliasReasonResolved, nil
+
+	default:
+		// The admission webhook's XOR rule (FunctionAliasSpec) makes this
+		// unreachable for any object that ever passed validation; handled
+		// defensively rather than panicking on a hand-crafted/legacy object.
+		return "", false, fv1.FunctionAliasReasonVersionNotFound, nil
+	}
+}
+
+// writeStatus persists the resolution outcome: on an effective-target CHANGE
+// (ResolvedVersion transitioning from a non-empty X to Y != X) it appends an
+// AliasTargetRecord for the OUTGOING target X before overwriting
+// ResolvedVersion, bounded to aliasHistoryLimit (oldest dropped from the
+// front). No history entry is appended on first resolution (no outgoing
+// target yet) or when resolution is unmet (ResolvedVersion is left
+// untouched entirely). The Resolved condition is always kept current. The
+// write is skipped (nil returned, zero API calls) when nothing changed —
+// the idempotence guarantee a duplicate/unrelated-event reconcile relies on.
+//
+// Uses a status Patch computed from a pre-mutation DeepCopy (client.MergeFrom)
+// rather than Update, following the canaryconfigmgr reconciler pattern: the
+// merge patch carries no ResourceVersion precondition, so this write never
+// conflicts against the cache-read object.
+func (r *AliasReconciler) writeStatus(ctx context.Context, alias *fv1.FunctionAlias, resolvedVersion string, resolvedOK bool, reason string) error {
+	original := alias.DeepCopy()
+	changed := false
+
+	var message string
+	switch {
+	case resolvedOK:
+		outgoing := alias.Status.ResolvedVersion
+		if outgoing != "" && outgoing != resolvedVersion {
+			rec := fv1.AliasTargetRecord{
+				Version:       outgoing,
+				PackageDigest: r.bestEffortDigest(ctx, alias.Namespace, outgoing),
+				SwitchedAt:    metav1.Now(),
+			}
+			alias.Status.History = appendBoundedHistory(alias.Status.History, rec)
+			changed = true
+		}
+		if outgoing != resolvedVersion {
+			alias.Status.ResolvedVersion = resolvedVersion
+			changed = true
+		}
+		message = fmt.Sprintf("resolved to FunctionVersion %q", resolvedVersion)
+	case reason == fv1.FunctionAliasReasonDigestUnmatched:
+		message = fmt.Sprintf("no FunctionVersion for function %q records packageDigest %q yet", alias.Spec.FunctionName, alias.Spec.PackageDigest)
+	default:
+		message = fmt.Sprintf("FunctionVersion %q not found", alias.Spec.Version)
+	}
+
+	condStatus := metav1.ConditionFalse
+	if resolvedOK {
+		condStatus = metav1.ConditionTrue
+	}
+	if conditions.Set(&alias.Status.Conditions, metav1.Condition{
+		Type:               fv1.FunctionAliasConditionResolved,
+		Status:             condStatus,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: alias.Generation,
+	}) {
+		changed = true
+	}
+
+	driftChanged, err := r.applyEnvDrift(ctx, alias, resolvedVersion, resolvedOK)
+	if err != nil {
+		return err
+	}
+	if driftChanged {
+		changed = true
+	}
+
+	if !changed {
+		return nil
+	}
+	return r.client.Status().Patch(ctx, alias, client.MergeFrom(original))
+}
+
+// uncachedNamespaceErrSubstring is the message fragment controller-runtime's
+// multi-namespace cache (sigs.k8s.io/controller-runtime/pkg/cache,
+// multiNamespaceCache.Get/List, v0.24.1) returns when asked for a namespace
+// it was never configured to watch — a plain fmt.Errorf with no exported
+// sentinel or typed error to match via errors.Is/As as of that version:
+//
+//	fmt.Errorf("unable to get: %v because of unknown namespace for the cache", key)
+//
+// This is the concrete shape of "an Environment/FunctionVersion reference
+// lands outside a namespace-scoped buildermgr's watched set" — a real,
+// expected case for a cross-namespace Snapshot.Environment reference under
+// static (non-cluster-wide) multi-namespace tenancy. Matched by substring
+// because that is all upstream offers; a future controller-runtime bump
+// changing the wording fails CLOSED (notAssessableGetErr stops matching, the
+// error is treated as real, and the alias reconcile requeues with a logged
+// error instead of silently misclassifying something else as "not
+// assessable" forever).
+const uncachedNamespaceErrSubstring = "unknown namespace for the cache"
+
+// notAssessableGetErr reports whether err from a Get inside applyEnvDrift
+// means "cannot tell" rather than "a real failure that should propagate and
+// requeue the reconcile". Three cases collapse to the same "not assessable,
+// remove the condition" outcome documented on
+// FunctionAliasConditionEnvDrift:
+//   - NotFound: the object was deleted after resolution recorded it.
+//   - Forbidden: this reconciler's RBAC does not cover the object's
+//     namespace — a legitimate, non-transient case for a cross-namespace
+//     Environment/FunctionVersion reference under a namespace-scoped Role
+//     (see charts/fission-all/templates/buildermgr/role-fission-cr.yaml).
+//   - The uncached-namespace case controller-runtime's multi-namespace
+//     cache returns under static (non-cluster-wide) multi-namespace
+//     tenancy; see uncachedNamespaceErrSubstring.
+//
+// Before this existed, any of these three degraded applyEnvDrift into a
+// hard error that aborted writeStatus BEFORE its Patch call — silently
+// blocking the Resolved condition and History writes (which had already
+// been computed earlier in the same call) and error-looping the alias on
+// every reconcile. Only a genuinely unexpected error (a real API outage,
+// etc.) should still propagate.
+func notAssessableGetErr(err error) bool {
+	if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
+		return true
+	}
+	return strings.Contains(err.Error(), uncachedNamespaceErrSubstring)
+}
+
+// applyEnvDrift sets or removes the EnvDrift condition on alias (in-memory;
+// the caller folds this into its own status patch) and reports whether it
+// changed anything. Drift is assessable only once resolution succeeded AND
+// both the target FunctionVersion and the Environment it was published
+// against can still be read — any of those being unavailable removes the
+// condition rather than reporting a stale True/False, per
+// FunctionAliasConditionEnvDrift's "absence means not assessable" contract.
+func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.FunctionAlias, resolvedVersion string, resolvedOK bool) (bool, error) {
+	if !resolvedOK || resolvedVersion == "" {
+		return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+	}
+
+	v := &fv1.FunctionVersion{}
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: alias.Namespace, Name: resolvedVersion}, v); err != nil {
+		if notAssessableGetErr(err) {
+			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+		}
+		return false, fmt.Errorf("versioning: getting function version %s/%s for alias %s/%s env-drift check: %w",
+			alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
+	}
+
+	// Mirrors publish.go:118's envNS fallback: an unset Snapshot Environment
+	// namespace means "same namespace as the function", and a FunctionAlias
+	// always lives in its Function's namespace (repairMetadata Gets the
+	// Function from alias.Namespace) — so alias.Namespace stands in for the
+	// function's namespace here.
+	envNS := v.Spec.Snapshot.Environment.Namespace
+	if envNS == "" {
+		envNS = alias.Namespace
+	}
+
+	env := &fv1.Environment{}
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: envNS, Name: v.Spec.Snapshot.Environment.Name}, env); err != nil {
+		if notAssessableGetErr(err) {
+			return conditions.Delete(&alias.Status.Conditions, fv1.FunctionAliasConditionEnvDrift), nil
+		}
+		return false, fmt.Errorf("versioning: getting environment %s/%s referenced by function version %s/%s for alias %s/%s env-drift check: %w",
+			envNS, v.Spec.Snapshot.Environment.Name, alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
+	}
+
+	drift := v.Spec.EnvObservedGeneration != env.Generation
+	imageChanged := v.Spec.EnvRuntimeImage != "" && env.Spec.Runtime.Image != "" && v.Spec.EnvRuntimeImage != env.Spec.Runtime.Image
+
+	status := metav1.ConditionFalse
+	reason := fv1.FunctionAliasReasonEnvCurrent
+	message := fmt.Sprintf("environment %s/%s generation %d matches version %q's recorded generation %d",
+		envNS, env.Name, env.Generation, resolvedVersion, v.Spec.EnvObservedGeneration)
+	if drift {
+		status = metav1.ConditionTrue
+		reason = fv1.FunctionAliasReasonEnvGenerationDrift
+		message = fmt.Sprintf("environment %s/%s has drifted: version %q was published under generation %d, live environment is generation %d",
+			envNS, env.Name, resolvedVersion, v.Spec.EnvObservedGeneration, env.Generation)
+		if imageChanged {
+			message += fmt.Sprintf("; runtime image also changed from %q to %q", v.Spec.EnvRuntimeImage, env.Spec.Runtime.Image)
+		}
+	}
+
+	return conditions.Set(&alias.Status.Conditions, metav1.Condition{
+		Type:               fv1.FunctionAliasConditionEnvDrift,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		ObservedGeneration: alias.Generation,
+	}), nil
+}
+
+// bestEffortDigest fetches name's FunctionVersion to record its digest on an
+// outgoing AliasTargetRecord. It is best-effort by design (a Get, not a
+// List, so cheap) — the version may have already been garbage collected by
+// the time its target rolls out of ResolvedVersion, in which case an empty
+// digest is recorded (AliasTargetRecord.PackageDigest is optional).
+func (r *AliasReconciler) bestEffortDigest(ctx context.Context, namespace, name string) string {
+	v := &fv1.FunctionVersion{}
+	if err := r.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, v); err != nil {
+		return ""
+	}
+	return v.Spec.PackageDigest
+}
+
+// appendBoundedHistory appends rec and, once len exceeds aliasHistoryLimit,
+// drops from the front — keeping the newest aliasHistoryLimit entries with
+// the most recent last, per the FunctionAliasStatus.History contract.
+func appendBoundedHistory(hist []fv1.AliasTargetRecord, rec fv1.AliasTargetRecord) []fv1.AliasTargetRecord {
+	hist = append(hist, rec)
+	if len(hist) > aliasHistoryLimit {
+		hist = hist[len(hist)-aliasHistoryLimit:]
+	}
+	return hist
+}

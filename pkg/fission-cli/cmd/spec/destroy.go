@@ -100,6 +100,14 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return fmt.Errorf("workflow delete failed: %w", err)
 	}
 
+	// FunctionAliases reference Functions (spec.FunctionName, and an ownerRef
+	// when the Function existed at apply time), so they must go before
+	// Functions — same ordering reason as Workflows above.
+	_, _, err = applyFunctionAliases(ctx, fclient, fr, true, false, false)
+	if err != nil {
+		return fmt.Errorf("functionAlias delete failed: %w", err)
+	}
+
 	_, _, err = applyFunctions(ctx, fclient, fr, true, false, false)
 	if err != nil {
 		return fmt.Errorf("function delete failed: %w", err)
@@ -166,6 +174,11 @@ func (opts *DestroySubCommand) insertNSToResource(input cli.Input, fr *FissionRe
 			fr.Workflows[i].Namespace = currentNS
 		}
 	}
+	for i := range fr.FunctionAliases {
+		if fr.FunctionAliases[i].Namespace == "" {
+			fr.FunctionAliases[i].Namespace = currentNS
+		}
+	}
 
 	return nil
 }
@@ -200,6 +213,13 @@ func deleteResources(ctx context.Context, fclient cmd.Client, fr *FissionResourc
 		return c.Workflows(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	}); err != nil {
 		return fmt.Errorf("workflow delete failed: %w", err)
+	}
+	// FunctionAliases reference Functions, so delete before Functions — same
+	// ordering reason as Workflows above.
+	if err := destroyResources(ctx, fr.FunctionAliases, "functionAlias", func(ctx context.Context, ns, name string) error {
+		return c.FunctionAliases(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	}); err != nil {
+		return fmt.Errorf("functionAlias delete failed: %w", err)
 	}
 	if err := destroyResources(ctx, fr.Functions, "function", func(ctx context.Context, ns, name string) error {
 		return c.Functions(ns).Delete(ctx, name, metav1.DeleteOptions{})

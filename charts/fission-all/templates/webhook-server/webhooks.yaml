@@ -125,6 +125,49 @@ webhooks:
     service:
       name: webhook-service
       namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-functionalias
+  failurePolicy: Fail
+  name: vfunctionalias.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - functionaliases
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $caBundleValue }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
+      path: /validate-fission-io-v1-functionversion
+  failurePolicy: Fail
+  name: vfunctionversion.fission.io
+  rules:
+  - apiGroups:
+    - fission.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - functionversions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: {{ $caBundleValue }}
+    service:
+      name: webhook-service
+      namespace:  {{ .Release.Namespace }}
       path: /validate-fission-io-v1-kuberneteswatchtrigger
   failurePolicy: Fail
   name: vkuberneteswatchtrigger.fission.io

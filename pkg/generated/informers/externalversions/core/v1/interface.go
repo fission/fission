@@ -20,6 +20,10 @@ type Interface interface {
 	FissionTenants() FissionTenantInformer
 	// Functions returns a FunctionInformer.
 	Functions() FunctionInformer
+	// FunctionAliases returns a FunctionAliasInformer.
+	FunctionAliases() FunctionAliasInformer
+	// FunctionVersions returns a FunctionVersionInformer.
+	FunctionVersions() FunctionVersionInformer
 	// HTTPTriggers returns a HTTPTriggerInformer.
 	HTTPTriggers() HTTPTriggerInformer
 	// KubernetesWatchTriggers returns a KubernetesWatchTriggerInformer.
@@ -65,6 +69,16 @@ func (v *version) FissionTenants() FissionTenantInformer {
 // Functions returns a FunctionInformer.
 func (v *version) Functions() FunctionInformer {
 	return &functionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// FunctionAliases returns a FunctionAliasInformer.
+func (v *version) FunctionAliases() FunctionAliasInformer {
+	return &functionAliasInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// FunctionVersions returns a FunctionVersionInformer.
+func (v *version) FunctionVersions() FunctionVersionInformer {
+	return &functionVersionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // HTTPTriggers returns a HTTPTriggerInformer.

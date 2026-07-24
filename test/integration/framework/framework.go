@@ -54,6 +54,11 @@ const (
 	// StateSvcName resolves to svc/statesvc (RFC-0023 keyed state). State
 	// tests skip when it is unreachable (functionState disabled).
 	StateSvcName = "statesvc.fission"
+	// ExecutorName resolves to svc/executor — the executor's HTTP API
+	// (/v2/getServiceForFunction, /v2/tap, /v2/error, etc.). Direct-specialize
+	// tests (RFC-0025 phase 2) call it to address a specific published
+	// FunctionVersion's warm pool ahead of any router-side versioned routing.
+	ExecutorName = "executor.fission"
 )
 
 // Framework is a process-wide singleton built from KUBECONFIG once and reused
@@ -71,14 +76,18 @@ type Framework struct {
 	// signing (matches the chart's pass-through mode when
 	// internalAuth.enabled=false).
 	internalAuthSecret []byte
-	// httpClient and routerHTTP are built once so every caller shares one
-	// registry transport (and its connection pool) instead of constructing
-	// a transport per call. httpClient is unsigned with no global timeout;
-	// routerHTTP signs /fission-function/... (when the secret is set) and
-	// keeps a 30s per-request timeout.
-	httpClient *http.Client
-	routerHTTP *http.Client
-	logger     logr.Logger
+	// httpClient, routerHTTP, and executorHTTP are built once so every caller
+	// shares one registry transport (and its connection pool) instead of
+	// constructing a transport per call. httpClient is unsigned with no
+	// global timeout; routerHTTP signs /fission-function/... (when the
+	// secret is set) and keeps a 30s per-request timeout; executorHTTP signs
+	// /v2/... (the executor's HTTP API) with the ServiceExecutor-derived key
+	// and keeps a 30s per-request timeout — see pkg/executor/api.go's
+	// GetHandler, which verifies with that same derivation.
+	httpClient   *http.Client
+	routerHTTP   *http.Client
+	executorHTTP *http.Client
+	logger       logr.Logger
 }
 
 var (
@@ -121,15 +130,20 @@ func newFramework() (*Framework, error) {
 	// connection pool); its DialContext keeps the registry alive for the
 	// process — the registry (and its port-forward connections) is never
 	// closed, dying with the test process.
-	var signing http.RoundTripper = reg.DefaultTransport()
-	if len(secret) > 0 {
-		// Sign requests to /fission-function/... with the
-		// ServiceRouterInternal key; other paths (HTTPTriggers,
-		// /router-healthz) pass through unsigned to match end-user
-		// behaviour against the public listener. Shared with the benchmark
-		// harness via pkg/auth/hmac.
-		signing = hmacauth.NewServiceSigningTransport(secret, hmacauth.ServiceRouterInternal, reg.DefaultTransport(), "/fission-function/")
-	}
+	//
+	// routerHTTP signs /fission-function/... with the ServiceRouterInternal
+	// key; other paths (HTTPTriggers, /router-healthz) pass through unsigned
+	// to match end-user behaviour against the public listener. executorHTTP
+	// signs /v2/... (the executor's HTTP API — RFC-0025 direct-specialize
+	// tests POST to /v2/getServiceForFunction) with the ServiceExecutor-
+	// derived key, mirroring routerHTTP's shape but against a different
+	// channel: the executor's verifier (pkg/executor/api.go GetHandler)
+	// derives its key for ServiceExecutor, not ServiceRouterInternal, so
+	// reusing routerHTTP's transport would sign with the wrong key and every
+	// request would 401. Both an empty secret (pass-through, matching the
+	// chart's internalAuth.enabled=false mode).
+	routerHTTP := newSignedClient(secret, reg, hmacauth.ServiceRouterInternal, "/fission-function/")
+	executorHTTP := newSignedClient(secret, reg, hmacauth.ServiceExecutor, "/v2/")
 	return &Framework{
 		restConfig:         restConfig,
 		clientGen:          clientGen,
@@ -138,12 +152,30 @@ func newFramework() (*Framework, error) {
 		images:             loadRuntimeImages(),
 		internalAuthSecret: secret,
 		httpClient:         reg.DefaultClient(),
-		// WrapRoundTripper applies per-route Host rewrites (the mcp route
-		// declares one) on top of the signing wrapper; HMAC canonicals
-		// cover method+path+body, not Host, so the order is cosmetic.
-		routerHTTP: &http.Client{Timeout: 30 * time.Second, Transport: reg.WrapRoundTripper(signing)},
-		logger:     loggerfactory.GetLogger(),
+		routerHTTP:         routerHTTP,
+		executorHTTP:       executorHTTP,
+		logger:             loggerfactory.GetLogger(),
 	}, nil
+}
+
+// newSignedClient builds an http.Client that signs requests under prefix
+// with the HMAC key derived for svc, or passes through unsigned when secret
+// is empty (matching the chart's internalAuth.enabled=false mode). Shared by
+// routerHTTP and executorHTTP, whose only differences are which service's
+// key they sign with and which path prefix that covers. WrapRoundTripper
+// applies per-route Host rewrites (the mcp route declares one) on top of the
+// signing transport; HMAC canonicals cover method+path+body, not Host, so
+// the order is cosmetic.
+func newSignedClient(secret []byte, reg *portless.Registry, svc hmacauth.Service, prefix string) *http.Client {
+	var transport http.RoundTripper = reg.DefaultTransport()
+	if len(secret) > 0 {
+		transport = hmacauth.NewServiceSigningTransport(secret, svc, reg.DefaultTransport(), prefix)
+	}
+	// 120s: this cap must cover a full poolmgr cold start (env pod scheduling
+	// + specialization) on a contended single-node CI runner — a direct
+	// /v2/getServiceForFunction POST was observed exceeding a 30s cap there.
+	// It is a ceiling, not a wait: fast paths are unaffected.
+	return &http.Client{Timeout: 120 * time.Second, Transport: reg.WrapRoundTripper(transport)}
 }
 
 // newRegistry builds the portless registry backing all framework HTTP
@@ -174,6 +206,7 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 		// instead of weakening the server's protection.
 		{MCPName, "FISSION_MCP_BASE_URL", "mcp", []portless.RouteOption{portless.RouteWithHostRewrite("127.0.0.1")}},
 		{StateSvcName, "FISSION_STATESVC", "statesvc", nil},
+		{ExecutorName, "FISSION_EXECUTOR", "executor", nil},
 	} {
 		var b portless.Backend
 		var err error
@@ -261,3 +294,17 @@ func (f *Framework) InternalAuthSecret() []byte { return f.internalAuthSecret }
 // unreachable (the MCP subsystem is enabled in the kind/kind-ci skaffold
 // profiles but may be off in other installs).
 func (f *Framework) MCPBaseURL() string { return portless.URL(MCPName, 0, "") }
+
+// ExecutorBaseURL returns the framework's URL for the executor's HTTP API
+// (svc/executor). Direct-specialize tests (RFC-0025 phase 2) POST versioned
+// Function objects to "<base>/v2/getServiceForFunction" via ExecutorClient
+// ahead of any router-side versioned routing (phase 3). The host is a
+// portless route name, resolvable only by clients built from this framework.
+func (f *Framework) ExecutorBaseURL() string { return portless.URL(ExecutorName, 0, "") }
+
+// ExecutorClient returns the shared http.Client that signs requests to the
+// executor's /v2/... API with the ServiceExecutor-derived key (when
+// FISSION_INTERNAL_AUTH_SECRET is set) and resolves ExecutorName through the
+// portless registry. Mirrors routerHTTP's shape for a different channel —
+// see the executorHTTP field doc for why the two must not share a signer.
+func (f *Framework) ExecutorClient() *http.Client { return f.executorHTTP }

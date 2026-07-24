@@ -375,6 +375,10 @@ func (spec FunctionSpec) Validate() error {
 		}
 	}
 
+	if spec.Versioning != nil {
+		errs = errors.Join(errs, spec.Versioning.Validate())
+	}
+
 	// Non-CEL admission check (pod-spec security). Kept in Validate() so the
 	// CLI checks it client-side; the webhook runs it via ValidateForAdmission().
 	// validateForAdmission also runs ProvisionedConcurrency.Validate(), so the
@@ -604,6 +608,10 @@ func (tc *ToolConfig) Validate() error {
 		}
 	}
 
+	if tc.Alias != "" {
+		errs = errors.Join(errs, ValidateKubeName("FunctionSpec.Tool.Alias", tc.Alias))
+	}
+
 	return errs
 }
 
@@ -739,6 +747,14 @@ func (es ExecutionStrategy) Validate() error {
 	return errs
 }
 
+// Validate checks a FunctionReference: Type is a supported value, Name is a
+// kube name when Type is "name", and the optional Alias/Version pins
+// (RFC-0025) are each a kube name, mutually exclusive, and valid only when
+// Type is "name" — mirroring the CRD's CEL rules on this type so the CLI
+// validates client-side. This is FORMAT validation only: whether the named
+// alias/version actually exists is not checked here (aliases are eventually
+// consistent, and existence-at-admission would break apply-before-publish
+// ordering); router-side resolution enforces existence at request time.
 func (ref FunctionReference) Validate() error {
 	var errs error
 
@@ -751,6 +767,25 @@ func (ref FunctionReference) Validate() error {
 
 	if ref.Type == FunctionReferenceTypeFunctionName {
 		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Name", ref.Name))
+	}
+
+	hasAlias := ref.Alias != ""
+	hasVersion := ref.Version != ""
+
+	if hasAlias && hasVersion {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference", "", "alias and version are mutually exclusive"))
+	}
+	if hasAlias {
+		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Alias", ref.Alias))
+		if ref.Type != FunctionReferenceTypeFunctionName {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference.Alias", ref.Alias, "alias is only valid when type is 'name'"))
+		}
+	}
+	if hasVersion {
+		errs = errors.Join(errs, ValidateKubeName("FunctionReference.Version", ref.Version))
+		if ref.Type != FunctionReferenceTypeFunctionName {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionReference.Version", ref.Version, "version is only valid when type is 'name'"))
+		}
 	}
 
 	return errs
@@ -1341,5 +1376,176 @@ func (ml *MessageQueueTriggerList) Validate() error {
 	for _, m := range ml.Items {
 		errs = errors.Join(errs, m.Validate())
 	}
+	return errs
+}
+
+//
+// Function versions & aliases (RFC-0025)
+//
+
+// Validate checks a VersioningConfig: Mode must be one of the recognized
+// values (empty defaults to auto at the reconciler), and Retain, when set,
+// must be a positive GC floor — CEL already enforces this Minimum=1 marker at
+// the API server, but the Go-side check keeps the CLI's client-side validation
+// and Snapshot's nested re-check (see FunctionVersionSpec.Validate) honest.
+func (vc *VersioningConfig) Validate() error {
+	var errs error
+
+	switch vc.Mode {
+	case "", VersioningModeAuto, VersioningModeManual: // no op
+	default:
+		errs = errors.Join(errs, MakeValidationErr(ErrorUnsupportedType, "FunctionSpec.Versioning.Mode", vc.Mode, "not a valid versioning mode"))
+	}
+
+	if vc.Retain != nil && *vc.Retain < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Versioning.Retain", *vc.Retain, "must be >= 1"))
+	}
+
+	return errs
+}
+
+// Validate checks a FunctionVersionSpec: the identity fields that pin this
+// snapshot to a Function generation are required and well-formed, and the
+// embedded Snapshot must itself validate (the same spec-level check
+// Function.Validate runs) but must not carry its own Versioning config — a
+// version is a versioning-config-free leaf, so a nested config would beg the
+// question of what publishing that snapshot means and is rejected instead of
+// silently ignored.
+func (spec FunctionVersionSpec) Validate() error {
+	var errs error
+
+	errs = errors.Join(errs, ValidateKubeName("FunctionVersionSpec.FunctionName", spec.FunctionName))
+
+	if len(spec.FunctionUID) == 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionVersionSpec.FunctionUID", spec.FunctionUID, "must not be empty"))
+	}
+
+	if spec.FunctionGeneration < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionVersionSpec.FunctionGeneration", spec.FunctionGeneration, "must be >= 1"))
+	}
+
+	if spec.Sequence < 1 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionVersionSpec.Sequence", spec.Sequence, "must be >= 1"))
+	}
+
+	if len(spec.PackageDigest) == 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionVersionSpec.PackageDigest", spec.PackageDigest, "must not be empty"))
+	}
+
+	if spec.Snapshot.Versioning != nil {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionVersionSpec.Snapshot.Versioning", "", "snapshot must zero versioning to avoid recursion"))
+	}
+
+	errs = errors.Join(errs, spec.Snapshot.Validate())
+
+	return errs
+}
+
+// Validate checks a FunctionAliasSpec: FunctionName is a kube name, exactly
+// one of Version (name-pinned) or PackageDigest (declarative, eventually
+// resolved) targets the alias — mirroring the CRD's CEL XOR rule so the CLI
+// validates client-side — and, when Weight is set for a split rollout,
+// SecondaryVersion is required, is itself a kube name, and differs from
+// Version (a split against itself is not a rollout).
+func (spec FunctionAliasSpec) Validate() error {
+	var errs error
+
+	errs = errors.Join(errs, ValidateKubeName("FunctionAliasSpec.FunctionName", spec.FunctionName))
+
+	hasVersion := spec.Version != ""
+	hasDigest := spec.PackageDigest != ""
+	switch {
+	case !hasVersion && !hasDigest:
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionAliasSpec", "", "exactly one of version or packageDigest must be set"))
+	case hasVersion && hasDigest:
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionAliasSpec", "", "only one of version or packageDigest may be set"))
+	}
+
+	if hasVersion {
+		errs = errors.Join(errs, ValidateKubeName("FunctionAliasSpec.Version", spec.Version))
+	}
+	// ociDigestRegexp mirrors FunctionAliasSpec.PackageDigest's kubebuilder
+	// Pattern marker in types.go — the same grammar as OCIArchive.Digest,
+	// since both fields accept a "sha256:" + 64-hex-char digest.
+	if hasDigest && !ociDigestRegexp.MatchString(spec.PackageDigest) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAliasSpec.PackageDigest", spec.PackageDigest, "must be 'sha256:' followed by 64 hex characters"))
+	}
+
+	if spec.Weight != nil {
+		if *spec.Weight < 0 || *spec.Weight > 100 {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAliasSpec.Weight", *spec.Weight, "must be 0-100"))
+		}
+		if spec.SecondaryVersion == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionAliasSpec.SecondaryVersion", "", "weight requires secondaryVersion"))
+		}
+	}
+
+	if spec.SecondaryVersion != "" {
+		errs = errors.Join(errs, ValidateKubeName("FunctionAliasSpec.SecondaryVersion", spec.SecondaryVersion))
+		if spec.SecondaryVersion == spec.Version {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAliasSpec.SecondaryVersion", spec.SecondaryVersion, "must differ from version"))
+		}
+	}
+
+	return errs
+}
+
+// Validate checks a FunctionVersion: the object name must be exactly
+// "<functionName>-v<sequence>" (the version-control loop and `fission fn
+// publish` both mint names this way; a mismatch here means the object was
+// hand-authored or corrupted, and the name-derived lookup every consumer
+// relies on — GC, alias resolution — would silently miss it), plus the
+// embedded spec.
+func (fv *FunctionVersion) Validate() error {
+	var errs error
+
+	wantName := fmt.Sprintf("%s-v%d", fv.Spec.FunctionName, fv.Spec.Sequence)
+	if fv.Name != wantName {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionVersion.ObjectMeta.Name", fv.Name, fmt.Sprintf("must be %q (<functionName>-v<sequence>)", wantName)))
+	}
+	errs = errors.Join(errs, validateNS("FunctionVersion.ObjectMeta.Namespace", fv.Namespace))
+
+	errs = errors.Join(errs, fv.Spec.Validate())
+
+	return errs
+}
+
+// aliasNameShadowsVersionScheme reports whether name matches the
+// FunctionVersion naming scheme minted FOR functionName —
+// "<functionName>-v<sequence>" (versioning.Publish; enforced on the
+// FunctionVersion side by FunctionVersion.Validate above). An alias with
+// such a name would materialize to the IDENTICAL internal-listener route as
+// one of that function's own published versions
+// (/fission-function/[<ns>/]<functionName>:<name> — see pkg/router's
+// internalRouteExactURLs/routetable.InternalKey, which has no alias-vs-
+// version discriminant beyond the shared Suffix string), so whichever event
+// (alias repoint vs. a new publish) lands last would silently overwrite the
+// other's route. The check is scoped to functionName specifically — an
+// alias named e.g. "hello-v3" is fine for any function OTHER than "hello".
+func aliasNameShadowsVersionScheme(name, functionName string) bool {
+	suffix, ok := strings.CutPrefix(name, functionName+"-v")
+	if !ok || suffix == "" {
+		return false
+	}
+	for _, r := range suffix {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (fa *FunctionAlias) Validate() error {
+	var errs error
+
+	errs = errors.Join(errs,
+		validateMetadata("FunctionAlias", fa.ObjectMeta),
+		fa.Spec.Validate())
+
+	if aliasNameShadowsVersionScheme(fa.Name, fa.Spec.FunctionName) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionAlias.ObjectMeta.Name", fa.Name,
+			fmt.Sprintf("collides with the FunctionVersion naming scheme for function %q (<functionName>-v<sequence>); choose a different alias name", fa.Spec.FunctionName)))
+	}
+
 	return errs
 }

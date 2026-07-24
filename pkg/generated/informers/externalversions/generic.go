@@ -49,6 +49,10 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().FissionTenants().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("functions"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().Functions().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("functionaliases"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().FunctionAliases().Informer()}, nil
+	case v1.SchemeGroupVersion.WithResource("functionversions"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().FunctionVersions().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("httptriggers"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Core().V1().HTTPTriggers().Informer()}, nil
 	case v1.SchemeGroupVersion.WithResource("kuberneteswatchtriggers"):

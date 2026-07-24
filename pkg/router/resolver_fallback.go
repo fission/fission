@@ -60,6 +60,16 @@ func newFallbackResolver(logger logr.Logger, ix *endpointcache.Index, executor *
 	}
 }
 
+// backendVersion returns the RFC-0025 published version fn was resolved to
+// (the fv1.FUNCTION_VERSION label versioning.VersionedFunction stamps), or ""
+// for an unversioned resolution. Every endpointcache.Index call in this file
+// threads this through so a versioned trigger's warm pool is admitted from,
+// quarantined within, and strike-counted against its OWN FnKey -- never the
+// live function's unversioned pool.
+func backendVersion(fn *fv1.Function) string {
+	return fn.Labels[fv1.FUNCTION_VERSION]
+}
+
 func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function, stickyKey string) (ResolvedEntry, error) {
 	if fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType != fv1.ExecutorTypePoolmgr {
 		return f.resolveDeployBacked(ctx, fn, stickyKey)
@@ -74,13 +84,18 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function, sticky
 		return f.executor.Resolve(ctx, fn, stickyKey)
 	}
 
-	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, fn.GetRequestPerPod(), stickyKey)
+	// version is the resolved backend's published version (RFC-0025 phase 3):
+	// "" for the unversioned pool (today's default), or the pinned
+	// FunctionVersion's name when the trigger resolved through an Alias/
+	// Version reference -- each lives at its own FnKey, never conflated.
+	version := backendVersion(fn)
+	ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, version, fn.GetRequestPerPod(), stickyKey)
 	if admit == endpointcache.Admitted {
 		endpointcache.RecordHit()
 		return ResolvedEntry{SvcURL: ep.URL, FromCache: true, Release: release}, nil
 	}
 
-	ready := f.index.ReadyCount(fn.Namespace, fn.Name)
+	ready := f.index.ReadyCount(fn.Namespace, fn.Name, version)
 	if ready == 0 {
 		// Cold start (or Istio mode / executor flag off): the synchronous
 		// executor RPC, byte-identical to the pre-RFC path — this is what keeps
@@ -128,7 +143,8 @@ func (f *fallbackResolver) Resolve(ctx context.Context, fn *fv1.Function, sticky
 // endpointLB is on, in which case ready pod IPs are dialed directly with
 // least-outstanding selection.
 func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Function, stickyKey string) (ResolvedEntry, error) {
-	if f.index.ReadyCount(fn.Namespace, fn.Name) > 0 {
+	version := backendVersion(fn)
+	if f.index.ReadyCount(fn.Namespace, fn.Name, version) > 0 {
 		entry, err := f.executor.Resolve(ctx, fn, stickyKey)
 		// The nil-SvcURL guard covers the throttler-follower race (Resolve can
 		// answer nil, nil): without it the LB entry would carry TapURL=nil and
@@ -146,7 +162,7 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 		// address the executor knows, not the pod IP. Any inadmissible state
 		// (e.g. every endpoint quarantined) keeps the VIP entry, which still
 		// works.
-		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, math.MaxInt32, stickyKey)
+		ep, release, admit := f.index.Admit(fn.Namespace, fn.Name, version, math.MaxInt32, stickyKey)
 		if admit == endpointcache.Admitted {
 			// Counted separately from hits: the Service entry above may have
 			// cost an executor RPC, so this is NOT a "zero-RPC" hit — it is an
@@ -185,18 +201,19 @@ func (f *fallbackResolver) resolveDeployBacked(ctx context.Context, fn *fv1.Func
 // metric only fires when every endpoint of a function is out.
 func (f *fallbackResolver) Invalidate(fn *fv1.Function, addr *url.URL, reason InvalidateReason) {
 	if addr != nil {
+		version := backendVersion(fn)
 		if reason == InvalidateSoft {
-			if f.index.ReportDialTimeout(fn.Namespace, fn.Name, addr.Host) {
+			if f.index.ReportDialTimeout(fn.Namespace, fn.Name, version, addr.Host) {
 				f.logger.Info("quarantining endpoint after repeated dial timeouts",
-					"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
+					"function", fn.Name, "namespace", fn.Namespace, "version", version, "address", addr.Host)
 			} else {
 				f.logger.V(1).Info("dial timeout strike recorded",
-					"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
+					"function", fn.Name, "namespace", fn.Namespace, "version", version, "address", addr.Host)
 			}
 		} else {
 			f.logger.Info("quarantining endpoint after dial failure",
-				"function", fn.Name, "namespace", fn.Namespace, "address", addr.Host)
-			f.index.Quarantine(fn.Namespace, fn.Name, addr.Host)
+				"function", fn.Name, "namespace", fn.Namespace, "version", version, "address", addr.Host)
+			f.index.Quarantine(fn.Namespace, fn.Name, version, addr.Host)
 		}
 	}
 	f.executor.Invalidate(fn, addr, reason)
