@@ -7,9 +7,11 @@ package poolmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -227,7 +229,8 @@ func provisionedFnWithUID(name, uid string, target int) *fv1.Function {
 func getPod(t *testing.T, p *Provisioner, name string) *corev1.Pod {
 	t.Helper()
 	got, err := p.kubernetesClient.CoreV1().Pods("default").Get(
-		t.Context(), name, metav1.GetOptions{})
+		t.Context(), name, metav1.GetOptions{},
+	)
 	require.NoError(t, err)
 	return got
 }
@@ -236,7 +239,8 @@ func getPod(t *testing.T, p *Provisioner, name string) *corev1.Pod {
 func getFnStatus(t *testing.T, p *Provisioner, name string) fv1.FunctionStatus {
 	t.Helper()
 	got, err := p.fissionClient.CoreV1().Functions("default").Get(
-		t.Context(), name, metav1.GetOptions{})
+		t.Context(), name, metav1.GetOptions{},
+	)
 	require.NoError(t, err)
 	return got.Status
 }
@@ -295,22 +299,26 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 		{
 			"unset = off",
 			nil,
-			ProvisionerConfig{}, false, false,
+			ProvisionerConfig{},
+			false, false,
 		},
 		{
 			"false = off",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "false"},
-			ProvisionerConfig{}, false, false,
+			ProvisionerConfig{},
+			false, false,
 		},
 		{
 			"garbage bool = off with error",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "yes"},
-			ProvisionerConfig{}, false, true,
+			ProvisionerConfig{},
+			false, true,
 		},
 		{
 			"enabled, defaults",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "true"},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second},
+			true, false,
 		},
 		{
 			"enabled, overrides",
@@ -320,7 +328,8 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "8",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "1m",
 			},
-			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute}, true, false,
+			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute},
+			true, false,
 		},
 		{
 			"enabled, garbage ints fall back to defaults",
@@ -330,7 +339,8 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "notaduration",
 			},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second},
+			true, false,
 		},
 	}
 	for _, tt := range tests {
@@ -1113,4 +1123,65 @@ func TestProvisioner_RunZeroIntervalNoPanic(t *testing.T) {
 func metaFindCondition(st fv1.FunctionStatus, ct string) *metav1.Condition {
 	cond := meta.FindStatusCondition(st.Conditions, ct)
 	return cond
+}
+
+func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const uid = "u1"
+		fn := provisionedFnWithUID("fn", uid, 0)
+		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{
+			{Name: "peak", Start: "0 9 * * *", Duration: "8h", Target: 3},
+		}
+		pods := []*corev1.Pod{}
+		pref := []corev1.ObjectReference{}
+		for i := range 3 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := readyPod(podName, uid)
+			delete(pod.Labels, fv1.PROVISIONED_LABEL)
+			pods = append(pods, pod)
+			pref = append(pref, podRef(podName, "default"))
+		}
+		gpm := &fakeGPM{
+			svc: &fscache.FuncSvc{
+				KubernetesObjects: pref,
+			},
+		}
+		p := newTestProvisionerWithGPM(t, gpm, fn, pods...)
+		p.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		fn, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+
+		time.Sleep(9 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		for i := range 3 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			assert.Equal(t, fv1.PROVISIONED_VALUE, pod.Labels[fv1.PROVISIONED_LABEL],
+				"provisioned label must be patched in")
+		}
+		assert.Equal(t, int64(3), gpm.calls.Load())
+		for i := range 3 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			require.NoError(t, p.crClient.Update(t.Context(), pod))
+		}
+
+		time.Sleep(8 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+		for i := range 3 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			assert.Equal(t, "", pod.Labels[fv1.PROVISIONED_LABEL],
+				"provisioned label must be removed")
+		}
+		assert.Equal(t, int64(3), gpm.calls.Load())
+	})
 }

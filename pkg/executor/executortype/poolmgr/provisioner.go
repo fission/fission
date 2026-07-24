@@ -137,7 +137,23 @@ func (p *Provisioner) armTransition(fn *fv1.Function) {
 	var next time.Time
 	defer sched.mu.Unlock()
 	now := time.Now()
-	if (sched.generation != fn.Generation) || len(sched.windows) == 0 {
+	needsRebuild := (sched.generation != fn.Generation) || (len(sched.windows) == 0)
+	if !needsRebuild {
+		for _, pw := range sched.windows {
+			if pw == nil || pw.capped {
+				continue
+			}
+			edge := pw.activeUntil
+			if edge.IsZero() {
+				edge = pw.nextOpen
+			}
+			if !edge.After(now) {
+				needsRebuild = true
+				break
+			}
+		}
+	}
+	if needsRebuild {
 		sched.reBuildWindows(fn, p.logger)
 		sched.generation = fn.Generation
 	}
@@ -320,6 +336,7 @@ func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 // MUST hold the per-function reconcile lock (lockFor(fn.UID)).
 func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Function) {
 	target := p.effectiveTarget(fn)
+	p.armTransition(fn)
 	if target == 0 {
 		p.disableProvisioningLocked(ctx, fn)
 		return
@@ -345,7 +362,6 @@ func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Funct
 	if err := p.updateFunctionStatus(ctx, fn, ready, target, specTarget); err != nil {
 		p.logger.Error(err, "Unable to update status of the function", "function", fn.Name, "namespace", fn.Namespace, "ready", ready, "target", target)
 	}
-	p.armTransition(fn)
 }
 
 // provisionedPodLabels builds the label selector shared by every provisioned-
@@ -615,13 +631,15 @@ func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function)
 func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
-	if v, ok := p.timers.Load(fn.UID); ok {
-		sched := v.(*fnSchedule)
-		if sched.timer != nil {
-			sched.timer.Stop()
+	if fn.Spec.ProvisionedConcurrency == nil {
+		if v, ok := p.timers.Load(fn.UID); ok {
+			sched := v.(*fnSchedule)
+			if sched.timer != nil {
+				sched.timer.Stop()
+			}
 		}
+		p.timers.Delete(fn.UID)
 	}
-	p.timers.Delete(fn.UID)
 	if err := p.updateFunctionStatus(ctx, fn, 0, 0, 0); err != nil {
 		p.logger.Error(err, "Unable to update status of the function",
 			"function", fn.Name, "namespace", fn.Namespace)
