@@ -168,3 +168,81 @@ func TestBackoffDelaysRedelivery(t *testing.T) {
 		synctest.Wait()
 	})
 }
+
+// ctxCheckingQueue wraps recordingQueue but, like a real statestore backend
+// (a DB call bound to its context), fails a settle call whose context has
+// already expired instead of silently ignoring ctx like recordingQueue does.
+// This is what makes TestSettleSurvivesSlowDelivery actually exercise the
+// pre-delivery-vs-post-delivery sctx bug: recordingQueue's settle methods
+// never look at ctx, so they can't distinguish a fresh settle context from an
+// expired one.
+type ctxCheckingQueue struct {
+	*recordingQueue
+}
+
+func (q ctxCheckingQueue) Ack(ctx context.Context, receipt string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return q.recordingQueue.Ack(ctx, receipt)
+}
+
+func (q ctxCheckingQueue) Nack(ctx context.Context, receipt string, retryAfter time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return q.recordingQueue.Nack(ctx, receipt, retryAfter)
+}
+
+func (q ctxCheckingQueue) Kill(ctx context.Context, receipt, reason string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return q.recordingQueue.Kill(ctx, receipt, reason)
+}
+
+// TestSettleSurvivesSlowDelivery proves the settle budget is refreshed after
+// delivery returns (not consumed by delivery itself): a delivery slower than
+// settleTimeout that ultimately fails must still settle (Nack) rather than
+// finding its settle context already expired. Before the fix, sctx was created
+// once before Deliver and never refreshed, so a delivery outliving
+// settleTimeout left every settle call (Ack/Nack/Kill) racing an
+// already-expired context, and the Nack below was silently dropped
+// (logSettle logs it at V(1) as a store error and returns) — the message then
+// sat leased until DefaultLeaseDuration instead of retrying promptly.
+func TestSettleSurvivesSlowDelivery(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		rq := ctxCheckingQueue{&recordingQueue{}}
+		now := time.Now()
+		d := newTestDispatcher(rq, delivererFunc(func(ctx context.Context, _ Envelope, _ string, _ int) DeliveryResult {
+			// Sleep well past settleTimeout before the delivery "returns" — this
+			// models a legitimate slow function (minutes-long timeouts), not a
+			// delivery-context cancellation.
+			time.Sleep(settleTimeout * 3)
+			return DeliveryResult{StatusCode: 500}
+		}), now)
+
+		env := Envelope{
+			EnqueueTime: now, Function: "fn", Namespace: "ns",
+			FunctionTimeout: int((settleTimeout * 10).Seconds()),
+			Policy:          Policy{NoJitter: true, BackoffBase: time.Millisecond, BackoffCap: time.Millisecond, MaxAge: time.Hour},
+		}
+		msg := leasedMsg(t, env, 1)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			d.process(t.Context(), msg)
+		}()
+
+		// Advance virtual time past the deliverer's sleep so it actually returns,
+		// then let process() run to completion.
+		time.Sleep(settleTimeout * 4)
+		synctest.Wait()
+
+		require.Empty(t, rq.acks)
+		require.Empty(t, rq.kills)
+		require.Len(t, rq.nacks, 1, "the post-delivery settle must land on a fresh, unexpired context")
+		assert.Equal(t, "receipt-x", rq.nacks[0].receipt)
+	})
+}
