@@ -76,8 +76,15 @@ build-fission-cli:
 	@GOOS=$(GOOS) GOARCH=$(GOARCH) GOAMD64=$(GOAMD64) GORELEASER_CURRENT_TAG=$(VERSION) goreleaser build --snapshot --clean --single-target --id fission-cli
 
 install-fission-cli:
-	# TODO: Fix this hack, replace v1 with GOAMD64
-	mv dist/fission-cli_$(GOOS)_$(GOARCH)_v1/fission$(FISSION-CLI-SUFFIX) /usr/local/bin/fission
+	# goreleaser suffixes the dist dir with the arch microarchitecture level
+	# (GOAMD64 for amd64 e.g. _v1, GOARM64 for arm64 e.g. _v8.0, GOARM for arm),
+	# which varies per machine -- resolve the dir by glob instead of hardcoding it.
+	@dir="$$(ls -d dist/fission-cli_$(GOOS)_$(GOARCH)*/ 2>/dev/null | head -n1)"; \
+	if [ -z "$$dir" ]; then \
+		echo "install-fission-cli: no dist/fission-cli_$(GOOS)_$(GOARCH)* directory found; run 'make build-fission-cli' first" >&2; \
+		exit 1; \
+	fi; \
+	mv "$$dir/fission$(FISSION-CLI-SUFFIX)" /usr/local/bin/fission
 
 ### Codegen
 codegen:
