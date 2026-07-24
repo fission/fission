@@ -42,10 +42,11 @@ type fakeGPM struct {
 	block      chan struct{} // if non-nil, each call blocks until this is closed
 	svc        *fscache.FuncSvc
 	err        error
+	refs       []corev1.ObjectReference
 }
 
 func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	f.calls.Add(1)
+	n := f.calls.Add(1)
 	cur := f.concurrent.Add(1)
 	for {
 		peak := f.peakConc.Load()
@@ -60,6 +61,9 @@ func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.Fu
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
+	}
+	if f.refs != nil {
+		return &fscache.FuncSvc{KubernetesObjects: []corev1.ObjectReference{f.refs[(n-1)%int64(len(f.refs))]}}, f.err
 	}
 	return f.svc, f.err
 }
@@ -1130,11 +1134,12 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		const uid = "u1"
 		fn := provisionedFnWithUID("fn", uid, 0)
 		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{
-			{Name: "peak", Start: "0 9 * * *", Duration: "8h", Target: 3},
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+			{Name: "window2", Start: "CRON_TZ=UTC 0 12 * * *", Duration: "2h", Target: 5},
 		}
 		pods := []*corev1.Pod{}
 		pref := []corev1.ObjectReference{}
-		for i := range 3 {
+		for i := range 5 {
 			podName := fmt.Sprintf("pod%d", i)
 			pod := readyPod(podName, uid)
 			delete(pod.Labels, fv1.PROVISIONED_LABEL)
@@ -1142,9 +1147,10 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 			pref = append(pref, podRef(podName, "default"))
 		}
 		gpm := &fakeGPM{
-			svc: &fscache.FuncSvc{
-				KubernetesObjects: pref,
-			},
+			// svc: &fscache.FuncSvc{
+			// 	KubernetesObjects: pref,
+			// },
+			refs: pref,
 		}
 		p := newTestProvisionerWithGPM(t, gpm, fn, pods...)
 		p.reconcileFunction(t.Context(), fn)
@@ -1153,35 +1159,109 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
 
+		// check if window 1 provisioned target is updated
 		time.Sleep(9 * time.Hour)
 		synctest.Wait()
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
-		for i := range 3 {
+		labeled := 0
+		for i := range 5 {
 			podName := fmt.Sprintf("pod%d", i)
 			pod := getPod(t, p, podName)
-			assert.Equal(t, fv1.PROVISIONED_VALUE, pod.Labels[fv1.PROVISIONED_LABEL],
-				"provisioned label must be patched in")
+			if pod.Labels[fv1.PROVISIONED_LABEL] == "true" {
+				labeled++
+			}
 		}
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
 		assert.Equal(t, int64(3), gpm.calls.Load())
-		for i := range 3 {
+
+		// update crClient cache
+		for i := range 5 {
 			podName := fmt.Sprintf("pod%d", i)
-			pod := getPod(t, p, podName)
-			require.NoError(t, p.crClient.Update(t.Context(), pod))
+			var cur corev1.Pod
+			require.NoError(t, p.crClient.Get(t.Context(), client.ObjectKey{Namespace: "default", Name: podName}, &cur))
+			src := getPod(t, p, podName)
+			if v, ok := src.Labels[fv1.PROVISIONED_LABEL]; ok {
+				cur.Labels[fv1.PROVISIONED_LABEL] = v
+			} else {
+				delete(cur.Labels, fv1.PROVISIONED_LABEL)
+			}
+			require.NoError(t, p.crClient.Update(t.Context(), &cur))
 		}
 
-		time.Sleep(8 * time.Hour)
+		// check if window 2 provisioned target is updated
+		time.Sleep(3 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 5, fn.Status.ProvisionedTarget, "expected 5 target, got: ", fn.Status.ProvisionedTarget)
+		labeled = 0
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			if pod.Labels[fv1.PROVISIONED_LABEL] == "true" {
+				labeled++
+			}
+		}
+		assert.Equal(t, 5, labeled, "expected 5 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(5), gpm.calls.Load())
+		// update crClient cache
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			var cur corev1.Pod
+			require.NoError(t, p.crClient.Get(t.Context(), client.ObjectKey{Namespace: "default", Name: podName}, &cur))
+			src := getPod(t, p, podName)
+			if v, ok := src.Labels[fv1.PROVISIONED_LABEL]; ok {
+				cur.Labels[fv1.PROVISIONED_LABEL] = v
+			} else {
+				delete(cur.Labels, fv1.PROVISIONED_LABEL)
+			}
+			require.NoError(t, p.crClient.Update(t.Context(), &cur))
+		}
+
+		// window 2 is over, check if provisioned target is updated to window1 target
+		time.Sleep(2 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		labeled = 0
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			if pod.Labels[fv1.PROVISIONED_LABEL] == "true" {
+				labeled++
+			}
+		}
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(5), gpm.calls.Load())
+		// update crClient cache
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			var cur corev1.Pod
+			require.NoError(t, p.crClient.Get(t.Context(), client.ObjectKey{Namespace: "default", Name: podName}, &cur))
+			src := getPod(t, p, podName)
+			if v, ok := src.Labels[fv1.PROVISIONED_LABEL]; ok {
+				cur.Labels[fv1.PROVISIONED_LABEL] = v
+			} else {
+				delete(cur.Labels, fv1.PROVISIONED_LABEL)
+			}
+			require.NoError(t, p.crClient.Update(t.Context(), &cur))
+		}
+
+		// window1 is over, check if provisioned target is updated to 0
+		time.Sleep(3 * time.Hour)
 		synctest.Wait()
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
-		for i := range 3 {
+		for i := range 5 {
 			podName := fmt.Sprintf("pod%d", i)
 			pod := getPod(t, p, podName)
 			assert.Equal(t, "", pod.Labels[fv1.PROVISIONED_LABEL],
 				"provisioned label must be removed")
 		}
-		assert.Equal(t, int64(3), gpm.calls.Load())
+		assert.Equal(t, int64(5), gpm.calls.Load())
 	})
 }

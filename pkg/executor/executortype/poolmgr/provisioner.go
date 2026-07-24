@@ -190,7 +190,6 @@ func (p *Provisioner) armTransition(fn *fv1.Function) {
 				return
 			}
 			p.reconcileFunction(ctx, fn)
-			p.armTransition(fn)
 		})
 	} else {
 		sched.timer.Reset(delay)
