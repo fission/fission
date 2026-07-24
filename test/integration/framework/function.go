@@ -87,6 +87,14 @@ type FunctionOptions struct {
 	// IdleTimeout, when > 0, passes `--idletimeout <n>` (seconds before an
 	// idle poolmgr pod is reaped).
 	IdleTimeout int
+	// RetainPods, when > 0, passes `--retainpods <n>` (poolmgr warm-pod floor:
+	// PoolCache.ListAvailableValue only offers a generation's pods as idle-reap
+	// candidates once its live pod count exceeds this floor, so 0 — the CLI
+	// default — means the idle reaper is free to drain every pod once past
+	// IdleTimeout regardless of generation; RFC-0025 alias-retention extends the
+	// same floor to an alias-referenced non-latest generation instead of
+	// unconditionally zeroing it, so exercising that path needs RetainPods > 0).
+	RetainPods int
 	// TargetCPU is the CPU utilization (%) the autoscaler targets.
 	TargetCPU int
 	// MinCPU / MaxCPU are millicores (CLI: `--mincpu` / `--maxcpu`).
@@ -208,6 +216,9 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	if opts.IdleTimeout > 0 {
 		args = append(args, "--idletimeout", strconv.Itoa(opts.IdleTimeout))
+	}
+	if opts.RetainPods > 0 {
+		args = append(args, "--retainpods", strconv.Itoa(opts.RetainPods))
 	}
 	if opts.MinScale > 0 {
 		args = append(args, "--minscale", strconv.Itoa(opts.MinScale))
