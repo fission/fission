@@ -30,3 +30,21 @@ func TestRunLocalIsClusterOptional(t *testing.T) {
 	assert.Equal(t, "true", runLocal.Annotations[cmd.ClusterOptionalAnnotation],
 		"run-local must be marked cluster-optional so --image works without a kubeconfig")
 }
+
+// TestPublishHelpDocumentsOutputValues guards discoverability of `fn publish
+// -o name`: the behavior has existed since printPublishResult was written
+// (publish.go), but was undocumented in the command's own help text. This
+// pins the Long description down to naming every accepted --output value.
+func TestPublishHelpDocumentsOutputValues(t *testing.T) {
+	var publish *cobra.Command
+	for _, c := range Commands().Commands() {
+		if c.Name() == "publish" {
+			publish = c
+			break
+		}
+	}
+	require.NotNil(t, publish, "publish subcommand should be registered")
+	for _, want := range []string{"name", "json", "yaml", "wide"} {
+		assert.Contains(t, publish.Long, want, "publish --help should document -o %s", want)
+	}
+}

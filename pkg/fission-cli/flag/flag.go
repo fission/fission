@@ -127,7 +127,13 @@ var (
 	// RFC-0025 `fission fn describe --version`: render the SNAPSHOT inspector
 	// (sequence, digest, description, env observation vs live, ALIASED-BY)
 	// for one pinned FunctionVersion instead of the live function view.
-	FnDescribeVersion      = Flag{Type: String, Name: flagkey.FnDescribeVersion, Usage: "Describe a specific pinned FunctionVersion's snapshot instead of the live function"}
+	FnDescribeVersion = Flag{Type: String, Name: flagkey.FnDescribeVersion, Usage: "Describe a specific pinned FunctionVersion's snapshot instead of the live function"}
+	// RFC-0025 `fission fn get --version`: render a specific pinned
+	// FunctionVersion's SNAPSHOT deployment source instead of the live
+	// function's. The flag name (flagkey.FnTestVersion, "version") is reused
+	// from `fn test`/`fn describe`/`fn pods`/`fn logs`; flag names are scoped
+	// per-subcommand, so this is safe (see the FnTestAlias comment above).
+	FnGetVersion           = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Get a specific pinned FunctionVersion's snapshot source instead of the live function"}
 	FnIdleTimeout          = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 	FnStreaming            = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
 	FnStreamingProtocol    = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}

@@ -57,7 +57,7 @@ func Commands() *cobra.Command {
 		Short:   "Get function source code",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{},
+		Optional: []flag.Flag{flag.FnGetVersion},
 	})
 
 	getmetaCmd := wrapper.SubCommand(&cobra.Command{
@@ -271,6 +271,12 @@ func Commands() *cobra.Command {
 	publishCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "publish",
 		Short: "Publish the function's current spec as an immutable version",
+		Long: "Publish the function's current spec as an immutable FunctionVersion snapshot (RFC-0025); " +
+			"idempotent -- called again with an unchanged spec and package digest, it returns the existing " +
+			"newest version instead of minting a duplicate. --output/-o accepts: (default table) prints " +
+			"\"created <name>\" or \"unchanged <name>\"; \"name\" prints only the bare FunctionVersion name, " +
+			"one line, for scripting (mirrors kubectl's -o name); \"json\"/\"yaml\" marshal the full " +
+			"FunctionVersion object; \"wide\" renders the same as the default table (no extra columns).",
 	}, Publish, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{flag.PublishDescription, flag.PublishWait, flag.WaitTimeout, flag.Output},
