@@ -97,6 +97,14 @@ const (
 
 	FnTestAsync = "async"
 
+	// RFC-0025 `fission fn test --alias`/`--version`: smoke-test a specific
+	// FunctionAlias or pinned FunctionVersion instead of the live function.
+	// Mutually exclusive with each other; the strings themselves are shared
+	// with AliasName/AliasVersion/FnRollbackAlias -- flag names are scoped
+	// per-subcommand, so reuse is fine.
+	FnTestAlias   = "alias"
+	FnTestVersion = "version"
+
 	// RFC-0024 async invocation config (fn create/update).
 	FnAsyncMaxAttempts = "async-retry-max-attempts"
 	FnAsyncMaxAge      = "async-max-age"

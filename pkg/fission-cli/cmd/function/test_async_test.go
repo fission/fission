@@ -226,15 +226,15 @@ func TestHandleAsyncResponseAccepted(t *testing.T) {
 	t.Run("invocation id from header", func(t *testing.T) {
 		hdr := http.Header{}
 		hdr.Set(asyncinvoke.HeaderInvocationID, "asyncinv/9")
-		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, hdr, ""))
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, hdr, ""), "fn", "")
 		require.NoError(t, err)
 	})
 	t.Run("invocation id falls back to JSON body", func(t *testing.T) {
-		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, `{"invocationId":"asyncinv/5"}`))
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, `{"invocationId":"asyncinv/5"}`), "fn", "")
 		require.NoError(t, err)
 	})
 	t.Run("no id anywhere still succeeds with a warning", func(t *testing.T) {
-		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, ""))
+		err := handleAsyncResponse(fakeResponse(http.StatusAccepted, nil, ""), "fn", "")
 		require.NoError(t, err)
 	})
 }
@@ -251,9 +251,26 @@ func TestHandleAsyncResponseErrorStatuses(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			err := handleAsyncResponse(fakeResponse(tc.status, nil, ""))
+			err := handleAsyncResponse(fakeResponse(tc.status, nil, ""), "fn", "")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.errSub)
 		})
 	}
+}
+
+// TestHandleAsyncResponseNotFound guards the two 404 branches directly (the
+// do()-level TestDoAsyncSuffixedRouteNotFound in test_test.go covers the same
+// thing end-to-end): a suffixed request upgrades to the alias/version hint, a
+// bare one keeps the generic "async invocation failed" message.
+func TestHandleAsyncResponseNotFound(t *testing.T) {
+	t.Run("suffixed request gets the alias/version hint", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, nil, ""), "fn", "prod")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "alias/version route not found")
+	})
+	t.Run("bare request keeps the generic message", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, nil, ""), "fn", "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "async invocation failed")
+	})
 }

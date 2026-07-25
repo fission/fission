@@ -154,6 +154,9 @@ func Commands() *cobra.Command {
 			// for getting log from log database if we failed to get logs from function pod.
 			flag.FnLogDBType,
 			flag.FnSubPath,
+			// RFC-0025: test a specific alias (e.g. prod) or pinned version
+			// instead of the live function.
+			flag.FnTestAlias, flag.FnTestVersion,
 		},
 	})
 
