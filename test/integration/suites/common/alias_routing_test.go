@@ -390,8 +390,11 @@ func sumMetricLines(raw []byte, name string) float64 {
 // bare `:<alias>` route every FunctionAlias auto-materializes independent of
 // any HTTPTrigger -- see pkg/router/reconciler_alias.go's
 // functionAliasReconciler), and that repointing the alias converges fast.
-// The RFC's target is sub-second; this asserts a CI-generous <3s hard bound
-// and logs the actual elapsed time so real convergence latency is visible in
+// The RFC's target is sub-second; this asserts a <10s hard bound -- wide
+// enough that controller-hop scheduling latency on a contended CI leg never
+// trips it (3s was observed exceeded by 6% under load), tight enough to
+// prove convergence came from the watch path and not the 60s resync -- and
+// logs the actual elapsed time so real convergence latency is visible in
 // the test log without making CI timing-flaky.
 //
 // The same repoint doubles as the "before"/"after" bracket for the
@@ -445,8 +448,9 @@ func TestAliasInvokeAndRepoint(t *testing.T) {
 		}, 30*time.Second, 50*time.Millisecond)
 		elapsed := time.Since(ackTime)
 
-		t.Logf("alias repoint: public-route convergence in %s (RFC-0025 target <1s; CI-generous hard bound <3s)", elapsed)
-		assert.Lessf(t, elapsed, 3*time.Second, "alias repoint must converge well under 3s (RFC target <1s)")
+		t.Logf("alias repoint: public-route convergence in %s (RFC-0025 target <1s; hard bound <10s)", elapsed)
+		assert.Lessf(t, elapsed, 10*time.Second,
+			"alias repoint must converge via the watch path, well ahead of the 60s resync (RFC target <1s)")
 
 		driftAfter := scrapeCounterSum(t, ctx, f, "router", "fission_router_route_resync_drift_total")
 		assert.Equalf(t, driftBefore, driftAfter,
