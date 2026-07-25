@@ -118,6 +118,13 @@ type FunctionOptions struct {
 	// `--state-sticky-name` (sticky routing, RFC-0023 phase 3).
 	StateStickySource string
 	StateStickyName   string
+	// Versioning, when set ("auto"|"manual"|"off"), passes `--versioning
+	// <mode>` (RFC-0025 opt-in; pkg/fission-cli/cmd/function/create.go's
+	// getVersioningConfig, shared by create and update).
+	Versioning string
+	// Retain, when > 0, passes `--retain <n>` alongside Versioning (requires
+	// Versioning to be auto|manual).
+	Retain int
 }
 
 // CreateFunction creates a Function via the CLI from either Code or Src. The
@@ -246,6 +253,12 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	for _, s := range opts.Secrets {
 		args = append(args, "--secret", s)
+	}
+	if opts.Versioning != "" {
+		args = append(args, "--versioning", opts.Versioning)
+	}
+	if opts.Retain > 0 {
+		args = append(args, "--retain", strconv.Itoa(opts.Retain))
 	}
 	ns.CLI(t, ctx, args...)
 
