@@ -64,6 +64,16 @@ func printHtSummary(format util.OutputFormat, triggers []fv1.HTTPTrigger) error 
 		function := ""
 		if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
 			function = trigger.Spec.FunctionReference.Name
+			// RFC-0025: an alias/version-pinned reference renders as
+			// "<fn>:<tag>", matching the router's own route grammar (see
+			// pkg/router/rewrite.go's trimFunctionPrefix) rather than
+			// silently showing just the live function name.
+			switch {
+			case trigger.Spec.FunctionReference.Alias != "":
+				function += ":" + trigger.Spec.FunctionReference.Alias
+			case trigger.Spec.FunctionReference.Version != "":
+				function += ":" + trigger.Spec.FunctionReference.Version
+			}
 		} else {
 			for k, v := range trigger.Spec.FunctionReference.FunctionWeights {
 				function += fmt.Sprintf("%s:%v ", k, v)

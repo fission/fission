@@ -203,6 +203,8 @@ var (
 	HtGateway           = Flag{Type: StringSlice, Name: flagkey.HtGateway, Usage: "Parent Gateway the HTTPRoute attaches to (gateway provider): --gateway name or --gateway namespace/name (repeatable)"}
 	HtFnName            = Flag{Type: StringSlice, Name: flagkey.HtFnName, Usage: "Name(s) of the function for this trigger. (If 2 functions are supplied with this flag, traffic gets routed to them based on weights supplied with --weight flag.)"}
 	HtFnWeight          = Flag{Type: IntSlice, Name: flagkey.HtFnWeight, Usage: "Weight for each function supplied with --function flag, in the same order. Used for canary deployment"}
+	HtFnAlias           = Flag{Type: String, Name: flagkey.HtFnAlias, Usage: "Route through this FunctionAlias (RFC-0025) instead of the live function; requires exactly one --function, mutually exclusive with --function-version and with weighted multi-function routing"}
+	HtFnVersion         = Flag{Type: String, Name: flagkey.HtFnVersion, Usage: "Pin the route to this FunctionVersion (RFC-0025) instead of the live function; requires exactly one --function, mutually exclusive with --function-alias and with weighted multi-function routing"}
 	HtFnFilter          = Flag{Type: String, Name: flagkey.HtFilter, Usage: "Name of the function for trigger(s)"}
 	HtPrefix            = Flag{Type: String, Name: flagkey.HtPrefix, Usage: "Prefix with which functions are exposed. NOTE: Prefix takes precedence over URL/RelativeURL [DEPRECATED for 'fn create', use 'route create' instead]"}
 	HtKeepPrefix        = Flag{Type: Bool, Name: flagkey.HtKeepPrefix, Usage: "Keep the prefix in the URL while forwarding request to the function"}

@@ -103,13 +103,30 @@ func (opts *UpdateSubCommand) complete(input cli.Input) (err error) {
 			functionWeightsList = input.IntSlice(flagkey.HtFnWeight)
 		}
 
+		fnAlias := input.String(flagkey.HtFnAlias)
+		fnVersion := input.String(flagkey.HtFnVersion)
+		if err := validateFnRefTagFlags(fnAlias, fnVersion, functionList); err != nil {
+			return err
+		}
+
 		// set function reference
 		functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
 		if err != nil {
 			return fmt.Errorf("error setting function weight: %w", err)
 		}
+		functionRef.Alias = fnAlias
+		functionRef.Version = fnVersion
+
+		if fnAlias != "" || fnVersion != "" {
+			if err := checkFnRefTagOwnership(input.Context(), opts.Client(), triggerNamespace, functionList[0], fnAlias, fnVersion); err != nil {
+				return err
+			}
+		}
 
 		ht.Spec.FunctionReference = *functionRef
+	} else if input.IsSet(flagkey.HtFnAlias) || input.IsSet(flagkey.HtFnVersion) {
+		return errors.New("--function-alias/--function-version require --function to be set in the same update " +
+			"(route update does not infer the target function from the existing route)")
 	}
 
 	if input.IsSet(flagkey.HtIngress) {

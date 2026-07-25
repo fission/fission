@@ -159,6 +159,8 @@ const (
 	HtGateway           = "gateway"
 	HtFnName            = "function"
 	HtFnWeight          = "weight"
+	HtFnAlias           = "function-alias"
+	HtFnVersion         = "function-version"
 	HtFilter            = HtFnName
 	HtPrefix            = "prefix"
 	HtKeepPrefix        = "keepprefix"

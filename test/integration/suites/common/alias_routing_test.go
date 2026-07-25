@@ -47,33 +47,22 @@ import (
 
 // createAliasRoute creates an HTTPTrigger whose FunctionReference resolves
 // through a FunctionAlias (fv1.FunctionReference.Alias) rather than the live
-// Function directly. `fission route create` has no --alias flag yet -- Phase
-// 3 added the CRD field, CEL rules, and router/webhook support for it (see
-// pkg/apis/core/v1/types.go's FunctionReference.Alias doc comment), but not a
-// CLI surface (pkg/fission-cli/cmd/httptrigger/create.go's setHtFunctionRef
-// only builds Type name / FunctionWeights) -- so this builds and creates the
-// CRD directly through the typed client, the same way
-// functionversion_test.go/versioned_specialize_test.go reach past the CLI
-// for assertions/setup it has no flag for.
+// Function directly, via `fission route create --function-alias` (the RFC-0025
+// Phase 4 CLI surface -- pkg/fission-cli/cmd/httptrigger/create.go's
+// setHtFunctionRef plus the reftag.go preflight). Earlier phases added the CRD
+// field, CEL rules, and router/webhook support (see
+// pkg/apis/core/v1/types.go's FunctionReference.Alias doc comment) without a
+// CLI flag, which is why this used to reach past the CLI the same way
+// functionversion_test.go/versioned_specialize_test.go still do for
+// assertions/setup that has no flag at all.
 func createAliasRoute(t *testing.T, ctx context.Context, ns *framework.TestNamespace, name, urlPath, fnName, aliasName string, methods ...string) {
 	t.Helper()
-	fc := ns.Framework().FissionClient().CoreV1()
-	prefix := ""
-	trigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns.Name},
-		Spec: fv1.HTTPTriggerSpec{
-			RelativeURL: urlPath,
-			Methods:     methods,
-			Prefix:      &prefix,
-			FunctionReference: fv1.FunctionReference{
-				Type:  fv1.FunctionReferenceTypeFunctionName,
-				Name:  fnName,
-				Alias: aliasName,
-			},
-		},
+	args := []string{"route", "create", "--name", name, "--url", urlPath, "--function", fnName, "--function-alias", aliasName}
+	for _, m := range methods {
+		args = append(args, "--method", m)
 	}
-	_, err := fc.HTTPTriggers(ns.Name).Create(ctx, trigger, metav1.CreateOptions{})
-	require.NoErrorf(t, err, "create alias-based HTTPTrigger %q", name)
+	ns.CLI(t, ctx, args...)
+	fc := ns.Framework().FissionClient().CoreV1()
 	t.Cleanup(func() {
 		cctx, ccancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer ccancel()

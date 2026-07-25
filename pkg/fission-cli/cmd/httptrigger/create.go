@@ -43,15 +43,23 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 func (opts *CreateSubCommand) complete(input cli.Input) error {
 	functionList := input.StringSlice(flagkey.HtFnName)
 	functionWeightsList := input.IntSlice(flagkey.HtFnWeight)
+	fnAlias := input.String(flagkey.HtFnAlias)
+	fnVersion := input.String(flagkey.HtFnVersion)
 
 	if len(functionList) == 0 {
 		return errors.New("need a function name to create a trigger, use --function")
+	}
+
+	if err := validateFnRefTagFlags(fnAlias, fnVersion, functionList); err != nil {
+		return err
 	}
 
 	functionRef, err := setHtFunctionRef(functionList, functionWeightsList)
 	if err != nil {
 		return err
 	}
+	functionRef.Alias = fnAlias
+	functionRef.Version = fnVersion
 
 	triggerName := input.String(flagkey.HtName)
 	// just name triggers by uuid.
@@ -128,6 +136,12 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		err = util.CheckFunctionExistence(input.Context(), opts.Client(), functionList, fnNamespace)
 		if err != nil {
 			console.Warn(err.Error())
+		}
+
+		if fnAlias != "" || fnVersion != "" {
+			if err := checkFnRefTagOwnership(input.Context(), opts.Client(), fnNamespace, functionList[0], fnAlias, fnVersion); err != nil {
+				return err
+			}
 		}
 	}
 
