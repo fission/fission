@@ -271,8 +271,10 @@ func TestDoSyncSmallerTestTimeoutGoverns(t *testing.T) {
 // --version preflight in resolveTestRefSuffix: passing both must error before
 // either object is even looked up (no fake objects are registered, so a Get
 // call would itself fail and could be mistaken for this error).
+//
+// Not run in parallel: cmd.SetClientset installs a package-level client
+// shared by every test in this package.
 func TestResolveTestRefSuffixMutuallyExclusive(t *testing.T) {
-	t.Parallel()
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	cmd.ResetClientsetForTest()
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
@@ -291,11 +293,11 @@ func TestResolveTestRefSuffixMutuallyExclusive(t *testing.T) {
 // "not found"), and an alias that resolves but targets a different function
 // must be rejected rather than silently testing against the wrong lineage.
 // A found, matching alias resolves to its own name as the router suffix.
+//
+// Not run in parallel (including subtests): cmd.SetClientset installs a
+// package-level client shared by every test in this package.
 func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
-	t.Parallel()
-
 	t.Run("missing alias", func(t *testing.T) {
-		t.Parallel()
 		fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 		cmd.ResetClientsetForTest()
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
@@ -309,7 +311,6 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 	})
 
 	t.Run("alias targets a different function", func(t *testing.T) {
-		t.Parallel()
 		alias := &fv1.FunctionAlias{
 			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
 			Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
@@ -327,7 +328,6 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 	})
 
 	t.Run("matching alias resolves to its own name", func(t *testing.T) {
-		t.Parallel()
 		alias := &fv1.FunctionAlias{
 			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
 			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
@@ -347,11 +347,11 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 
 // TestResolveTestRefSuffixVersionPreflight mirrors
 // TestResolveTestRefSuffixAliasPreflight for --version.
+//
+// Not run in parallel (including subtests): cmd.SetClientset installs a
+// package-level client shared by every test in this package.
 func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
-	t.Parallel()
-
 	t.Run("missing version", func(t *testing.T) {
-		t.Parallel()
 		fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 		cmd.ResetClientsetForTest()
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
@@ -365,7 +365,6 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 	})
 
 	t.Run("version targets a different function", func(t *testing.T) {
-		t.Parallel()
 		version := &fv1.FunctionVersion{
 			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
 			Spec:       fv1.FunctionVersionSpec{FunctionName: "other-fn"},
@@ -383,7 +382,6 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 	})
 
 	t.Run("matching version resolves to its own name", func(t *testing.T) {
-		t.Parallel()
 		version := &fv1.FunctionVersion{
 			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
 			Spec:       fv1.FunctionVersionSpec{FunctionName: "fn"},
@@ -404,8 +402,10 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 // TestResolveTestRefSuffixNeitherSet guards the common (no --alias/--version)
 // path: an empty suffix, no API calls, no error -- this is what every
 // existing `fn test` invocation without the new flags must keep getting.
+//
+// Not run in parallel: cmd.SetClientset installs a package-level client
+// shared by every test in this package.
 func TestResolveTestRefSuffixNeitherSet(t *testing.T) {
-	t.Parallel()
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	cmd.ResetClientsetForTest()
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})

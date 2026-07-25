@@ -38,6 +38,6 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error deleting function alias: %w", err)
 	}
 
-	fmt.Printf("function alias '%v.%v' deleted\n", name, namespace)
+	fmt.Printf("function alias '%v' deleted\n", name)
 	return nil
 }

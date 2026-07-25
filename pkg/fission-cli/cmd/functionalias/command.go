@@ -39,6 +39,10 @@ func Commands() *cobra.Command {
 	updateCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "update",
 		Short: "Update a function alias",
+		Long: "Update a FunctionAlias's target (--version or --package-digest, mutually exclusive) or " +
+			"traffic split (--weight/--secondary-version, or --clear-weight to drop it). To repoint back to " +
+			"a previously resolved target using the alias's own Status.History instead of naming a version " +
+			"by hand, see `fission fn rollback` instead.",
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.AliasName},
 		Optional: []flag.Flag{
@@ -66,6 +70,10 @@ func Commands() *cobra.Command {
 	waitCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "wait",
 		Short: "Wait for a function alias to reach a status condition",
+		Long: "Wait for a FunctionAlias to reach a status condition, e.g. `fission alias wait --name prod " +
+			"--for condition=Resolved` after an `alias create`/`alias update`/`fn rollback`, so a caller " +
+			"(CI, a script) can tell when the alias resolver has actually converged on the new target " +
+			"rather than racing it. FunctionAlias's only condition type is Resolved.",
 	}, Wait, flag.FlagSet{
 		Required: []flag.Flag{flag.AliasName, flag.WaitFor},
 		Optional: []flag.Flag{flag.WaitTimeout},

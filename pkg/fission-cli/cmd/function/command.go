@@ -297,7 +297,8 @@ func Commands() *cobra.Command {
 			"previous target (Status.History's last entry), or an explicit --to version. Always a full " +
 			"repoint — clears Weight/SecondaryVersion, so a rollback issued mid-canary stops the traffic " +
 			"split rather than only rolling back the primary target. Refuses to touch an alias managed by " +
-			"`fission spec` (Git) unless --detach.",
+			"`fission spec` (Git) unless --detach. For a one-off repoint to a version you already know, " +
+			"see `fission alias update --version --wait` instead.",
 	}, Rollback, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName, flag.FnRollbackAlias},
 		Optional: []flag.Flag{flag.FnRollbackTo, flag.FnRollbackDetach, flag.FnRollbackWait, flag.WaitTimeout},

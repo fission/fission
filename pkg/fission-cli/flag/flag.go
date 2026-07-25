@@ -347,7 +347,7 @@ var (
 	AliasFunction         = Flag{Type: String, Name: flagkey.AliasFunction, Usage: "Function this alias points at"}
 	AliasVersion          = Flag{Type: String, Name: flagkey.AliasVersion, Usage: "FunctionVersion name the alias resolves to (exactly one of --version/--package-digest)"}
 	AliasPackageDigest    = Flag{Type: String, Name: flagkey.AliasPackageDigest, Usage: "Package digest (sha256:<hex>) the alias resolves to declaratively (exactly one of --version/--package-digest)"}
-	AliasWeight           = Flag{Type: Int, Name: flagkey.AliasWeight, Usage: "Percentage (0-100) of traffic served by the primary target; the remainder goes to --secondary-version"}
+	AliasWeight           = Flag{Type: Int, Name: flagkey.AliasWeight, Usage: "Percentage (0-100) of traffic served by the primary target; the remainder goes to --secondary-version. Requires --secondary-version; omit --weight entirely for 100% to the primary"}
 	AliasSecondaryVersion = Flag{Type: String, Name: flagkey.AliasSecondaryVersion, Usage: "Secondary FunctionVersion name receiving the 100-minus-weight remainder of traffic"}
 	AliasClearWeight      = Flag{Type: Bool, Name: flagkey.AliasClearWeight, Usage: "Clear the weighted split (drop --weight and --secondary-version)"}
 	AliasWait             = Flag{Type: Bool, Name: flagkey.AliasWait, Usage: "Wait for the alias to resolve to its updated target (see --timeout)"}

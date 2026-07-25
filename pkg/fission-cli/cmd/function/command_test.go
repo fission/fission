@@ -48,3 +48,19 @@ func TestPublishHelpDocumentsOutputValues(t *testing.T) {
 		assert.Contains(t, publish.Long, want, "publish --help should document -o %s", want)
 	}
 }
+
+// TestRollbackHelpCrossReferencesAliasUpdate guards the UX-review breadcrumb
+// (F12): a user reaching for `fn rollback` when they actually know the exact
+// target version should be pointed at the lighter-weight `alias update
+// --version --wait` instead of history-based rollback.
+func TestRollbackHelpCrossReferencesAliasUpdate(t *testing.T) {
+	var rollback *cobra.Command
+	for _, c := range Commands().Commands() {
+		if c.Name() == "rollback" {
+			rollback = c
+			break
+		}
+	}
+	require.NotNil(t, rollback, "rollback subcommand should be registered")
+	assert.Contains(t, rollback.Long, "fission alias update --version --wait")
+}

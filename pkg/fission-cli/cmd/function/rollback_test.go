@@ -94,6 +94,7 @@ func TestRollbackEmptyHistoryErrorsWithoutTo(t *testing.T) {
 	err := Rollback(in)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no previous target recorded")
+	assert.Contains(t, err.Error(), "fission fn versions --name hello", "must point the user at how to find a --to target")
 }
 
 func TestRollbackWrongFunctionErrors(t *testing.T) {

@@ -130,8 +130,12 @@ func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace,
 // `-o name` for scripting. json/yaml marshal the FunctionVersion via
 // util.PrintStructured (which, like every other structured printer in this
 // package, writes straight to os.Stdout rather than w). The default table
-// format prints "created <name>" when Publish minted a new version or
-// "unchanged <name>" when it idempotently returned the existing newest one.
+// format's first line is the machine-readable "created <name>" (Publish
+// minted a new version) or "unchanged <name>" (it idempotently returned the
+// existing newest one) — this exact line is a stable contract other tooling
+// greps for, so it is never altered by anything below it. A second,
+// human-facing breadcrumb line follows, pointing at the next natural step:
+// pointing a FunctionAlias at the version just published.
 func printPublishResult(w io.Writer, result *versioning.PublishResult, outStr string) error {
 	if outStr == "name" {
 		_, err := fmt.Fprintln(w, result.Version.Name)
@@ -150,6 +154,10 @@ func printPublishResult(w io.Writer, result *versioning.PublishResult, outStr st
 	if result.Created {
 		verb = "created"
 	}
-	_, err = fmt.Fprintf(w, "%s %s\n", verb, result.Version.Name)
+	if _, err := fmt.Fprintf(w, "%s %s\n", verb, result.Version.Name); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "next: fission alias create --function %s --name <alias> --version %s\n",
+		result.Version.Spec.FunctionName, result.Version.Name)
 	return err
 }

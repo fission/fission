@@ -74,7 +74,8 @@ func (opts *RollbackSubCommand) complete(input cli.Input) error {
 	} else {
 		hist := alias.Status.History
 		if len(hist) == 0 {
-			return errors.New("no previous target recorded: function alias has no Status.History and --to was not given")
+			return fmt.Errorf("no previous target recorded: function alias has no Status.History and --to was not given "+
+				"(see `fission fn versions --name %v` to find a target)", opts.fnName)
 		}
 		opts.target = hist[len(hist)-1].Version
 	}

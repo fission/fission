@@ -281,5 +281,21 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	}
 
 	fmt.Printf("Function '%v' updated\n", opts.function.Name)
+	if hint := versioningAutoHint(opts.function); hint != "" {
+		fmt.Print(hint)
+	}
 	return nil
+}
+
+// versioningAutoHint returns the breadcrumb line printed after a successful
+// `fn update` when the function's versioning mode is auto, or "" when it
+// isn't opted in. Auto-versioning mints a new FunctionVersion asynchronously
+// once the package build succeeds — not synchronously with this update — so
+// the hint tells the caller where to watch for it rather than leaving them
+// to wonder why `fn get --version` doesn't show a new version yet.
+func versioningAutoHint(fn *fv1.Function) string {
+	if fn.Spec.Versioning == nil || fn.Spec.Versioning.Mode != fv1.VersioningModeAuto {
+		return ""
+	}
+	return fmt.Sprintf("versioning=auto: a new version is minted once the build succeeds (fission fn versions --name %v)\n", fn.Name)
 }

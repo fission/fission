@@ -49,14 +49,20 @@ func TestPrintPublishResultTableCreated(t *testing.T) {
 	var buf bytes.Buffer
 	err := printPublishResult(&buf, &versioning.PublishResult{Version: publishedVersion(), Created: true}, "")
 	require.NoError(t, err)
-	assert.Equal(t, "created hello-v1\n", buf.String())
+	lines := strings.Split(buf.String(), "\n")
+	require.NotEmpty(t, lines)
+	assert.Equal(t, "created hello-v1", lines[0], "the machine-readable first line is a stable contract")
+	assert.Contains(t, buf.String(), "next: fission alias create --function hello --name <alias> --version hello-v1")
 }
 
 func TestPrintPublishResultTableUnchanged(t *testing.T) {
 	var buf bytes.Buffer
 	err := printPublishResult(&buf, &versioning.PublishResult{Version: publishedVersion(), Created: false}, "")
 	require.NoError(t, err)
-	assert.Equal(t, "unchanged hello-v1\n", buf.String())
+	lines := strings.Split(buf.String(), "\n")
+	require.NotEmpty(t, lines)
+	assert.Equal(t, "unchanged hello-v1", lines[0], "the machine-readable first line is a stable contract")
+	assert.Contains(t, buf.String(), "next: fission alias create --function hello --name <alias> --version hello-v1")
 }
 
 func TestPrintPublishResultInvalidFormatErrors(t *testing.T) {
