@@ -43,6 +43,19 @@ func getOwnedFunctionVersion(ctx context.Context, client cmd.Client, namespace, 
 	return version, nil
 }
 
+// aliasEffectiveTarget returns the FunctionVersion name a's spec currently
+// targets: Spec.Version when name-pinned, else Status.ResolvedVersion once a
+// digest-pinned alias has resolved. Empty when neither is set yet (a
+// digest-pinned alias that has not resolved at all). Shared by
+// resolveVersionLabelFilter below and `fn describe`'s VERSIONING/ALIASED-BY
+// tables (describe.go).
+func aliasEffectiveTarget(a *v1.FunctionAlias) string {
+	if a.Spec.Version != "" {
+		return a.Spec.Version
+	}
+	return a.Status.ResolvedVersion
+}
+
 // resolveVersionLabelFilter resolves the RFC-0025 --alias/--version flags
 // (mutually exclusive) to the FunctionVersion name that `fn pods`/`fn logs`
 // should filter the fission.io/function-version pod label on. Returns "" when
@@ -66,10 +79,7 @@ func resolveVersionLabelFilter(ctx context.Context, client cmd.Client, namespace
 		if err != nil {
 			return "", err
 		}
-		target := alias.Spec.Version
-		if target == "" {
-			target = alias.Status.ResolvedVersion
-		}
+		target := aliasEffectiveTarget(alias)
 		if target == "" {
 			return "", fmt.Errorf("alias %q has not resolved to a version yet", aliasName)
 		}

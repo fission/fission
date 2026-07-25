@@ -75,7 +75,11 @@ func Commands() *cobra.Command {
 		Short:   "Describe a function's health in one view (summary, conditions, build, pods)",
 	}, Describe, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{},
+		Optional: []flag.Flag{
+			// RFC-0025: --version swaps the live view for the SNAPSHOT
+			// inspector of one pinned FunctionVersion.
+			flag.FnDescribeVersion,
+		},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{

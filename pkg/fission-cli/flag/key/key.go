@@ -109,6 +109,13 @@ const (
 	FnTestAlias   = "alias"
 	FnTestVersion = "version"
 
+	// RFC-0025 `fission fn describe --version`: render the SNAPSHOT inspector
+	// for one pinned FunctionVersion instead of the live function view. The
+	// string is reused from FnTestVersion/FnPodsVersion/FnLogVersion -- flag
+	// names are scoped per-subcommand, so this is safe (see the FnTestAlias
+	// comment above).
+	FnDescribeVersion = "version"
+
 	// RFC-0024 async invocation config (fn create/update).
 	FnAsyncMaxAttempts = "async-retry-max-attempts"
 	FnAsyncMaxAge      = "async-max-age"

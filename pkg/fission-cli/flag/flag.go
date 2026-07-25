@@ -122,8 +122,12 @@ var (
 	// one alias's resolved target or a pinned FunctionVersion. The flag names
 	// (flagkey.FnTestAlias/FnTestVersion, "alias"/"version") are reused from
 	// `fn test`; flag names are scoped per-subcommand, so this is safe.
-	FnPodsAlias            = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "List only pods for a specific alias's (e.g. prod) resolved version; mutually exclusive with --version"}
-	FnPodsVersion          = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "List only pods for a specific pinned FunctionVersion; mutually exclusive with --alias"}
+	FnPodsAlias   = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "List only pods for a specific alias's (e.g. prod) resolved version; mutually exclusive with --version"}
+	FnPodsVersion = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "List only pods for a specific pinned FunctionVersion; mutually exclusive with --alias"}
+	// RFC-0025 `fission fn describe --version`: render the SNAPSHOT inspector
+	// (sequence, digest, description, env observation vs live, ALIASED-BY)
+	// for one pinned FunctionVersion instead of the live function view.
+	FnDescribeVersion      = Flag{Type: String, Name: flagkey.FnDescribeVersion, Usage: "Describe a specific pinned FunctionVersion's snapshot instead of the live function"}
 	FnIdleTimeout          = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 	FnStreaming            = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
 	FnStreamingProtocol    = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
