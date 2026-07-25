@@ -100,12 +100,22 @@ func TestCanaryAliasPromotion(t *testing.T) {
 		assert.Emptyf(c, alias.Spec.SecondaryVersion, "secondary version must be cleared on the terminal promotion write")
 	}, 5*time.Minute, 2*time.Second)
 
-	aliasAfter, err := fc.FunctionAliases(af.ns.Name).Get(ctx, af.AliasName, metav1.GetOptions{})
-	require.NoError(t, err)
-	require.Lenf(t, aliasAfter.Status.History, historyBefore+1,
-		"promotion must append exactly ONE new History record (the outgoing old version), got %+v", aliasAfter.Status.History)
-	assert.Equalf(t, af.V1Name, aliasAfter.Status.History[len(aliasAfter.Status.History)-1].Version,
-		"the appended History record must be for the outgoing OLD version")
+	// The History append is written by the alias resolver controller's status
+	// reconcile, which lags the canary's terminal spec write — a one-shot Get
+	// right after the spec converges races the controller on a contended leg
+	// (observed in CI). Poll for the append instead of asserting immediately.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		aliasAfter, err := fc.FunctionAliases(af.ns.Name).Get(ctx, af.AliasName, metav1.GetOptions{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.Lenf(c, aliasAfter.Status.History, historyBefore+1,
+			"promotion must append exactly ONE new History record (the outgoing old version), got %+v", aliasAfter.Status.History) {
+			return
+		}
+		assert.Equalf(c, af.V1Name, aliasAfter.Status.History[len(aliasAfter.Status.History)-1].Version,
+			"the appended History record must be for the outgoing OLD version")
+	}, 2*time.Minute, 3*time.Second)
 
 	cfg, err := fc.CanaryConfigs(af.ns.Name).Get(ctx, canaryName, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -186,10 +196,18 @@ func TestCanaryAliasRollback(t *testing.T) {
 		assert.Emptyf(c, alias.Spec.SecondaryVersion, "secondary version must be cleared on rollback")
 	}, 5*time.Minute, 2*time.Second)
 
-	aliasAfter, err := fc.FunctionAliases(af.ns.Name).Get(ctx, af.AliasName, metav1.GetOptions{})
-	require.NoError(t, err)
-	assert.Lenf(t, aliasAfter.Status.History, historyBefore,
-		"rollback must NOT append any new History record -- the primary's Spec.Version never actually changed, got %+v", aliasAfter.Status.History)
+	// Negative assertion with a settle window: History appends land via the
+	// alias resolver's asynchronous status reconcile, so a one-shot check right
+	// after convergence could false-pass before a (wrong) append arrives. Hold
+	// the zero-append invariant across a settle period instead.
+	require.Never(t, func() bool {
+		aliasAfter, err := fc.FunctionAliases(af.ns.Name).Get(ctx, af.AliasName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		return len(aliasAfter.Status.History) != historyBefore
+	}, 30*time.Second, 3*time.Second,
+		"rollback must NOT append any new History record -- the primary's Spec.Version never actually changed")
 
 	cfg, err := fc.CanaryConfigs(af.ns.Name).Get(ctx, canaryName, metav1.GetOptions{})
 	require.NoError(t, err)
