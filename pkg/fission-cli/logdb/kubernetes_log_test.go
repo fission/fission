@@ -111,3 +111,51 @@ func TestGetFunctionPodLogs(t *testing.T) {
 		assert.NotEmpty(t, buf.String())
 	})
 }
+
+// versionedFunctionPod is functionPod plus an RFC-0025
+// fission.io/function-version label, for exercising LogFilter.Version.
+func versionedFunctionPod(name, resourceVersion, version string) *corev1.Pod {
+	pod := functionPod(name, resourceVersion)
+	pod.Labels[fv1.FUNCTION_VERSION] = version
+	return pod
+}
+
+// TestSelectFunctionPodsVersionFilter guards the RFC-0025 --alias/--version
+// selector addition and why it is genuinely load-bearing, not cosmetic:
+// selectFunctionPods's non-AllPods path picks only the single newest pod
+// (highest resourceVersion) among the *selected* set. Without narrowing the
+// selector to LogFilter.Version first, that "newest" pod could belong to an
+// entirely different, unrelated version -- silently reading the wrong pod's
+// logs.
+func TestSelectFunctionPodsVersionFilter(t *testing.T) {
+	older := versionedFunctionPod("pod-v1", "1", "hello-v1")
+	newer := versionedFunctionPod("pod-v2", "9", "hello-v2")
+
+	t.Run("without a version filter, the globally newest pod wins", func(t *testing.T) {
+		client := cmd.Client{KubernetesClient: fake.NewClientset(older, newer)}
+		filter := LogFilter{FunctionObject: testFunction(), PodNamespace: fnNamespace, RecordLimit: 100}
+
+		pods, err := selectFunctionPods(t.Context(), client, filter)
+		require.NoError(t, err)
+		require.Len(t, pods, 1)
+		assert.Equal(t, "pod-v2", pods[0].Name)
+	})
+
+	t.Run("a version filter scopes selection to that version's pods, even the older one", func(t *testing.T) {
+		client := cmd.Client{KubernetesClient: fake.NewClientset(older, newer)}
+		filter := LogFilter{FunctionObject: testFunction(), PodNamespace: fnNamespace, RecordLimit: 100, Version: "hello-v1"}
+
+		pods, err := selectFunctionPods(t.Context(), client, filter)
+		require.NoError(t, err)
+		require.Len(t, pods, 1)
+		assert.Equal(t, "pod-v1", pods[0].Name)
+	})
+
+	t.Run("a version filter matching no pods errors", func(t *testing.T) {
+		client := cmd.Client{KubernetesClient: fake.NewClientset(older)}
+		filter := LogFilter{FunctionObject: testFunction(), PodNamespace: fnNamespace, RecordLimit: 100, Version: "hello-v9"}
+
+		_, err := selectFunctionPods(t.Context(), client, filter)
+		require.Error(t, err)
+	})
+}

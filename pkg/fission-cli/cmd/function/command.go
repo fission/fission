@@ -142,7 +142,10 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{
 			flag.FnLogFollow, flag.FnLogReverseQuery, flag.FnLogCount,
 			flag.FnLogDetail, flag.FnLogPod, flag.FnLogDBType, flag.NamespacePod, flag.FnLogAllPods,
-			flag.FnLogRequestID, flag.FnLogTraceID, flag.FnLogLevel},
+			flag.FnLogRequestID, flag.FnLogTraceID, flag.FnLogLevel,
+			// RFC-0025: read logs for a specific alias/version's pods.
+			flag.FnLogAlias, flag.FnLogVersion,
+		},
 	})
 
 	testCmd := wrapper.SubCommand(&cobra.Command{
@@ -239,7 +242,11 @@ func Commands() *cobra.Command {
 		Long:    "List pods currently used by a function",
 	}, ListPods, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{},
+		Optional: []flag.Flag{
+			// RFC-0025: list pods for a specific alias/version instead of all
+			// of the function's pods.
+			flag.FnPodsAlias, flag.FnPodsVersion,
+		},
 	})
 
 	waitCmd := wrapper.SubCommand(&cobra.Command{

@@ -213,10 +213,12 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 // resolves the router route suffix (RFC-0025) `fission function test` should
 // target: "" for the live function, else the alias or version name. Both
 // flags are preflight-checked against the API server -- Get the named
-// FunctionAlias/FunctionVersion and confirm it actually belongs to fnName --
-// so a typo surfaces here as a clear error instead of an opaque router 404
-// once the request is sent (see suffixedRouteNotFoundError for the 404 that
-// preflight can't catch: a real-but-not-yet-resolved alias).
+// FunctionAlias/FunctionVersion and confirm it actually belongs to fnName
+// (getOwnedFunctionAlias/getOwnedFunctionVersion in versionref.go, shared with
+// `fn pods`/`fn logs`) -- so a typo surfaces here as a clear error instead of
+// an opaque router 404 once the request is sent (see
+// suffixedRouteNotFoundError for the 404 that preflight can't catch: a
+// real-but-not-yet-resolved alias).
 func (opts *TestSubCommand) resolveTestRefSuffix(input cli.Input, fnName, namespace string) (string, error) {
 	aliasName := input.String(flagkey.FnTestAlias)
 	versionName := input.String(flagkey.FnTestVersion)
@@ -227,21 +229,13 @@ func (opts *TestSubCommand) resolveTestRefSuffix(input cli.Input, fnName, namesp
 
 	switch {
 	case aliasName != "":
-		alias, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(namespace).Get(input.Context(), aliasName, metav1.GetOptions{})
-		if err != nil {
-			return "", fmt.Errorf("alias %q not found for function %q: %w", aliasName, fnName, err)
-		}
-		if alias.Spec.FunctionName != fnName {
-			return "", fmt.Errorf("alias %q targets function %q, not %q", aliasName, alias.Spec.FunctionName, fnName)
+		if _, err := getOwnedFunctionAlias(input.Context(), opts.Client(), namespace, fnName, aliasName); err != nil {
+			return "", err
 		}
 		return aliasName, nil
 	case versionName != "":
-		version, err := opts.Client().FissionClientSet.CoreV1().FunctionVersions(namespace).Get(input.Context(), versionName, metav1.GetOptions{})
-		if err != nil {
-			return "", fmt.Errorf("version %q not found for function %q: %w", versionName, fnName, err)
-		}
-		if version.Spec.FunctionName != fnName {
-			return "", fmt.Errorf("version %q targets function %q, not %q", versionName, version.Spec.FunctionName, fnName)
+		if _, err := getOwnedFunctionVersion(input.Context(), opts.Client(), namespace, fnName, versionName); err != nil {
+			return "", err
 		}
 		return versionName, nil
 	default:

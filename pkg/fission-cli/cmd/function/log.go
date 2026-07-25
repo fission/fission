@@ -51,6 +51,14 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error getting function: %w", err)
 	}
 
+	// RFC-0025: --alias/--version (mutually exclusive) narrow the pods read
+	// to one FunctionAlias's resolved target or a pinned FunctionVersion.
+	version, err := resolveVersionLabelFilter(input.Context(), opts.Client(), namespace, f.Name,
+		input.String(flagkey.FnTestAlias), input.String(flagkey.FnTestVersion))
+	if err != nil {
+		return err
+	}
+
 	logDBOptions := logdb.LogDBOptions{
 		Client: opts.Client(),
 	}
@@ -68,6 +76,14 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		console.Warn(fmt.Sprintf("--request-id/--trace-id/--level filters are only applied by the loki dbtype and are ignored for %q", dbType))
 	}
 
+	// RFC-0025 --alias/--version: the inverse of the loki-only filters above --
+	// only the kubernetes dbtype can filter on the pod's
+	// fission.io/function-version label, so warn (not error) and ignore the
+	// filter for any other dbtype, matching the gating pattern above.
+	if dbType != logdb.KUBERNETES && version != "" {
+		console.Warn(fmt.Sprintf("--alias/--version filters are only applied by the kubernetes dbtype and are ignored for %q", dbType))
+	}
+
 	// The filter is built once; the polling loop below overrides only the
 	// per-iteration fields (Since/Reverse/WarnUser/Details).
 	baseFilter := logdb.LogFilter{
@@ -82,6 +98,7 @@ func (opts *LogSubCommand) do(input cli.Input) error {
 		RequestID:      input.String(flagkey.FnLogRequestID),
 		TraceID:        input.String(flagkey.FnLogTraceID),
 		Level:          input.String(flagkey.FnLogLevel),
+		Version:        version,
 	}
 
 	// Live streaming: when --follow is set and the driver can tail (kubernetes

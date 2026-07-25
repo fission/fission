@@ -87,59 +87,72 @@ var (
 	ReplicasMin = Flag{Type: Int, Name: flagkey.ReplicasMinscale, Usage: "Minimum number of pods (Uses resource inputs to configure HPA)", DefaultValue: 1}
 	ReplicasMax = Flag{Type: Int, Name: flagkey.ReplicasMaxscale, Usage: "Maximum number of pods (Uses resource inputs to configure HPA)", DefaultValue: 1}
 
-	FnName                   = Flag{Type: String, Name: flagkey.FnName, Usage: "Function name"}
-	FnSpecializationTimeout  = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
-	FnEnvName                = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
-	FnPkgName                = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
-	FnImageName              = Flag{Type: String, Name: flagkey.FnImageName, Usage: "Name of the Docker image to be deployed as a function. Valid only when executorType is set to 'container'"}
-	FnPort                   = Flag{Type: Int, Name: flagkey.FnPort, Usage: "Port where the application is running", DefaultValue: svcinfo.PortEnvRuntime}
-	FnCommand                = Flag{Type: String, Name: flagkey.FnCommand, Usage: "Command to be passed to the container. If not specified , the ones defined in the image are used"}
-	FnArgs                   = Flag{Type: String, Name: flagkey.FnArgs, Usage: "Args to be passed to the command on the container. If not specified , the ones defined in the image are used"}
-	FnEntryPoint             = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
-	FnBuildCmd               = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
-	FnSecret                 = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the secrets will be replaced by the provided list of secrets."}
-	FnCfgMap                 = Flag{Type: StringSlice, Name: flagkey.FnCfgMap, Usage: "Function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags. In case of fn update the configmaps will be replaced by the provided list of configmaps."}
-	FnExecutorType           = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
-	FnExecutionTimeout       = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
-	FnLogPod                 = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
-	FnLogFollow              = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
-	FnLogDetail              = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
-	FnLogDBType              = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default) or loki", DefaultValue: "kubernetes"}
-	FnLogReverseQuery        = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as loki"}
-	FnLogCount               = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
-	FnLogRequestID           = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
-	FnLogTraceID             = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
-	FnLogLevel               = Flag{Type: String, Name: flagkey.FnLogLevel, Usage: "Filter logs by level, e.g. error (loki dbtype)"}
-	NamespacePod             = Flag{Type: String, Name: flagkey.NamespacePod, Usage: "Namespace in which function's pod are created. If not specified, function's namespace is used. Note: version <1.18 used fission-function as pod's default ns."}
-	FnTestBody               = Flag{Type: String, Name: flagkey.FnTestBody, Short: "b", Usage: "Request body"}
-	FnTestTimeout            = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
-	FnTestHeader             = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
-	FnTestQuery              = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
-	FnTestAsync              = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "Invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
-	FnTestAlias              = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
-	FnTestVersion            = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
-	FnIdleTimeout            = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
-	FnStreaming              = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
-	FnStreamingProtocol      = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
-	FnStreamingIdleTimeout   = Flag{Type: Int, Name: flagkey.FnStreamingIdleTimeout, Usage: "Idle timeout (seconds) for a streaming response before it is aborted; reset on each chunk", DefaultValue: 60}
-	FnStreamingMaxDuration   = Flag{Type: Int, Name: flagkey.FnStreamingMaxDuration, Usage: "Hard ceiling (seconds) on total streaming response lifetime; 0 means no ceiling (the idle timeout governs)", DefaultValue: 0}
-	FnExposeAsMCP            = Flag{Type: Bool, Name: flagkey.FnExposeAsMCP, Usage: "Advertise this function as a Model Context Protocol (MCP) tool on the MCP server"}
-	FnToolDescription        = Flag{Type: String, Name: flagkey.FnToolDescription, Usage: "Agent-facing tool description (required with --expose-as-mcp)"}
-	FnToolInputSchema        = Flag{Type: String, Name: flagkey.FnToolInputSchema, Usage: "Path to a JSON Schema file describing the tool's arguments; advertised verbatim as the MCP tool inputSchema"}
-	FnToolName               = Flag{Type: String, Name: flagkey.FnToolName, Usage: "Override the advertised MCP tool name (defaults to <namespace>-<function name>)"}
-	FnConcurrency            = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests (Only valid for executortype; `poolmgr`)", DefaultValue: 500}
-	FnRequestsPerPod         = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod (Only valid for executortype; `poolmgr`)", DefaultValue: 1}
-	FnOnceOnly               = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime (Only valid for executortype; `poolmgr`)"}
-	FnSubPath                = Flag{Type: String, Name: flagkey.FnSubPath, Usage: "Sub Path to check if function internally supports routing"}
-	FnRunEnvVersion          = Flag{Type: Int, Name: flagkey.FnRunEnvVersion, Usage: "Environment API version of the runtime image when running locally with --image (ignored when --env resolves it)", DefaultValue: 2}
-	FnRunKeep                = Flag{Type: Bool, Name: flagkey.FnRunKeep, Usage: "Keep the local function container and mount running after the invocation instead of tearing it down"}
-	FnRunWatch               = Flag{Type: Bool, Name: flagkey.FnRunWatch, Short: "w", Usage: "Serve the function locally and re-specialize on source change (hot reload); env executors only"}
-	FnRunDebugPort           = Flag{Type: Int, Name: flagkey.FnRunDebugPort, Usage: "Publish an additional container port for a debugger (delve/debugpy) to attach to"}
-	FnRunEnvVar              = Flag{Type: StringSlice, Name: flagkey.FnRunEnvVar, Short: "e", Usage: "Set a runtime env var KEY=VALUE in the local container (repeatable)"}
-	FnRunEnvFile             = Flag{Type: String, Name: flagkey.FnRunEnvFile, Usage: "Read runtime env vars from a file (one KEY=VALUE per line); -e overrides"}
-	FnRunBuild               = Flag{Type: Bool, Name: flagkey.FnRunBuild, Usage: "Compile the source with the environment builder image before running (compiled environments)"}
-	FnRunBuilderImage        = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
-	FnLogAllPods             = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
+	FnName                  = Flag{Type: String, Name: flagkey.FnName, Usage: "Function name"}
+	FnSpecializationTimeout = Flag{Type: Int, Name: flagkey.FnSpecializationTimeout, Aliases: []string{"st"}, Usage: "Timeout for executor to wait for function pod creation", DefaultValue: fv1.DefaultSpecializationTimeOut}
+	FnEnvName               = Flag{Type: String, Name: flagkey.FnEnvironmentName, Usage: "Environment name for function"}
+	FnPkgName               = Flag{Type: String, Name: flagkey.FnPackageName, Aliases: []string{"pkg"}, Usage: "Name of the existing package (--deploy and --src and --env will be ignored), should be in the same namespace as the function"}
+	FnImageName             = Flag{Type: String, Name: flagkey.FnImageName, Usage: "Name of the Docker image to be deployed as a function. Valid only when executorType is set to 'container'"}
+	FnPort                  = Flag{Type: Int, Name: flagkey.FnPort, Usage: "Port where the application is running", DefaultValue: svcinfo.PortEnvRuntime}
+	FnCommand               = Flag{Type: String, Name: flagkey.FnCommand, Usage: "Command to be passed to the container. If not specified , the ones defined in the image are used"}
+	FnArgs                  = Flag{Type: String, Name: flagkey.FnArgs, Usage: "Args to be passed to the command on the container. If not specified , the ones defined in the image are used"}
+	FnEntryPoint            = Flag{Type: String, Name: flagkey.FnEntrypoint, Aliases: []string{"entry"}, Usage: "Entry point for environment v2 to load with"}
+	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
+	FnSecret                = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the secrets will be replaced by the provided list of secrets."}
+	FnCfgMap                = Flag{Type: StringSlice, Name: flagkey.FnCfgMap, Usage: "Function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags. In case of fn update the configmaps will be replaced by the provided list of configmaps."}
+	FnExecutorType          = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
+	FnExecutionTimeout      = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
+	FnLogPod                = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
+	FnLogFollow             = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
+	FnLogDetail             = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
+	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default) or loki", DefaultValue: "kubernetes"}
+	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as loki"}
+	FnLogCount              = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
+	FnLogRequestID          = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
+	FnLogTraceID            = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
+	FnLogLevel              = Flag{Type: String, Name: flagkey.FnLogLevel, Usage: "Filter logs by level, e.g. error (loki dbtype)"}
+	NamespacePod            = Flag{Type: String, Name: flagkey.NamespacePod, Usage: "Namespace in which function's pod are created. If not specified, function's namespace is used. Note: version <1.18 used fission-function as pod's default ns."}
+	FnTestBody              = Flag{Type: String, Name: flagkey.FnTestBody, Short: "b", Usage: "Request body"}
+	FnTestTimeout           = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
+	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
+	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
+	FnTestAsync             = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "Invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
+	FnTestAlias             = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
+	FnTestVersion           = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
+	// RFC-0025 `fission fn pods --alias`/`--version`: filter the pod list to
+	// one alias's resolved target or a pinned FunctionVersion. The flag names
+	// (flagkey.FnTestAlias/FnTestVersion, "alias"/"version") are reused from
+	// `fn test`; flag names are scoped per-subcommand, so this is safe.
+	FnPodsAlias            = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "List only pods for a specific alias's (e.g. prod) resolved version; mutually exclusive with --version"}
+	FnPodsVersion          = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "List only pods for a specific pinned FunctionVersion; mutually exclusive with --alias"}
+	FnIdleTimeout          = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
+	FnStreaming            = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
+	FnStreamingProtocol    = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
+	FnStreamingIdleTimeout = Flag{Type: Int, Name: flagkey.FnStreamingIdleTimeout, Usage: "Idle timeout (seconds) for a streaming response before it is aborted; reset on each chunk", DefaultValue: 60}
+	FnStreamingMaxDuration = Flag{Type: Int, Name: flagkey.FnStreamingMaxDuration, Usage: "Hard ceiling (seconds) on total streaming response lifetime; 0 means no ceiling (the idle timeout governs)", DefaultValue: 0}
+	FnExposeAsMCP          = Flag{Type: Bool, Name: flagkey.FnExposeAsMCP, Usage: "Advertise this function as a Model Context Protocol (MCP) tool on the MCP server"}
+	FnToolDescription      = Flag{Type: String, Name: flagkey.FnToolDescription, Usage: "Agent-facing tool description (required with --expose-as-mcp)"}
+	FnToolInputSchema      = Flag{Type: String, Name: flagkey.FnToolInputSchema, Usage: "Path to a JSON Schema file describing the tool's arguments; advertised verbatim as the MCP tool inputSchema"}
+	FnToolName             = Flag{Type: String, Name: flagkey.FnToolName, Usage: "Override the advertised MCP tool name (defaults to <namespace>-<function name>)"}
+	FnConcurrency          = Flag{Type: Int, Name: flagkey.FnConcurrency, Aliases: []string{"con"}, Usage: "Maximum number of pods specialized concurrently to serve requests (Only valid for executortype; `poolmgr`)", DefaultValue: 500}
+	FnRequestsPerPod       = Flag{Type: Int, Name: flagkey.FnRequestsPerPod, Aliases: []string{"rpp"}, Usage: "Maximum number of concurrent requests that can be served by a specialized pod (Only valid for executortype; `poolmgr`)", DefaultValue: 1}
+	FnOnceOnly             = Flag{Type: Bool, Name: flagkey.FnOnceOnly, Aliases: []string{"yolo"}, Usage: "Specifies if specialized pod will serve exactly one request in its lifetime (Only valid for executortype; `poolmgr`)"}
+	FnSubPath              = Flag{Type: String, Name: flagkey.FnSubPath, Usage: "Sub Path to check if function internally supports routing"}
+	FnRunEnvVersion        = Flag{Type: Int, Name: flagkey.FnRunEnvVersion, Usage: "Environment API version of the runtime image when running locally with --image (ignored when --env resolves it)", DefaultValue: 2}
+	FnRunKeep              = Flag{Type: Bool, Name: flagkey.FnRunKeep, Usage: "Keep the local function container and mount running after the invocation instead of tearing it down"}
+	FnRunWatch             = Flag{Type: Bool, Name: flagkey.FnRunWatch, Short: "w", Usage: "Serve the function locally and re-specialize on source change (hot reload); env executors only"}
+	FnRunDebugPort         = Flag{Type: Int, Name: flagkey.FnRunDebugPort, Usage: "Publish an additional container port for a debugger (delve/debugpy) to attach to"}
+	FnRunEnvVar            = Flag{Type: StringSlice, Name: flagkey.FnRunEnvVar, Short: "e", Usage: "Set a runtime env var KEY=VALUE in the local container (repeatable)"}
+	FnRunEnvFile           = Flag{Type: String, Name: flagkey.FnRunEnvFile, Usage: "Read runtime env vars from a file (one KEY=VALUE per line); -e overrides"}
+	FnRunBuild             = Flag{Type: Bool, Name: flagkey.FnRunBuild, Usage: "Compile the source with the environment builder image before running (compiled environments)"}
+	FnRunBuilderImage      = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
+	FnLogAllPods           = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
+	// RFC-0025 `fission fn logs --alias`/`--version`: same resolution as
+	// FnPodsAlias/FnPodsVersion above, restricting which pods' logs are read.
+	// Only the kubernetes dbtype applies this filter; the loki dbtype warns
+	// and ignores it (same gating as --request-id/--trace-id/--level, which
+	// only loki applies).
+	FnLogAlias               = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Show logs for a specific alias's (e.g. prod) resolved version instead of the live function; mutually exclusive with --version; kubernetes dbtype only"}
+	FnLogVersion             = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Show logs for a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias; kubernetes dbtype only"}
 	FnRetainPods             = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 	FnProvisionedConcurrency = Flag{Type: Int, Name: flagkey.FnProvisionedConcurrency, Usage: "Number of warm specialized pods to maintain eagerly (poolmgr only). 0 (default)=no provisioned concurrency", DefaultValue: 0}
 	FnVersioning             = Flag{Type: String, Name: flagkey.FnVersioning, Usage: "Opt the function into immutable version snapshots and named aliases; one of 'auto' (mint a version on every runtime-affecting update), 'manual' (mint only on `fission fn publish`), or 'off' (disable, update only)"}
