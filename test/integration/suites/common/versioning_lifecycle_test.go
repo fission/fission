@@ -15,7 +15,7 @@
 // version was published under an Environment generation the live
 // Environment has since moved past). Opting a Function into RFC-0025
 // versioning goes through the CLI's `fission fn update --versioning
-// auto|manual|off [--retain N]` surface (pkg/fission-cli/cmd/function/
+// auto|manual|off [--retain-versions N]` surface (pkg/fission-cli/cmd/function/
 // create.go's getVersioningConfig, shared by create and update) -- see
 // setVersioningCLI below -- exercising the real flag end to end rather than
 // patching Spec.Versioning through the typed clientset as this file did
@@ -39,18 +39,18 @@ import (
 )
 
 // setVersioningCLI opts fnName into RFC-0025 versioning via `fission fn
-// update --name <fn> --versioning <mode> [--retain <n>]` -- the CLI surface
-// added on top of the phase-1/2/3 primitives this file exercises (see the
-// package doc comment above). Every call site in this file runs this only
-// after ns.WaitForFunction has already settled the Function's post-create
-// defaulting round-trip, so a single CLI update (unlike a bare clientset
-// .Update() reached for before this flag existed) does not need its own
-// Conflict retry.
+// update --name <fn> --versioning <mode> [--retain-versions <n>]` -- the CLI
+// surface added on top of the phase-1/2/3 primitives this file exercises
+// (see the package doc comment above). Every call site in this file runs
+// this only after ns.WaitForFunction has already settled the Function's
+// post-create defaulting round-trip, so a single CLI update (unlike a bare
+// clientset .Update() reached for before this flag existed) does not need
+// its own Conflict retry.
 func setVersioningCLI(t *testing.T, ctx context.Context, ns *framework.TestNamespace, fnName, mode string, retain *int) {
 	t.Helper()
 	args := []string{"fn", "update", "--name", fnName, "--versioning", mode}
 	if retain != nil {
-		args = append(args, "--retain", strconv.Itoa(*retain))
+		args = append(args, "--retain-versions", strconv.Itoa(*retain))
 	}
 	ns.CLI(t, ctx, args...)
 }
@@ -383,11 +383,11 @@ func TestEnvDriftE2E(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. --versioning/--retain CLI flag surface (create + every mode transition)
+// 4. --versioning/--retain-versions CLI flag surface (create + every mode transition)
 // ---------------------------------------------------------------------------
 
 // TestVersioningModesCLI exercises the `fission fn create/update --versioning
-// auto|manual|off [--retain N]` flag surface itself end to end
+// auto|manual|off [--retain-versions N]` flag surface itself end to end
 // (pkg/fission-cli/cmd/function/create.go's getVersioningConfig) -- distinct
 // from TestAutoPublishLifecycle/TestRetentionSweepE2E above, which exercise
 // the reconcilers' BEHAVIOR once versioning is already on via `fn update`;
@@ -397,7 +397,8 @@ func TestEnvDriftE2E(t *testing.T) {
 // `fn update`) mints nothing on --code but does on `fn publish`; flipping to
 // auto via `fn update --versioning auto` makes the next --code update
 // self-mint; flipping to off clears Spec.Versioning and stops further
-// minting; --retain wires Spec.Versioning.Retain and is honored by a sweep.
+// minting; --retain-versions wires Spec.Versioning.Retain and is honored by
+// a sweep.
 func TestVersioningModesCLI(t *testing.T) {
 	t.Parallel()
 
@@ -480,21 +481,21 @@ func TestVersioningModesCLI(t *testing.T) {
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", code3)
 	assertVersionCountStable(t, ctx, ns, fnName, countAfterOff, 20*time.Second)
 
-	// --- --retain wires Spec.Versioning.Retain, and a sweep honors it ---
+	// --- --retain-versions wires Spec.Versioning.Retain, and a sweep honors it ---
 	retain := 2
 	setVersioningCLI(t, ctx, ns, fnName, "manual", &retain)
 	fn, err = fc.Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, fn.Spec.Versioning)
 	assert.Equal(t, fv1.VersioningModeManual, fn.Spec.Versioning.Mode)
-	require.NotNilf(t, fn.Spec.Versioning.Retain, "--retain 2 must set Spec.Versioning.Retain")
+	require.NotNilf(t, fn.Spec.Versioning.Retain, "--retain-versions 2 must set Spec.Versioning.Retain")
 	assert.EqualValues(t, 2, *fn.Spec.Versioning.Retain)
 
 	// v1/v2 above are already unaliased; two more manual publishes push the
 	// unaliased count to 4, past the retain-2 floor -- the automatic
 	// RetentionGCReconciler (full sweep-vs-alias coverage: TestRetentionSweepE2E)
-	// must bring it back down to 2, proving --retain's spec wiring actually
-	// feeds the sweep.
+	// must bring it back down to 2, proving --retain-versions's spec wiring
+	// actually feeds the sweep.
 	code4 := writeNodeReturning(t, "vmodes-v4", "vmodes-v4!\n")
 	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--code", code4)
 	out = ns.CLI(t, ctx, "fn", "publish", "--name", fnName, "--wait")

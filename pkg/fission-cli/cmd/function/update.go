@@ -137,9 +137,9 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
-	// --versioning toggles the versioning config; 'off' clears it. --retain
-	// merges onto the existing (or newly-set) config and requires versioning
-	// to be enabled either way.
+	// --versioning toggles the versioning config; 'off' clears it.
+	// --retain-versions merges onto the existing (or newly-set) config and
+	// requires versioning to be enabled either way.
 	function.Spec.Versioning, err = getVersioningConfig(input, function.Spec.Versioning)
 	if err != nil {
 		return err

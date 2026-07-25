@@ -115,9 +115,9 @@ var (
 	FnTestTimeout            = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
 	FnTestHeader             = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
 	FnTestQuery              = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
-	FnTestAsync              = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "RFC-0024: invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
-	FnTestAlias              = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "RFC-0025: test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
-	FnTestVersion            = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "RFC-0025: test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
+	FnTestAsync              = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "Invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
+	FnTestAlias              = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
+	FnTestVersion            = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
 	FnIdleTimeout            = Flag{Type: Int, Name: flagkey.FnIdleTimeout, Usage: "The length of time (in seconds) that a function is idle before pod(s) are eligible for recycling", DefaultValue: 120}
 	FnStreaming              = Flag{Type: Bool, Name: flagkey.FnStreaming, Usage: "Enable streaming (SSE/chunked/WebSocket) responses for this function; the response is flushed incrementally and not cut by the function timeout"}
 	FnStreamingProtocol      = Flag{Type: String, Name: flagkey.FnStreamingProtocol, Usage: "Streaming protocol when --streaming is set; one of 'auto', 'sse', 'chunked', 'websocket'", DefaultValue: "auto"}
@@ -141,9 +141,9 @@ var (
 	FnRunBuilderImage        = Flag{Type: String, Name: flagkey.FnRunBuilderImage, Usage: "Builder image to use with --build when running cluster-less (defaults to the environment's builder image)"}
 	FnLogAllPods             = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods             = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
-	FnProvisionedConcurrency = Flag{Type: Int, Name: flagkey.FnProvisionedConcurrency, Usage: "Number of warm specialized pods to maintain eagerly (RFC-26; poolmgr only). 0 (default)=no provisioned concurrency", DefaultValue: 0}
+	FnProvisionedConcurrency = Flag{Type: Int, Name: flagkey.FnProvisionedConcurrency, Usage: "Number of warm specialized pods to maintain eagerly (poolmgr only). 0 (default)=no provisioned concurrency", DefaultValue: 0}
 	FnVersioning             = Flag{Type: String, Name: flagkey.FnVersioning, Usage: "Opt the function into immutable version snapshots and named aliases; one of 'auto' (mint a version on every runtime-affecting update), 'manual' (mint only on `fission fn publish`), or 'off' (disable, update only)"}
-	FnRetain                 = Flag{Type: Int, Name: flagkey.FnRetain, Usage: "Number of unaliased versions to keep per function before older ones are garbage collected (requires --versioning auto|manual, or an existing versioning config)"}
+	FnRetainVersions         = Flag{Type: Int, Name: flagkey.FnRetainVersions, Usage: "Number of unaliased versions to keep per function before older ones are garbage collected (requires --versioning auto|manual, or an existing versioning config); disambiguates from --retainpods, which retains specialized pods rather than function versions"}
 
 	// RFC-0027 `fission topic` dev commands.
 	TopicName        = Flag{Type: String, Name: flagkey.TopicName, Usage: "Topic name"}
@@ -153,13 +153,13 @@ var (
 	TopicLimit       = Flag{Type: Int, Name: flagkey.TopicLimit, Usage: "Maximum events to peek", DefaultValue: 10}
 
 	// RFC-0024 async dead-letter-queue admin flags.
-	DlqQueue = Flag{Type: String, Name: flagkey.DlqQueue, Usage: "Dead-letter queue to operate on: empty for async invocations, or an RFC-0027 broker egress queue (mq-egress-<type>, e.g. mq-egress-kafka)"}
+	DlqQueue = Flag{Type: String, Name: flagkey.DlqQueue, Usage: "Dead-letter queue to operate on: empty for async invocations, or a broker egress queue (mq-egress-<type>, e.g. mq-egress-kafka)"}
 	DlqID    = Flag{Type: String, Name: flagkey.DlqID, Usage: "Durable invocation id of a dead-lettered async invocation"}
 	DlqAll   = Flag{Type: Bool, Name: flagkey.DlqAll, Usage: "Apply to every dead-lettered invocation"}
 	DlqLimit = Flag{Type: Int, Name: flagkey.DlqLimit, Usage: "Maximum number of dead-lettered invocations to list", DefaultValue: 100}
 
 	// RFC-0023 keyed-state config (fn create/update).
-	FnState              = Flag{Type: Bool, Name: flagkey.FnState, Usage: "Opt the function into the keyed-state API (RFC-0023)"}
+	FnState              = Flag{Type: Bool, Name: flagkey.FnState, Usage: "Opt the function into the keyed-state API"}
 	FnStateKeyspace      = Flag{Type: String, Name: flagkey.FnStateKeyspace, Usage: "State keyspace name (defaults to the function name; explicit so a rename keeps the data)"}
 	FnStateMaxKeys       = Flag{Type: Int, Name: flagkey.FnStateMaxKeys, Usage: "Max live keys in the keyspace (0 = platform default)"}
 	FnStateMaxValueBytes = Flag{Type: Int, Name: flagkey.FnStateMaxValueBytes, Usage: "Max size of one state value in bytes (0 = platform default)"}
@@ -175,20 +175,20 @@ var (
 	StateIfVersion = Flag{Type: Int, Name: flagkey.StateIfVersion, Usage: "Compare-and-swap version precondition (0 = create-only for set; unset = unconditional)"}
 
 	// RFC-0024 async invocation config (fn create/update).
-	FnAsyncMaxAttempts = Flag{Type: Int, Name: flagkey.FnAsyncMaxAttempts, Usage: "Async delivery attempt budget before dead-lettering (RFC-0024)"}
-	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered (RFC-0024)"}
-	FnAsyncOnSuccess   = Flag{Type: String, Name: flagkey.FnAsyncOnSuccess, Usage: "Same-namespace function to invoke with the result after a successful async delivery (RFC-0024); empty clears it"}
-	FnAsyncOnFailure   = Flag{Type: String, Name: flagkey.FnAsyncOnFailure, Usage: "Same-namespace function to invoke with the result after a permanent async failure (RFC-0024); empty clears it"}
+	FnAsyncMaxAttempts = Flag{Type: Int, Name: flagkey.FnAsyncMaxAttempts, Usage: "Async delivery attempt budget before dead-lettering"}
+	FnAsyncMaxAge      = Flag{Type: Duration, Name: flagkey.FnAsyncMaxAge, Usage: "Max time an async invocation may wait for successful delivery before it is dead-lettered"}
+	FnAsyncOnSuccess   = Flag{Type: String, Name: flagkey.FnAsyncOnSuccess, Usage: "Same-namespace function to invoke with the result after a successful async delivery; empty clears it"}
+	FnAsyncOnFailure   = Flag{Type: String, Name: flagkey.FnAsyncOnFailure, Usage: "Same-namespace function to invoke with the result after a permanent async failure; empty clears it"}
 	// RFC-0027 statestore topic destinations. Mutually exclusive per condition
 	// with the function-destination flag above.
-	FnAsyncOnSuccessTopic = Flag{Type: String, Name: flagkey.FnAsyncOnSuccessTopic, Usage: "Statestore topic to publish the result envelope to after a successful async delivery (RFC-0027); empty clears it"}
-	FnAsyncOnFailureTopic = Flag{Type: String, Name: flagkey.FnAsyncOnFailureTopic, Usage: "Statestore topic to publish the result envelope to after a permanent async failure (RFC-0027); empty clears it"}
+	FnAsyncOnSuccessTopic = Flag{Type: String, Name: flagkey.FnAsyncOnSuccessTopic, Usage: "Statestore topic to publish the result envelope to after a successful async delivery; empty clears it"}
+	FnAsyncOnFailureTopic = Flag{Type: String, Name: flagkey.FnAsyncOnFailureTopic, Usage: "Statestore topic to publish the result envelope to after a permanent async failure; empty clears it"}
 	// Termination Grace Period configurable at function creation/update only for container functions
 	FnTerminationGracePeriod = Flag{Type: Int64, Name: flagkey.FnGracePeriod, Usage: "Grace time (in seconds) for pod to perform connection draining before termination (only non-negative values considered)", DefaultValue: 360}
 
 	HtName              = Flag{Type: String, Name: flagkey.HtName, Usage: "HTTP trigger name"}
 	HtMethod            = Flag{Type: StringSlice, Name: flagkey.HtMethod, Usage: "HTTP Methods: GET,POST,PUT,DELETE,HEAD. To mention single method: --method GET and for multiple methods --method GET --method POST. [DEPRECATED for 'fn create', use 'route create' instead]", DefaultValue: []string{http.MethodGet}}
-	HtInvocationMode    = Flag{Type: String, Name: flagkey.HtInvocationMode, Usage: "RFC-0024: 'async' makes every request through this trigger asynchronous (durable 202 + invocation id); empty is the default synchronous mode"}
+	HtInvocationMode    = Flag{Type: String, Name: flagkey.HtInvocationMode, Usage: "'async' makes every request through this trigger asynchronous (durable 202 + invocation id); empty is the default synchronous mode"}
 	HtUrl               = Flag{Type: String, Name: flagkey.HtUrl, Usage: "URL pattern (supports {var} and {var:regexp} path templates) [DEPRECATED for 'fn create', use 'route create' instead]"}
 	HtHost              = Flag{Type: String, Name: flagkey.HtHost, Usage: "Use --ingressrule instead", Deprecated: true, Substitute: flagkey.HtIngressRule}
 	HtIngress           = Flag{Type: Bool, Name: flagkey.HtIngress, Usage: "Creates ingress with same URL [DEPRECATED: the Kubernetes Ingress API is frozen, use --route-provider gateway instead]"}
@@ -230,7 +230,7 @@ var (
 
 	MqtName            = Flag{Type: String, Name: flagkey.MqtName, Usage: "Message queue trigger name"}
 	MqtFnName          = Flag{Type: String, Name: flagkey.MqtFnName, Usage: "Function name"}
-	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtkind \"fission\" => kafka, statestore (the RFC-0027 built-in, no broker)\n\t\t\t\t\t For mqtkind \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, nats-jetstream, rabbitmq, redis", DefaultValue: "kafka"}
+	MqtMQType          = Flag{Type: String, Name: flagkey.MqtMQType, Usage: "For mqtkind \"fission\" => kafka, statestore (the built-in, no-broker option)\n\t\t\t\t\t For mqtkind \"keda\" => kafka, aws-sqs-queue, aws-kinesis-stream, gcp-pubsub, stan, nats-jetstream, rabbitmq, redis", DefaultValue: "kafka"}
 	MqtTopic           = Flag{Type: String, Name: flagkey.MqtTopic, Usage: "Message queue Topic the trigger listens on"}
 	MqtRespTopic       = Flag{Type: String, Name: flagkey.MqtRespTopic, Usage: "Topic that the function response is sent on (response discarded if unspecified)"}
 	MqtErrorTopic      = Flag{Type: String, Name: flagkey.MqtErrorTopic, Usage: "Topic that the function error messages are sent to (errors discarded if unspecified"}

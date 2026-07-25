@@ -122,9 +122,10 @@ type FunctionOptions struct {
 	// <mode>` (RFC-0025 opt-in; pkg/fission-cli/cmd/function/create.go's
 	// getVersioningConfig, shared by create and update).
 	Versioning string
-	// Retain, when > 0, passes `--retain <n>` alongside Versioning (requires
-	// Versioning to be auto|manual).
-	Retain int
+	// RetainVersions, when > 0, passes `--retain-versions <n>` alongside
+	// Versioning (requires Versioning to be auto|manual). Named to disambiguate
+	// from RetainPods, which retains specialized pods rather than versions.
+	RetainVersions int
 }
 
 // CreateFunction creates a Function via the CLI from either Code or Src. The
@@ -257,8 +258,8 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	if opts.Versioning != "" {
 		args = append(args, "--versioning", opts.Versioning)
 	}
-	if opts.Retain > 0 {
-		args = append(args, "--retain", strconv.Itoa(opts.Retain))
+	if opts.RetainVersions > 0 {
+		args = append(args, "--retain-versions", strconv.Itoa(opts.RetainVersions))
 	}
 	ns.CLI(t, ctx, args...)
 

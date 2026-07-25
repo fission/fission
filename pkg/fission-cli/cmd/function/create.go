@@ -205,17 +205,17 @@ func destinationFromFlags(input cli.Input, fnKey, topicKey string, current *fv1.
 }
 
 // getVersioningConfig builds the RFC-0025 VersioningConfig from the
-// --versioning/--retain flags, merging onto existing (the function's current
-// config, or nil on create) so an update that sets only --retain keeps the
-// mode, and one that sets only --versioning keeps a prior Retain. Neither
-// flag set returns existing untouched (nil on create). --versioning off
-// clears the config (on create it's a no-op, since existing is already nil).
-// --retain requires versioning to already be enabled -- either --versioning
-// auto|manual in the same call, or an existing config -- since Retain only
-// means something alongside a Mode.
+// --versioning/--retain-versions flags, merging onto existing (the function's
+// current config, or nil on create) so an update that sets only
+// --retain-versions keeps the mode, and one that sets only --versioning keeps
+// a prior Retain. Neither flag set returns existing untouched (nil on
+// create). --versioning off clears the config (on create it's a no-op, since
+// existing is already nil). --retain-versions requires versioning to already
+// be enabled -- either --versioning auto|manual in the same call, or an
+// existing config -- since Retain only means something alongside a Mode.
 func getVersioningConfig(input cli.Input, existing *fv1.VersioningConfig) (*fv1.VersioningConfig, error) {
 	versioningSet := input.IsSet(flagkey.FnVersioning)
-	retainSet := input.IsSet(flagkey.FnRetain)
+	retainSet := input.IsSet(flagkey.FnRetainVersions)
 	if !versioningSet && !retainSet {
 		return existing, nil
 	}
@@ -230,7 +230,7 @@ func getVersioningConfig(input cli.Input, existing *fv1.VersioningConfig) (*fv1.
 			}
 		case "off":
 			if retainSet {
-				return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetain)
+				return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetainVersions)
 			}
 			return nil, nil
 		default:
@@ -238,15 +238,15 @@ func getVersioningConfig(input cli.Input, existing *fv1.VersioningConfig) (*fv1.
 		}
 	} else {
 		if existing == nil {
-			return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetain)
+			return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetainVersions)
 		}
 		vc = existing.DeepCopy()
 	}
 
 	if retainSet {
-		retain := input.Int(flagkey.FnRetain)
+		retain := input.Int(flagkey.FnRetainVersions)
 		if retain < 1 {
-			return nil, fmt.Errorf("--%s must be >= 1", flagkey.FnRetain)
+			return nil, fmt.Errorf("--%s must be >= 1", flagkey.FnRetainVersions)
 		}
 		vc.Retain = new(retain)
 	}

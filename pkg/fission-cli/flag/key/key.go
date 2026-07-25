@@ -92,8 +92,8 @@ const (
 	FnProvisionedConcurrency = "provisioned-concurrency"
 
 	// RFC-0025 versioning opt-in (fn create/update).
-	FnVersioning = "versioning"
-	FnRetain     = "retain"
+	FnVersioning     = "versioning"
+	FnRetainVersions = "retain-versions"
 
 	DlqID    = "id"
 	DlqAll   = "all"
