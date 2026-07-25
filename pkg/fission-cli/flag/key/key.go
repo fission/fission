@@ -91,6 +91,10 @@ const (
 	FnRetainPods             = "retainpods"
 	FnProvisionedConcurrency = "provisioned-concurrency"
 
+	// RFC-0025 versioning opt-in (fn create/update).
+	FnVersioning = "versioning"
+	FnRetain     = "retain"
+
 	DlqID    = "id"
 	DlqAll   = "all"
 	DlqLimit = "limit"

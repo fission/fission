@@ -142,6 +142,8 @@ var (
 	FnLogAllPods             = Flag{Type: Bool, Name: flagkey.FnLogAllPods, Usage: "Get all pod's logs in the function."}
 	FnRetainPods             = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 	FnProvisionedConcurrency = Flag{Type: Int, Name: flagkey.FnProvisionedConcurrency, Usage: "Number of warm specialized pods to maintain eagerly (RFC-26; poolmgr only). 0 (default)=no provisioned concurrency", DefaultValue: 0}
+	FnVersioning             = Flag{Type: String, Name: flagkey.FnVersioning, Usage: "Opt the function into immutable version snapshots and named aliases; one of 'auto' (mint a version on every runtime-affecting update), 'manual' (mint only on `fission fn publish`), or 'off' (disable, update only)"}
+	FnRetain                 = Flag{Type: Int, Name: flagkey.FnRetain, Usage: "Number of unaliased versions to keep per function before older ones are garbage collected (requires --versioning auto|manual, or an existing versioning config)"}
 
 	// RFC-0027 `fission topic` dev commands.
 	TopicName        = Flag{Type: String, Name: flagkey.TopicName, Usage: "Topic name"}

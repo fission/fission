@@ -204,6 +204,56 @@ func destinationFromFlags(input cli.Input, fnKey, topicKey string, current *fv1.
 	}
 }
 
+// getVersioningConfig builds the RFC-0025 VersioningConfig from the
+// --versioning/--retain flags, merging onto existing (the function's current
+// config, or nil on create) so an update that sets only --retain keeps the
+// mode, and one that sets only --versioning keeps a prior Retain. Neither
+// flag set returns existing untouched (nil on create). --versioning off
+// clears the config (on create it's a no-op, since existing is already nil).
+// --retain requires versioning to already be enabled -- either --versioning
+// auto|manual in the same call, or an existing config -- since Retain only
+// means something alongside a Mode.
+func getVersioningConfig(input cli.Input, existing *fv1.VersioningConfig) (*fv1.VersioningConfig, error) {
+	versioningSet := input.IsSet(flagkey.FnVersioning)
+	retainSet := input.IsSet(flagkey.FnRetain)
+	if !versioningSet && !retainSet {
+		return existing, nil
+	}
+
+	var vc *fv1.VersioningConfig
+	if versioningSet {
+		switch mode := input.String(flagkey.FnVersioning); mode {
+		case "auto", "manual":
+			vc = &fv1.VersioningConfig{Mode: fv1.VersioningMode(mode)}
+			if existing != nil {
+				vc.Retain = existing.Retain
+			}
+		case "off":
+			if retainSet {
+				return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetain)
+			}
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("--%s must be one of auto, manual, off", flagkey.FnVersioning)
+		}
+	} else {
+		if existing == nil {
+			return nil, fmt.Errorf("use --%s auto|manual with --%s", flagkey.FnVersioning, flagkey.FnRetain)
+		}
+		vc = existing.DeepCopy()
+	}
+
+	if retainSet {
+		retain := input.Int(flagkey.FnRetain)
+		if retain < 1 {
+			return nil, fmt.Errorf("--%s must be >= 1", flagkey.FnRetain)
+		}
+		vc.Retain = new(retain)
+	}
+
+	return vc, nil
+}
+
 func (opts *CreateSubCommand) do(input cli.Input) error {
 	err := opts.complete(input)
 	if err != nil {
@@ -408,6 +458,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	versioningConfig, err := getVersioningConfig(input, nil)
+	if err != nil {
+		return err
+	}
+
 	opts.function = &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
@@ -424,6 +479,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Tool:                   toolConfig,
 			State:                  getStateConfig(input, nil),
 			Invocation:             invocation,
+			Versioning:             versioningConfig,
 			ProvisionedConcurrency: getProvisionedConcurrencyConfig(input),
 			Concurrency:            fnConcurrency,
 			RequestsPerPod:         requestsPerPod,
