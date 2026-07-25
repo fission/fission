@@ -22,7 +22,10 @@ func Commands() *cobra.Command {
 		Short: "Create a function alias",
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.AliasName, flag.AliasFunction},
-		Optional: []flag.Flag{flag.AliasVersion, flag.AliasPackageDigest, flag.AliasWeight, flag.AliasSecondaryVersion},
+		Optional: []flag.Flag{
+			flag.AliasVersion, flag.AliasPackageDigest, flag.AliasWeight, flag.AliasSecondaryVersion,
+			flag.AliasWait, flag.WaitTimeout,
+		},
 	})
 
 	getCmd := wrapper.SubCommand(&cobra.Command{

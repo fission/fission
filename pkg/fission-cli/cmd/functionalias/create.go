@@ -78,11 +78,24 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	_, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(opts.alias.Namespace).Create(input.Context(), opts.alias, metav1.CreateOptions{})
+	created, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(opts.alias.Namespace).Create(input.Context(), opts.alias, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("error creating function alias: %w", err)
 	}
 
-	fmt.Printf("function alias '%v' created\n", opts.alias.Name)
+	fmt.Printf("function alias '%v' created\n", created.Name)
+
+	if input.Bool(flagkey.AliasWait) {
+		timeout := input.Duration(flagkey.WaitTimeout)
+		// created.Spec.Version is empty for a PackageDigest-pinned alias;
+		// WaitForResolved treats that as "just wait for Resolved=True" (see
+		// its doc comment) since the caller cannot name the target version
+		// the async digest resolution will land on.
+		if err := WaitForResolved(input.Context(), opts.Client().FissionClientSet, created.Namespace, created.Name, created.Spec.Version, timeout); err != nil {
+			return fmt.Errorf("error waiting for function alias to resolve: %w", err)
+		}
+		fmt.Printf("function alias '%v' resolved\n", created.Name)
+	}
+
 	return nil
 }
