@@ -168,12 +168,6 @@ type stepOutcome struct {
 // RollForwardOrBack: instead of stopping a ticker or closing a quit channel it
 // returns a stepOutcome the reconciler maps onto a ctrl.Result and a status
 // write.
-//
-// INVARIANT: the terminal Succeeded outcome requires at least one completed
-// evaluation window in which the new function actually carried traffic. The
-// failure evaluation above is skipped while the new function's weight is 0
-// (nothing to observe), so a single tick must never both introduce first
-// traffic and terminally succeed — see rollForward's done gate.
 func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (stepOutcome, error) {
 	log := m.logger.WithValues("name", cfg.Name, "namespace", cfg.Namespace)
 
@@ -283,6 +277,18 @@ func triggerRouteInfo(trigger *fv1.HTTPTrigger) (path string, methods []string) 
 // that is the shim's one write that can produce an AliasReconciler History
 // append; every other write (progression steps, and the terminal FAILURE
 // write) leaves Spec.Version at cfg.Spec.OldFunction and so appends nothing.
+//
+// INVARIANT: the terminal promotion write requires at least one completed
+// evaluation window in which the secondary actually carried traffic. The
+// failure evaluation below is skipped at primaryWeight == 100 (the secondary
+// has no traffic to observe), so a single tick must never both introduce
+// first traffic AND terminally promote: rollForwardAlias clamps any step
+// taken FROM primaryWeight == 100 to a weighted, non-terminal state — with
+// WeightIncrement >= 100 that is {Weight: 0, SecondaryVersion: set}, all
+// traffic on the secondary but still rollback-able — so the next tick's
+// evaluation gates the promotion. Reaching rollForwardAlias with
+// primaryWeight < 100 implies this tick's evaluation ran and passed (the
+// error / no-traffic / threshold-crossed branches all return first).
 func (m *canaryConfigMgr) stepAlias(ctx context.Context, cfg *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (stepOutcome, error) {
 	aliasName := trigger.Spec.FunctionReference.Alias
 	log := m.logger.WithValues("name", cfg.Name, "namespace", cfg.Namespace, "alias", aliasName)
@@ -424,25 +430,37 @@ func (m *canaryConfigMgr) validateAliasRollout(ctx context.Context, cfg *fv1.Can
 
 // rollForwardAlias steps WeightIncrement percent of the primary's share onto
 // the alias's secondary target (cfg.Spec.NewFunction), clamping at 0. It
-// reports whether the primary has reached weight 0 (the rollout is done).
+// reports whether the rollout is done (the terminal promotion was written).
 // Per stepAlias's role mapping, Spec.Version is written as
 // cfg.Spec.OldFunction on every progression step — the same value it already
 // holds, so this never produces an AliasReconciler History append — and is
 // repointed to cfg.Spec.NewFunction ONLY on the terminal "done" write, the
 // shim's single History-producing write per rollout.
+//
+// The terminal branch is gated on primaryWeight < 100, enforcing stepAlias's
+// invariant: a step taken FROM the unevaluated start state (primaryWeight ==
+// 100, where stepAlias skips the failure evaluation) must land on a weighted,
+// non-terminal state so the secondary is evaluated for at least one window
+// before it can be promoted. With WeightIncrement >= 100 that state is
+// {Weight: 0, SecondaryVersion: set} — all traffic to the secondary (the
+// router's 0/100 split always picks the secondary, see getCanaryBackend),
+// but Spec.Version still the OLD primary, so the next tick can still roll
+// back. Without this gate a WeightIncrement >= 100 canary would terminally
+// promote a 100%-failing secondary in its very first tick, with zero
+// observed evaluation windows.
 func (m *canaryConfigMgr) rollForwardAlias(ctx context.Context, cfg *fv1.CanaryConfig, alias *fv1.FunctionAlias) (bool, error) {
 	primaryWeight := 100
 	if alias.Spec.Weight != nil {
 		primaryWeight = *alias.Spec.Weight
 	}
 
-	if primaryWeight-cfg.Spec.WeightIncrement <= 0 {
+	if primaryWeight < 100 && primaryWeight-cfg.Spec.WeightIncrement <= 0 {
 		m.logger.Info("alias canary rollout complete; promoting secondary to primary",
 			"name", cfg.Name, "namespace", cfg.Namespace, "alias", alias.Name, "version", cfg.Spec.NewFunction)
 		return true, m.updateFunctionAliasWithRetries(ctx, alias.Namespace, alias.Name, cfg.Spec.NewFunction, nil, "")
 	}
 
-	newWeight := primaryWeight - cfg.Spec.WeightIncrement
+	newWeight := max(0, primaryWeight-cfg.Spec.WeightIncrement)
 	m.logger.Info("stepped down alias primary weight",
 		"name", cfg.Name, "namespace", cfg.Namespace, "alias", alias.Name, "primary_weight", newWeight)
 	return false, m.updateFunctionAliasWithRetries(ctx, alias.Namespace, alias.Name, cfg.Spec.OldFunction, &newWeight, cfg.Spec.NewFunction)
@@ -488,16 +506,16 @@ func (m *canaryConfigMgr) updateFunctionAliasWithRetries(ctx context.Context, na
 // (the new function has reached 100% AND had traffic during an evaluated
 // window).
 //
-// INVARIANT: the terminal Succeeded outcome requires at least one completed
-// evaluation window in which the new function actually carried traffic.
-// step() skips the failure evaluation while the new function's weight is 0,
-// so a step FROM weight 0 must never report done even when WeightIncrement
-// >= 100 pushes the weight straight to 100 — the rollout stays Pending for
-// one more interval and the next tick's evaluation either confirms
-// (Succeeded) or rolls the traffic back (Failed). Without this gate a
-// WeightIncrement >= 100 canary would write terminal Succeeded — after which
-// the reconciler never re-evaluates or rolls back — with the new function's
-// very first traffic, zero windows observed.
+// Same invariant as rollForwardAlias: the terminal Succeeded outcome requires
+// at least one completed evaluation window in which the new function actually
+// carried traffic. step() skips the failure evaluation while the new
+// function's weight is 0, so a step FROM weight 0 must never report done even
+// when WeightIncrement >= 100 pushes the weight straight to 100 — the rollout
+// stays Pending for one more interval and the next tick's evaluation either
+// confirms (Succeeded) or rolls the traffic back (Failed). Without this gate
+// a WeightIncrement >= 100 canary would write terminal Succeeded — after
+// which the reconciler never re-evaluates or rolls back — with the new
+// function's very first traffic, zero windows observed.
 func (m *canaryConfigMgr) rollForward(ctx context.Context, cfg *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (bool, error) {
 	weights := trigger.Spec.FunctionReference.FunctionWeights
 	done := false

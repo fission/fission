@@ -170,6 +170,22 @@ func TestRollForward(t *testing.T) {
 		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
 		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
 	})
+
+	t.Run("increment >= 100 from zero shifts all traffic but is not done", func(t *testing.T) {
+		// The step that INTRODUCES first traffic must never also be the terminal
+		// one: step() skips the failure evaluation at weight 0, so done here
+		// would mean Succeeded with zero observed evaluation windows.
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		mgr, _, c := newTestEnv(&fakeFailureClient{}, trigger, cc)
+
+		done, err := mgr.rollForward(t.Context(), cc, trigger)
+		require.NoError(t, err)
+		assert.False(t, done, "a step from weight 0 must not report done — the next tick must evaluate first")
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
 }
 
 func TestRollbackWeights(t *testing.T) {
@@ -268,6 +284,50 @@ func TestStep(t *testing.T) {
 		got := getTrigger(t, c)
 		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
 		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 with failing new function never reports Succeeded", func(t *testing.T) {
+		// Regression for the single-tick promote bug: with WeightIncrement >= 100
+		// the first tick used to shift 0 -> 100 AND report Succeeded — a terminal
+		// status the reconciler never revisits — without ever evaluating the new
+		// function. Now the introducing tick stays Pending and the next tick's
+		// evaluation rolls a failing function back.
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		prom := &fakeFailureClient{pct: 50} // > threshold 10
+		mgr, _, c := newTestEnv(prom, trigger, cc)
+
+		// Tick 1: introduces traffic, no evaluation possible yet, not terminal.
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+		assert.Empty(t, prom.calls, "at weight 0 there is nothing to evaluate")
+		assert.Equal(t, 100, getTrigger(t, c).Spec.FunctionReference.FunctionWeights["new"])
+
+		// Tick 2: first evaluation window completed — threshold crossed, roll back.
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusFailed, out.terminalStatus)
+		require.Len(t, prom.calls, 1)
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 with healthy new function succeeds only after an evaluated window", func(t *testing.T) {
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		prom := &fakeFailureClient{pct: 5} // < threshold 10
+		mgr, _, c := newTestEnv(prom, trigger, cc)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out, "introducing tick must not be terminal")
+
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus)
+		require.Len(t, prom.calls, 1, "exactly one evaluated window before promotion")
+		assert.Equal(t, 100, getTrigger(t, c).Spec.FunctionReference.FunctionWeights["new"])
 	})
 }
 
@@ -495,6 +555,102 @@ func TestStepAlias(t *testing.T) {
 		assert.Equal(t, "orders-v2", got.Spec.Version, "promotion repoints the primary to the new version")
 		assert.Nil(t, got.Spec.Weight)
 		assert.Equal(t, "", got.Spec.SecondaryVersion)
+	})
+
+	t.Run("increment >= 100 clamps the first step to a weighted non-terminal state", func(t *testing.T) {
+		// Regression for the single-tick promote bug: WeightIncrement >= 100 used
+		// to make the very first tick write the terminal promotion ({Version:
+		// new, Weight: nil}) with the failure evaluation skipped entirely
+		// (primaryWeight was still 100). The step from the unevaluated state must
+		// clamp to {Weight: 0, SecondaryVersion: set}: all traffic on the
+		// secondary, but Spec.Version still the OLD primary so the next tick's
+		// evaluation can still roll back.
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(100, 10)
+		prom := &fakeFailureClient{}
+		mgr, _, c := newTestEnv(prom, trigger, cc, alias, oldVer, newVer)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out, "introducing tick must not be terminal")
+		assert.Empty(t, prom.calls, "at primary weight 100 there is nothing to evaluate")
+
+		got := getAliasByName(t, c, "prod")
+		assert.Equal(t, "orders-v1", got.Spec.Version, "primary must stay OLD — no unevaluated promotion")
+		require.NotNil(t, got.Spec.Weight)
+		assert.Equal(t, 0, *got.Spec.Weight, "clamped to a weighted 0/100 split, not the terminal write")
+		assert.Equal(t, "orders-v2", got.Spec.SecondaryVersion)
+	})
+
+	t.Run("increment >= 100 with failing secondary rolls back, never promotes", func(t *testing.T) {
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(100, 10)
+		prom := &fakeFailureClient{pct: 50} // > threshold 10 — secondary is failing
+		mgr, _, c := newTestEnv(prom, trigger, cc, alias, oldVer, newVer)
+
+		// Tick 1: clamped weighted step, evaluation skipped (no traffic yet).
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+
+		// Tick 2: first completed evaluation window — threshold crossed, roll back.
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusFailed, out.terminalStatus)
+		require.Len(t, prom.calls, 1)
+
+		got := getAliasByName(t, c, "prod")
+		assert.Equal(t, "orders-v1", got.Spec.Version, "failing secondary must never be promoted")
+		assert.Nil(t, got.Spec.Weight)
+		assert.Equal(t, "", got.Spec.SecondaryVersion)
+	})
+
+	t.Run("increment >= 100 with healthy secondary promotes only after an evaluated window", func(t *testing.T) {
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(100, 10)
+		prom := &fakeFailureClient{pct: 5} // < threshold 10 — secondary is healthy
+		mgr, _, c := newTestEnv(prom, trigger, cc, alias, oldVer, newVer)
+
+		// Tick 1: the intermediate weighted write, not the promotion.
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+		mid := getAliasByName(t, c, "prod")
+		assert.Equal(t, "orders-v1", mid.Spec.Version)
+		require.NotNil(t, mid.Spec.Weight)
+		assert.Equal(t, 0, *mid.Spec.Weight)
+		assert.Equal(t, "orders-v2", mid.Spec.SecondaryVersion)
+
+		// Tick 2: evaluation ran and passed — terminal promotion.
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus)
+		require.Len(t, prom.calls, 1, "exactly one evaluated window before promotion")
+
+		got := getAliasByName(t, c, "prod")
+		assert.Equal(t, "orders-v2", got.Spec.Version)
+		assert.Nil(t, got.Spec.Weight)
+		assert.Equal(t, "", got.Spec.SecondaryVersion)
+	})
+
+	t.Run("increment 50 happy path keeps its two-tick shape", func(t *testing.T) {
+		// Matches the integration suite's IncrementStep=50 rollout: 100 -> 50
+		// (first weighted step), evaluate at 50, then 50 -> terminal in the SAME
+		// tick as the passing evaluation — the invariant gate must not add an
+		// interval when the terminal step starts from an already-evaluated state.
+		trigger, cc, alias, oldVer, newVer := aliasCanaryFixtures(50, 10)
+		prom := &fakeFailureClient{pct: 5}
+		mgr, _, c := newTestEnv(prom, trigger, cc, alias, oldVer, newVer)
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+		mid := getAliasByName(t, c, "prod")
+		require.NotNil(t, mid.Spec.Weight)
+		assert.Equal(t, 50, *mid.Spec.Weight)
+
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus, "50 -> terminal must complete in the evaluation-passing tick")
+		require.Len(t, prom.calls, 1)
+		assert.Equal(t, "orders-v2", getAliasByName(t, c, "prod").Spec.Version)
 	})
 
 	t.Run("failure threshold crossed rolls back without changing version", func(t *testing.T) {
