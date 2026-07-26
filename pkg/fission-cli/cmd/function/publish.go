@@ -118,7 +118,7 @@ func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace,
 	}
 
 	if err := util.PollUntil(ctx, time.Second, check); err != nil {
-		if ctx.Err() != nil {
+		if util.PollEnded(err) {
 			return fmt.Errorf("%s waiting for package %s/%s build to finish: %w", util.PollDeadlineVerb(ctx), namespace, name, ctx.Err())
 		}
 		return err

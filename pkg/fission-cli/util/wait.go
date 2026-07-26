@@ -29,12 +29,11 @@ import (
 // terminal failure that should abort the wait immediately without waiting
 // out the rest of the deadline.
 //
-// On ctx ending, PollUntil returns ctx.Err() itself rather than a
-// caller-specific message: ctx.Err() is sticky (once non-nil it stays
-// non-nil), so a caller can reliably tell "PollUntil's own deadline/
-// cancellation ended the loop" apart from "check returned a terminal error"
-// by testing ctx.Err() != nil on return, and build its own message with
-// PollDeadlineVerb.
+// On ctx ending, PollUntil returns a *PollEndedError wrapping ctx.Err().
+// Callers classify the outcome with PollEnded, NOT by testing ctx.Err() on
+// return: ctx.Err() is sticky, so a genuine terminal check error that merely
+// coincides with ctx expiring would be misreported as a timeout by that
+// test, discarding the useful diagnostic.
 func PollUntil(ctx context.Context, interval time.Duration, check func(context.Context) (bool, error)) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -49,10 +48,29 @@ func PollUntil(ctx context.Context, interval time.Duration, check func(context.C
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return &PollEndedError{Err: ctx.Err()}
 		case <-ticker.C:
 		}
 	}
+}
+
+// PollEndedError marks that PollUntil's own ctx.Done branch ended the loop
+// (as opposed to check returning a terminal error).
+type PollEndedError struct{ Err error }
+
+func (e *PollEndedError) Error() string { return e.Err.Error() }
+func (e *PollEndedError) Unwrap() error { return e.Err }
+
+// PollEnded reports whether a PollUntil error means "the wait's deadline or
+// cancellation ended the poll" — either PollUntil's own Done branch fired, or
+// check surfaced an in-flight operation interrupted by ctx (an error wrapping
+// the context error). A terminal check error unrelated to ctx — even one that
+// races ctx expiring — reports false, so it surfaces verbatim.
+func PollEnded(err error) bool {
+	var ended *PollEndedError
+	return errors.As(err, &ended) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // PollDeadlineVerb reports the wording a poll loop's terminal error should
@@ -129,7 +147,7 @@ func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.C
 	if err == nil {
 		return nil
 	}
-	if ctx.Err() != nil {
+	if PollEnded(err) {
 		return waitTimeoutError(ctx, condType, want, lastSeen)
 	}
 	return err

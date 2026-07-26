@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	ktesting "k8s.io/client-go/testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
@@ -122,4 +124,22 @@ func TestWaitForPackageBuildCanceledReportsCanceled(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "canceled while"), "got: %v", err)
 	assert.False(t, strings.Contains(err.Error(), "timed out"), "got: %v", err)
+}
+
+// TestWaitForPackageBuildFailureRacingCancelKeepsBuildError pins the review
+// fix on PollUntil classification: a genuine terminal error (build failed)
+// that lands in the same instant the wait ctx is canceled must surface
+// verbatim, not be reclassified as "canceled while waiting" (ctx.Err() is
+// sticky, so the old ctx.Err()!=nil test discarded the real diagnostic).
+func TestWaitForPackageBuildFailureRacingCancelKeepsBuildError(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset(packageWithStatus(fv1.BuildStatusFailed)) //nolint:staticcheck
+	ctx, cancel := context.WithCancel(t.Context())
+	fc.PrependReactor("get", "packages", func(ktesting.Action) (bool, runtime.Object, error) {
+		cancel() // ctx expires "during" the get that observes the failure
+		return false, nil, nil
+	})
+	err := waitForPackageBuild(ctx, fc, "default", "hello-pkg", time.Second)
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "build failed"), "got: %v", err)
+	assert.False(t, strings.Contains(err.Error(), "canceled while"), "got: %v", err)
 }

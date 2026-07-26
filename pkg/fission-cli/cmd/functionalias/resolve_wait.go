@@ -43,7 +43,7 @@ func waitForResolved(ctx context.Context, get func(context.Context) (*fv1.Functi
 	}
 
 	if err := util.PollUntil(ctx, interval, check); err != nil {
-		if ctx.Err() != nil {
+		if util.PollEnded(err) {
 			return fmt.Errorf("%s waiting for alias to resolve%s: %w", util.PollDeadlineVerb(ctx), resolveWaitSuffix(wantVersion), ctx.Err())
 		}
 		return err

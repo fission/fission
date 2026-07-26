@@ -209,3 +209,30 @@ func TestRunWait(t *testing.T) {
 		}
 	})
 }
+
+// TestPollUntilTerminalErrorRacingCtxExpiry pins PollEnded's contract: a
+// terminal check error unrelated to ctx surfaces verbatim and classifies as
+// NOT poll-ended even when ctx expires in the same instant; PollUntil's own
+// Done branch returns a *PollEndedError that does classify.
+func TestPollUntilTerminalErrorRacingCtxExpiry(t *testing.T) {
+	terminal := errors.New("genuine terminal failure")
+	ctx, cancel := context.WithCancel(t.Context())
+	err := PollUntil(ctx, time.Millisecond, func(context.Context) (bool, error) {
+		cancel()
+		return false, terminal
+	})
+	if !errors.Is(err, terminal) {
+		t.Fatalf("terminal error must surface verbatim, got: %v", err)
+	}
+	if PollEnded(err) {
+		t.Fatalf("terminal error racing ctx expiry must NOT classify as poll-ended")
+	}
+
+	expired, cancel2 := context.WithCancel(t.Context())
+	cancel2()
+	err = PollUntil(expired, time.Millisecond, func(context.Context) (bool, error) { return false, nil })
+	var ended *PollEndedError
+	if !errors.As(err, &ended) || !PollEnded(err) {
+		t.Fatalf("ctx-ended poll must return *PollEndedError and classify as poll-ended, got: %v", err)
+	}
+}
