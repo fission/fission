@@ -12,10 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -55,13 +58,15 @@ func specializedAdoptPod(name, ns, fnUID, generation string) *apiv1.Pod {
 }
 
 // runAdopt wires a GenericPoolManager against a fake kubernetesClient seeded
-// with pod, runs adoptSpecializedPods to completion, and returns the fsCache
-// it populated.
-func runAdopt(t *testing.T, pod *apiv1.Pod) *fscache.FunctionServiceCache {
+// with pod (and a fake fissionClient seeded with fissionObjs, for the
+// missing-generation-label fallback that fetches the live Function), runs
+// adoptSpecializedPods to completion, and returns the fsCache it populated.
+func runAdopt(t *testing.T, pod *apiv1.Pod, fissionObjs ...runtime.Object) *fscache.FunctionServiceCache {
 	t.Helper()
 	gpm := &GenericPoolManager{
 		logger:           logr.Discard(),
 		kubernetesClient: k8sfake.NewSimpleClientset(pod),
+		fissionClient:    fissionfake.NewSimpleClientset(fissionObjs...),
 		nsResolver:       utils.DefaultNSResolver(),
 		instanceID:       "inst-1",
 		fsCache:          fscache.MakeFunctionServiceCache(logr.Discard()),
@@ -100,28 +105,67 @@ func TestAdoptSpecializedPodsPopulatesGeneration(t *testing.T) {
 	require.Equal(t, "10.9.9.9:8888", got.Address)
 }
 
-// TestAdoptSpecializedPodsSkipsMissingGeneration locks the chosen error
-// posture for a pre-migration pod (rolling-upgrade window) that lacks the
-// fv1.FUNCTION_GENERATION label: adoptSpecializedPods must skip adopting it
-// — the same posture the surrounding code already uses for any other
-// missing required label/annotation (ok1..ok8) — rather than silently
-// keying it at Generation 0, which would produce an entry no live Function
-// can ever look up.
-func TestAdoptSpecializedPodsSkipsMissingGeneration(t *testing.T) {
-	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "")
-	fsCache := runAdopt(t, pod)
-
-	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-1"),
-		"a pod without the function-generation label must not be adopted into the cache")
+// liveFn builds the live Function object the missing-label fallback fetches.
+func liveFn(uid string, generation int64) *fv1.Function {
+	return &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "fn1",
+			Namespace:  "default",
+			UID:        k8sTypes.UID(uid),
+			Generation: generation,
+		},
+	}
 }
 
-// TestAdoptSpecializedPodsSkipsUnparsableGeneration mirrors the missing-label
-// case for a label present but not a valid int64 — treated the same way
-// (skip, don't adopt with a garbage Generation).
-func TestAdoptSpecializedPodsSkipsUnparsableGeneration(t *testing.T) {
+// TestAdoptSpecializedPodsMissingGenerationFallsBack locks the rolling-upgrade
+// posture for a pod specialized by a release predating the
+// fv1.FUNCTION_GENERATION label: instead of skipping it (which, once the
+// rollout completes and no old-code replica remains, turns the upgrade window
+// into a cluster-wide cold-start spike), adoptSpecializedPods adopts it
+// against the live Function's CURRENT generation so GetByFunction keyed on the
+// live Function finds it.
+func TestAdoptSpecializedPodsMissingGenerationFallsBack(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "")
+	fsCache := runAdopt(t, pod, liveFn("fn-uid-1", 5))
+
+	got, err := fsCache.GetByFunction(&liveFn("fn-uid-1", 5).ObjectMeta)
+	require.NoError(t, err, "a label-less pod must be adopted against the live Function's current generation")
+	require.Equal(t, "10.9.9.9:8888", got.Address)
+}
+
+// TestAdoptSpecializedPodsUnparsableGenerationFallsBack mirrors the
+// missing-label case for a label present but not a valid int64 — same
+// fallback: adopt against the live Function's current generation rather than
+// skipping or adopting with a garbage Generation.
+func TestAdoptSpecializedPodsUnparsableGenerationFallsBack(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "not-a-number")
-	fsCache := runAdopt(t, pod)
+	fsCache := runAdopt(t, pod, liveFn("fn-uid-1", 5))
+
+	got, err := fsCache.GetByFunction(&liveFn("fn-uid-1", 5).ObjectMeta)
+	require.NoError(t, err, "an unparsable label must fall back to the live Function's current generation")
+	require.Equal(t, "10.9.9.9:8888", got.Address)
+}
+
+// TestAdoptSpecializedPodsMissingGenerationNoLiveFunction: when the label is
+// absent AND the live Function cannot be fetched (deleted mid-upgrade), the
+// fallback has nothing trustworthy to key on — skip, as before.
+func TestAdoptSpecializedPodsMissingGenerationNoLiveFunction(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "")
+	fsCache := runAdopt(t, pod) // no Function seeded: lookup 404s
 
 	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-1"),
-		"a pod with an unparsable function-generation label must not be adopted into the cache")
+		"a label-less pod whose Function no longer exists must not be adopted")
+}
+
+// TestAdoptSpecializedPodsMissingGenerationUIDMismatch: the fallback guards on
+// UID — a pod left over from a deleted-and-recreated function of the same name
+// must not be adopted against the NEW Function's generation.
+func TestAdoptSpecializedPodsMissingGenerationUIDMismatch(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-old", "")
+	fsCache := runAdopt(t, pod, liveFn("fn-uid-new", 5))
+
+	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-old"),
+		"a pod whose function UID differs from the live Function's must not be adopted")
+	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-new"),
+		"the stale pod must not be registered under the new Function's UID either")
 }

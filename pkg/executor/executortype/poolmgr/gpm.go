@@ -736,9 +736,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
-				fnGenStr, ok9 := pod.Labels[fv1.FUNCTION_GENERATION]
-
-				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 || !ok9 {
+				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
 					gpm.logger.Info("failed to adopt pod for function due to lack of necessary information",
 						"pod", pod.Name, "labels", pod.Labels, "annotations", pod.Annotations,
 						"env", env.Name)
@@ -753,18 +751,41 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				// every adopted pod, leaking stale byFunction/byAddress
 				// entries until TTL reap. Parse it from the pod's
 				// FUNCTION_GENERATION label (stamped at specialization time,
-				// gp_pod.go's specializedPodLabels) and, like every other
-				// required field above, skip adoption rather than guess if
-				// it's missing or malformed — e.g. a pre-migration pod still
-				// alive during a rolling upgrade. A skipped pod isn't lost:
-				// it stays in the cluster and either gets adopted by an
-				// executor replica still running the old code, or is reaped
-				// as idle and replaced by a fresh cold start.
-				fnGen, perr := strconv.ParseInt(fnGenStr, 10, 64)
-				if perr != nil {
-					gpm.logger.Error(perr, "failed to adopt pod for function: unparsable function-generation label",
-						"pod", pod.Name, "value", fnGenStr)
-					return
+				// gp_pod.go's specializedPodLabels). When the label is missing
+				// or malformed — a pod specialized by a release predating the
+				// label, still warm during a rolling upgrade — fall back to
+				// the live Function's CURRENT generation instead of skipping:
+				// on a completed rollout there is no old-code replica left to
+				// adopt a skipped pod, so skipping every pre-label pod turns
+				// the upgrade window AdoptExistingResources exists to smooth
+				// into a cluster-wide cold-start spike. The fallback guards on
+				// UID so a pod belonging to a deleted-and-recreated function
+				// of the same name is never adopted against the new Function.
+				var fnGen int64
+				genParsed := false
+				if fnGenStr, ok := pod.Labels[fv1.FUNCTION_GENERATION]; ok {
+					g, perr := strconv.ParseInt(fnGenStr, 10, 64)
+					if perr == nil {
+						fnGen = g
+						genParsed = true
+					} else {
+						gpm.logger.Error(perr, "unparsable function-generation label, falling back to the live Function's generation",
+							"pod", pod.Name, "value", fnGenStr)
+					}
+				}
+				if !genParsed {
+					fn, gerr := gpm.fissionClient.CoreV1().Functions(fnNS).Get(ctx, fnName, metav1.GetOptions{})
+					if gerr != nil {
+						gpm.logger.Error(gerr, "failed to adopt pod for function: no usable function-generation label and live Function lookup failed",
+							"pod", pod.Name, "function", fnName, "ns", fnNS)
+						return
+					}
+					if string(fn.UID) != fnUID {
+						gpm.logger.Info("failed to adopt pod for function: pod's function UID does not match the live Function (name reused)",
+							"pod", pod.Name, "podFunctionUID", fnUID, "liveFunctionUID", string(fn.UID))
+						return
+					}
+					fnGen = fn.Generation
 				}
 
 				// Carry the pod's version label into the synthetic meta:
