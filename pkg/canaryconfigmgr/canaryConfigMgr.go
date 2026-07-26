@@ -27,16 +27,30 @@ import (
 	"github.com/fission/fission/pkg/crd"
 )
 
+// failureQuery names the parameters a failure-percentage query needs,
+// replacing GetFunctionFailurePercentage's 6 positional string/[]string
+// params (thermo #6) — a bare "" in the 4th position used to silently select
+// function-pair mode, which read as an unlabeled magic value at every call
+// site. Version is that same alias-mode addition (RFC-0025 phase 5): empty
+// means function-pair mode (byte-identical query to before the shim),
+// non-empty adds a function_version label so two versions of the SAME
+// function — which share Function/Namespace/Path/Methods — are
+// distinguishable series (see
+// docs/rfc/0025-function-versions-aliases-rollback.md L181-182).
+type failureQuery struct {
+	Path      string
+	Methods   []string
+	Function  string
+	Version   string
+	Namespace string
+	Window    string
+}
+
 // failurePercentageGetter computes the error rate of the canary's new
 // function/version over a time window. *PrometheusApiClient satisfies it in
-// production; unit tests inject a deterministic fake. funcVersion is the
-// alias-mode addition (RFC-0025 phase 5): empty means function-pair mode
-// (byte-identical query to before the shim), non-empty adds a
-// function_version label so two versions of the SAME function — which share
-// function_name/function_namespace/path/method — are distinguishable series
-// (see docs/rfc/0025-function-versions-aliases-rollback.md L181-182).
+// production; unit tests inject a deterministic fake.
 type failurePercentageGetter interface {
-	GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcVersion, funcNs, window string) (float64, error)
+	GetFunctionFailurePercentage(ctx context.Context, q failureQuery) (float64, error)
 }
 
 // setCanaryConfigConditions mirrors the bare Status string onto the standard
@@ -210,11 +224,17 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 	if trigger.Spec.FunctionReference.FunctionWeights[cfg.Spec.NewFunction] != 0 {
 		urlPath, methods := triggerRouteInfo(trigger)
 
-		// funcVersion is empty here: function-pair mode's NewFunction is
+		// Version is empty here: function-pair mode's NewFunction is
 		// already a function name, so no function_version label is added —
 		// the query is byte-identical to the pre-shim query.
-		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, urlPath, methods,
-			cfg.Spec.NewFunction, "", cfg.Namespace, cfg.Spec.WeightIncrementDuration)
+		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, failureQuery{
+			Path:      urlPath,
+			Methods:   methods,
+			Function:  cfg.Spec.NewFunction,
+			Version:   "",
+			Namespace: cfg.Namespace,
+			Window:    cfg.Spec.WeightIncrementDuration,
+		})
 		if err != nil {
 			// Transient query error — check again next window rather than aborting.
 			log.Error(err, "error calculating failure percentage; will retry")
@@ -314,15 +334,21 @@ func (m *canaryConfigMgr) stepAlias(ctx context.Context, cfg *fv1.CanaryConfig, 
 	if primaryWeight < 100 {
 		urlPath, methods := triggerRouteInfo(trigger)
 
-		// function_name is the alias's FUNCTION, not cfg.Spec.NewFunction (a
+		// Function is the alias's FUNCTION, not cfg.Spec.NewFunction (a
 		// VERSION name) — both the primary and secondary targets are versions
-		// of that one function and so share function_name/function_namespace/
-		// path/method; function_version disambiguates which of the two a
-		// given series belongs to (RFC L181-182). Passing NewFunction as
-		// function_name would match zero series, wedging the rollout in a
-		// permanent requeue (failurePercent == -1 forever).
-		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, urlPath, methods,
-			alias.Spec.FunctionName, cfg.Spec.NewFunction, cfg.Namespace, cfg.Spec.WeightIncrementDuration)
+		// of that one function and so share Function/Namespace/Path/Methods;
+		// Version disambiguates which of the two a given series belongs to
+		// (RFC L181-182). Passing NewFunction as Function would match zero
+		// series, wedging the rollout in a permanent requeue (failurePercent
+		// == -1 forever).
+		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, failureQuery{
+			Path:      urlPath,
+			Methods:   methods,
+			Function:  alias.Spec.FunctionName,
+			Version:   cfg.Spec.NewFunction,
+			Namespace: cfg.Namespace,
+			Window:    cfg.Spec.WeightIncrementDuration,
+		})
 		if err != nil {
 			log.Error(err, "error calculating failure percentage; will retry")
 			return stepOutcome{requeue: true}, nil

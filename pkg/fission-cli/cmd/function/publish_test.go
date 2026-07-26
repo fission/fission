@@ -6,6 +6,7 @@ package function
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -107,4 +108,18 @@ func TestWaitForPackageBuildMissingPackageTimesOut(t *testing.T) {
 	err := waitForPackageBuild(t.Context(), fc, "default", "missing-pkg", 20*time.Millisecond)
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "timed out"), "got: %v", err)
+}
+
+// TestWaitForPackageBuildCanceledReportsCanceled pins the reuse-review #6
+// fix: an explicit ctx cancellation (as opposed to the timeout above) must
+// report "canceled while", not "timed out" — the distinction PollUntil/
+// PollDeadlineVerb restore.
+func TestWaitForPackageBuildCanceledReportsCanceled(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset(packageWithStatus(fv1.BuildStatusRunning)) //nolint:staticcheck
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := waitForPackageBuild(ctx, fc, "default", "hello-pkg", time.Second)
+	require.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "canceled while"), "got: %v", err)
+	assert.False(t, strings.Contains(err.Error(), "timed out"), "got: %v", err)
 }

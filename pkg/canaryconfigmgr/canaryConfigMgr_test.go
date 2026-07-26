@@ -95,8 +95,8 @@ type fakeFailureCall struct {
 	funcName, funcVersion, funcNs string
 }
 
-func (f *fakeFailureClient) GetFunctionFailurePercentage(_ context.Context, _ string, _ []string, funcName, funcVersion, funcNs, _ string) (float64, error) {
-	f.calls = append(f.calls, fakeFailureCall{funcName, funcVersion, funcNs})
+func (f *fakeFailureClient) GetFunctionFailurePercentage(_ context.Context, q failureQuery) (float64, error) {
+	f.calls = append(f.calls, fakeFailureCall{q.Function, q.Version, q.Namespace})
 	return f.pct, f.err
 }
 

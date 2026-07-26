@@ -24,29 +24,31 @@ import (
 // where resolution happens asynchronously against a target the caller cannot
 // name in advance (see FunctionAliasSpec's XOR of Version/PackageDigest).
 // `fn rollback --wait` always passes the explicit target version it just set.
-// interval is the poll period; mirrors function.waitForPackageBuild.
+// interval is the poll period; mirrors function.waitForPackageBuild. The poll
+// scaffold itself is util.PollUntil, shared with util.WaitForCondition and
+// function.waitForPackageBuild.
 func waitForResolved(ctx context.Context, get func(context.Context) (*fv1.FunctionAlias, error), wantVersion string, interval time.Duration) error {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
+	check := func(ctx context.Context) (bool, error) {
 		alias, err := get(ctx)
 		switch {
 		case err == nil:
 			if conditions.IsTrue(alias.Status.Conditions, fv1.FunctionAliasConditionResolved) &&
 				(wantVersion == "" || alias.Status.ResolvedVersion == wantVersion) {
-				return nil
+				return true, nil
 			}
 		case !util.IsNotFound(err):
-			return err
+			return false, err
 		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for alias to resolve%s: %w", resolveWaitSuffix(wantVersion), ctx.Err())
-		case <-ticker.C:
-		}
+		return false, nil
 	}
+
+	if err := util.PollUntil(ctx, interval, check); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("%s waiting for alias to resolve%s: %w", util.PollDeadlineVerb(ctx), resolveWaitSuffix(wantVersion), ctx.Err())
+		}
+		return err
+	}
+	return nil
 }
 
 func resolveWaitSuffix(wantVersion string) string {

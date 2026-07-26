@@ -61,7 +61,8 @@ type functionHandler struct {
 	// (see resolveResult.stickySource). nil for the legacy
 	// FunctionReferenceTypeFunctionWeights canary, which has no single
 	// canonical sticky config and so never extracts a key (pure random pick,
-	// unchanged from pre-Task-5 behavior).
+	// unchanged from pre-Task-5 behavior). stickySource's nilness IS the
+	// mode() discriminator below — set the two together.
 	stickySource         *fv1.Function
 	tsRoundTripperParams *tsRoundTripperParams
 	isDebugEnv           bool
@@ -90,6 +91,41 @@ type functionHandler struct {
 	// the X-Fission-Invocation-Id guard in handler(), not by a nil invoker. May be
 	// nil (or hold a nil queue) when the feature is off.
 	asyncInvoker *asyncInvoker
+}
+
+// stickyMode names which of the two ways handler() derives its sticky key,
+// replacing a bare `fh.stickySource == nil` check as the hot-path
+// discriminator (thermo #5).
+//
+//   - stickyModeSingleSource: stickySource names ONE canonical Sticky config
+//     that governs the pick itself -- stickyKeyFromRequest computes a real
+//     key from it up front, and (for a weighted route) getCanaryBackend's
+//     pick is deterministic on that key. Every FunctionReferenceTypeFunctionName
+//     resolution is this mode, alias or not (see resolveResult.stickySource).
+//   - stickyModePerBackend: the legacy FunctionReferenceTypeFunctionWeights
+//     canary. Its backends are distinct named functions, each with its own
+//     independent StickyConfig -- there is no single config to key the pick
+//     on, so the pick stays unkeyed/random, and handler() recomputes the
+//     Admit-side key AFTER the pick from whichever backend won (restoring
+//     pre-Task-5 behavior).
+type stickyMode int
+
+const (
+	stickyModeSingleSource stickyMode = iota
+	stickyModePerBackend
+)
+
+// mode reports fh's stickyMode, derived from stickySource rather than a
+// separately stored field: stickySource is nil for exactly the legacy
+// per-backend canary (see its doc comment), so the derivation can never
+// drift from what stickySource itself says -- and a functionHandler built by
+// hand for a test (bypassing newFunctionHandlerBase) still gets the right
+// mode for free just by setting stickySource.
+func (fh *functionHandler) mode() stickyMode {
+	if fh.stickySource == nil {
+		return stickyModePerBackend
+	}
+	return stickyModeSingleSource
 }
 
 // proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
@@ -158,32 +194,32 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	// stickyKey) -- computing it once and passing it down is what guarantees
 	// the two can never disagree for a weighted alias.
 	//
-	// fh.stickySource is nil for the legacy FunctionReferenceTypeFunctionWeights
-	// canary (its backends are distinct named functions, each with its own
-	// independent StickyConfig, so there is no single config to key the PICK
-	// on) -- stickyKey starts "" there and getCanaryBackend falls back to its
-	// pre-Task-5 random pick. The pre-Task-5 Admit-side behavior (honor
-	// whichever backend the pick landed on) is restored below, AFTER the
-	// pick, once fh.function is known.
+	// In stickyModePerBackend (the legacy FunctionReferenceTypeFunctionWeights
+	// canary: distinct named backends, each with its own independent
+	// StickyConfig, so there is no single config to key the PICK on)
+	// stickyKey starts "" and getCanaryBackend falls back to its pre-Task-5
+	// random pick. The pre-Task-5 Admit-side behavior (honor whichever
+	// backend the pick landed on) is restored below, AFTER the pick, once
+	// fh.function is known.
 	stickyKey := stickyKeyFromRequest(fh.stickySource, request)
 
 	if len(fh.fnWeightDistributionList) > 0 {
-		// Weighted backend selection: the legacy FunctionReferenceTypeFunctionWeights
-		// canary AND an RFC-0025 weighted FunctionAlias (Spec.Weight != nil) both
-		// resolve to a resolveResultMultipleFunctions with a non-empty weight
-		// distribution — pick the per-request backend from it now rather than at
-		// mux-build time. NOT gated on fh.httpTrigger != nil: a weighted alias's
-		// materialized `:<alias>` internal route (buildInternalAliasHandler,
-		// routeshape.go) carries the same distribution with no httpTrigger at
-		// all, so MQ/timer/kubewatcher/MCP invocations through that route see
-		// the identical split an HTTPTrigger referencing the alias would —
-		// "weighted aliases work uniformly on all trigger types for free,
-		// because the weighted pick happens router-side" (RFC-0025).
+		// Weighted backend selection: stickyModePerBackend's legacy canary AND
+		// an RFC-0025 weighted FunctionAlias (stickyModeSingleSource,
+		// Spec.Weight != nil) both resolve to a resolveResultMultipleFunctions
+		// with a non-empty weight distribution — pick the per-request backend
+		// from it now rather than at mux-build time. NOT gated on
+		// fh.httpTrigger != nil: a weighted alias's materialized `:<alias>`
+		// internal route (buildInternalAliasHandler, routeshape.go) carries the
+		// same distribution with no httpTrigger at all, so MQ/timer/kubewatcher/
+		// MCP invocations through that route see the identical split an
+		// HTTPTrigger referencing the alias would — "weighted aliases work
+		// uniformly on all trigger types for free, because the weighted pick
+		// happens router-side" (RFC-0025).
 		//
-		// stickyKey is "" for the legacy canary going in (stickySource is nil
-		// there), so getCanaryBackend falls back to its pre-Task-5 random
-		// pick; for a keyed request against a weighted alias, the pick is
-		// deterministic.
+		// stickyKey is "" for stickyModePerBackend going in, so
+		// getCanaryBackend falls back to its pre-Task-5 random pick; for a
+		// keyed request in stickyModeSingleSource, the pick is deterministic.
 		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList, stickyKey)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",
@@ -196,13 +232,13 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		fh.logger.V(1).Info("chosen function backend's metadata", "metadata", fh.function)
 
 		// Legacy canary Admit-side restore (see the top-of-function comment):
-		// fh.stickySource is nil, so stickyKey is still "" here -- recompute
-		// it from the just-chosen fn, restoring the pre-Task-5 behavior of
+		// in stickyModePerBackend, stickyKey is still "" here -- recompute it
+		// from the just-chosen fn, restoring the pre-Task-5 behavior of
 		// honoring whichever backend's own StickyConfig the random pick
 		// landed on. Safe to overwrite: the pick above was never keyed
 		// (stickyKey was "" going in), so there is no pick/admit disagreement
 		// to reintroduce.
-		if fh.stickySource == nil {
+		if fh.mode() == stickyModePerBackend {
 			stickyKey = stickyKeyFromRequest(fn, request)
 		}
 	}

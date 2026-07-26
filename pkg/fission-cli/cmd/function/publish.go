@@ -91,7 +91,9 @@ func (opts *PublishSubCommand) run(input cli.Input) error {
 // checks — or timeout elapses. A NotFound get keeps polling (the package may
 // not have been created yet by a racing builder step); BuildStatusFailed
 // returns immediately since waiting longer cannot help. timeout<=0 falls back
-// to util.DefaultWaitTimeout, mirroring util.RunWait.
+// to util.DefaultWaitTimeout, mirroring util.RunWait. The poll scaffold
+// itself is util.PollUntil, shared with util.WaitForCondition and
+// functionalias.waitForResolved.
 func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace, name string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = util.DefaultWaitTimeout
@@ -99,29 +101,29 @@ func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
+	check := func(ctx context.Context) (bool, error) {
 		pkg, err := cl.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{})
 		switch {
 		case err == nil:
 			switch pkg.Status.BuildStatus {
 			case fv1.BuildStatusSucceeded, fv1.BuildStatusNone:
-				return nil
+				return true, nil
 			case fv1.BuildStatusFailed:
-				return fmt.Errorf("package %s/%s build failed", namespace, name)
+				return false, fmt.Errorf("package %s/%s build failed", namespace, name)
 			}
 		case !util.IsNotFound(err):
-			return err
+			return false, err
 		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for package %s/%s build to finish: %w", namespace, name, ctx.Err())
-		case <-ticker.C:
-		}
+		return false, nil
 	}
+
+	if err := util.PollUntil(ctx, time.Second, check); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("%s waiting for package %s/%s build to finish: %w", util.PollDeadlineVerb(ctx), namespace, name, ctx.Err())
+		}
+		return err
+	}
+	return nil
 }
 
 // printPublishResult renders a versioning.PublishResult per the --output

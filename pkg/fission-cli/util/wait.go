@@ -18,6 +18,55 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
+// PollUntil is the shared poll scaffold behind every fission-cli wait loop
+// (WaitForCondition below, function.waitForPackageBuild, and
+// functionalias.waitForResolved): a time.Ticker-driven loop that calls check
+// at interval until it reports done, returns a terminal error, or ctx ends.
+//
+// check's contract mirrors what each of those loops already did by hand:
+// return (false, nil) to keep polling (a transient condition like NotFound,
+// or "not ready yet"), (true, nil) once satisfied, or (false, err) for a
+// terminal failure that should abort the wait immediately without waiting
+// out the rest of the deadline.
+//
+// On ctx ending, PollUntil returns ctx.Err() itself rather than a
+// caller-specific message: ctx.Err() is sticky (once non-nil it stays
+// non-nil), so a caller can reliably tell "PollUntil's own deadline/
+// cancellation ended the loop" apart from "check returned a terminal error"
+// by testing ctx.Err() != nil on return, and build its own message with
+// PollDeadlineVerb.
+func PollUntil(ctx context.Context, interval time.Duration, check func(context.Context) (bool, error)) error {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		done, err := check(ctx)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// PollDeadlineVerb reports the wording a poll loop's terminal error should
+// use for why ctx ended: "timed out" for a deadline, "canceled while" for an
+// explicit cancellation (e.g. Ctrl-C, or a caller-owned context canceled for
+// an unrelated reason) — restoring the distinction a bare "timed out"
+// message papers over.
+func PollDeadlineVerb(ctx context.Context) string {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return "canceled while"
+	}
+	return "timed out"
+}
+
 // DefaultWaitTimeout is the wait timeout used when --timeout is unset or
 // non-positive. It is also the declared default of the --timeout flag, so both
 // the flag definition and the runtime fallback share this single source.
@@ -54,44 +103,42 @@ func ParseForCondition(s string) (condType string, want metav1.ConditionStatus, 
 // immediately. interval is the poll period.
 func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.Condition, error), condType string, want metav1.ConditionStatus, interval time.Duration) error {
 	lastSeen := NoneValue
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
+	check := func(ctx context.Context) (bool, error) {
 		conds, err := get(ctx)
 		switch {
 		case err == nil:
 			if c := conditions.Find(conds, condType); c != nil {
 				lastSeen = string(c.Status)
 				if c.Status == want {
-					return nil
+					return true, nil
 				}
 			}
 		case IsNotFound(err):
 			lastSeen = "NotFound"
 		case ctx.Err() != nil:
 			// The wait deadline/cancellation interrupted the in-flight get;
-			// fall through to the ctx.Done() branch so we report the outcome
-			// (and last-seen status) consistently rather than the raw error.
+			// let PollUntil's own ctx.Done() branch report the outcome (and
+			// last-seen status) consistently rather than the raw error.
 		default:
-			return err
+			return false, err
 		}
-
-		select {
-		case <-ctx.Done():
-			return waitTimeoutError(ctx, condType, want, lastSeen)
-		case <-ticker.C:
-		}
+		return false, nil
 	}
+
+	err := PollUntil(ctx, interval, check)
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return waitTimeoutError(ctx, condType, want, lastSeen)
+	}
+	return err
 }
 
 // waitTimeoutError formats the terminal wait error, distinguishing a deadline
 // from an explicit cancellation so the message is accurate.
 func waitTimeoutError(ctx context.Context, condType string, want metav1.ConditionStatus, lastSeen string) error {
-	verb := "timed out"
-	if errors.Is(ctx.Err(), context.Canceled) {
-		verb = "canceled while"
-	}
-	return fmt.Errorf("%s waiting for condition %q=%q (last seen %q): %w", verb, condType, want, lastSeen, ctx.Err())
+	return fmt.Errorf("%s waiting for condition %q=%q (last seen %q): %w", PollDeadlineVerb(ctx), condType, want, lastSeen, ctx.Err())
 }
 
 // RunWait is the shared glue for every resource's `wait` subcommand: it parses

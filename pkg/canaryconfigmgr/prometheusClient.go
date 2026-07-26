@@ -38,17 +38,17 @@ func MakePrometheusClient(logger logr.Logger, prometheusSvc string) (*Prometheus
 	}, nil
 }
 
-// funcVersion (RFC-0025 phase 5) adds a function_version label to every query
+// q.Version (RFC-0025 phase 5) adds a function_version label to every query
 // this method issues, disambiguating two versions of the SAME function that
 // otherwise share every other label (function_name/function_namespace/path/
 // method) — see docs/rfc/0025-function-versions-aliases-rollback.md
 // L181-182. Empty is function-pair mode: the query is byte-identical to
 // before this parameter existed.
-func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcVersion, funcNs string, window string) (float64, error) {
+func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx context.Context, q failureQuery) (float64, error) {
 	var reqs, failedReqs float64
 	// first get a total count of requests to this url in a time window
-	for _, method := range methods {
-		mreqs, err := promApiClient.GetRequestsToFuncInWindow(ctx, path, method, funcName, funcVersion, funcNs, window)
+	for _, method := range q.Methods {
+		mreqs, err := promApiClient.GetRequestsToFuncInWindow(ctx, q.Path, method, q.Function, q.Version, q.Namespace, q.Window)
 		if err != nil {
 			return 0, err
 		}
@@ -56,12 +56,12 @@ func (promApiClient *PrometheusApiClient) GetFunctionFailurePercentage(ctx conte
 	}
 
 	if reqs <= 0 {
-		return -1, fmt.Errorf("no requests to this url %s and method %v in the window: %s", path, methods, window)
+		return -1, fmt.Errorf("no requests to this url %s and method %v in the window: %s", q.Path, q.Methods, q.Window)
 	}
 
 	// next, get a total count of errored out requests to this function in the same window
-	for _, method := range methods {
-		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(ctx, funcName, funcVersion, funcNs, path, method, window)
+	for _, method := range q.Methods {
+		mfailedReqs, err := promApiClient.GetTotalFailedRequestsToFuncInWindow(ctx, q.Function, q.Version, q.Namespace, q.Path, method, q.Window)
 		if err != nil {
 			return 0, err
 		}

@@ -106,6 +106,24 @@ func TestWaitForResolvedFlipsAfterRetries(t *testing.T) {
 	assert.GreaterOrEqual(t, gets.Load(), int32(3), "must have retried past the first unresolved Get")
 }
 
+// TestWaitForResolvedCanceledReportsCanceled pins the reuse-review #6 fix:
+// an explicit ctx cancellation (as opposed to a plain deadline) must report
+// "canceled while", not "timed out" — the distinction util.PollUntil /
+// util.PollDeadlineVerb restore.
+func TestWaitForResolvedCanceledReportsCanceled(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset(unresolvedAlias("hello-v1")) //nolint:staticcheck
+	get := func(ctx context.Context) (*fv1.FunctionAlias, error) {
+		return fc.CoreV1().FunctionAliases("default").Get(ctx, "prod", metav1.GetOptions{})
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := waitForResolved(ctx, get, "hello-v1", time.Second)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "canceled while")
+	assert.NotContains(t, err.Error(), "timed out")
+}
+
 func TestWaitForResolvedPropagatesNonNotFoundError(t *testing.T) {
 	assertErr := errors.New("boom")
 	fc := fissionfake.NewSimpleClientset(unresolvedAlias("hello-v1")) //nolint:staticcheck
