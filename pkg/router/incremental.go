@@ -878,6 +878,24 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) (int, error)
 		if _, ok := liveVersionKeys[key]; ok {
 			continue
 		}
+		// Re-check before deleting, mirroring the Suffix=="" branch above: a
+		// FunctionAlias/FunctionVersion created while this pass was walking
+		// (its reconciler already applied the route) is absent from the LIST
+		// snapshot, and tearing its route down here would be self-inflicted
+		// drift — plus a materializer signal — that the object's next event or
+		// the next pass has to undo. suffixStillClaimed Gets the live object
+		// by (namespace, suffix) and scopes it to THIS function, the same
+		// check the delete-event path performs. A transient read error skips
+		// the delete too (the next pass retries); only a confirmed-gone
+		// claimant is cleaned up.
+		claimed, err := ts.suffixStillClaimed(ctx, key)
+		if err != nil {
+			errs = errors.Join(errs, err)
+			continue
+		}
+		if claimed {
+			continue
+		}
 		if ts.routeTable.DeleteFunction(key) == routetable.ShapeChanged {
 			drift++
 			ts.signalMaterialize()

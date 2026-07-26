@@ -17,9 +17,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
+	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/router/routetable"
 )
 
@@ -663,4 +667,77 @@ func TestLiveFunctionStickyEditReachesAliasRoutedTrigger(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, drift, "a settled sticky edit must not register as resync drift")
 	requireNoSignal(t, ts)
+}
+
+// TestResyncSparesAliasRouteCreatedAfterList pins the C7 fix: resync's
+// stale-route cleanup for suffixed (alias/version) internal routes must
+// re-check the live object before deleting — exactly like the plain-function
+// branch does — because a FunctionAlias created AFTER the resync captured its
+// LIST snapshot (but applied by its reconciler before the cleanup walk) is
+// absent from the snapshot while its route is legitimately live. Pre-fix the
+// cleanup tore the route down unconditionally (and signalled a materialize),
+// self-healing only at the alias's next event or the next resync — a
+// drift-metric increment violating the zero-drift bar. A genuinely deleted
+// alias (Get NotFound too) must still be cleaned up.
+func TestResyncSparesAliasRouteCreatedAfterList(t *testing.T) {
+	fn := incrFn("hello", "default", 1)
+	v1 := incrVersion("hello-v1", "default", "hello", fn.UID, 1, 1)
+	alias := incrAlias("prod", "default", "hello", "hello-v1", 1)
+
+	// The interceptor hides the alias from every LIST while leaving Get
+	// untouched — the observable state of an alias created after the LIST
+	// snapshot was taken.
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(fn, v1, alias).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+				if err := c.List(ctx, list, opts...); err != nil {
+					return err
+				}
+				if al, ok := list.(*fv1.FunctionAliasList); ok {
+					kept := al.Items[:0]
+					for _, item := range al.Items {
+						if item.Name != "prod" {
+							kept = append(kept, item)
+						}
+					}
+					al.Items = kept
+				}
+				return nil
+			},
+		}).Build()
+	ts := newIncrementalTSWithClient(t, cl)
+
+	// Baseline: function + version converged; the hidden alias is not
+	// materialized by the list-driven pass.
+	_, err := ts.resync(t.Context(), true)
+	require.NoError(t, err)
+	require.False(t, hasInternalRoute(ts, "default", "hello", "prod"),
+		"precondition: the LIST-hidden alias is not materialized by resync")
+
+	// The alias reconciler applies the just-created alias (the event path
+	// does not LIST, so the interceptor does not affect it).
+	_, err = ts.applyAliasIncremental(t.Context(), alias)
+	require.NoError(t, err)
+	require.True(t, hasInternalRoute(ts, "default", "hello", "prod"),
+		"precondition: the alias reconciler materialized the route")
+	drainSignals(ts)
+
+	// A resync whose LIST snapshot predates the alias: the live-object
+	// re-check must spare the route. Pre-fix: deleted, drift++, materialize
+	// signalled.
+	drift, err := ts.resync(t.Context(), false)
+	require.NoError(t, err)
+	assert.True(t, hasInternalRoute(ts, "default", "hello", "prod"),
+		"resync must not tear down a route whose alias is live but missing from the LIST snapshot")
+	assert.Zero(t, drift, "sparing a live route is not a correction")
+	requireNoSignal(t, ts)
+
+	// Genuinely deleted (Get returns NotFound too): the cleanup must proceed.
+	require.NoError(t, cl.Delete(t.Context(), alias))
+	drift, err = ts.resync(t.Context(), false)
+	require.NoError(t, err)
+	assert.False(t, hasInternalRoute(ts, "default", "hello", "prod"),
+		"a genuinely deleted alias's route must still be cleaned up")
+	assert.Equal(t, 1, drift, "the missed delete is exactly one correction")
+	requireSignal(t, ts)
 }

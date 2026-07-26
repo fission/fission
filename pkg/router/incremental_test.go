@@ -35,8 +35,16 @@ import (
 // so materialize() has swap targets.
 func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, client.Client) {
 	t.Helper()
-	logger := loggerfactory.GetLogger()
 	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build()
+	return newIncrementalTSWithClient(t, cl), cl
+}
+
+// newIncrementalTSWithClient is newIncrementalTS for tests that need to build
+// the fake client themselves (e.g. with interceptor funcs simulating stale
+// LIST snapshots).
+func newIncrementalTSWithClient(t testing.TB, cl client.Client) *HTTPTriggerSet {
+	t.Helper()
+	logger := loggerfactory.GetLogger()
 	ts := &HTTPTriggerSet{
 		logger:                     logger.WithName("incremental_test"),
 		client:                     cl,
@@ -47,7 +55,7 @@ func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, cli
 	ts.initIncrementalRoutes()
 	ts.mutableRouter = newMutableRouter(logger, httpmux.New().Handler())
 	ts.internalMutableRouter = newMutableRouter(logger, httpmux.New().Handler())
-	return ts, cl
+	return ts
 }
 
 // muxes rebuilds the listener muxes from the current route-table snapshot — the
