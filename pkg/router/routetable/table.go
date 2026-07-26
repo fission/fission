@@ -209,48 +209,39 @@ type Table struct {
 	mu       sync.Mutex
 	public   map[types.UID]*RouteSpec
 	internal map[InternalKey]*InternalSpec
-	// fnIndex maps a function to the triggers whose routes resolve through
-	// it, so a function event can re-apply exactly the affected triggers.
-	fnIndex map[types.NamespacedName]map[types.UID]struct{}
-	// triggerFns is the reverse of fnIndex, kept so a trigger re-apply that
-	// changes its function set (or a delete) can clean its old index entries.
-	triggerFns map[types.UID][]types.NamespacedName
+	// fnIndex maps a function to the triggers (by UID) whose routes resolve
+	// through it, so a function event can re-apply exactly the affected
+	// triggers. See biIndex's doc comment for why it (and aliasIndex) is
+	// keyed on types.UID while unresolved/unresolvedAlias are keyed on
+	// types.NamespacedName.
+	fnIndex biIndex[types.UID]
 	// aliasIndex maps a FunctionAlias to the triggers whose routes were
 	// resolved through it (RouteSpec.AliasGens keys), mirroring fnIndex so an
 	// alias event can re-apply exactly the affected triggers via
 	// TriggersForAlias.
-	aliasIndex map[types.NamespacedName]map[types.UID]struct{}
-	// triggerAliases is the reverse of aliasIndex, mirroring triggerFns.
-	triggerAliases map[types.UID][]types.NamespacedName
-	// unresolved maps a function to the triggers that REFERENCE it but could
-	// not resolve (the function does not exist yet). It keeps the
-	// function-create cascade working for the trigger-before-function apply
-	// ordering: without it, the route's removal would drop the index edge
-	// and the trigger would only re-admit at the next resync.
-	unresolved map[types.NamespacedName]map[types.NamespacedName]struct{}
-	// unresolvedFns is the reverse of unresolved, for cleanup.
-	unresolvedFns map[types.NamespacedName][]types.NamespacedName
+	aliasIndex biIndex[types.UID]
+	// unresolved maps a function to the triggers (by namespace/name) that
+	// REFERENCE it but could not resolve (the function does not exist yet).
+	// It keeps the function-create cascade working for the
+	// trigger-before-function apply ordering: without it, the route's
+	// removal would drop the index edge and the trigger would only re-admit
+	// at the next resync.
+	unresolved biIndex[types.NamespacedName]
 	// unresolvedAlias mirrors unresolved for FunctionAlias references: a
 	// trigger whose alias does not exist (or has not resolved) yet is
 	// indexed here so the alias's create/first-resolve event admits it
 	// immediately, the same guarantee unresolved gives function references.
-	unresolvedAlias map[types.NamespacedName]map[types.NamespacedName]struct{}
-	// unresolvedAliasFns is the reverse of unresolvedAlias, for cleanup.
-	unresolvedAliasFns map[types.NamespacedName][]types.NamespacedName
+	unresolvedAlias biIndex[types.NamespacedName]
 }
 
 func New() *Table {
 	return &Table{
-		public:             make(map[types.UID]*RouteSpec),
-		internal:           make(map[InternalKey]*InternalSpec),
-		fnIndex:            make(map[types.NamespacedName]map[types.UID]struct{}),
-		triggerFns:         make(map[types.UID][]types.NamespacedName),
-		aliasIndex:         make(map[types.NamespacedName]map[types.UID]struct{}),
-		triggerAliases:     make(map[types.UID][]types.NamespacedName),
-		unresolved:         make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
-		unresolvedFns:      make(map[types.NamespacedName][]types.NamespacedName),
-		unresolvedAlias:    make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
-		unresolvedAliasFns: make(map[types.NamespacedName][]types.NamespacedName),
+		public:          make(map[types.UID]*RouteSpec),
+		internal:        make(map[InternalKey]*InternalSpec),
+		fnIndex:         newBiIndex[types.UID](),
+		aliasIndex:      newBiIndex[types.UID](),
+		unresolved:      newBiIndex[types.NamespacedName](),
+		unresolvedAlias: newBiIndex[types.NamespacedName](),
 	}
 }
 
@@ -310,8 +301,8 @@ func (t *Table) DeleteTrigger(uid types.UID) ApplyResult {
 	}
 	t.clearUnresolvedLocked(types.NamespacedName{Namespace: spec.Namespace, Name: spec.Name})
 	delete(t.public, uid)
-	t.dropFnIndexLocked(uid)
-	t.dropAliasIndexLocked(uid)
+	t.fnIndex.dropTrigger(uid)
+	t.aliasIndex.dropTrigger(uid)
 	return ShapeChanged
 }
 
@@ -328,8 +319,8 @@ func (t *Table) DeleteTriggerByName(key types.NamespacedName) ApplyResult {
 	for uid, spec := range t.public {
 		if spec.Namespace == key.Namespace && spec.Name == key.Name {
 			delete(t.public, uid)
-			t.dropFnIndexLocked(uid)
-			t.dropAliasIndexLocked(uid)
+			t.fnIndex.dropTrigger(uid)
+			t.aliasIndex.dropTrigger(uid)
 			res = ShapeChanged
 		}
 	}
@@ -412,48 +403,15 @@ func (t *Table) InternalKeysBySuffix(namespace, suffix string) []InternalKey {
 func (t *Table) MarkUnresolved(trigger types.NamespacedName, fns []types.NamespacedName, aliases []types.NamespacedName) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.clearUnresolvedLocked(trigger)
-	for _, fn := range fns {
-		set, ok := t.unresolved[fn]
-		if !ok {
-			set = make(map[types.NamespacedName]struct{})
-			t.unresolved[fn] = set
-		}
-		set[trigger] = struct{}{}
-	}
-	t.unresolvedFns[trigger] = fns
-	for _, alias := range aliases {
-		set, ok := t.unresolvedAlias[alias]
-		if !ok {
-			set = make(map[types.NamespacedName]struct{})
-			t.unresolvedAlias[alias] = set
-		}
-		set[trigger] = struct{}{}
-	}
-	t.unresolvedAliasFns[trigger] = aliases
+	t.unresolved.reindex(trigger, fns)
+	t.unresolvedAlias.reindex(trigger, aliases)
 }
 
 // clearUnresolvedLocked drops a trigger's unresolved edges (both function and
 // alias). Caller holds t.mu.
 func (t *Table) clearUnresolvedLocked(trigger types.NamespacedName) {
-	for _, fn := range t.unresolvedFns[trigger] {
-		if set, ok := t.unresolved[fn]; ok {
-			delete(set, trigger)
-			if len(set) == 0 {
-				delete(t.unresolved, fn)
-			}
-		}
-	}
-	delete(t.unresolvedFns, trigger)
-	for _, alias := range t.unresolvedAliasFns[trigger] {
-		if set, ok := t.unresolvedAlias[alias]; ok {
-			delete(set, trigger)
-			if len(set) == 0 {
-				delete(t.unresolvedAlias, alias)
-			}
-		}
-	}
-	delete(t.unresolvedAliasFns, trigger)
+	t.unresolved.dropTrigger(trigger)
+	t.unresolvedAlias.dropTrigger(trigger)
 }
 
 // TriggersForFunction returns the namespaced names of the triggers whose
@@ -463,7 +421,7 @@ func (t *Table) clearUnresolvedLocked(trigger types.NamespacedName) {
 func (t *Table) TriggersForFunction(key types.NamespacedName) []types.NamespacedName {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	uids := t.fnIndex[key]
+	uids := t.fnIndex.edges(key)
 	seen := make(map[types.NamespacedName]struct{}, len(uids))
 	out := make([]types.NamespacedName, 0, len(uids))
 	for uid := range uids {
@@ -475,7 +433,7 @@ func (t *Table) TriggersForFunction(key types.NamespacedName) []types.Namespaced
 			}
 		}
 	}
-	for trigger := range t.unresolved[key] {
+	for trigger := range t.unresolved.edges(key) {
 		if _, dup := seen[trigger]; !dup {
 			seen[trigger] = struct{}{}
 			out = append(out, trigger)
@@ -495,7 +453,7 @@ func (t *Table) TriggersForAlias(namespace, name string) []types.NamespacedName 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	key := types.NamespacedName{Namespace: namespace, Name: name}
-	uids := t.aliasIndex[key]
+	uids := t.aliasIndex.edges(key)
 	seen := make(map[types.NamespacedName]struct{}, len(uids))
 	out := make([]types.NamespacedName, 0, len(uids))
 	for uid := range uids {
@@ -507,7 +465,7 @@ func (t *Table) TriggersForAlias(namespace, name string) []types.NamespacedName 
 			}
 		}
 	}
-	for trigger := range t.unresolvedAlias[key] {
+	for trigger := range t.unresolvedAlias.edges(key) {
 		if _, dup := seen[trigger]; !dup {
 			seen[trigger] = struct{}{}
 			out = append(out, trigger)
@@ -600,61 +558,18 @@ func (t *Table) Sizes() (public, internal int) {
 // function's live events (spec change, delete): the index entry would sit
 // under a key {ns, "name@version"} the cascade never looks up.
 func (t *Table) reindexLocked(spec *RouteSpec) {
-	t.dropFnIndexLocked(spec.TriggerUID)
 	keys := make([]types.NamespacedName, 0, len(spec.FnGens))
 	for backendKey := range spec.FnGens {
 		fnName, _ := ParseBackendKey(backendKey)
-		key := types.NamespacedName{Namespace: spec.Namespace, Name: fnName}
-		keys = append(keys, key)
-		set, ok := t.fnIndex[key]
-		if !ok {
-			set = make(map[types.UID]struct{})
-			t.fnIndex[key] = set
-		}
-		set[spec.TriggerUID] = struct{}{}
+		keys = append(keys, types.NamespacedName{Namespace: spec.Namespace, Name: fnName})
 	}
-	t.triggerFns[spec.TriggerUID] = keys
+	t.fnIndex.reindex(spec.TriggerUID, keys)
 
-	t.dropAliasIndexLocked(spec.TriggerUID)
 	aliasKeys := make([]types.NamespacedName, 0, len(spec.AliasGens))
 	for alias := range spec.AliasGens {
-		key := types.NamespacedName{Namespace: spec.Namespace, Name: alias}
-		aliasKeys = append(aliasKeys, key)
-		set, ok := t.aliasIndex[key]
-		if !ok {
-			set = make(map[types.UID]struct{})
-			t.aliasIndex[key] = set
-		}
-		set[spec.TriggerUID] = struct{}{}
+		aliasKeys = append(aliasKeys, types.NamespacedName{Namespace: spec.Namespace, Name: alias})
 	}
-	t.triggerAliases[spec.TriggerUID] = aliasKeys
-}
-
-// dropFnIndexLocked removes a trigger's fn index entries. Caller holds t.mu.
-func (t *Table) dropFnIndexLocked(uid types.UID) {
-	for _, key := range t.triggerFns[uid] {
-		if set, ok := t.fnIndex[key]; ok {
-			delete(set, uid)
-			if len(set) == 0 {
-				delete(t.fnIndex, key)
-			}
-		}
-	}
-	delete(t.triggerFns, uid)
-}
-
-// dropAliasIndexLocked removes a trigger's alias index entries, mirroring
-// dropFnIndexLocked. Caller holds t.mu.
-func (t *Table) dropAliasIndexLocked(uid types.UID) {
-	for _, key := range t.triggerAliases[uid] {
-		if set, ok := t.aliasIndex[key]; ok {
-			delete(set, uid)
-			if len(set) == 0 {
-				delete(t.aliasIndex, key)
-			}
-		}
-	}
-	delete(t.triggerAliases, uid)
+	t.aliasIndex.reindex(spec.TriggerUID, aliasKeys)
 }
 
 func cmpNamespacedName(a, b types.NamespacedName) int {
