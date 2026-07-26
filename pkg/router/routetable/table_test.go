@@ -100,6 +100,50 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 		assert.Equal(t, "v2", serve(t, tbl.Snapshot()[0].Handler))
 	})
 
+	t.Run("alias generation bump with same shape is HandlerSwapped (the weight-only alias edit)", func(t *testing.T) {
+		tbl := New()
+		mkSpec := func(aliasGen int64) *RouteSpec {
+			return spec("u1", 1, map[string]int64{"hello@hello-v1": 1, "hello@hello-v2": 2}, func(s *RouteSpec) {
+				s.AliasGens = map[string]int64{"prod": aliasGen}
+			})
+		}
+		tbl.ApplyTrigger(mkSpec(1), func() http.Handler { return tagHandler("w90") })
+		ref := tbl.Snapshot()[0].Handler
+
+		// Same trigger gen, same shape, same BackendKey set + snapshot
+		// generations — ONLY the alias's own Generation moved (a weight-only
+		// edit). Must swap, never NoChange, never ShapeChanged.
+		res := tbl.ApplyTrigger(mkSpec(2), func() http.Handler { return tagHandler("w50") })
+		assert.Equal(t, HandlerSwapped, res)
+		assert.Equal(t, "w50", serve(t, ref), "the EXISTING ref must now serve the new split")
+
+		// Identical re-apply (the settled state a resync recomputes) is a
+		// NoChange — the drift-symmetry half of the contract.
+		res = tbl.ApplyTrigger(mkSpec(2), mustNotBuild(t))
+		assert.Equal(t, NoChange, res)
+	})
+
+	t.Run("sticky-source generation bump with same shape is HandlerSwapped", func(t *testing.T) {
+		tbl := New()
+		mkSpec := func(stickyGen int64) *RouteSpec {
+			return spec("u1", 1, map[string]int64{"hello@hello-v1": 1}, func(s *RouteSpec) {
+				s.AliasGens = map[string]int64{"prod": 1}
+				s.StickyGen = stickyGen
+			})
+		}
+		tbl.ApplyTrigger(mkSpec(1), func() http.Handler { return tagHandler("nosticky") })
+		ref := tbl.Snapshot()[0].Handler
+
+		// The live function's Generation (the sticky-config source for an
+		// alias resolution) moved while the pinned snapshot's did not.
+		res := tbl.ApplyTrigger(mkSpec(2), func() http.Handler { return tagHandler("sticky") })
+		assert.Equal(t, HandlerSwapped, res)
+		assert.Equal(t, "sticky", serve(t, ref))
+
+		res = tbl.ApplyTrigger(mkSpec(2), mustNotBuild(t))
+		assert.Equal(t, NoChange, res)
+	})
+
 	t.Run("path change is ShapeChanged and preserves ref identity", func(t *testing.T) {
 		tbl := New()
 		tbl.ApplyTrigger(spec("u1", 1, map[string]int64{"fn": 10}, nil),
@@ -208,23 +252,24 @@ func TestFnIndexMaintenance(t *testing.T) {
 }
 
 // TestAliasIndexMaintenance pins the alias→triggers index (RFC-0025)
-// end-to-end: RouteSpec.Aliases is mirrored into aliasIndex by reindexLocked
-// exactly like FnGens is for fnIndex, TriggersForAlias finds the resolved
-// triggers, MarkUnresolved's alias half lets an unresolved reference be found
-// too, and both cascades clean up on delete — the alias index gets the same
-// maintenance guarantees as fnIndex, for free, from the same code path.
+// end-to-end: RouteSpec.AliasGens keys are mirrored into aliasIndex by
+// reindexLocked exactly like FnGens is for fnIndex, TriggersForAlias finds the
+// resolved triggers, MarkUnresolved's alias half lets an unresolved reference
+// be found too, and both cascades clean up on delete — the alias index gets
+// the same maintenance guarantees as fnIndex, for free, from the same code
+// path.
 func TestAliasIndexMaintenance(t *testing.T) {
 	tbl := New()
 	prodAlias := types.NamespacedName{Namespace: "default", Name: "prod"}
 	stagingAlias := types.NamespacedName{Namespace: "default", Name: "staging"}
 
 	u1 := spec("u1", 1, map[string]int64{"hello@hello-v1": 1}, func(s *RouteSpec) {
-		s.Aliases = []string{"prod"}
+		s.AliasGens = map[string]int64{"prod": 1}
 	})
 	tbl.ApplyTrigger(u1, func() http.Handler { return tagHandler("t1") })
 	u2 := spec("u2", 1, map[string]int64{"hello@hello-v2": 1}, func(s *RouteSpec) {
 		s.ExactPath = "/two"
-		s.Aliases = []string{"prod", "staging"}
+		s.AliasGens = map[string]int64{"prod": 1, "staging": 1}
 	})
 	tbl.ApplyTrigger(u2, func() http.Handler { return tagHandler("t2") })
 
@@ -234,7 +279,7 @@ func TestAliasIndexMaintenance(t *testing.T) {
 	// Re-target u1 from prod to staging: the index must follow, mirroring
 	// TestFnIndexMaintenance's re-target case.
 	u1b := spec("u1", 2, map[string]int64{"hello@hello-v3": 1}, func(s *RouteSpec) {
-		s.Aliases = []string{"staging"}
+		s.AliasGens = map[string]int64{"staging": 1}
 	})
 	tbl.ApplyTrigger(u1b, func() http.Handler { return tagHandler("t1b") })
 	assert.Len(t, tbl.TriggersForAlias(prodAlias.Namespace, prodAlias.Name), 1, "u1 no longer resolves through prod")

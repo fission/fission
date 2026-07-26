@@ -144,13 +144,25 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 		fnGens[name] = fn.Generation
 		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
 	}
+	// StickyGen folds the sticky-config source function's Generation into the
+	// route identity. For an alias-resolved trigger the sticky source is the
+	// LIVE function while FnGens holds only the pinned snapshots' Generations,
+	// so without this a live Spec.State.Sticky edit would cascade here (via
+	// fnIndex) only for ApplyTrigger to answer NoChange, leaving the handler
+	// closed over the stale sticky config. The resync computes this identically
+	// (same resolver, same live cache), so a settled edit shows zero drift.
+	var stickyGen int64
+	if rr.stickySource != nil {
+		stickyGen = rr.stickySource.Generation
+	}
 	spec := &routetable.RouteSpec{
 		TriggerUID: trigger.UID,
 		Namespace:  trigger.Namespace,
 		Name:       trigger.Name,
 		TriggerGen: trigger.Generation,
 		FnGens:     fnGens,
-		Aliases:    rr.Aliases,
+		AliasGens:  rr.AliasGens,
+		StickyGen:  stickyGen,
 		ExactPath:  shape.exactPath,
 		PrefixPath: shape.prefixPath,
 		Host:       shape.host,

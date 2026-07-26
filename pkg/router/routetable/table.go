@@ -61,7 +61,8 @@ func (r *HandlerRef) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // RouteSpec is one HTTPTrigger's derived route: identity + change-detection
 // fields, the match shape, and the swappable handler. Shape equality drives
-// the materializer; (TriggerRV, FnRVs) equality drives handler swaps.
+// the materializer; (TriggerGen, FnGens, AliasGens, StickyGen) equality
+// drives handler swaps.
 type RouteSpec struct {
 	// Identity / change detection. Generations (not ResourceVersions) on
 	// purpose: the reconcilers are registered with
@@ -95,14 +96,34 @@ type RouteSpec struct {
 	// tiebreak for exact-duplicate shapes.
 	Created metav1.Time
 
-	// Aliases is the FunctionAlias names this route's resolution consumed
-	// (RFC-0025): populated from resolveResult.Aliases, which only
-	// resolveByAlias sets (a plain name, version-pinned, or FunctionWeights
-	// reference never references an alias). reindexLocked mirrors it into
+	// AliasGens maps each FunctionAlias name this route's resolution consumed
+	// (RFC-0025) to that alias's observed Generation: populated from
+	// resolveResult.AliasGens, which only resolveByAlias sets (a plain name,
+	// version-pinned, or FunctionWeights reference never references an
+	// alias). The KEYS are the index input: reindexLocked mirrors them into
 	// the table's aliasIndex, so a FunctionAlias event (a repoint) can find
 	// exactly the triggers to re-apply via TriggersForAlias — the same
-	// cascade fnIndex/FnGens gives function events.
-	Aliases []string
+	// cascade fnIndex/FnGens gives function events. The VALUES are change
+	// detection: a weight-only alias edit (`fission alias update --weight`,
+	// or an alias-mode canary stepping its split) bumps ONLY the alias's own
+	// spec Generation — the resolved BackendKey set and every pinned
+	// snapshot's Generation are unchanged — so without the alias Generation
+	// in the route identity ApplyTrigger would answer NoChange and the
+	// handler closure would keep serving the stale weight distribution.
+	// Symmetric with the internal `:<alias>` route, whose
+	// aliasRouteGeneration folds alias.Generation for exactly this reason.
+	AliasGens map[string]int64
+
+	// StickyGen is the Generation of the resolution's sticky-config source
+	// function (resolveResult.stickySource; 0 when there is none — the
+	// legacy FunctionWeights canary). For a plain or version-pinned
+	// reference it duplicates a Generation already present in FnGens; for an
+	// alias-resolved route the sticky source is the LIVE function, whose
+	// Generation appears nowhere in FnGens (only the pinned snapshots' do) —
+	// without it, a live Spec.State.Sticky edit would never reach an
+	// alias-routed trigger's handler: the function-event cascade would
+	// re-apply the trigger only for ApplyTrigger to answer NoChange.
+	StickyGen int64
 
 	// Handler is the stable ref registered into the mux. Owned by the
 	// table: ApplyTrigger sets it on insert and preserves it across shape
@@ -195,8 +216,9 @@ type Table struct {
 	// changes its function set (or a delete) can clean its old index entries.
 	triggerFns map[types.UID][]types.NamespacedName
 	// aliasIndex maps a FunctionAlias to the triggers whose routes were
-	// resolved through it (RouteSpec.Aliases), mirroring fnIndex so an alias
-	// repoint can re-apply exactly the affected triggers via TriggersForAlias.
+	// resolved through it (RouteSpec.AliasGens keys), mirroring fnIndex so an
+	// alias event can re-apply exactly the affected triggers via
+	// TriggersForAlias.
 	aliasIndex map[types.NamespacedName]map[types.UID]struct{}
 	// triggerAliases is the reverse of aliasIndex, mirroring triggerFns.
 	triggerAliases map[types.UID][]types.NamespacedName
@@ -253,13 +275,15 @@ func (t *Table) ApplyTrigger(spec *RouteSpec, build func() http.Handler) ApplyRe
 		return ShapeChanged
 	}
 	if old.shapeEqual(spec) {
-		if old.TriggerGen == spec.TriggerGen && maps.Equal(old.FnGens, spec.FnGens) {
+		if old.TriggerGen == spec.TriggerGen && maps.Equal(old.FnGens, spec.FnGens) &&
+			maps.Equal(old.AliasGens, spec.AliasGens) && old.StickyGen == spec.StickyGen {
 			return NoChange
 		}
 		old.Handler.Swap(build())
 		old.TriggerGen = spec.TriggerGen
 		old.FnGens = spec.FnGens
-		old.Aliases = spec.Aliases
+		old.AliasGens = spec.AliasGens
+		old.StickyGen = spec.StickyGen
 		old.Created = spec.Created
 		old.Namespace, old.Name = spec.Namespace, spec.Name
 		t.reindexLocked(old)
@@ -592,8 +616,8 @@ func (t *Table) reindexLocked(spec *RouteSpec) {
 	t.triggerFns[spec.TriggerUID] = keys
 
 	t.dropAliasIndexLocked(spec.TriggerUID)
-	aliasKeys := make([]types.NamespacedName, 0, len(spec.Aliases))
-	for _, alias := range spec.Aliases {
+	aliasKeys := make([]types.NamespacedName, 0, len(spec.AliasGens))
+	for alias := range spec.AliasGens {
 		key := types.NamespacedName{Namespace: spec.Namespace, Name: alias}
 		aliasKeys = append(aliasKeys, key)
 		set, ok := t.aliasIndex[key]

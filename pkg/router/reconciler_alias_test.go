@@ -193,7 +193,8 @@ func TestAliasCascadeRepointsHTTPTriggerHandlerSwapped(t *testing.T) {
 	snap := ts.routeTable.Snapshot()
 	require.Len(t, snap, 1)
 	assert.Contains(t, snap[0].FnGens, "hello@hello-v1", "the route's FnGens key names the alias's CURRENT target")
-	assert.Equal(t, []string{"prod"}, snap[0].Aliases, "the route is indexed under the alias it consumed")
+	assert.Equal(t, map[string]int64{"prod": 1}, snap[0].AliasGens,
+		"the route is indexed under the alias it consumed, at its observed generation")
 
 	// Repoint the alias and reconcile it: the cascade must re-apply t1 as a
 	// pure HandlerSwapped (same shape — /hello is unchanged).
@@ -330,6 +331,35 @@ func (r *versionRecordingResolver) Resolve(_ context.Context, fn *fv1.Function, 
 
 func (r *versionRecordingResolver) Invalidate(*fv1.Function, *url.URL, InvalidateReason) {}
 
+// snapshotAndReset returns the per-version call counts recorded so far and
+// clears them, so a test can assert on each traffic phase independently.
+func (r *versionRecordingResolver) snapshotAndReset() map[string]int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := r.calls
+	r.calls = nil
+	return out
+}
+
+// wireVersionRecordingProxy points ts's proxy plumbing (address resolver,
+// tapper, round-tripper params) at a stub 200-upstream and returns the
+// recording resolver, so a test can drive a route's live handler and observe
+// which resolved version each request landed on.
+func wireVersionRecordingProxy(t *testing.T, ts *HTTPTriggerSet) *versionRecordingResolver {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	upstreamURL, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	resolver := &versionRecordingResolver{url: upstreamURL}
+	ts.addressResolver = resolver
+	ts.tapper = &nopTapper{}
+	ts.tsRoundTripperParams = newTestParams(1, 1)
+	return resolver
+}
+
 // TestInternalAliasRouteServesWeightedSplit is the fix for the reported spec
 // gap: a weighted FunctionAlias's materialized `:<alias>` internal route
 // must serve the SAME split an HTTPTrigger referencing it would, not just the
@@ -346,17 +376,7 @@ func TestInternalAliasRouteServesWeightedSplit(t *testing.T) {
 	alias.Spec.Weight = new(50)
 	alias.Spec.SecondaryVersion = "hello-v2"
 	ts, _ := newIncrementalTS(t, fn, v1, v2, alias)
-
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-	upstreamURL, err := url.Parse(upstream.URL)
-	require.NoError(t, err)
-	resolver := &versionRecordingResolver{url: upstreamURL}
-	ts.addressResolver = resolver
-	ts.tapper = &nopTapper{}
-	ts.tsRoundTripperParams = newTestParams(1, 1)
+	resolver := wireVersionRecordingProxy(t, ts)
 
 	res, err := ts.applyAliasInternalRoute(t.Context(), alias)
 	require.NoError(t, err)
@@ -475,4 +495,172 @@ func TestDeleteAliasScopedToOwnFunctionCrossFunctionSuffixCollision(t *testing.T
 	drift, err := ts.resync(t.Context(), false)
 	require.NoError(t, err)
 	assert.Zero(t, drift, "the innocent function's route must not have been touched, so there is nothing to heal")
+}
+
+// TestAliasWeightOnlyEditReachesHTTPTriggerHandlerSwapped pins the C2 fix: a
+// WEIGHT-only FunctionAlias edit (`fission alias update --weight`, or an
+// alias-mode canary stepping its split) changes neither the resolved
+// BackendKey set nor any pinned snapshot's Generation — only the alias's own
+// spec Generation moves. Folding that Generation into the trigger's route
+// identity (RouteSpec.AliasGens) makes the alias event's cascade land as a
+// HandlerSwapped whose new closure serves the new distribution; pre-fix the
+// re-apply answered NoChange and PUBLIC traffic stayed on the stale split for
+// the whole rollout (the internal `:<alias>` route already folded
+// alias.Generation via aliasRouteGeneration — only the public path was
+// missed). Also asserts the drift-symmetry half: once the edit settles, a
+// resync pass recomputes the identical identity and corrects NOTHING.
+func TestAliasWeightOnlyEditReachesHTTPTriggerHandlerSwapped(t *testing.T) {
+	fn := incrFn("hello", "default", 1)
+	v1 := incrVersion("hello-v1", "default", "hello", fn.UID, 1, 1)
+	v2 := incrVersion("hello-v2", "default", "hello", fn.UID, 2, 2)
+	alias := incrAlias("prod", "default", "hello", "hello-v1", 1)
+	alias.Spec.Weight = new(100)
+	alias.Spec.SecondaryVersion = "hello-v2"
+	trigger := incrAliasTrigger("t1", "default", 1, "/hello", "hello", "prod")
+	ts, cl := newIncrementalTS(t, fn, v1, v2, alias, trigger)
+	resolver := wireVersionRecordingProxy(t, ts)
+
+	// Seed the fully-reconciled baseline (trigger route + internal routes) —
+	// the state production is in by the time a weight edit lands.
+	_, err := ts.resync(t.Context(), true)
+	require.NoError(t, err)
+	ts.materialize(t.Context())
+	drainSignals(ts)
+
+	snap := ts.routeTable.Snapshot()
+	require.Len(t, snap, 1)
+	handler := snap[0].Handler
+	drive := func(n int) {
+		t.Helper()
+		for range n {
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/hello", nil))
+			require.Equal(t, http.StatusOK, rr.Code)
+		}
+	}
+
+	drive(40)
+	calls := resolver.snapshotAndReset()
+	require.Equal(t, 40, calls["hello-v1"], "weight 100 must send every request to the primary")
+
+	// Weight-only edit: same {primary, secondary} target set, new split. A
+	// spec write bumps ONLY alias.Generation.
+	reweighted := &fv1.FunctionAlias{}
+	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: "prod"}, reweighted))
+	reweighted.Generation = 2
+	reweighted.Spec.Weight = new(0)
+	require.NoError(t, cl.Update(t.Context(), reweighted))
+
+	// The alias event's trigger cascade lands exactly here
+	// (reapplyTriggersForAlias → applyTriggerIncremental): the re-apply must
+	// be a HandlerSwapped — pre-fix it was NoChange.
+	res, err := ts.applyTriggerIncremental(t.Context(), trigger)
+	require.NoError(t, err)
+	assert.Equal(t, routetable.HandlerSwapped, res,
+		"a weight-only alias edit must swap the public trigger's handler (pre-fix: NoChange)")
+	requireNoSignal(t, ts) // the split lives in the handler closure, never in the mux shape
+
+	snap = ts.routeTable.Snapshot()
+	require.Len(t, snap, 1)
+	assert.Same(t, handler, snap[0].Handler, "atomic swap on the SAME ref, not a re-registration")
+
+	drive(40)
+	calls = resolver.snapshotAndReset()
+	assert.Zero(t, calls["hello-v1"], "the stale 100/0 split must be gone from public traffic")
+	assert.Equal(t, 40, calls["hello-v2"], "the new 0/100 split must serve immediately")
+
+	// Settle the alias's own internal route too (a real alias event does both
+	// halves via applyAliasIncremental), then drift symmetry: the resync
+	// rebuilds every RouteSpec from the live cache through the same resolver,
+	// so a settled weight-only edit must show ZERO drift — the CI bar.
+	_, err = ts.applyAliasIncremental(t.Context(), reweighted)
+	require.NoError(t, err)
+	drift, err := ts.resync(t.Context(), false)
+	require.NoError(t, err)
+	assert.Zero(t, drift, "a settled weight-only edit must not register as resync drift")
+	requireNoSignal(t, ts)
+}
+
+// TestLiveFunctionStickyEditReachesAliasRoutedTrigger pins the stickySource
+// half of the C2 fix: an alias resolution's sticky-config source is the LIVE
+// function (resolveResult.stickySource), whose Generation appears nowhere in
+// FnGens (only the pinned snapshots' do) — so a live Spec.State.Sticky edit
+// used to cascade to the alias-routed trigger via fnIndex only for
+// ApplyTrigger to answer NoChange, leaving the handler closed over the stale
+// (or absent) sticky config forever. RouteSpec.StickyGen makes the cascade a
+// HandlerSwapped whose new closure honors the edited config.
+func TestLiveFunctionStickyEditReachesAliasRoutedTrigger(t *testing.T) {
+	fn := incrFn("hello", "default", 1)
+	v1 := incrVersion("hello-v1", "default", "hello", fn.UID, 1, 1)
+	v2 := incrVersion("hello-v2", "default", "hello", fn.UID, 2, 2)
+	alias := incrAlias("prod", "default", "hello", "hello-v1", 1)
+	alias.Spec.Weight = new(50)
+	alias.Spec.SecondaryVersion = "hello-v2"
+	trigger := incrAliasTrigger("t1", "default", 1, "/hello", "hello", "prod")
+	ts, cl := newIncrementalTS(t, fn, v1, v2, alias, trigger)
+	resolver := wireVersionRecordingProxy(t, ts)
+
+	_, err := ts.resync(t.Context(), true)
+	require.NoError(t, err)
+	ts.materialize(t.Context())
+	drainSignals(ts)
+
+	snap := ts.routeTable.Snapshot()
+	require.Len(t, snap, 1)
+	require.Equal(t, int64(1), snap[0].StickyGen,
+		"the live function (gen 1) is the alias resolution's sticky-config source")
+	handler := snap[0].Handler
+	drive := func(n int) {
+		t.Helper()
+		for range n {
+			req := httptest.NewRequest(http.MethodGet, "/hello", nil)
+			req.Header.Set("X-Session-Id", "session-abc")
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+			require.Equal(t, http.StatusOK, rr.Code)
+		}
+	}
+
+	// No sticky config yet: the keyed header is ignored, the 50/50 pick is
+	// random, and both backends receive traffic.
+	drive(100)
+	calls := resolver.snapshotAndReset()
+	require.Positive(t, calls["hello-v1"], "unkeyed 50/50 must reach the primary")
+	require.Positive(t, calls["hello-v2"], "unkeyed 50/50 must reach the secondary")
+
+	// Sticky edit on the LIVE function (a spec change bumps its Generation).
+	// The pinned snapshots are untouched, so FnGens cannot see this.
+	live := &fv1.Function{}
+	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Namespace: "default", Name: "hello"}, live))
+	live.Generation = 2
+	live.Spec.State = &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Session-Id"}}
+	require.NoError(t, cl.Update(t.Context(), live))
+
+	// The function event cascades to the alias-routed trigger via fnIndex
+	// (BackendKeys are stripped back to the live function's name) and must
+	// swap its handler — pre-fix the re-apply answered NoChange because no
+	// identity field carried the live function's Generation.
+	_, err = ts.applyFunctionIncremental(t.Context(), live)
+	require.NoError(t, err)
+	requireNoSignal(t, ts)
+
+	snap = ts.routeTable.Snapshot()
+	require.Len(t, snap, 1)
+	assert.Equal(t, int64(2), snap[0].StickyGen,
+		"the cascade must re-resolve the trigger against the edited live function (pre-fix: identity unchanged, NoChange)")
+	assert.Same(t, handler, snap[0].Handler, "still an atomic swap on the same ref")
+
+	// The swapped handler honors the sticky key: every request carrying the
+	// same key now lands on ONE deterministic backend.
+	drive(100)
+	calls = resolver.snapshotAndReset()
+	require.Equal(t, 100, calls["hello-v1"]+calls["hello-v2"], "every request resolved to one of the two targets")
+	assert.True(t, calls["hello-v1"] == 100 || calls["hello-v2"] == 100,
+		"a keyed request stream must stick to one backend after the sticky edit, got %v", calls)
+
+	// Drift symmetry: the settled sticky edit must not register as drift.
+	drift, err := ts.resync(t.Context(), false)
+	require.NoError(t, err)
+	assert.Zero(t, drift, "a settled sticky edit must not register as resync drift")
+	requireNoSignal(t, ts)
 }

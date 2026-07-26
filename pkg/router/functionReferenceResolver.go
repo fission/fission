@@ -53,13 +53,17 @@ type (
 		resolveResultType
 		functionMap                map[string]*fv1.Function
 		functionWtDistributionList []functionWeightDistribution
-		// Aliases is the FunctionAlias names this resolution consumed
-		// (RFC-0025): only resolveByAlias populates it (a plain name,
-		// version-pinned, or FunctionWeights reference never references an
-		// alias). applyTriggerIncremental copies it onto the route's
-		// RouteSpec.Aliases so a FunctionAlias event can find and re-apply
-		// exactly the triggers resolving through it (TriggersForAlias).
-		Aliases []string
+		// AliasGens maps each FunctionAlias name this resolution consumed
+		// (RFC-0025) to its observed Generation: only resolveByAlias
+		// populates it (a plain name, version-pinned, or FunctionWeights
+		// reference never references an alias). applyTriggerIncremental
+		// copies it onto the route's RouteSpec.AliasGens so a FunctionAlias
+		// event can find and re-apply exactly the triggers resolving through
+		// it (TriggersForAlias), and so the alias's own Generation is part of
+		// the route identity — a weight-only alias edit (same targets, new
+		// split) bumps only alias.Generation, and must land as a
+		// HandlerSwapped on every consuming trigger, never a NoChange.
+		AliasGens map[string]int64
 		// stickySource is the Function whose Spec.State.Sticky config governs
 		// RFC-0023 sticky routing for this result (RFC-0025 Task 5).
 		//
@@ -273,7 +277,7 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 
 	if alias.Spec.Weight == nil {
 		rr := singleFunctionResult(primaryKey, primary)
-		rr.Aliases = []string{ref.Alias}
+		rr.AliasGens = map[string]int64{ref.Alias: alias.Generation}
 		rr.stickySource = live
 		return rr, nil
 	}
@@ -303,7 +307,7 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 			{name: primaryKey, weight: weight, sumPrefix: weight},
 			{name: secondaryKey, weight: 100 - weight, sumPrefix: 100},
 		},
-		Aliases:      []string{ref.Alias},
+		AliasGens:    map[string]int64{ref.Alias: alias.Generation},
 		stickySource: live,
 	}
 	return &rr, nil
