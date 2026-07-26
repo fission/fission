@@ -17,6 +17,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd/spec"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 type RollbackSubCommand struct {
@@ -153,20 +154,15 @@ func (opts *RollbackSubCommand) warnEnvDrift(input cli.Input) {
 		return
 	}
 
-	// Mirrors publish.go:118's envNS fallback: an unset Snapshot Environment
-	// namespace means "same namespace as the function", and opts.namespace
-	// is that namespace (FunctionVersions/FunctionAliases live alongside
-	// their Function).
-	envNS := v.Spec.Snapshot.Environment.Namespace
-	if envNS == "" {
-		envNS = opts.namespace
-	}
+	// opts.namespace is the function's namespace (FunctionVersions/
+	// FunctionAliases live alongside their Function).
+	envNS := versioning.SnapshotEnvNamespace(v, opts.namespace)
 	env, err := opts.Client().FissionClientSet.CoreV1().Environments(envNS).Get(input.Context(), v.Spec.Snapshot.Environment.Name, metav1.GetOptions{})
 	if err != nil {
 		return
 	}
 
-	if v.Spec.EnvObservedGeneration != env.Generation {
+	if versioning.EnvDrifted(v, env) {
 		fmt.Printf("WARNING: target version %v was published under env %v/%v generation %v; live env is generation %v — rollback restores code/config, not the runtime image\n",
 			opts.target, envNS, env.Name, v.Spec.EnvObservedGeneration, env.Generation)
 	}

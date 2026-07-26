@@ -143,17 +143,13 @@ func (opts *DescribeSubCommand) aliasesFor(ctx context.Context, namespace, fnNam
 // recorded (Spec.Snapshot.Environment), best-effort: it exists only to
 // compute EnvDrift for the --version SNAPSHOT inspector, so an unreadable or
 // unset Environment renders drift as unassessable (nil) rather than failing
-// the view -- mirrors envDriftByVersion's (versions.go) namespace-fallback
-// and "absence means not assessable" conventions.
+// the view -- "absence means not assessable", matching versionEnvDrift below.
 func (opts *DescribeSubCommand) snapshotEnvFor(ctx context.Context, namespace string, version *fv1.FunctionVersion) *fv1.Environment {
 	ref := version.Spec.Snapshot.Environment
 	if ref.Name == "" {
 		return nil
 	}
-	envNS := ref.Namespace
-	if envNS == "" {
-		envNS = namespace
-	}
+	envNS := versioning.SnapshotEnvNamespace(version, namespace)
 	env, err := opts.Client().FissionClientSet.CoreV1().Environments(envNS).Get(ctx, ref.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil
@@ -358,17 +354,16 @@ func versionPublishedAt(version *fv1.FunctionVersion) string {
 }
 
 // versionEnvDrift compares the version's publish-time environment
-// observation (Spec.EnvObservedGeneration) against the live Environment's
-// current Generation: "DRIFT (live generation=<n>)" when they differ,
-// "current" when they still match, or util.NoneValue when env is nil (the
-// snapshot recorded no Environment at all, or the live one is unreadable) --
-// not assessable, mirroring envDriftByVersion's (versions.go) and
+// observation against the live Environment's current Generation: "DRIFT
+// (live generation=<n>)" when they differ, "current" when they still match,
+// or util.NoneValue when env is nil (the snapshot recorded no Environment at
+// all, or the live one is unreadable) -- not assessable, matching
 // FunctionAliasConditionEnvDrift's "absence means cannot tell" convention.
 func versionEnvDrift(version *fv1.FunctionVersion, env *fv1.Environment) string {
 	if env == nil {
 		return util.NoneValue
 	}
-	if version.Spec.EnvObservedGeneration != env.Generation {
+	if versioning.EnvDrifted(version, env) {
 		return fmt.Sprintf("DRIFT (live generation=%d)", env.Generation)
 	}
 	return "current"

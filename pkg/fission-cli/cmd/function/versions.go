@@ -153,12 +153,7 @@ func envDriftByVersion(ctx context.Context, cl versioned.Interface, namespace st
 			continue
 		}
 
-		// Mirrors publish.go:118's envNS fallback: an unset Snapshot
-		// Environment namespace means "same namespace as the function".
-		envNS := v.Spec.Snapshot.Environment.Namespace
-		if envNS == "" {
-			envNS = namespace
-		}
+		envNS := versioning.SnapshotEnvNamespace(&v, namespace)
 
 		key := envNS + "/" + envName
 		env, cached := envCache[key]
@@ -174,7 +169,7 @@ func envDriftByVersion(ctx context.Context, cl versioned.Interface, namespace st
 			drift[v.Name] = util.NoneValue
 			continue
 		}
-		if v.Spec.EnvObservedGeneration != env.Generation {
+		if versioning.EnvDrifted(&v, env) {
 			drift[v.Name] = "True"
 		} else {
 			drift[v.Name] = "False"

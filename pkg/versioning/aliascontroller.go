@@ -147,7 +147,7 @@ func (r *AliasReconciler) mapVersionToAliases(ctx context.Context, obj client.Ob
 // currently-resolved target FunctionVersion's snapshot references the
 // Environment event — Environments are frequently referenced from a
 // different namespace than the Function/Alias/Version (Snapshot.Environment
-// carries its own Namespace field; see applyEnvDrift's envNS fallback), so
+// carries its own Namespace field; see SnapshotEnvNamespace), so
 // this cannot be scoped to the event's own namespace the way
 // mapVersionToAliases is. There is no index from Environment identity to
 // alias, so this Lists every FunctionAlias cluster-wide and Gets each one's
@@ -181,10 +181,7 @@ func (r *AliasReconciler) mapEnvToAliases(ctx context.Context, obj client.Object
 			continue
 		}
 
-		envNS := v.Spec.Snapshot.Environment.Namespace
-		if envNS == "" {
-			envNS = a.Namespace
-		}
+		envNS := SnapshotEnvNamespace(v, a.Namespace)
 		if v.Spec.Snapshot.Environment.Name == env.Name && envNS == env.Namespace {
 			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(a)})
 		}
@@ -479,15 +476,10 @@ func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.Function
 			alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
 	}
 
-	// Mirrors publish.go:118's envNS fallback: an unset Snapshot Environment
-	// namespace means "same namespace as the function", and a FunctionAlias
-	// always lives in its Function's namespace (repairMetadata Gets the
-	// Function from alias.Namespace) — so alias.Namespace stands in for the
-	// function's namespace here.
-	envNS := v.Spec.Snapshot.Environment.Namespace
-	if envNS == "" {
-		envNS = alias.Namespace
-	}
+	// A FunctionAlias always lives in its Function's namespace (repairMetadata
+	// Gets the Function from alias.Namespace) — so alias.Namespace stands in
+	// for the function's namespace here.
+	envNS := SnapshotEnvNamespace(v, alias.Namespace)
 
 	env := &fv1.Environment{}
 	if err := r.client.Get(ctx, client.ObjectKey{Namespace: envNS, Name: v.Spec.Snapshot.Environment.Name}, env); err != nil {
@@ -498,7 +490,10 @@ func (r *AliasReconciler) applyEnvDrift(ctx context.Context, alias *fv1.Function
 			envNS, v.Spec.Snapshot.Environment.Name, alias.Namespace, resolvedVersion, alias.Namespace, alias.Name, err)
 	}
 
-	drift := v.Spec.EnvObservedGeneration != env.Generation
+	// EnvDrifted is the shared generation check; the runtime-image comparison
+	// below is layered on top of it and is specific to this reconciler's
+	// condition message (not part of the shared drift definition).
+	drift := EnvDrifted(v, env)
 	imageChanged := v.Spec.EnvRuntimeImage != "" && env.Spec.Runtime.Image != "" && v.Spec.EnvRuntimeImage != env.Spec.Runtime.Image
 
 	status := metav1.ConditionFalse

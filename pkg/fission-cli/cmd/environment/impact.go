@@ -17,6 +17,7 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 // driftOtherEnv is impactRowForAlias's Drift verdict when the alias's
@@ -202,7 +203,7 @@ func impactRowForAlias(ctx context.Context, cl versioned.Interface, namespace st
 	}
 
 	row.EnvObservedGeneration = v.Spec.EnvObservedGeneration
-	if v.Spec.EnvObservedGeneration != env.Generation {
+	if versioning.EnvDrifted(v, env) {
 		row.Drift = "True"
 	} else {
 		row.Drift = "False"
@@ -211,21 +212,14 @@ func impactRowForAlias(ctx context.Context, cl versioned.Interface, namespace st
 }
 
 // snapshotEnvMatches reports whether v's Snapshot.Environment actually
-// resolves to env — the same publish.go:118 namespace-fallback logic
-// AliasReconciler.applyEnvDrift and `fn versions -o wide`'s
-// envDriftByVersion use (unset Snapshot Environment namespace means "the
-// function's own namespace"; namespace here is that namespace, since fns
-// was already scoped to it). A version's snapshot is the reference for what
-// Environment it was actually published against — the Function's CURRENT
+// resolves to env (namespace here is that namespace, since fns was already
+// scoped to it). A version's snapshot is the reference for what Environment
+// it was actually published against — the Function's CURRENT
 // Spec.Environment (what filterFunctionsByEnvironment matched on) can have
 // moved on since.
 func snapshotEnvMatches(v *fv1.FunctionVersion, namespace string, env *fv1.Environment) bool {
 	if v.Spec.Snapshot.Environment.Name != env.Name {
 		return false
 	}
-	envNS := v.Spec.Snapshot.Environment.Namespace
-	if envNS == "" {
-		envNS = namespace
-	}
-	return envNS == env.Namespace
+	return versioning.SnapshotEnvNamespace(v, namespace) == env.Namespace
 }
