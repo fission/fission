@@ -459,7 +459,63 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 	return false
 }
 
+// RefreshFuncPods deletes the function's specialized pods — every generation's —
+// so the next request re-specializes a warm pod. This is the ExecutorType
+// interface entry point, reached from the cms Secret/ConfigMap reconcilers on a
+// content change. It deliberately recycles alias-retained (RFC-0025) generations
+// too: Secrets/ConfigMaps are referenced by NAME (their contents are not part of
+// a FunctionVersion snapshot), and retained pods are exempt from the idle reaper
+// (versionretain), so this refresh is the only path that ever gets rotated
+// Secret/ConfigMap data into an alias-pinned version's pods — sparing them here
+// would leave e.g. revoked credentials live indefinitely. The Function
+// reconciler's spec-change refresh instead goes through refreshFuncPods
+// (funchandlers.go), which spares retained generations.
 func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.Logger, f fv1.Function) error {
+	return gpm.refreshFuncPodsFiltered(ctx, logger, f, nil)
+}
+
+// refreshSparesPod reports whether a refresh driven by the live Function f must
+// leave a listed specialized pod alone: the pod belongs to a generation OTHER
+// than f's own that a live FunctionAlias still pins (RFC-0025 warm rollback —
+// deleting it would knock out the pinned version's warm capacity and 5xx
+// in-flight alias traffic on every live deploy). retained is
+// versionretain.View.Retained (or nil = spare nothing, the pre-RFC-0025
+// behaviour).
+//
+// Pods of f's OWN generation are never spared, retained or not: the refresh is
+// the only mechanism that recycles the live generation's stale-spec pods (a
+// just-bumped spec, env update, rotated ConfigMap), and a pod labelled with the
+// new live generation re-specializes to an identical spec anyway. A pod with a
+// missing or unparsable fv1.FUNCTION_GENERATION label recycles too: the only
+// path that labels a specialized pod (choosePod's relabel via
+// specializedPodLabels, gp_pod.go) has stamped the generation since RFC-0002,
+// which predates versioning — so a label-less pod is pre-migration legacy and
+// cannot be a pinned version's pod.
+func refreshSparesPod(podLabels map[string]string, f *fv1.Function, retained func(uid k8sTypes.UID, gen int64) bool) bool {
+	if retained == nil {
+		return false
+	}
+	genStr, ok := podLabels[fv1.FUNCTION_GENERATION]
+	if !ok {
+		return false
+	}
+	gen, err := strconv.ParseInt(genStr, 10, 64)
+	if err != nil {
+		return false
+	}
+	if gen == f.Generation {
+		return false
+	}
+	return retained(f.UID, gen)
+}
+
+// refreshFuncPodsFiltered is RefreshFuncPods' body with the RFC-0025 retain
+// filter injected: pods whose generation label names an alias-retained
+// generation other than f's own survive the refresh (see refreshSparesPod).
+// The predicate is a parameter — not read from gpm.retainedFn — so each caller
+// states explicitly whether it spares (Function reconciler) or recycles
+// everything (cms Secret/ConfigMap refresh, nil).
+func (gpm *GenericPoolManager) refreshFuncPodsFiltered(ctx context.Context, logger logr.Logger, f fv1.Function, retained func(uid k8sTypes.UID, gen int64) bool) error {
 
 	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
@@ -493,6 +549,15 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.
 	}
 
 	for _, po := range podList.Items {
+		if refreshSparesPod(po.Labels, &f, retained) {
+			logger.V(1).Info("refresh sparing alias-retained generation's pod",
+				"pod", po.Name,
+				"pod_generation", po.Labels[fv1.FUNCTION_GENERATION],
+				"function", f.Name,
+				"namespace", f.Namespace,
+				"live_generation", f.Generation)
+			continue
+		}
 		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(ctx, po.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
