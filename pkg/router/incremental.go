@@ -409,17 +409,21 @@ func (ts *HTTPTriggerSet) applyAliasIncremental(ctx context.Context, alias *fv1.
 // candidate: a suffix name can be shared across DIFFERENT functions (an
 // alias "hello-v1" on function "world" and a FunctionVersion "hello-v1" on
 // function "hello" are both valid, independent routes), so a delete event for
-// one must not remove the other's still-live route. In practice at most one
-// of the two Gets below can hit for a well-formed object (the FunctionAlias
-// webhook's aliasNameShadowsVersionScheme rejects an alias colliding with
-// ITS OWN function's version scheme), but both are checked defensively.
+// one must not remove the other's still-live route. Both Gets can hit at
+// once for cross-function collisions (the FunctionAlias webhook's
+// aliasNameShadowsVersionScheme only rejects an alias colliding with ITS
+// OWN function's version scheme), so an alias hit that belongs to a
+// DIFFERENT function must fall through to the version check rather than
+// answer for it.
 func (ts *HTTPTriggerSet) suffixStillClaimed(ctx context.Context, key routetable.InternalKey) (bool, error) {
 	nsName := types.NamespacedName{Namespace: key.Namespace, Name: key.Suffix}
 
 	alias := &fv1.FunctionAlias{}
 	switch err := ts.client.Get(ctx, nsName, alias); {
 	case err == nil:
-		return alias.Spec.FunctionName == key.Name, nil
+		if alias.Spec.FunctionName == key.Name {
+			return true, nil
+		}
 	case !apierrors.IsNotFound(err):
 		return false, err
 	}
