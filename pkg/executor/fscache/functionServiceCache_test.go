@@ -403,6 +403,24 @@ func TestVersionPinnedLookupReturnsOwnGeneration(t *testing.T) {
 	require.Len(t, fsc.ListByFunctionUID(live.Function.UID), 2, "both generations must be enumerable by UID")
 }
 
+// TestListByFunctionVersion covers the version-GC enumeration: only the
+// entry whose Function metadata carries the matching fv1.FUNCTION_VERSION
+// label in the matching namespace is returned — the live sibling (no label),
+// other version names, and other namespaces all miss.
+func TestListByFunctionVersion(t *testing.T) {
+	fsc, _, versioned := versionedPairFixture(t)
+
+	got := fsc.ListByFunctionVersion("default", "fn-v1")
+	require.Len(t, got, 1)
+	require.Equal(t, versioned.Address, got[0].Address)
+	require.Equal(t, versioned.Name, got[0].Name)
+
+	require.Empty(t, fsc.ListByFunctionVersion("default", "fn-v2"),
+		"a version name with no cached projection must return nothing")
+	require.Empty(t, fsc.ListByFunctionVersion("other-ns", "fn-v1"),
+		"the namespace must scope the match")
+}
+
 // TestDeleteEntryScopedToOwnGeneration is the C8 regression: DeleteEntry of
 // ONE generation's fsvc must remove only its own (UID, Generation) index
 // entry — the surviving sibling that shares the UID must stay reachable via

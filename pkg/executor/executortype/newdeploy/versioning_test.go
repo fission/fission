@@ -9,10 +9,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -151,4 +158,163 @@ func TestGetFuncSvcFromCacheVersionPinned(t *testing.T) {
 	remaining := deploy.fsCache.ListByFunctionUID(liveFn.UID)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, liveSvc.Address, remaining[0].Address)
+}
+
+// seedFunctionObjects creates the Deployment/Service/HPA triple named name
+// with the given labels in ns — the object set fnCreate leaves behind.
+func seedFunctionObjects(t *testing.T, kubeClient kubernetes.Interface, ns, name string, lbls map[string]string) {
+	t.Helper()
+	ctx := t.Context()
+	meta := metav1.ObjectMeta{Name: name, Namespace: ns, Labels: lbls}
+	_, err := kubeClient.AppsV1().Deployments(ns).Create(ctx, &appsv1.Deployment{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = kubeClient.CoreV1().Services(ns).Create(ctx, &apiv1.Service{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = kubeClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Create(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+}
+
+// assertFunctionObjects asserts presence (want=true) or absence (want=false)
+// of the Deployment/Service/HPA triple named name in ns.
+func assertFunctionObjects(t *testing.T, kubeClient kubernetes.Interface, ns, name string, want bool) {
+	t.Helper()
+	ctx := t.Context()
+	_, depErr := kubeClient.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+	_, svcErr := kubeClient.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+	_, hpaErr := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
+	if want {
+		assert.NoError(t, depErr, "deployment %s must exist", name)
+		assert.NoError(t, svcErr, "service %s must exist", name)
+		assert.NoError(t, hpaErr, "hpa %s must exist", name)
+	} else {
+		assert.Error(t, depErr, "deployment %s must be deleted", name)
+		assert.Error(t, svcErr, "service %s must be deleted", name)
+		assert.Error(t, hpaErr, "hpa %s must be deleted", name)
+	}
+}
+
+// TestNewDeployFnDeleteEmptyCacheRemovesPerVersionObjects is the C4/gap-1
+// regression: after an executor restart the fscache is EMPTY, so fnDelete's
+// cache walk finds nothing and its computed-name fallback only covers the
+// live (unversioned) object set — the per-version -v<seq>
+// Deployment/Service/HPA sets specialized by the previous incarnation used
+// to leak. Deletion must be cache-independent: everything carrying the
+// function's identity labels goes, and an unrelated function's objects
+// survive.
+func TestNewDeployFnDeleteEmptyCacheRemovesPerVersionObjects(t *testing.T) {
+	t.Parallel()
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	deploy := &NewDeploy{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+
+	liveFn := fnForObjName("hello", "default")
+	v1Fn := liveFn.DeepCopy()
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+	v2Fn := liveFn.DeepCopy()
+	v2Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v2"}
+	envMeta := metav1.ObjectMeta{Name: "env", Namespace: "default", UID: "env-uid"}
+
+	names := []string{deploy.getObjName(liveFn), deploy.getObjName(v1Fn), deploy.getObjName(v2Fn)}
+	for i, fn := range []*fv1.Function{liveFn, v1Fn, v2Fn} {
+		seedFunctionObjects(t, kubeClient, "default", names[i], deploy.getDeployLabels(fn.ObjectMeta, envMeta))
+	}
+
+	// A different function's objects (same labels shape, different UID) must
+	// not be caught by the label sweep.
+	otherFn := fnForObjName("other", "default")
+	otherFn.UID = "00000000-0000-0000-0000-00000000cafe"
+	otherName := deploy.getObjName(otherFn)
+	seedFunctionObjects(t, kubeClient, "default", otherName, deploy.getDeployLabels(otherFn.ObjectMeta, envMeta))
+
+	// fsCache is intentionally EMPTY: the executor-restart scenario.
+	require.NoError(t, deploy.fnDelete(t.Context(), liveFn))
+
+	for _, name := range names {
+		assertFunctionObjects(t, kubeClient, "default", name, false)
+	}
+	assertFunctionObjects(t, kubeClient, "default", otherName, true)
+}
+
+// TestNewDeployCleanupFunctionVersion is the C4/gap-2 regression: deleting a
+// FunctionVersion CR (retention GC or manual) must remove exactly that
+// version's Deployment/Service/HPA set and evict its fscache entry, while the
+// live function's objects and cache entry stay untouched.
+func TestNewDeployCleanupFunctionVersion(t *testing.T) {
+	t.Parallel()
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	deploy := &NewDeploy{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+	ctx := t.Context()
+
+	liveFn := fnForObjName("hello", "default")
+	liveFn.Generation = 5
+	v1Fn := liveFn.DeepCopy()
+	v1Fn.Generation = 2
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+	envMeta := metav1.ObjectMeta{Name: "env", Namespace: "default", UID: "env-uid"}
+
+	liveName := deploy.getObjName(liveFn)
+	v1Name := deploy.getObjName(v1Fn)
+	seedFunctionObjects(t, kubeClient, "default", liveName, deploy.getDeployLabels(liveFn.ObjectMeta, envMeta))
+	seedFunctionObjects(t, kubeClient, "default", v1Name, deploy.getDeployLabels(v1Fn.ObjectMeta, envMeta))
+
+	_, err := deploy.fsCache.Add(fscache.FuncSvc{
+		Name: liveName, Function: &liveFn.ObjectMeta, Address: "10.9.0.5:8888", Executor: fv1.ExecutorTypeNewdeploy,
+	})
+	require.NoError(t, err)
+	_, err = deploy.fsCache.Add(fscache.FuncSvc{
+		Name: v1Name, Function: &v1Fn.ObjectMeta, Address: "10.9.0.2:8888", Executor: fv1.ExecutorTypeNewdeploy,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, deploy.CleanupFunctionVersion(ctx, "default", "hello-v1"))
+
+	assertFunctionObjects(t, kubeClient, "default", v1Name, false)
+	assertFunctionObjects(t, kubeClient, "default", liveName, true)
+
+	assert.Empty(t, deploy.fsCache.ListByFunctionVersion("default", "hello-v1"),
+		"the deleted version's cache entry must be evicted")
+	remaining := deploy.fsCache.ListByFunctionUID(liveFn.UID)
+	require.Len(t, remaining, 1, "the live entry must survive")
+	assert.Equal(t, liveName, remaining[0].Name)
+}
+
+// TestNewDeployCleanupFunctionVersionCacheOnly covers the half of
+// CleanupFunctionVersion the label list cannot see: a cached projection whose
+// backing objects are already gone (or never landed) must still be evicted
+// via the cache walk, and the call must not error on the objects' absence.
+func TestNewDeployCleanupFunctionVersionCacheOnly(t *testing.T) {
+	t.Parallel()
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	deploy := &NewDeploy{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+
+	v1Fn := fnForObjName("hello", "default")
+	v1Fn.Generation = 2
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+	_, err := deploy.fsCache.Add(fscache.FuncSvc{
+		Name: deploy.getObjName(v1Fn), Function: &v1Fn.ObjectMeta, Address: "10.9.0.2:8888", Executor: fv1.ExecutorTypeNewdeploy,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, deploy.CleanupFunctionVersion(t.Context(), "default", "hello-v1"))
+	assert.Empty(t, deploy.fsCache.ListByFunctionVersion("default", "hello-v1"))
 }

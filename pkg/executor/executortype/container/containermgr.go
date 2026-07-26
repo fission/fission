@@ -668,10 +668,67 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
+	// Cache-INDEPENDENT enumeration: the cache walk above only finds
+	// generations with a live fscache entry, and the computed name only covers
+	// the Function object passed in (typically the live spec, no version
+	// label). Per-version -v<seq> objects specialized by a previous executor
+	// incarnation — or whose entry was evicted — would leak past both, so
+	// additionally list Deployments/Services/HPAs by the identity labels every
+	// created object carries (getDeployLabels) and tear down everything found.
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer),
+		fv1.FUNCTION_UID:  string(fn.UID),
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, caaf.kubernetesClient, ns, selector)
+	multierr = errors.Join(multierr, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
 	for objName := range objNames {
 		multierr = errors.Join(multierr, caaf.cleanupContainer(ctx, ns, objName))
 	}
 	return multierr
+}
+
+// CleanupFunctionVersion tears down the per-version Deployment/Service/HPA
+// set (and the fscache entry) a deleted FunctionVersion's projection left
+// behind, driven by the executor's versiongc reconciler. See the newdeploy
+// counterpart (and pkg/executor/versiongc's package doc) for why teardown is
+// label-based rather than an ownerReference on the objects: with the chart's
+// functionNamespace value set the objects and the FunctionVersion CR live in
+// different namespaces, which Kubernetes ownerRef GC cannot span.
+func (caaf *Container) CleanupFunctionVersion(ctx context.Context, fnNamespace, versionName string) error {
+	var errs error
+
+	// Cache first: evict the projection's entry so the idle reaper stops
+	// tracking a service whose backing objects are about to vanish, and so
+	// its object name is torn down even if a list below fails.
+	objNames := make(map[string]struct{})
+	for _, fsvc := range caaf.fsCache.ListByFunctionVersion(fnNamespace, versionName) {
+		objNames[fsvc.Name] = struct{}{}
+		if _, err := caaf.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("error deleting the function version entry from cache: %w", err))
+		}
+	}
+
+	ns := caaf.nsResolver.GetFunctionNS(fnNamespace)
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypeContainer),
+		fv1.FUNCTION_NAMESPACE: fnNamespace,
+		fv1.FUNCTION_VERSION:   versionName,
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, caaf.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		errs = errors.Join(errs, caaf.cleanupContainer(ctx, ns, objName))
+	}
+
+	return errs
 }
 
 // getObjName returns a unique name for kubernetes objects of function. A

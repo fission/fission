@@ -43,6 +43,7 @@ import (
 	"github.com/fission/fission/pkg/executor/funcreconciler"
 	"github.com/fission/fission/pkg/executor/reaper/idle"
 	"github.com/fission/fission/pkg/executor/util"
+	"github.com/fission/fission/pkg/executor/versiongc"
 	"github.com/fission/fission/pkg/executor/versionretain"
 	fetcherConfig "github.com/fission/fission/pkg/fetcher/config"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
@@ -447,6 +448,25 @@ func StartExecutor(ctx context.Context, clientGen crd.ClientGeneratorInterface, 
 	// idle reaper (wired above via SetVersionRetain) does not drain a
 	// generation an alias still points at. See versionretain.RegisterReconcilers.
 	if err := versionretain.RegisterReconcilers(crMgr, versionRetainView); err != nil {
+		return err
+	}
+
+	// versiongc (RFC-0025): when a FunctionVersion CR is deleted (retention GC
+	// sweep or manual delete), tear down that version's per-version
+	// Deployment/Service/HPA set for the newdeploy and container executor
+	// types — nothing else removes it before the whole Function is deleted.
+	// Label-driven, not ownerRef-driven; see versiongc's package doc for the
+	// cross-namespace (functionNamespace) analysis. Poolmgr is deliberately
+	// absent: its per-version pods are pool-managed and idle-reaped via
+	// versionretain.
+	versionCleaners := make([]versiongc.VersionObjectCleaner, 0, 2)
+	if nd, ok := ndm.(*newdeploy.NewDeploy); ok {
+		versionCleaners = append(versionCleaners, nd)
+	}
+	if cn, ok := cnm.(*container.Container); ok {
+		versionCleaners = append(versionCleaners, cn)
+	}
+	if err := versiongc.RegisterReconciler(crMgr, logger, versionCleaners...); err != nil {
 		return err
 	}
 

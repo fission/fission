@@ -196,6 +196,34 @@ func (fsc *FunctionServiceCache) ListByFunctionUID(uid types.UID) []*FuncSvc {
 	return fsvcs
 }
 
+// ListByFunctionVersion returns every cached function service whose Function
+// metadata is a versioned projection of the named FunctionVersion: its
+// fv1.FUNCTION_VERSION label equals versionName and its namespace (the
+// function's own resource namespace, which is also the FunctionVersion CR's
+// namespace) equals namespace. Used by the executor's version-GC teardown
+// (CleanupFunctionVersion) — when a FunctionVersion CR is deleted, its entry
+// must be evicted alongside its per-version Deployment/Service/HPA or the
+// idle reaper keeps erroring on the vanished Deployment forever. Entries'
+// Atime is not refreshed — administrative enumeration, not a request-path
+// hit.
+func (fsc *FunctionServiceCache) ListByFunctionVersion(namespace, versionName string) []*FuncSvc {
+	index := fsc.byFunctionUG.Copy()
+	fsvcs := make([]*FuncSvc, 0, 1)
+	for key, m := range index {
+		if m.Namespace != namespace || m.Labels[fv1.FUNCTION_VERSION] != versionName {
+			continue
+		}
+		fsvc, err := fsc.byFunction.Get(key)
+		if err != nil {
+			// Transient TOCTOU gap with a concurrent delete; skip.
+			continue
+		}
+		fsvcCopy := *fsvc
+		fsvcs = append(fsvcs, &fsvcCopy)
+	}
+	return fsvcs
+}
+
 // GetLiveByFunctionUID gets the function service cached for the UID's LIVE
 // function — the entry whose Function metadata carries no
 // fv1.FUNCTION_VERSION label. Versioned projections sharing the UID are

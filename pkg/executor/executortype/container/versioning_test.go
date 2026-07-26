@@ -9,10 +9,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
@@ -139,4 +146,128 @@ func TestContainerGetFuncSvcFromCacheVersionPinned(t *testing.T) {
 	remaining := caaf.fsCache.ListByFunctionUID(liveFn.UID)
 	require.Len(t, remaining, 1)
 	assert.Equal(t, liveSvc.Address, remaining[0].Address)
+}
+
+// seedContainerObjects creates the Deployment/Service/HPA triple named name
+// with the given labels in ns — the object set fnCreate leaves behind.
+func seedContainerObjects(t *testing.T, kubeClient kubernetes.Interface, ns, name string, lbls map[string]string) {
+	t.Helper()
+	ctx := t.Context()
+	meta := metav1.ObjectMeta{Name: name, Namespace: ns, Labels: lbls}
+	_, err := kubeClient.AppsV1().Deployments(ns).Create(ctx, &appsv1.Deployment{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = kubeClient.CoreV1().Services(ns).Create(ctx, &apiv1.Service{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+	_, err = kubeClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Create(ctx, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: meta}, metav1.CreateOptions{})
+	require.NoError(t, err)
+}
+
+// assertContainerObjects asserts presence (want=true) or absence (want=false)
+// of the Deployment/Service/HPA triple named name in ns.
+func assertContainerObjects(t *testing.T, kubeClient kubernetes.Interface, ns, name string, want bool) {
+	t.Helper()
+	ctx := t.Context()
+	_, depErr := kubeClient.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+	_, svcErr := kubeClient.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+	_, hpaErr := kubeClient.AutoscalingV2().HorizontalPodAutoscalers(ns).Get(ctx, name, metav1.GetOptions{})
+	if want {
+		assert.NoError(t, depErr, "deployment %s must exist", name)
+		assert.NoError(t, svcErr, "service %s must exist", name)
+		assert.NoError(t, hpaErr, "hpa %s must exist", name)
+	} else {
+		assert.Error(t, depErr, "deployment %s must be deleted", name)
+		assert.Error(t, svcErr, "service %s must be deleted", name)
+		assert.Error(t, hpaErr, "hpa %s must be deleted", name)
+	}
+}
+
+// TestContainerFnDeleteEmptyCacheRemovesPerVersionObjects is the C4/gap-1
+// regression at the container-executor boundary — see the newdeploy twin:
+// with an EMPTY fscache (executor restart), fnDelete must still remove every
+// per-version -v<seq> Deployment/Service/HPA set via the identity-label
+// sweep, while an unrelated function's objects survive.
+func TestContainerFnDeleteEmptyCacheRemovesPerVersionObjects(t *testing.T) {
+	t.Parallel()
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	caaf := &Container{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+
+	liveFn := fnForObjName("hello", "default")
+	v1Fn := liveFn.DeepCopy()
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+	v2Fn := liveFn.DeepCopy()
+	v2Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v2"}
+
+	names := []string{caaf.getObjName(liveFn), caaf.getObjName(v1Fn), caaf.getObjName(v2Fn)}
+	for i, fn := range []*fv1.Function{liveFn, v1Fn, v2Fn} {
+		seedContainerObjects(t, kubeClient, "default", names[i], caaf.getDeployLabels(fn.ObjectMeta))
+	}
+
+	otherFn := fnForObjName("other", "default")
+	otherFn.UID = "00000000-0000-0000-0000-00000000cafe"
+	otherName := caaf.getObjName(otherFn)
+	seedContainerObjects(t, kubeClient, "default", otherName, caaf.getDeployLabels(otherFn.ObjectMeta))
+
+	// fsCache is intentionally EMPTY: the executor-restart scenario.
+	require.NoError(t, caaf.fnDelete(t.Context(), liveFn))
+
+	for _, name := range names {
+		assertContainerObjects(t, kubeClient, "default", name, false)
+	}
+	assertContainerObjects(t, kubeClient, "default", otherName, true)
+}
+
+// TestContainerCleanupFunctionVersion is the C4/gap-2 regression at the
+// container-executor boundary — see the newdeploy twin: deleting a
+// FunctionVersion CR must remove exactly that version's object set and evict
+// its fscache entry, leaving the live function's objects and entry untouched.
+func TestContainerCleanupFunctionVersion(t *testing.T) {
+	t.Parallel()
+	logger := loggerfactory.GetLogger()
+	kubeClient := fake.NewSimpleClientset()
+	caaf := &Container{
+		logger:           logger,
+		kubernetesClient: kubeClient,
+		fsCache:          fscache.MakeFunctionServiceCache(logger),
+		nsResolver:       utils.DefaultNSResolver(),
+		hpaops:           hpautils.NewHpaOperations(logger, kubeClient, "test-instance"),
+	}
+	ctx := t.Context()
+
+	liveFn := fnForObjName("hello", "default")
+	liveFn.Generation = 5
+	v1Fn := liveFn.DeepCopy()
+	v1Fn.Generation = 2
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+
+	liveName := caaf.getObjName(liveFn)
+	v1Name := caaf.getObjName(v1Fn)
+	seedContainerObjects(t, kubeClient, "default", liveName, caaf.getDeployLabels(liveFn.ObjectMeta))
+	seedContainerObjects(t, kubeClient, "default", v1Name, caaf.getDeployLabels(v1Fn.ObjectMeta))
+
+	_, err := caaf.fsCache.Add(fscache.FuncSvc{
+		Name: liveName, Function: &liveFn.ObjectMeta, Address: "10.9.1.5:8888", Executor: fv1.ExecutorTypeContainer,
+	})
+	require.NoError(t, err)
+	_, err = caaf.fsCache.Add(fscache.FuncSvc{
+		Name: v1Name, Function: &v1Fn.ObjectMeta, Address: "10.9.1.2:8888", Executor: fv1.ExecutorTypeContainer,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, caaf.CleanupFunctionVersion(ctx, "default", "hello-v1"))
+
+	assertContainerObjects(t, kubeClient, "default", v1Name, false)
+	assertContainerObjects(t, kubeClient, "default", liveName, true)
+
+	assert.Empty(t, caaf.fsCache.ListByFunctionVersion("default", "hello-v1"),
+		"the deleted version's cache entry must be evicted")
+	remaining := caaf.fsCache.ListByFunctionUID(liveFn.UID)
+	require.Len(t, remaining, 1, "the live entry must survive")
+	assert.Equal(t, liveName, remaining[0].Name)
 }

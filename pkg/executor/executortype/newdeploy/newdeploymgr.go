@@ -861,6 +861,79 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
+	// Cache-INDEPENDENT enumeration: the cache walk above only finds
+	// generations with a live fscache entry, and the computed name only covers
+	// the Function object passed in (typically the live spec, no version
+	// label). Per-version -v<seq> objects specialized by a previous executor
+	// incarnation — or whose entry was evicted — would leak past both, so
+	// additionally list Deployments/Services/HPAs by the identity labels every
+	// created object carries (getDeployLabels) and tear down everything found.
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy),
+		fv1.FUNCTION_UID:  string(fn.UID),
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, deploy.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
+	}
+
+	return errs
+}
+
+// CleanupFunctionVersion tears down the per-version Deployment/Service/HPA
+// set (and the fscache entry) a deleted FunctionVersion's projection left
+// behind, driven by the executor's versiongc reconciler. Without it those
+// objects leak until the whole Function is deleted: retention GC (or a manual
+// delete passing the webhook guard) removes only the FunctionVersion CR.
+//
+// Label-based teardown is used INSTEAD of an ownerReference on the objects
+// pointing at the FunctionVersion, for two reasons (see also
+// pkg/executor/versiongc's package doc):
+//   - Kubernetes ownerRefs require owner and dependent in the same namespace,
+//     but with the chart's functionNamespace value set, a default-namespace
+//     function's objects deploy to that namespace (nsResolver.GetFunctionNS)
+//     while its FunctionVersion stays in the function's namespace — the GC
+//     would treat the cross-namespace owner as absent and delete the
+//     per-version Deployment right after creation.
+//   - These objects already carry a controller ownerRef to the Function when
+//     enableOwnerReferences is on; a FunctionVersion ownerRef ADDED to it
+//     would never cascade (the GC keeps a dependent while ANY owner is
+//     alive), and REPLACING it changes teardown semantics for the flag-off /
+//     cross-namespace installs the flag exists for.
+//
+// fnNamespace is the function CR's namespace — also the FunctionVersion CR's
+// namespace and the FUNCTION_NAMESPACE label value on the objects.
+func (deploy *NewDeploy) CleanupFunctionVersion(ctx context.Context, fnNamespace, versionName string) error {
+	var errs error
+
+	// Cache first: evict the projection's entry so the idle reaper stops
+	// tracking a service whose backing objects are about to vanish, and so
+	// its object name is torn down even if a list below fails.
+	objNames := make(map[string]struct{})
+	for _, fsvc := range deploy.fsCache.ListByFunctionVersion(fnNamespace, versionName) {
+		objNames[fsvc.Name] = struct{}{}
+		if _, err := deploy.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("error deleting the function version entry from cache: %w", err))
+		}
+	}
+
+	ns := deploy.nsResolver.GetFunctionNS(fnNamespace)
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypeNewdeploy),
+		fv1.FUNCTION_NAMESPACE: fnNamespace,
+		fv1.FUNCTION_VERSION:   versionName,
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, deploy.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
 	for objName := range objNames {
 		errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
 	}
