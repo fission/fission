@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // resolverFor returns a FunctionConfigResolver that reports every function found
@@ -119,21 +120,26 @@ func TestProcessFiresFunctionDestination_VersionPinned(t *testing.T) {
 
 // TestProcessVersionPinnedDestinationDelivery_FallsBackNotDeadLettered is
 // the end-to-end proof for the fix above: a destination-fired envelope whose
-// pinned version's route has been GC'd (404 on the versioned URL) falls back
-// to the bare-name route and SUCCEEDS -- acked, not killed/dead-lettered --
-// exactly like a primary invocation's version-pinned 404 fallback
-// (TestHTTPDelivererVersionPinned_FallsBackOnNotFound in deliverer_test.go).
-// Before this fix, a Version-pinned destination's `:<version>` suffix was
-// baked directly into Function with no fallback: any 404 on that route
-// (routine, since retain-N GC does not track destination references) would
-// dead-letter every single fire permanently.
+// pinned version's route has been GC'd (route-miss-MARKED 404 on the
+// versioned URL — the marker is what distinguishes it from the function's own
+// 404, see the MARKER CONTRACT in deliverer.go) falls back to the bare-name
+// route and SUCCEEDS -- acked, not killed/dead-lettered -- exactly like a
+// primary invocation's version-pinned marked-404 fallback
+// (TestHTTPDelivererVersionPinned_FallsBackOnMarkedNotFound in
+// deliverer_test.go). Before this fix, a Version-pinned destination's
+// `:<version>` suffix was baked directly into Function with no fallback: any
+// 404 on that route (routine, since retain-N GC does not track destination
+// references) would dead-letter every single fire permanently.
 func TestProcessVersionPinnedDestinationDelivery_FallsBackNotDeadLettered(t *testing.T) {
 	t.Parallel()
 	var attempts []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts = append(attempts, r.URL.Path)
 		if strings.Contains(r.URL.Path, ":") {
-			w.WriteHeader(http.StatusNotFound) // the pinned version's route was GC'd
+			// The pinned version's route was GC'd: the router's own not-found
+			// handler stamps the route-miss marker on its 404.
+			w.Header().Set(utils.HeaderRouteMiss, "1")
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

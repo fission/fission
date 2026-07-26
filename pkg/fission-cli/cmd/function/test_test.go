@@ -22,6 +22,7 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func TestRenderInvocationFailure(t *testing.T) {
@@ -452,17 +453,19 @@ func TestDoAliasSuffixReachesRequestURL(t *testing.T) {
 	assert.Equal(t, "/fission-function/fn:prod", gotPath, "the alias suffix must reach the outgoing request path")
 }
 
-// TestDoSyncSuffixedRouteNotFound guards the RFC-0025 404 upgrade: a plain
-// router 404 (no X-Fission-Component header -- an unmaterialized alias/
-// version route looks exactly like this, since it never reaches any
-// component that could attribute the failure) on a suffixed request must
-// surface the alias/version hint instead of the generic "error getting
-// function response".
+// TestDoSyncSuffixedRouteNotFound guards the RFC-0025 404 upgrade: a router
+// route-miss 404 — carrying the utils.HeaderRouteMiss marker the internal
+// listener's own not-found handler stamps, which is what an unmaterialized
+// alias/version route returns — on a suffixed request must surface the
+// alias/version hint instead of the generic "error getting function
+// response". (A plain 404 without the marker is the function's own response
+// and keeps the generic handling.)
 //
 // Not run in parallel: cmd.SetClientset installs a package-level client
 // shared by every test in this package.
 func TestDoSyncSuffixedRouteNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(utils.HeaderRouteMiss, "1") // the router's own route-miss 404
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
@@ -498,6 +501,7 @@ func TestDoSyncSuffixedRouteNotFound(t *testing.T) {
 // shared by every test in this package.
 func TestDoAsyncSuffixedRouteNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(utils.HeaderRouteMiss, "1") // the router's own route-miss 404
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func TestHTTPDelivererDelivers(t *testing.T) {
@@ -205,18 +206,22 @@ func TestHTTPDelivererVersionPinned_TargetsVersionedRoute(t *testing.T) {
 	assert.Equal(t, "/fission-function/ns/hello:hello-v1", gotPath, "delivers at the versioned route")
 }
 
-// TestHTTPDelivererVersionPinned_FallsBackOnNotFound proves the RFC-0025
-// Task 5 GC'd-route recovery: a 404 on the versioned route retries
-// immediately against the bare function route, within the SAME attempt (the
-// caller sees exactly one DeliveryResult, and it reflects the bare route's
-// outcome, not the 404).
-func TestHTTPDelivererVersionPinned_FallsBackOnNotFound(t *testing.T) {
+// TestHTTPDelivererVersionPinned_FallsBackOnMarkedNotFound proves the RFC-0025
+// Task 5 GC'd-route recovery: a route-miss-MARKED 404 on the versioned route
+// (utils.HeaderRouteMiss, stamped only by the router's own internal-listener
+// not-found handler) retries immediately against the bare function route,
+// within the SAME attempt (the caller sees exactly one DeliveryResult, and it
+// reflects the bare route's outcome, not the 404).
+func TestHTTPDelivererVersionPinned_FallsBackOnMarkedNotFound(t *testing.T) {
 	t.Parallel()
 	var gotPaths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPaths = append(gotPaths, r.URL.Path)
 		if strings.Contains(r.URL.Path, ":") {
-			w.WriteHeader(http.StatusNotFound) // versioned route GC'd
+			// Versioned route GC'd: the router's own not-found handler stamps
+			// the route-miss marker on its 404.
+			w.Header().Set(utils.HeaderRouteMiss, "1")
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusOK) // bare route still serves
@@ -233,20 +238,68 @@ func TestHTTPDelivererVersionPinned_FallsBackOnNotFound(t *testing.T) {
 	assert.Equal(t, "/fission-function/ns/hello", gotPaths[1])
 }
 
+// TestHTTPDelivererVersionPinned_MarkedNotFoundFallsBackExactlyOnce proves the
+// fallback cannot cascade: when the BARE route's response is also a marked 404
+// (function deleted entirely, both routes gone), the deliverer stops after the
+// single fallback — two HTTP attempts total, and the caller sees the 404 to
+// settle through the normal matrix (dead-letter), not a retry loop.
+func TestHTTPDelivererVersionPinned_MarkedNotFoundFallsBackExactlyOnce(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set(utils.HeaderRouteMiss, "1")
+		w.WriteHeader(http.StatusNotFound) // every route is a route miss
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{Namespace: "ns", Function: "hello", FunctionVersion: "hello-vGONE"}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusNotFound, res.StatusCode)
+	assert.Equal(t, 2, attempts, "exactly one fallback: versioned then bare, never a third attempt")
+}
+
+// TestHTTPDelivererVersionPinned_NoFallbackOnPlainFunction404 is the C6
+// regression guard: a PLAIN 404 — no route-miss marker — is the FUNCTION'S own
+// response (the versioned route exists and served the request; the function's
+// business logic answered 404), so the deliverer must deliver exactly ONCE and
+// relay the 404 into the normal non-2xx settle path (body captured for the
+// OnFailure destination, classify → dead-letter), never re-deliver to the
+// bare-name route. Pre-fix, this scenario double-invoked the function's
+// non-idempotent side effects on every version-pinned async delivery.
+func TestHTTPDelivererVersionPinned_NoFallbackOnPlainFunction404(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNotFound) // the function's own "entity not found"
+		_, _ = io.WriteString(w, `{"error":"no such entity"}`)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{
+		Namespace: "ns", Function: "lookup", FunctionVersion: "lookup-v3",
+		OnFailure: &Destination{FunctionName: "on-fail"},
+	}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, 1, attempts, "a plain function 404 must be delivered exactly once — no bare-route fallback (the pre-fix double invocation)")
+	assert.Equal(t, "/fission-function/ns/lookup:lookup-v3", gotPath, "the one delivery went to the versioned route")
+	assert.Equal(t, http.StatusNotFound, res.StatusCode, "the function's 404 is relayed as-is into the settle matrix")
+	assert.Equal(t, []byte(`{"error":"no such entity"}`), res.Body, "non-2xx body captured for OnFailure, like any other function error status")
+	assert.Equal(t, actionKill, classify(res), "settles like any permanent 4xx: dead-letter, not retry/fallback")
+}
+
 // TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus proves the fallback
-// is scoped to exactly a 404 status on the versioned route -- any OTHER
-// status (this test uses 500) is relayed as-is, with only ONE attempt.
-//
-// It does NOT prove "the function's own legitimate 404 is relayed as-is" --
-// that claim would be false. A route-miss 404 (httpmux, no matching route)
-// and a 404 the function ITSELF chooses to return as a normal response are
-// byte-identical HTTP responses at this layer; the deliverer cannot tell
-// them apart, so a function that legitimately answers 404 to a version-
-// pinned async invocation IS double-invoked by the fallback below (see the
-// HONESTY NOTE on the FunctionVersion branch in Deliver). Async delivery is
-// already at-least-once, so this is a real but bounded widening of an
-// existing risk, not a new failure class -- flagged here, not fixed (see the
-// TODO(rfc-0025) on a future route-miss marker header).
+// is scoped to exactly a route-miss-marked 404 on the versioned route -- any
+// OTHER status (this test uses 500) is relayed as-is, with only ONE attempt.
+// (The plain-404-vs-marked-404 distinction has its own tests above; this one
+// pins the status gate.)
 func TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus(t *testing.T) {
 	t.Parallel()
 	var attempts int

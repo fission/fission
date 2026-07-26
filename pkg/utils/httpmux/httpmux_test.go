@@ -233,3 +233,39 @@ func TestFlushPassthrough(t *testing.T) {
 		t.Fatal("handler did not flush")
 	}
 }
+
+// TestWithNotFound proves a custom not-found handler replaces http.NotFound
+// for route misses only: a 405 (path matched, method didn't) still gets the
+// method-not-allowed handler, and a matched route dispatches normally. The
+// router relies on this to stamp its route-miss marker header on the internal
+// listener's own 404s.
+func TestWithNotFound(t *testing.T) {
+	t.Parallel()
+	m := New(WithNotFound(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Custom-Miss", "1")
+		http.NotFound(w, r)
+	})))
+	m.Handle("/known", ok("known")).Methods("GET")
+	h := m.Handler()
+
+	rr := do(t, h, "GET", "/unknown")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "1", rr.Header().Get("X-Custom-Miss"), "route miss uses the custom not-found handler")
+
+	rr = do(t, h, "POST", "/known")
+	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	assert.Empty(t, rr.Header().Get("X-Custom-Miss"), "a 405 is not a route miss — custom handler must not run")
+
+	rr = do(t, h, "GET", "/known")
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Empty(t, rr.Header().Get("X-Custom-Miss"))
+}
+
+// TestWithNotFoundNilKeepsDefault pins nil-safety: WithNotFound(nil) keeps the
+// default http.NotFound instead of panicking on dispatch.
+func TestWithNotFoundNilKeepsDefault(t *testing.T) {
+	t.Parallel()
+	m := New(WithNotFound(nil))
+	rr := do(t, m.Handler(), "GET", "/nope")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}

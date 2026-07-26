@@ -20,6 +20,7 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
+	"github.com/fission/fission/pkg/utils"
 )
 
 // fakeTestInput overrides only the accessors testQueryValues reads.
@@ -258,18 +259,29 @@ func TestHandleAsyncResponseErrorStatuses(t *testing.T) {
 	}
 }
 
-// TestHandleAsyncResponseNotFound guards the two 404 branches directly (the
+// TestHandleAsyncResponseNotFound guards the 404 branches directly (the
 // do()-level TestDoAsyncSuffixedRouteNotFound in test_test.go covers the same
-// thing end-to-end): a suffixed request upgrades to the alias/version hint, a
-// bare one keeps the generic "async invocation failed" message.
+// thing end-to-end): a suffixed request whose 404 carries the router's
+// route-miss marker upgrades to the alias/version hint; a plain 404 on a
+// suffixed route is the FUNCTION'S own response and keeps the generic
+// message (blaming route materialization would be wrong); a bare one keeps
+// the generic "async invocation failed" message either way.
 func TestHandleAsyncResponseNotFound(t *testing.T) {
-	t.Run("suffixed request gets the alias/version hint", func(t *testing.T) {
-		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, nil, ""), "fn", "prod")
+	routeMissHdr := http.Header{}
+	routeMissHdr.Set(utils.HeaderRouteMiss, "1")
+	t.Run("suffixed request with route-miss marker gets the alias/version hint", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, routeMissHdr.Clone(), ""), "fn", "prod")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "alias/version route not found")
 	})
+	t.Run("suffixed request with a plain function 404 keeps the generic message", func(t *testing.T) {
+		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, nil, ""), "fn", "prod")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "async invocation failed")
+		assert.NotContains(t, err.Error(), "alias/version route not found")
+	})
 	t.Run("bare request keeps the generic message", func(t *testing.T) {
-		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, nil, ""), "fn", "")
+		err := handleAsyncResponse(fakeResponse(http.StatusNotFound, routeMissHdr.Clone(), ""), "fn", "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "async invocation failed")
 	})

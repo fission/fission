@@ -213,6 +213,16 @@ func (p *WebhookPublisher) makeHTTPRequest(r *publishRequest) {
 				// error on the final attempt — per-attempt logs stay at
 				// V(1) to avoid flooding the error log (a deleted function
 				// would otherwise emit maxRetries errors per event).
+				//
+				// NOTE: the router now marks its OWN route-miss 404s with
+				// utils.HeaderRouteMiss (and strips it from function
+				// responses), so this retry could be tightened to
+				// marker-only. Deliberately NOT done here: this bounded
+				// retry predates the marker and also re-invokes functions
+				// that legitimately return 404 (bounded, unlike the async
+				// deliverer's pre-marker same-attempt double-invoke);
+				// gating it would change drop semantics for those events
+				// and belongs to a follow-up, not this fix.
 				msg = "request returned not found, will retry"
 				msgType = "retry"
 				// fall through to retry scheduling below

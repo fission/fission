@@ -24,6 +24,7 @@ import (
 	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/router/streaming"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -266,6 +267,14 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		BufferPool:   proxyResponseBufferPool,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
+			// The route-miss marker may ONLY ever be set by the router's own
+			// internal-listener not-found handler (internalRouteMissHandler).
+			// A function response that carries it — maliciously or by accident
+			// — must not be able to spoof "this route does not exist" to the
+			// async deliverer (which would double-invoke via its bare-name
+			// fallback) or any other marker consumer. Strip it from every
+			// proxied response.
+			resp.Header.Del(utils.HeaderRouteMiss)
 			// One goroutine for metric collection + the cached-URL tap (the
 			// historical pairing — the tap is a buffered channel send and does
 			// not warrant a spawn of its own).

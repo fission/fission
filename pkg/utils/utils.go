@@ -31,6 +31,18 @@ const (
 	ENV_DISABLE_OWNER_REFERENCES string = "DISABLE_OWNER_REFERENCES"
 )
 
+// HeaderRouteMiss marks a 404 as produced by the ROUTER'S OWN not-found path
+// on the internal listener — no /fission-function/... route matched the
+// request — as opposed to a 404 a function chose to return as its response.
+// The router sets it (value "1") ONLY in the internal mux's not-found handler
+// (pkg/router/routeshape.go, wired inside newListenerMuxes so it survives the
+// atomic mux swap) and STRIPS it from every function-proxied response
+// (functionHandler's ModifyResponse), so consumers can trust it: the async
+// deliverer's RFC-0025 version-pin fallback re-delivers to the bare-name route
+// only on a marked 404, and `fission function test` upgrades a marked 404 on a
+// `:<alias>`/`:<version>` route into the not-yet-materialized hint.
+const HeaderRouteMiss = "X-Fission-Route-Miss"
+
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {

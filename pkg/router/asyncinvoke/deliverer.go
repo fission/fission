@@ -38,6 +38,12 @@ type DeliveryResult struct {
 	// cap or a mid-stream read left it incomplete.
 	Body          []byte
 	BodyTruncated bool
+	// routeMiss is true when a 404 response carried the router's route-miss
+	// marker (utils.HeaderRouteMiss) — i.e. the router itself reported "no such
+	// route", as opposed to a 404 the function returned as its response. Only
+	// the deliverer's own version-pin fallback keys on it; the dispatcher's
+	// settle matrix never sees it (a function 404 settles like any other 4xx).
+	routeMiss bool
 }
 
 // httpDeliverer POSTs to the router internal listener, byte-identical to the
@@ -81,32 +87,26 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 
 	// RFC-0025 Task 5: a version-pinned envelope tries the versioned internal
 	// route (`:<version>` suffix, the same grammar buildInternalAliasHandler's
-	// routes register at) first. A 404 there is ASSUMED to mean the version's
-	// route was GC'd between enqueue and this delivery attempt (the router's
-	// httpmux returning 404 because no route matched) -- fall back to the
+	// routes register at) first. A MARKED 404 there means the version's route
+	// was GC'd between enqueue and this delivery attempt -- fall back to the
 	// bare-name route immediately, as part of the SAME attempt, not a
 	// redelivery cycle (the dispatcher's attempt/backoff accounting never
 	// sees this as a retry).
 	//
-	// HONESTY NOTE: a 404 from a route MISS and a 404 the function itself
-	// legitimately RETURNS as its own response are indistinguishable at this
-	// layer -- both arrive as plain HTTP 404s with no marker distinguishing
-	// them. So a function that (correctly, for its own business logic)
-	// responds 404 to a version-pinned async invocation gets DOUBLE-INVOKED
-	// by this fallback: once on the versioned route (which served it and
-	// returned 404), once more on the bare-name route. This is not a new
-	// failure mode async invocation didn't already have -- delivery is
-	// at-least-once by design (a dispatcher crash between Deliver and Ack has
-	// the same effect) -- but it is a real, present trade-off of this
-	// fallback specifically, not just a theoretical edge of the at-least-once
-	// contract, and is not something the caller can suppress today.
-	// TODO(rfc-0025): the robust fix is a router-set marker distinguishing a
-	// route-miss 404 (e.g. a response header the internal listener's 404
-	// handler stamps, checked here instead of trusting the bare status code)
-	// from a function-emitted 404, so only a genuine route-miss falls back.
+	// MARKER CONTRACT (closes the old HONESTY NOTE's double-invoke hole): the
+	// router's internal listener stamps utils.HeaderRouteMiss on its OWN
+	// not-found 404s -- internalRouteMissHandler, wired inside
+	// newListenerMuxes so it survives the atomic mux swap -- and strips the
+	// header from every function-proxied response (functionHandler's
+	// ModifyResponse), so a function cannot spoof it. The fallback fires ONLY
+	// on a marked 404 (result.routeMiss). A PLAIN 404 is the function's own
+	// response: it is delivered exactly once and settles through the normal
+	// non-2xx matrix (classify: permanent 4xx → dead-letter), never
+	// re-delivered -- a function whose business logic legitimately answers
+	// 404 is no longer double-invoked on the version-pinned path.
 	if env.FunctionVersion != "" {
 		result := h.deliverOnce(ctx, env, invocationID, attempt, h.targetURL(funcPath+":"+env.FunctionVersion, env.Query))
-		if result.Err == nil && result.StatusCode == http.StatusNotFound {
+		if result.Err == nil && result.StatusCode == http.StatusNotFound && result.routeMiss {
 			recordVersionFallback(ctx)
 			h.logger.Info("async delivery: versioned route not found, falling back to bare function route",
 				"namespace", env.Namespace, "function", env.Function, "version", env.FunctionVersion,
@@ -155,6 +155,10 @@ func (h *httpDeliverer) deliverOnce(ctx context.Context, env Envelope, invocatio
 		return DeliveryResult{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// The router's route-miss marker (see the MARKER CONTRACT in Deliver): only
+	// meaningful on a 404, and trustworthy because the router strips it from
+	// function-proxied responses.
+	routeMiss := resp.StatusCode == http.StatusNotFound && resp.Header.Get(utils.HeaderRouteMiss) != ""
 	// Capture the body only for the destination this outcome can actually fire: a
 	// 2xx settles to OnSuccess, any other status settles (now or on exhaustion) to
 	// OnFailure. So skip the up-to-64KiB read when the relevant destination is unset
@@ -165,7 +169,7 @@ func (h *httpDeliverer) deliverOnce(ctx context.Context, env Envelope, invocatio
 	needBody := (is2xx && env.OnSuccess != nil) || (!is2xx && env.OnFailure != nil)
 	if !needBody {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return DeliveryResult{StatusCode: resp.StatusCode}
+		return DeliveryResult{StatusCode: resp.StatusCode, routeMiss: routeMiss}
 	}
 	// Capture up to MaxPayloadBytes for a destination result envelope, flagging any
 	// truncation (over the cap, or a mid-stream read error that leaves the body
@@ -176,5 +180,5 @@ func (h *httpDeliverer) deliverOnce(ctx context.Context, env Envelope, invocatio
 		body = body[:MaxPayloadBytes]
 	}
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return DeliveryResult{StatusCode: resp.StatusCode, Body: body, BodyTruncated: truncated}
+	return DeliveryResult{StatusCode: resp.StatusCode, Body: body, BodyTruncated: truncated, routeMiss: routeMiss}
 }

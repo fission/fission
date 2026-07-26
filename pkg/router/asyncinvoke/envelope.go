@@ -85,8 +85,11 @@ type Envelope struct {
 	// destination pinned to a specific version gets the identical fallback
 	// treatment. Either way, the deliverer targets the versioned internal
 	// route (UrlForFunction(...) + ":" + FunctionVersion) first, falling back
-	// to the bare-name route on a 404 (the version's route was GC'd, or was
-	// never live at delivery time). Distinct from Version above, which is the
+	// to the bare-name route on a route-miss-MARKED 404 (utils.HeaderRouteMiss,
+	// stamped only by the router's own not-found path: the version's route was
+	// GC'd, or was never live at delivery time — a plain 404 is the function's
+	// own response and settles normally, never falls back; see the MARKER
+	// CONTRACT in deliverer.go). Distinct from Version above, which is the
 	// wire-format envelope schema version and is never touched by this field.
 	FunctionVersion string `json:"functionVersion,omitempty"`
 	// Method, Path, Query, Headers, and Body reproduce the original request. Path

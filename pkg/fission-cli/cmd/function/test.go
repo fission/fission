@@ -185,7 +185,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("router rejected the request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
 	case http.StatusNotFound:
-		if msg, ok := suffixedRouteNotFoundError(fnName, suffix); ok {
+		if msg, ok := suffixedRouteNotFoundError(fnName, suffix, resp.Header.Get(utils.HeaderRouteMiss) != ""); ok {
 			return errors.New(msg)
 		}
 		fallthrough
@@ -277,7 +277,7 @@ func handleAsyncResponse(resp *http.Response, fnName, suffix string) error {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("router rejected the async request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
 	case http.StatusNotFound:
-		if msg, ok := suffixedRouteNotFoundError(fnName, suffix); ok {
+		if msg, ok := suffixedRouteNotFoundError(fnName, suffix, resp.Header.Get(utils.HeaderRouteMiss) != ""); ok {
 			return errors.New(msg)
 		}
 		return fmt.Errorf("async invocation failed (%s): %s", resp.Status, strings.TrimSpace(string(body)))
@@ -286,17 +286,24 @@ func handleAsyncResponse(resp *http.Response, fnName, suffix string) error {
 	}
 }
 
-// suffixedRouteNotFoundError turns a bare router 404 into an actionable
+// suffixedRouteNotFoundError turns a router route-miss 404 into an actionable
 // message when the request was for a suffixed (`:<alias>`/`:<version>`)
 // route: the preflight in resolveTestRefSuffix already confirmed the
 // FunctionAlias/FunctionVersion object exists and belongs to this function,
-// so a 404 here means the router hasn't materialized that route yet --
+// so a route-miss here means the router hasn't materialized that route yet --
 // most commonly a freshly created/repointed alias that hasn't finished its
-// async resolve pass. ok is false (caller falls back to the generic 404
-// handling) when suffix is empty, since a bare function route 404 has
-// nothing to do with RFC-0025.
-func suffixedRouteNotFoundError(fnName, suffix string) (string, bool) {
-	if suffix == "" {
+// async resolve pass. routeMiss is whether the 404 carried the router's
+// route-miss marker (utils.HeaderRouteMiss, stamped only by the internal
+// listener's own not-found path and stripped from function-proxied
+// responses): without it the 404 is the FUNCTION'S own response, so ok is
+// false and the caller renders it as a normal function failure instead of
+// wrongly blaming route materialization. ok is likewise false when suffix is
+// empty, since a bare function route 404 has nothing to do with RFC-0025.
+// (Version-skew note: a pre-marker router never sets the header, so against
+// an older server the hint is not shown and the 404 falls through to the
+// generic rendering -- less specific, never wrong.)
+func suffixedRouteNotFoundError(fnName, suffix string, routeMiss bool) (string, bool) {
+	if suffix == "" || !routeMiss {
 		return "", false
 	}
 	return fmt.Sprintf("alias/version route not found for function %q at %q — check `fission alias get` / that the version exists; aliases resolve asynchronously", fnName, suffix), true

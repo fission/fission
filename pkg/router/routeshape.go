@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -295,7 +296,17 @@ func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) 
 	// build, not once at startup, because the muxes are swapped atomically
 	// (the CLAUDE.md USE_ENCODED_PATH gotcha).
 	publicOpts := []httpmux.Option{httpmux.WithMetrics(metrics.HTTPRecorder{})}
-	var internalOpts []httpmux.Option
+	// The internal listener's not-found handler stamps the route-miss marker
+	// (utils.HeaderRouteMiss) so callers can tell the router's own "no such
+	// route" 404 from a 404 a function returned. Wired HERE — inside
+	// newListenerMuxes, on every build — because the muxes are swapped
+	// atomically on reconciliation (the CLAUDE.md gotcha: anything applied only
+	// at startup is silently dropped on the first swap). It runs BEHIND the
+	// bundle-level HMAC ServiceVerifier wrap, so an unauthenticated request
+	// still gets its 401 before any route matching; only authenticated (or
+	// pass-through-mode) route misses are marked. Function-proxied responses
+	// can never carry the marker: functionHandler's ModifyResponse strips it.
+	internalOpts := []httpmux.Option{httpmux.WithNotFound(http.HandlerFunc(internalRouteMissHandler))}
 	if ts.useEncodedPath {
 		publicOpts = append(publicOpts, httpmux.WithEncodedPath())
 		internalOpts = append(internalOpts, httpmux.WithEncodedPath())
@@ -316,6 +327,21 @@ func (ts *HTTPTriggerSet) newListenerMuxes(featureConfig *config.FeatureConfig) 
 	internalOpts = append(internalOpts, httpmux.WithMiddleware(panicRecover))
 
 	return httpmux.New(publicOpts...), httpmux.New(internalOpts...)
+}
+
+// internalRouteMissHandler is the internal listener's not-found handler: for a
+// /fission-function/... path it stamps utils.HeaderRouteMiss before the plain
+// 404, marking the response as the ROUTER's route miss (no registered route —
+// e.g. a GC'd `:<version>` route, or a not-yet-materialized `:<alias>`) rather
+// than a 404 the function itself returned. The async deliverer's version-pin
+// fallback keys on exactly this marker (a plain 404 is a function response and
+// must settle normally, never re-deliver). Non-function paths keep the bare
+// 404 — the marker's contract is scoped to the function-route namespace.
+func internalRouteMissHandler(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/fission-function/") {
+		w.Header().Set(utils.HeaderRouteMiss, "1")
+	}
+	http.NotFound(w, r)
 }
 
 // registerRouterOwnedRoutes adds the public listener's own endpoints: the

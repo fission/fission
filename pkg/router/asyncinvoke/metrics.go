@@ -29,7 +29,7 @@ var (
 	asyncDepthCap = metrics.Int64Counter("fission_async_depth_cap_total",
 		"Count of async destination invocations dropped for exceeding the chain depth cap (A6)")
 	asyncVersionFallback = metrics.Int64Counter("fission_async_version_fallback_total",
-		"Count of async deliveries that fell back to the bare function route after a 404 on a version-pinned route (RFC-0025)")
+		"Count of async deliveries that fell back to the bare function route after a route-miss-marked 404 on a version-pinned route (RFC-0025)")
 )
 
 func recordDelivery(ctx context.Context, condition string) {
