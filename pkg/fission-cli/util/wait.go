@@ -66,6 +66,11 @@ func (e *PollEndedError) Unwrap() error { return e.Err }
 // check surfaced an in-flight operation interrupted by ctx (an error wrapping
 // the context error). A terminal check error unrelated to ctx — even one that
 // races ctx expiring — reports false, so it surfaces verbatim.
+//
+// Caveat: the context sentinels are process-global, so a check whose
+// operation runs under its OWN derived sub-context with an independent
+// deadline would misclassify here. Every current check passes the poll ctx
+// straight through; keep it that way (or classify before returning).
 func PollEnded(err error) bool {
 	var ended *PollEndedError
 	return errors.As(err, &ended) ||
