@@ -702,6 +702,14 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 					return
 				}
 
+				// Carry the pod's version label into the synthetic meta:
+				// GetLiveByFunctionUID classifies entries as live by the
+				// ABSENCE of FUNCTION_VERSION, so an adopted versioned pod's
+				// entry must keep the label or it masquerades as live.
+				var fnLabels map[string]string
+				if v := pod.Labels[fv1.FUNCTION_VERSION]; v != "" {
+					fnLabels = map[string]string{fv1.FUNCTION_VERSION: v}
+				}
 				fsvc := fscache.FuncSvc{
 					Name: pod.Name,
 					Function: &metav1.ObjectMeta{
@@ -710,6 +718,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 						UID:             k8sTypes.UID(fnUID),
 						ResourceVersion: fnRV,
 						Generation:      fnGen,
+						Labels:          fnLabels,
 					},
 					Environment: &env,
 					Address:     svcHost,
