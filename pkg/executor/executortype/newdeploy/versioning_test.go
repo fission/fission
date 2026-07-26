@@ -8,9 +8,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // fnForObjName builds a Function with a 36-char UUID-shaped UID (getObjName
@@ -80,4 +83,72 @@ func TestGetDeployLabelsUnversionedHasNoVersionLabel(t *testing.T) {
 
 	_, has := labels[fv1.FUNCTION_VERSION]
 	assert.False(t, has, "unversioned function must not carry FUNCTION_VERSION label")
+}
+
+// TestGetFuncSvcFromCacheVersionPinned is the C1 regression at the manager
+// boundary: the executor caches distinct fsvcs for a live function (gen 5)
+// and a versioned projection (gen 2) sharing one UID, each backing its own
+// Deployment. GetFuncSvcFromCache for the version-pinned projection must
+// return the projection's own service — never the live one that a bare-UID
+// (last-writer-wins) index would have handed back, silently executing the
+// wrong version's code. It then locks the C8 half: evicting the versioned
+// entry (IsValid-failure path, DeleteFuncSvcFromCache) must leave the live
+// entry reachable through the UID index.
+func TestGetFuncSvcFromCacheVersionPinned(t *testing.T) {
+	t.Parallel()
+	deploy := &NewDeploy{fsCache: fscache.MakeFunctionServiceCache(loggerfactory.GetLogger())}
+	ctx := t.Context()
+
+	liveFn := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "hello", Namespace: "default",
+			UID: "83c82da2-81e9-4ebd-867e-f383e65e603f", Generation: 5,
+		},
+	}
+	// Versioned projection: same UID, pinned older Generation, version label
+	// (the shape versioning.VersionedFunction produces).
+	v1Fn := liveFn.DeepCopy()
+	v1Fn.Generation = 2
+	v1Fn.Labels = map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}
+
+	liveSvc := fscache.FuncSvc{
+		Name:     deploy.getObjName(liveFn),
+		Function: &liveFn.ObjectMeta,
+		Address:  "10.9.0.5:8888",
+		Executor: fv1.ExecutorTypeNewdeploy,
+	}
+	v1Svc := fscache.FuncSvc{
+		Name:     deploy.getObjName(v1Fn),
+		Function: &v1Fn.ObjectMeta,
+		Address:  "10.9.0.2:8888",
+		Executor: fv1.ExecutorTypeNewdeploy,
+	}
+	_, err := deploy.fsCache.Add(liveSvc)
+	require.NoError(t, err)
+	// Added last: a bare-UID index would leave the versioned meta as the
+	// UID's only entry.
+	_, err = deploy.fsCache.Add(v1Svc)
+	require.NoError(t, err)
+
+	got, err := deploy.GetFuncSvcFromCache(ctx, v1Fn)
+	require.NoError(t, err, "version-pinned request must hit its own generation's cache entry")
+	assert.Equal(t, v1Svc.Address, got.Address, "gen-2 request must never be routed to the live gen-5 Deployment")
+	assert.Equal(t, v1Svc.Name, got.Name)
+
+	got, err = deploy.GetFuncSvcFromCache(ctx, liveFn)
+	require.NoError(t, err)
+	assert.Equal(t, liveSvc.Address, got.Address, "live request must never be routed to the versioned Deployment")
+
+	// C8: evicting one version's entry must not orphan the survivor's UID
+	// index entry (ListByFunctionUID feeds fnDelete; ListOld feeds the idle
+	// reaper).
+	deploy.DeleteFuncSvcFromCache(ctx, &v1Svc)
+
+	got, err = deploy.GetFuncSvcFromCache(ctx, liveFn)
+	require.NoError(t, err, "evicting the versioned entry must leave the live entry reachable")
+	assert.Equal(t, liveSvc.Address, got.Address)
+
+	remaining := deploy.fsCache.ListByFunctionUID(liveFn.UID)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, liveSvc.Address, remaining[0].Address)
 }

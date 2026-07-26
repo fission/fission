@@ -111,8 +111,8 @@ func TestAdoptSpecializedPodsSkipsMissingGeneration(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "")
 	fsCache := runAdopt(t, pod)
 
-	_, err := fsCache.GetByFunctionUID("fn-uid-1")
-	require.Error(t, err, "a pod without the function-generation label must not be adopted into the cache")
+	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-1"),
+		"a pod without the function-generation label must not be adopted into the cache")
 }
 
 // TestAdoptSpecializedPodsSkipsUnparsableGeneration mirrors the missing-label
@@ -122,6 +122,6 @@ func TestAdoptSpecializedPodsSkipsUnparsableGeneration(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "not-a-number")
 	fsCache := runAdopt(t, pod)
 
-	_, err := fsCache.GetByFunctionUID("fn-uid-1")
-	require.Error(t, err, "a pod with an unparsable function-generation label must not be adopted into the cache")
+	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-1"),
+		"a pod with an unparsable function-generation label must not be adopted into the cache")
 }
