@@ -436,6 +436,28 @@ func TestListAvailableValue_RetainSemantics(t *testing.T) {
 		assert.Equal(t, []string{"new"}, avail, "the floor is asymmetric: it never applies to the latest generation")
 	})
 
+	t.Run("MarkFuncDeleted marks every generation group of the UID, not just one", func(t *testing.T) {
+		// RFC-0025 steady state: the latest generation (gen 6) plus an
+		// alias-retained older generation (gen 3) coexist for one function.
+		// On Function delete BOTH groups must drain. Pre-fix, MarkFuncDeleted
+		// stopped at the first UID match (map-iteration order, i.e. a random
+		// one of the two), leaving the other group's pods reaper-exempt —
+		// gen 6 as latest via its svcRetain, gen 3 via the alias-retain floor.
+		p := NewPoolCache(logger)
+		set(p, "fn", 3, "old", 0) // alias-retained non-latest: floor would keep 1 pod
+		set(p, "fn", 6, "new", 1) // latest: svcRetain=1 would keep its pod
+		p.MarkFuncDeleted(crd.CacheKeyUG{UID: "fn", Generation: 6})
+
+		for key, grp := range p.cache {
+			assert.True(t, grp.deleted, "group at generation %d must be marked deleted", key.Generation)
+		}
+
+		retained := func(uid types.UID, gen int64) bool { return true } // an alias still points at gen 3
+		avail := names(p.ListAvailableValue(retained))
+		assert.Equal(t, []string{"new", "old"}, sortedCopy(avail),
+			"both generation groups must drain after the function is deleted")
+	})
+
 	t.Run("deleted and retained with svcRetain=0 still drains: deleted overrides the floor", func(t *testing.T) {
 		p := NewPoolCache(logger)
 		set(p, "fn", 1, "old", 0)

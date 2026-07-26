@@ -75,14 +75,13 @@ func NewFuncSvcGroup() *funcSvcGroup {
 }
 
 // MarkFuncDeleted marks EVERY cache group belonging to the function's UID as
-// deleted, whatever Generation each group is keyed at. The cache is keyed by
-// (UID, Generation), and during a rolling function update two generations'
-// groups can legitimately coexist for one function — the old generation's
-// specialized pods draining while the new generation serves traffic. A
-// Function delete landing in that window must mark both groups; stopping at
-// the first UID match (map-iteration order, so effectively random) would
-// leave the other group unmarked, and its pods would linger past the delete
-// until ordinary idle reaping caught up with them.
+// deleted, whatever Generation each group is keyed at. Multiple live
+// (UID, Generation) groups per function are the steady state under RFC-0025
+// (the latest generation plus alias-retained older generations, see
+// ListAvailableValue), so stopping at the first UID match would leave the
+// other groups unmarked on Function delete — their pods stay reaper-exempt
+// (ListAvailableValue keeps honouring the unmarked group's svcRetain floor)
+// until an executor restart.
 func (c *PoolCache) MarkFuncDeleted(function crd.CacheKeyUG) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
