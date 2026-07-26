@@ -37,6 +37,14 @@
 // Function itself is deleted, and reaper.CleanupExecutorObjects reaps all
 // previous-incarnation objects (per-version sets are never re-stamped by the
 // adopt pass) at the next executor startup.
+//
+// Second known window: version names restart at <fn>-v1 when every version of
+// a function is deleted and the function republished (Publish's sequence is
+// max over existing versions). A stale delete-event reconcile processed
+// before the recreated same-name CR reaches the cache tears down the new
+// version's freshly specialized objects and evicts its cache entries. The
+// window is one cache-sync wide and self-healing: the CR exists, so the next
+// invocation cold-starts.
 package versiongc
 
 import (
