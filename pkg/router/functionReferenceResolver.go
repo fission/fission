@@ -192,7 +192,27 @@ func singleFunctionResult(key string, fn *fv1.Function) *resolveResult {
 // mismatched owner, missing live function) rides errFunctionNotFound so the
 // incremental apply path drops the route and marks the trigger unresolved
 // rather than treating it as a transient error.
+//
+// This is the single-Get-of-live entry point used by callers that don't
+// already have the live Function in hand (a direct Version pin via
+// resolveByName, and applyVersionIncremental's per-FunctionVersion resolve).
+// A caller that already fetched (or needs) the live Function itself — namely
+// resolveByAlias, which also sources stickySource from it — should call
+// resolveVersionWithLive instead so the live Function is fetched once and
+// reused, not re-Gotten per target.
 func (frr *functionReferenceResolver) resolveVersion(ctx context.Context, namespace, name, version string) (*fv1.Function, error) {
+	live, err := frr.getFunction(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	return frr.resolveVersionWithLive(ctx, namespace, name, version, live)
+}
+
+// resolveVersionWithLive is resolveVersion's core: it Gets and validates the
+// FunctionVersion CR and projects it against an already-fetched live
+// Function, instead of fetching live itself. See resolveVersion's doc
+// comment for the split's rationale.
+func (frr *functionReferenceResolver) resolveVersionWithLive(ctx context.Context, namespace, name, version string, live *fv1.Function) (*fv1.Function, error) {
 	v := &fv1.FunctionVersion{}
 	err := frr.reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: version}, v)
 	if apierrors.IsNotFound(err) {
@@ -204,11 +224,6 @@ func (frr *functionReferenceResolver) resolveVersion(ctx context.Context, namesp
 	if v.Spec.FunctionName != name {
 		return nil, fmt.Errorf("function version %s/%s belongs to function %q, not %q: %w",
 			namespace, version, v.Spec.FunctionName, name, errFunctionNotFound)
-	}
-
-	live, err := frr.getFunction(ctx, namespace, name)
-	if err != nil {
-		return nil, err
 	}
 
 	return versioning.VersionedFunction(live, v), nil
@@ -255,7 +270,22 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 		return nil, fmt.Errorf("function alias %s/%s has not resolved to a version yet: %w", namespace, ref.Alias, errFunctionNotFound)
 	}
 
-	primary, err := frr.resolveVersion(ctx, namespace, ref.Name, target)
+	// The live Function is fetched exactly ONCE here and threaded through
+	// every use below: resolveVersionWithLive projects the primary (and, for
+	// a weighted alias, secondary) FunctionVersion against it, and it is
+	// also the stickySource (see the doc comment below). Before this, primary
+	// and secondary each re-Got the same live Function via resolveVersion,
+	// and a third Get fetched it again just for stickySource -- three reads
+	// (three deep-copies out of the cache) of one object per resolve. Fetching
+	// once also means primary/secondary/stickySource all see the exact same
+	// object, not three independent cache reads that could -- in principle --
+	// observe different generations if the Function changed mid-resolve.
+	live, err := frr.getFunction(ctx, namespace, ref.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	primary, err := frr.resolveVersionWithLive(ctx, namespace, ref.Name, target, live)
 	if err != nil {
 		return nil, err
 	}
@@ -270,10 +300,6 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 	// weighted split (or back): re-keying which config the hash is computed
 	// against on that edit would silently re-shuffle every in-flight
 	// session's pick, even though nothing about ITS request changed.
-	live, err := frr.getFunction(ctx, namespace, ref.Name)
-	if err != nil {
-		return nil, err
-	}
 
 	if alias.Spec.Weight == nil {
 		rr := singleFunctionResult(primaryKey, primary)
@@ -290,7 +316,7 @@ func (frr *functionReferenceResolver) resolveByAlias(ctx context.Context, namesp
 		return nil, fmt.Errorf("function alias %s/%s is weighted but has no secondary version: %w", namespace, ref.Alias, errFunctionNotFound)
 	}
 
-	secondary, err := frr.resolveVersion(ctx, namespace, ref.Name, alias.Spec.SecondaryVersion)
+	secondary, err := frr.resolveVersionWithLive(ctx, namespace, ref.Name, alias.Spec.SecondaryVersion, live)
 	if err != nil {
 		return nil, err
 	}

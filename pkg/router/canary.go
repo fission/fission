@@ -5,7 +5,6 @@
 package router
 
 import (
-	"hash/fnv"
 	"math/rand"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -42,15 +41,32 @@ func findCeil(randomNumber int, wtDistrList []functionWeightDistribution) string
 }
 
 // stickyWeightHash is the FNV-64a hash of a sticky routing key, used to pick
-// a weighted backend deterministically (RFC-0025 Task 5). Same style as
-// endpointcache's rendezvous hrwScore (pkg/router/endpointcache/index.go): a
-// pure function of the key alone, so every router replica -- and the pick
-// site here vs. the Admit ranking downstream -- computes the identical
-// value with no shared state.
+// a weighted backend deterministically (RFC-0025 Task 5). A pure function of
+// the key alone, so every router replica -- and the pick site here vs. the
+// Admit ranking downstream -- computes the identical value with no shared
+// state.
+//
+// Inlined FNV-1a (offset basis 14695981039346656037, prime 1099511628211)
+// over a local uint64 accumulator instead of fnv.New64a(): going through
+// hash.Hash64 heap-allocates the hasher on every call, and this runs on the
+// per-request hot path for every weighted alias / FunctionWeights canary
+// with a sticky key. Byte-for-byte identical output to
+// fnv.New64a().Write([]byte(key)).Sum64() for the same key -- see
+// TestStickyWeightHash_MatchesFNV64a -- so existing sticky assignments do
+// not shift on deploy. Mirrors the inline pattern documented on
+// endpointcache's shard() (pkg/router/endpointcache/index.go), the 32-bit
+// analog of the same fix.
 func stickyWeightHash(key string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(key))
-	return h.Sum64()
+	const (
+		offset64 = 14695981039346656037
+		prime64  = 1099511628211
+	)
+	h := uint64(offset64)
+	for i := 0; i < len(key); i++ {
+		h ^= uint64(key[i])
+		h *= prime64
+	}
+	return h
 }
 
 // getCanaryBackend picks a function from fnWtDistributionList. With a sticky

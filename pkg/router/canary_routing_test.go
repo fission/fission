@@ -6,6 +6,7 @@ package router
 
 import (
 	"fmt"
+	"hash/fnv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,6 +67,53 @@ func TestFindCeil(t *testing.T) {
 		assert.Equal(t, "c", findCeil(70, dist))
 		assert.Equal(t, "d", findCeil(90, dist))
 	})
+}
+
+// TestStickyWeightHash_MatchesFNV64a pins stickyWeightHash's inlined FNV-1a
+// against the standard library's hash/fnv New64a for the same inputs: the
+// inlining (heap-allocation fix, RFC-0025 efficiency pass) must be
+// byte-for-byte identical, or existing sticky assignments would silently
+// shift the moment it ships. Includes a multi-write case matching how
+// hrwScore (pkg/router/endpointcache/index.go) composes a key from several
+// parts via successive Write calls, to prove the inlined accumulator agrees
+// with hash.Hash64 not just for a single Write but across write boundaries
+// too.
+func TestStickyWeightHash_MatchesFNV64a(t *testing.T) {
+	t.Parallel()
+
+	stdFNV64a := func(parts ...string) uint64 {
+		h := fnv.New64a()
+		for _, p := range parts {
+			_, _ = h.Write([]byte(p))
+		}
+		return h.Sum64()
+	}
+
+	keys := []string{
+		"",
+		"a",
+		"user-1",
+		"session-abc",
+		"тест-utf8",
+		"a-fairly-long-sticky-key-with-several-words-in-it-1234567890",
+		string([]byte{0x00, 0xff, 0x10, 0x7f}),
+	}
+	for _, key := range keys {
+		assert.Equalf(t, stdFNV64a(key), stickyWeightHash(key), "stickyWeightHash(%q)", key)
+	}
+
+	// Multi-write sequence: stickyWeightHash itself only ever does a single
+	// Write of the whole key, but the inlined accumulator must still agree
+	// with hash.Hash64 write-for-write -- concatenating the parts first and
+	// hashing the whole string in one shot must equal writing them
+	// separately, exactly like fnv.New64a() does.
+	parts := []string{"default", "/", "hello", "/", "hello-v1"}
+	concatenated := ""
+	for _, p := range parts {
+		concatenated += p
+	}
+	assert.Equal(t, stdFNV64a(parts...), stickyWeightHash(concatenated),
+		"stickyWeightHash over the concatenated key must match FNV-1a written part-by-part")
 }
 
 func TestGetCanaryBackend(t *testing.T) {

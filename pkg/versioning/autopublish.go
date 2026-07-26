@@ -220,7 +220,7 @@ func (r *AutoPublishReconciler) Reconcile(ctx context.Context, req reconcile.Req
 		return reconcile.Result{}, nil
 	}
 
-	newest, _, err := newestVersion(ctx, r.clientset, fn)
+	newest, maxSeq, err := newestVersion(ctx, r.clientset, fn)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -234,7 +234,12 @@ func (r *AutoPublishReconciler) Reconcile(ctx context.Context, req reconcile.Req
 		}
 	}
 
-	result, err := Publish(ctx, r.clientset, fn, "")
+	// publishWithNewest instead of the public Publish: newest/maxSeq were
+	// just fetched above for the RuntimeAffecting check, so passing them
+	// through skips Publish's own would-be duplicate List of the same
+	// FunctionVersions for the same fn (see publishWithNewest's doc comment
+	// for the TOCTOU argument on reusing them here).
+	result, err := publishWithNewest(ctx, r.clientset, fn, "", true, newest, maxSeq)
 	if err != nil {
 		if errors.Is(err, ErrPackageNotReady) {
 			recordAutopublish(ctx, autopublishResultDeferred)

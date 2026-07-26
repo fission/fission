@@ -84,7 +84,44 @@ func Publish(ctx context.Context, cl versioned.Interface, fn *fv1.Function, desc
 	return publish(ctx, cl, fn, description, true)
 }
 
+// publish is Publish's unexported entry point: it lists fn's newest existing
+// FunctionVersion itself, then hands off to publishWithNewest. See
+// publishWithNewest's doc comment for the caller (AutoPublishReconciler)
+// that skips this List because it already has the result in hand.
 func publish(ctx context.Context, cl versioned.Interface, fn *fv1.Function, description string, allowRetry bool) (*PublishResult, error) {
+	newest, maxSeq, err := newestVersion(ctx, cl, fn)
+	if err != nil {
+		return nil, err
+	}
+	return publishWithNewest(ctx, cl, fn, description, allowRetry, newest, maxSeq)
+}
+
+// publishWithNewest is publish's core, parameterized on an already-known
+// (newest, maxSeq) pair — fn's newest existing FunctionVersion and its
+// Sequence, exactly what newestVersion returns — instead of listing it
+// itself.
+//
+// AutoPublishReconciler.Reconcile already calls newestVersion to run its own
+// RuntimeAffecting idempotence pre-check before ever deciding to publish;
+// calling this directly with that same (newest, maxSeq) instead of the
+// public Publish (which would re-List the identical FunctionVersions a
+// second time) removes that duplicate List RPC from every actual publish.
+// The plain publish wrapper above is unchanged for every other caller (the
+// CLI's `fission fn publish`, this file's own AlreadyExists retry, and
+// idempotent Publish calls with no pre-fetch to reuse).
+//
+// TOCTOU: newest/maxSeq can be up to one Package Get (this function's very
+// next line) staler than a List taken right here would be — a few
+// milliseconds, not a new race class. Create's target name is deterministic
+// (fn.Name + "-v" + seq), so a concurrent publisher racing the same sequence
+// number always loses to a 409 AlreadyExists below, which retries once
+// through the plain publish wrapper — i.e. a FRESH List — rather than
+// blindly retrying the stale sequence; it can never mint two versions at the
+// same sequence or skip idempotence. selfHealSnapshotPackage and
+// ensureSnapshotPackage separately guard the legacy snapshot-Package create
+// against the same class of concurrent-publisher race. A stale newest can at
+// worst cost one extra AlreadyExists round trip; it cannot corrupt state.
+func publishWithNewest(ctx context.Context, cl versioned.Interface, fn *fv1.Function, description string, allowRetry bool, newest *fv1.FunctionVersion, maxSeq int64) (*PublishResult, error) {
 	pkg, err := cl.CoreV1().Packages(fn.Spec.Package.PackageRef.Namespace).Get(ctx, fn.Spec.Package.PackageRef.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("versioning: getting package %s/%s referenced by function %s/%s: %w",
@@ -93,11 +130,6 @@ func publish(ctx context.Context, cl versioned.Interface, fn *fv1.Function, desc
 
 	if pkg.Status.BuildStatus != fv1.BuildStatusSucceeded && pkg.Status.BuildStatus != fv1.BuildStatusNone {
 		return nil, fmt.Errorf("%w: package %s/%s build status is %q", ErrPackageNotReady, pkg.Namespace, pkg.Name, pkg.Status.BuildStatus)
-	}
-
-	newest, maxSeq, err := newestVersion(ctx, cl, fn)
-	if err != nil {
-		return nil, err
 	}
 
 	snap := fn.Spec.DeepCopy()
