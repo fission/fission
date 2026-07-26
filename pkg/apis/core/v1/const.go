@@ -290,6 +290,17 @@ const (
 	SpecDeploymentNameAnnotation = "fission-name"
 )
 
+// IsSpecManaged reports whether annotations carries SpecDeploymentUIDAnnotation
+// -- key PRESENCE (even with an empty value) marks the object spec-managed, per
+// the control-plane contract on SpecDeploymentUIDAnnotation above. Shared by
+// every consumer of that contract (canaryconfigmgr's alias-mode canary guard,
+// `fission function rollback`'s spec-managed guard) so the presence check
+// itself only needs to be written once.
+func IsSpecManaged(annotations map[string]string) bool {
+	_, managed := annotations[SpecDeploymentUIDAnnotation]
+	return managed
+}
+
 const (
 	ANNOTATION_SVC_HOST = "svcHost"
 )

@@ -57,16 +57,14 @@ func (opts *RollbackSubCommand) complete(input cli.Input) error {
 	}
 	opts.namespace = ns
 
-	alias, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(ns).Get(input.Context(), opts.aliasName, metav1.GetOptions{})
+	// Preflight: the alias must exist and actually belong to the function the
+	// caller named — --name/--alias are independent flags, so a typo'd
+	// --alias pointing at a different function's alias must not silently
+	// repoint it. Shared ownership check (util.GetOwnedFunctionAlias) with
+	// `fn test`/`fn pods`/`fn logs`/`route create`'s --function-alias tag.
+	alias, err := util.GetOwnedFunctionAlias(input.Context(), opts.Client(), ns, opts.fnName, opts.aliasName)
 	if err != nil {
-		return fmt.Errorf("error reading function alias '%v': %w", opts.aliasName, err)
-	}
-
-	// Preflight: the alias must actually belong to the function the caller
-	// named — --name/--alias are independent flags, so a typo'd --alias
-	// pointing at a different function's alias must not silently repoint it.
-	if alias.Spec.FunctionName != opts.fnName {
-		return fmt.Errorf("function alias '%v' targets function '%v', not '%v'", opts.aliasName, alias.Spec.FunctionName, opts.fnName)
+		return err
 	}
 
 	if input.IsSet(flagkey.FnRollbackTo) {
@@ -89,7 +87,7 @@ func (opts *RollbackSubCommand) complete(input cli.Input) error {
 	// rollback. Refuse unless --detach, which strips both deployment
 	// annotations (name+UID) in the same update that performs the repoint —
 	// see run().
-	if _, managed := alias.Annotations[spec.FISSION_DEPLOYMENT_UID_KEY]; managed && !opts.detach {
+	if fv1.IsSpecManaged(alias.Annotations) && !opts.detach {
 		return fmt.Errorf("function alias '%v' is managed by `fission spec` (Git); the next spec apply will revert this rollback. "+
 			"Re-run with --detach to strip spec ownership, and update your Git repo: set spec.version: %v in the FunctionAlias manifest",
 			opts.aliasName, opts.target)

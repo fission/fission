@@ -104,7 +104,7 @@ func TestRollbackWrongFunctionErrors(t *testing.T) {
 	in := rollbackFlags("other-function", "prod")
 	err := Rollback(in)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "targets function 'hello'")
+	assert.Contains(t, err.Error(), `targets function "hello"`)
 
 	// And the alias must be untouched.
 	fc := setRollbackClient(alias)

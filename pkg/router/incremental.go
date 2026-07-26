@@ -47,6 +47,25 @@ const resyncInterval = 60 * time.Second
 
 // referencedFunctions lists the function keys a trigger's reference resolves
 // through (the canary form references several).
+// singleFnTimeout builds the one-entry fnTimeout map buildInternalFunctionHandler
+// needs for a single resolved Function (the internal `/fission-function/...`
+// route, and its `:<version>` materialization).
+func singleFnTimeout(fn *fv1.Function) map[crd.CacheKeyUG]int {
+	return map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
+}
+
+// fnTimeoutMap builds the fnTimeout map buildTriggerHandler/
+// buildInternalAliasHandler need for every Function a resolve can return
+// (rr.functionMap: a single-function trigger/alias resolves to one entry, a
+// weighted canary trigger or a weighted alias to two).
+func fnTimeoutMap(fns map[string]*fv1.Function) map[crd.CacheKeyUG]int {
+	fnTimeout := make(map[crd.CacheKeyUG]int, len(fns))
+	for _, fn := range fns {
+		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
+	}
+	return fnTimeout
+}
+
 func referencedFunctions(trigger *fv1.HTTPTrigger) []types.NamespacedName {
 	ref := trigger.Spec.FunctionReference
 	switch ref.Type {
@@ -139,11 +158,10 @@ func (ts *HTTPTriggerSet) applyTriggerIncremental(ctx context.Context, trigger *
 
 	shape := deriveRouteShape(trigger)
 	fnGens := make(map[string]int64, len(rr.functionMap))
-	fnTimeout := make(map[crd.CacheKeyUG]int, len(rr.functionMap))
 	for name, fn := range rr.functionMap {
 		fnGens[name] = fn.Generation
-		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
 	}
+	fnTimeout := fnTimeoutMap(rr.functionMap)
 	// StickyGen folds the sticky-config source function's Generation into the
 	// route identity. For an alias-resolved trigger the sticky source is the
 	// LIVE function while FnGens holds only the pinned snapshots' Generations,
@@ -218,7 +236,7 @@ func (ts *HTTPTriggerSet) deleteTriggerIncremental(key types.NamespacedName) rou
 // resolve before re-admits here).
 func (ts *HTTPTriggerSet) applyFunctionIncremental(ctx context.Context, fn *fv1.Function) (routetable.ApplyResult, error) {
 	key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
-	fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
+	fnTimeout := singleFnTimeout(fn)
 	res := ts.routeTable.ApplyFunction(routetable.InternalKey{NamespacedName: key}, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
@@ -376,10 +394,7 @@ func (ts *HTTPTriggerSet) applyAliasInternalRoute(ctx context.Context, alias *fv
 		return routetable.NoChange, err
 	}
 
-	fnTimeout := make(map[crd.CacheKeyUG]int, len(rr.functionMap))
-	for _, fn := range rr.functionMap {
-		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fn.Spec.FunctionTimeout
-	}
+	fnTimeout := fnTimeoutMap(rr.functionMap)
 	res := ts.routeTable.ApplyFunction(key, aliasRouteGeneration(alias, rr), func() http.Handler {
 		return ts.buildInternalAliasHandler(alias.Name, rr, fnTimeout)
 	})
@@ -505,7 +520,7 @@ func (ts *HTTPTriggerSet) applyVersionIncremental(ctx context.Context, v *fv1.Fu
 		return routetable.NoChange, err
 	}
 
-	fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
+	fnTimeout := singleFnTimeout(fn)
 	res := ts.routeTable.ApplyFunction(key, fn.Generation, func() http.Handler {
 		return ts.buildInternalFunctionHandler(fn, fnTimeout)
 	})
@@ -802,7 +817,7 @@ func (ts *HTTPTriggerSet) resync(ctx context.Context, initial bool) (int, error)
 		fn := &functionList.Items[i]
 		key := types.NamespacedName{Namespace: fn.Namespace, Name: fn.Name}
 		liveFns[key] = struct{}{}
-		fnTimeout := map[crd.CacheKeyUG]int{crd.CacheKeyUGFromMeta(&fn.ObjectMeta): fn.Spec.FunctionTimeout}
+		fnTimeout := singleFnTimeout(fn)
 		// Apply the internal route directly (no trigger cascade — the
 		// triggers are re-applied below in this same pass).
 		res := ts.routeTable.ApplyFunction(routetable.InternalKey{NamespacedName: key}, fn.Generation, func() http.Handler {

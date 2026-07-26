@@ -14,6 +14,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -55,10 +56,10 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 
 // getVersion renders the RFC-0025 SNAPSHOT source for one pinned
 // FunctionVersion instead of the live function's package. Preflight
-// (existence + Spec.FunctionName == fnName) is the shared versionref.go
-// helper `fn test`/`fn describe`/`fn pods`/`fn logs` already use for their
-// own --version flags, so a typo'd --version surfaces the same clear error
-// here rather than an opaque downstream 404.
+// (existence + Spec.FunctionName == fnName) is the shared
+// util.GetOwnedFunctionVersion helper `fn test`/`fn describe`/`fn pods`/
+// `fn logs` already use for their own --version flags, so a typo'd --version
+// surfaces the same clear error here rather than an opaque downstream 404.
 //
 // version.Spec.Snapshot.Package.PackageRef is fetched directly rather than
 // re-reading the live Function's package reference. What that ref names
@@ -78,7 +79,7 @@ func (opts *GetSubCommand) do(input cli.Input) error {
 //     content, the same guarantee a version-owned snapshot copy exists to
 //     provide for mutable archive types.
 func (opts *GetSubCommand) getVersion(ctx context.Context, namespace, fnName, versionName string) error {
-	version, err := getOwnedFunctionVersion(ctx, opts.Client(), namespace, fnName, versionName)
+	version, err := util.GetOwnedFunctionVersion(ctx, opts.Client(), namespace, fnName, versionName)
 	if err != nil {
 		return err
 	}

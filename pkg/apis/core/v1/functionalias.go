@@ -19,3 +19,17 @@ func (fa *FunctionAlias) EffectiveTarget() string {
 	}
 	return fa.Status.ResolvedVersion
 }
+
+// ReferencedVersionNames returns every FunctionVersion name this alias
+// references (primary pin, secondary, resolved) -- THE definition of "an
+// alias references a version" (retention invariant V3). Callers must not
+// re-derive the field list.
+func (fa *FunctionAlias) ReferencedVersionNames() []string {
+	var names []string
+	for _, name := range [...]string{fa.Spec.Version, fa.Spec.SecondaryVersion, fa.Status.ResolvedVersion} {
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}

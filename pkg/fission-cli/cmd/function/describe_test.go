@@ -335,8 +335,8 @@ func TestFunctionDescribeVersion(t *testing.T) {
 			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 		}
 		// Digest-pinned, resolved via Status rather than Spec.Version -- still
-		// counts as targeting hello-v1 (aliasEffectiveTarget prefers
-		// Spec.Version, falls back to Status.ResolvedVersion).
+		// counts as targeting hello-v1 (fv1.FunctionAlias.EffectiveTarget
+		// prefers Spec.Version, falls back to Status.ResolvedVersion).
 		aliasGitops := &fv1.FunctionAlias{
 			ObjectMeta: metav1.ObjectMeta{Name: "gitops", Namespace: "default"},
 			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + strings40('a')},

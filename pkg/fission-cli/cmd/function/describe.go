@@ -21,6 +21,7 @@ import (
 	"github.com/fission/fission/pkg/conditions"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/functionalias"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
@@ -68,11 +69,11 @@ func (opts *DescribeSubCommand) do(input cli.Input) error {
 
 // doVersion renders the RFC-0025 SNAPSHOT inspector for one FunctionVersion.
 // Preflight (existence + Spec.FunctionName == name) is the shared
-// versionref.go helper `fn test`/`fn pods`/`fn logs` already use for their
-// own --version flags, so a typo'd --version surfaces the same clear error
-// here.
+// util.GetOwnedFunctionVersion helper `fn test`/`fn pods`/`fn logs` already
+// use for their own --version flags, so a typo'd --version surfaces the same
+// clear error here.
 func (opts *DescribeSubCommand) doVersion(ctx context.Context, namespace, name, versionName string) error {
-	version, err := getOwnedFunctionVersion(ctx, opts.Client(), namespace, name, versionName)
+	version, err := util.GetOwnedFunctionVersion(ctx, opts.Client(), namespace, name, versionName)
 	if err != nil {
 		return err
 	}
@@ -115,36 +116,27 @@ func (opts *DescribeSubCommand) podsFor(ctx context.Context, fn *fv1.Function) [
 }
 
 // versionsFor lists fnName's FunctionVersions via the ownership label
-// selector (the same selector `fn versions` uses), best-effort: an
-// unreadable list renders the VERSIONING section's count as 0 rather than
-// failing the whole view, the same degrade-on-error convention as
-// packageFor/podsFor above.
+// selector (versioning.ListVersionsForFunction, the same selector `fn
+// versions` uses), best-effort: an unreadable list renders the VERSIONING
+// section's count as 0 rather than failing the whole view, the same
+// degrade-on-error convention as packageFor/podsFor above.
 func (opts *DescribeSubCommand) versionsFor(ctx context.Context, namespace, fnName string) []fv1.FunctionVersion {
-	selector := labels.SelectorFromSet(labels.Set{fv1.VersionFunctionNameLabel: fnName}).String()
-	list, err := opts.Client().FissionClientSet.CoreV1().FunctionVersions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	items, err := versioning.ListVersionsForFunction(ctx, opts.Client().FissionClientSet, namespace, fnName)
 	if err != nil {
 		return nil
 	}
-	return list.Items
+	return items
 }
 
-// aliasesFor lists fnName's FunctionAliases, filtered client-side on
-// Spec.FunctionName -- mirrors functionalias/list.go's filterByFunction: an
-// alias created before the ownership label existed (or by hand) would be
-// silently dropped by a selector-based List. Best-effort, same convention as
-// versionsFor.
+// aliasesFor lists fnName's FunctionAliases (functionalias.AliasesForFunction
+// -- see its doc comment for the client-side-filter rationale), best-effort,
+// same convention as versionsFor.
 func (opts *DescribeSubCommand) aliasesFor(ctx context.Context, namespace, fnName string) []fv1.FunctionAlias {
-	list, err := opts.Client().FissionClientSet.CoreV1().FunctionAliases(namespace).List(ctx, metav1.ListOptions{})
+	items, err := functionalias.AliasesForFunction(ctx, opts.Client().FissionClientSet, namespace, fnName)
 	if err != nil {
 		return nil
 	}
-	out := make([]fv1.FunctionAlias, 0, len(list.Items))
-	for _, a := range list.Items {
-		if a.Spec.FunctionName == fnName {
-			out = append(out, a)
-		}
-	}
-	return out
+	return items
 }
 
 // snapshotEnvFor fetches the live Environment a FunctionVersion's snapshot
@@ -282,8 +274,8 @@ func versioningModeLine(cfg *fv1.VersioningConfig) string {
 // describeAliasesTableTo renders the NAME/TARGET/WEIGHT/ENVDRIFT mini table
 // shared by the VERSIONING section (all of a function's aliases) and the
 // --version SNAPSHOT inspector's ALIASED-BY table (aliases already filtered
-// to those targeting one version). TARGET is aliasEffectiveTarget
-// (versionref.go); ENVDRIFT reads the EnvDrift condition the
+// to those targeting one version). TARGET is a.EffectiveTarget()
+// (fv1.FunctionAlias); ENVDRIFT reads the EnvDrift condition the
 // AliasReconciler writes, "-" when absent -- the condition's own "removed,
 // not False, when not assessable" contract (see
 // FunctionAliasConditionEnvDrift), condensed to a table cell.
@@ -295,7 +287,7 @@ func describeAliasesTableTo(out io.Writer, aliases []fv1.FunctionAlias) {
 	w := util.NewTabWriter(out)
 	fmt.Fprintln(w, "NAME\tTARGET\tWEIGHT\tENVDRIFT")
 	for _, a := range aliases {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", a.Name, valueOr(aliasEffectiveTarget(&a)), aliasWeight(&a), aliasEnvDriftStatus(&a))
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", a.Name, valueOr(a.EffectiveTarget()), aliasWeight(&a), aliasEnvDriftStatus(&a))
 	}
 	w.Flush()
 }
@@ -383,11 +375,11 @@ func versionEnvDrift(version *fv1.FunctionVersion, env *fv1.Environment) string 
 }
 
 // aliasedByVersion filters aliases to those whose effective target
-// (aliasEffectiveTarget, versionref.go) is versionName.
+// (a.EffectiveTarget(), fv1.FunctionAlias) is versionName.
 func aliasedByVersion(aliases []fv1.FunctionAlias, versionName string) []fv1.FunctionAlias {
 	out := make([]fv1.FunctionAlias, 0, len(aliases))
 	for _, a := range aliases {
-		if aliasEffectiveTarget(&a) == versionName {
+		if a.EffectiveTarget() == versionName {
 			out = append(out, a)
 		}
 	}

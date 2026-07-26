@@ -13,14 +13,15 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/functionalias"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 // unaliasedCell is the ALIASED-BY table cell for a version no FunctionAlias
@@ -51,13 +52,12 @@ func (opts *VersionsSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error listing function versions: %w", err)
 	}
 
-	selector := labels.SelectorFromSet(labels.Set{fv1.VersionFunctionNameLabel: fnName}).String()
-	list, err := opts.Client().FissionClientSet.CoreV1().FunctionVersions(namespace).List(input.Context(), metav1.ListOptions{LabelSelector: selector})
+	items, err := versioning.ListVersionsForFunction(input.Context(), opts.Client().FissionClientSet, namespace, fnName)
 	if err != nil {
 		return fmt.Errorf("error listing function versions: %w", err)
 	}
 
-	versions := sortedBySequence(list.Items)
+	versions := sortedBySequence(items)
 
 	// "name" prints the bare version names and nothing else -- handled
 	// locally, same as printPublishResult (publish.go), since
@@ -98,35 +98,27 @@ func printVersionNames(w io.Writer, versions []fv1.FunctionVersion) error {
 	return nil
 }
 
-// aliasesByFunction lists fnName's FunctionAliases in namespace, filtered
-// client-side on Spec.FunctionName -- mirrors describe.go's aliasesFor and
-// functionalias/list.go's filterByFunction: an alias created before the
-// ownership label existed (or by hand) would be silently dropped by a
-// selector-based List.
+// aliasesByFunction lists fnName's FunctionAliases in namespace
+// (functionalias.AliasesForFunction — see its doc comment for the
+// client-side-filter rationale, shared with describe.go's aliasesFor).
 func aliasesByFunction(ctx context.Context, cl versioned.Interface, namespace, fnName string) []fv1.FunctionAlias {
-	list, err := cl.CoreV1().FunctionAliases(namespace).List(ctx, metav1.ListOptions{})
+	items, err := functionalias.AliasesForFunction(ctx, cl, namespace, fnName)
 	if err != nil {
 		return nil
 	}
-	out := make([]fv1.FunctionAlias, 0, len(list.Items))
-	for _, a := range list.Items {
-		if a.Spec.FunctionName == fnName {
-			out = append(out, a)
-		}
-	}
-	return out
+	return items
 }
 
 // aliasedByColumn builds the `fn versions` ALIASED-BY table cell for every
 // version aliases points at: a comma-joined, sorted list of the alias names
-// whose effective target (aliasEffectiveTarget, versionref.go — Spec.Version
-// when name-pinned, else Status.ResolvedVersion) is that version. A version
-// absent from the returned map has no aliases pointing at it; callers render
-// that as unaliasedCell.
+// whose effective target (a.EffectiveTarget(), fv1.FunctionAlias —
+// Spec.Version when name-pinned, else Status.ResolvedVersion) is that
+// version. A version absent from the returned map has no aliases pointing at
+// it; callers render that as unaliasedCell.
 func aliasedByColumn(aliases []fv1.FunctionAlias) map[string]string {
 	names := make(map[string][]string)
 	for _, a := range aliases {
-		target := aliasEffectiveTarget(&a)
+		target := a.EffectiveTarget()
 		if target == "" {
 			continue
 		}

@@ -6,12 +6,11 @@ package httptrigger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 // validateFnRefTagFlags enforces the RFC-0025 --function-alias/
@@ -21,8 +20,8 @@ import (
 // multi-function reference (canary, --function supplied twice with
 // --weight) has no single function to pin a tag against.
 func validateFnRefTagFlags(alias, version string, functionList []string) error {
-	if alias != "" && version != "" {
-		return errors.New("--function-alias and --function-version are mutually exclusive")
+	if err := util.MutuallyExclusive(flagkey.HtFnAlias, alias, flagkey.HtFnVersion, version); err != nil {
+		return err
 	}
 	if alias == "" && version == "" {
 		return nil
@@ -35,30 +34,22 @@ func validateFnRefTagFlags(alias, version string, functionList []string) error {
 }
 
 // checkFnRefTagOwnership preflight-checks an alias/version tag against the
-// API server, mirroring `fn test`'s resolveTestRefSuffix
-// (pkg/fission-cli/cmd/function/test.go): the named FunctionAlias/
-// FunctionVersion must exist and its Spec.FunctionName must equal fnName, so
-// a typo or a tag borrowed from a different function's lineage surfaces here
-// as a clear error instead of an opaque router 404 once traffic hits the
-// route. A no-op when neither alias nor version is set.
+// API server, via the shared RFC-0025 ownership preflight
+// (util.GetOwnedFunctionAlias/util.GetOwnedFunctionVersion -- `fn test`'s
+// resolveTestRefSuffix and `fn pods`/`fn logs`'s resolveVersionLabelFilter
+// use the same helpers): the named FunctionAlias/FunctionVersion must exist
+// and its Spec.FunctionName must equal fnName, so a typo or a tag borrowed
+// from a different function's lineage surfaces here as a clear error
+// instead of an opaque router 404 once traffic hits the route. A no-op when
+// neither alias nor version is set.
 func checkFnRefTagOwnership(ctx context.Context, client cmd.Client, namespace, fnName, alias, version string) error {
 	switch {
 	case alias != "":
-		a, err := client.FissionClientSet.CoreV1().FunctionAliases(namespace).Get(ctx, alias, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("alias %q not found for function %q: %w", alias, fnName, err)
-		}
-		if a.Spec.FunctionName != fnName {
-			return fmt.Errorf("alias %q targets function %q, not %q", alias, a.Spec.FunctionName, fnName)
-		}
+		_, err := util.GetOwnedFunctionAlias(ctx, client, namespace, fnName, alias)
+		return err
 	case version != "":
-		v, err := client.FissionClientSet.CoreV1().FunctionVersions(namespace).Get(ctx, version, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("version %q not found for function %q: %w", version, fnName, err)
-		}
-		if v.Spec.FunctionName != fnName {
-			return fmt.Errorf("version %q targets function %q, not %q", version, v.Spec.FunctionName, fnName)
-		}
+		_, err := util.GetOwnedFunctionVersion(ctx, client, namespace, fnName, version)
+		return err
 	}
 	return nil
 }

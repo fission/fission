@@ -214,7 +214,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 // target: "" for the live function, else the alias or version name. Both
 // flags are preflight-checked against the API server -- Get the named
 // FunctionAlias/FunctionVersion and confirm it actually belongs to fnName
-// (getOwnedFunctionAlias/getOwnedFunctionVersion in versionref.go, shared with
+// (util.GetOwnedFunctionAlias/util.GetOwnedFunctionVersion, shared with
 // `fn pods`/`fn logs`) -- so a typo surfaces here as a clear error instead of
 // an opaque router 404 once the request is sent (see
 // suffixedRouteNotFoundError for the 404 that preflight can't catch: a
@@ -223,18 +223,18 @@ func (opts *TestSubCommand) resolveTestRefSuffix(input cli.Input, fnName, namesp
 	aliasName := input.String(flagkey.FnTestAlias)
 	versionName := input.String(flagkey.FnTestVersion)
 
-	if aliasName != "" && versionName != "" {
-		return "", errors.New("--alias and --version are mutually exclusive")
+	if err := util.MutuallyExclusive(flagkey.FnTestAlias, aliasName, flagkey.FnTestVersion, versionName); err != nil {
+		return "", err
 	}
 
 	switch {
 	case aliasName != "":
-		if _, err := getOwnedFunctionAlias(input.Context(), opts.Client(), namespace, fnName, aliasName); err != nil {
+		if _, err := util.GetOwnedFunctionAlias(input.Context(), opts.Client(), namespace, fnName, aliasName); err != nil {
 			return "", err
 		}
 		return aliasName, nil
 	case versionName != "":
-		if _, err := getOwnedFunctionVersion(input.Context(), opts.Client(), namespace, fnName, versionName); err != nil {
+		if _, err := util.GetOwnedFunctionVersion(input.Context(), opts.Client(), namespace, fnName, versionName); err != nil {
 			return "", err
 		}
 		return versionName, nil

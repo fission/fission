@@ -5,6 +5,7 @@
 package functionalias
 
 import (
+	"context"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	"github.com/fission/fission/pkg/generated/clientset/versioned"
 )
 
 type ListSubCommand struct {
@@ -58,7 +60,10 @@ func (opts *ListSubCommand) do(input cli.Input) error {
 // selector-based List. Filtering stays client-side until a phase-3
 // reconciler backfills the label onto every legacy FunctionAlias, at which
 // point this can flip to a label selector like function/versions.go's.
-// An empty fnName returns items unchanged.
+// An empty fnName returns items unchanged. The pure-slice variant: callers
+// that already have a List result (this file's own do(), tests) filter
+// in-process with it; AliasesForFunction below is the List+filter used by
+// everyone else.
 func filterByFunction(items []fv1.FunctionAlias, fnName string) []fv1.FunctionAlias {
 	if fnName == "" {
 		return items
@@ -70,6 +75,19 @@ func filterByFunction(items []fv1.FunctionAlias, fnName string) []fv1.FunctionAl
 		}
 	}
 	return out
+}
+
+// AliasesForFunction lists every FunctionAlias in namespace and filters to
+// those targeting fnName (filterByFunction above — see its doc comment for
+// why the filter runs client-side rather than via a label selector). Shared
+// by every RFC-0025 display that needs one function's aliases: `fn
+// describe`'s VERSIONING section, `fn versions`'s ALIASED-BY column.
+func AliasesForFunction(ctx context.Context, cl versioned.Interface, namespace, fnName string) ([]fv1.FunctionAlias, error) {
+	list, err := cl.CoreV1().FunctionAliases(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return filterByFunction(list.Items, fnName), nil
 }
 
 // aliasRow renders a's table cells, shared by `alias get` and `alias list`.

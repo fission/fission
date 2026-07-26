@@ -11,14 +11,13 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 type DeleteSubCommand struct {
@@ -92,15 +91,14 @@ func printCascadeWarning(ctx context.Context, fc versioned.Interface, namespace,
 }
 
 // countVersions returns the number of FunctionVersions owned by fnName, via
-// the same VersionFunctionNameLabel selector as `fn versions` (versions.go).
+// versioning.ListVersionsForFunction (the same selector `fn versions` uses).
 // Any List error is treated as "nothing to report", not a failure.
 func countVersions(ctx context.Context, fc versioned.Interface, namespace, fnName string) int {
-	selector := labels.SelectorFromSet(labels.Set{fv1.VersionFunctionNameLabel: fnName}).String()
-	list, err := fc.CoreV1().FunctionVersions(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	items, err := versioning.ListVersionsForFunction(ctx, fc, namespace, fnName)
 	if err != nil {
 		return 0
 	}
-	return len(list.Items)
+	return len(items)
 }
 
 // aliasNamesForFunction returns the sorted names of the FunctionAliases

@@ -105,10 +105,7 @@ func (v *View) Rebuild(aliases []fv1.FunctionAlias, versions []fv1.FunctionVersi
 	next := make(map[retainKey]struct{}, len(aliases))
 	for i := range aliases {
 		alias := &aliases[i]
-		for _, name := range [...]string{alias.Spec.Version, alias.Spec.SecondaryVersion, alias.Status.ResolvedVersion} {
-			if name == "" {
-				continue
-			}
+		for _, name := range alias.ReferencedVersionNames() {
 			ver, ok := byNsName[nsName{namespace: alias.Namespace, name: name}]
 			if !ok || ver.Spec.FunctionUID == "" {
 				continue

@@ -391,11 +391,11 @@ func (m *canaryConfigMgr) validateAliasRollout(ctx context.Context, cfg *fv1.Can
 		return nil, fmt.Sprintf("function alias %s is digest-pinned (packageDigest %q); alias-mode canary requires a name-pinned alias (spec.version), not a declarative digest pin",
 			aliasKey, alias.Spec.PackageDigest), nil
 	}
-	// Key PRESENCE marks the alias spec-managed, matching
+	// fv1.IsSpecManaged: key PRESENCE marks the alias spec-managed, matching
 	// pkg/fission-cli/cmd/function/rollback.go's identical guard — a
 	// present-but-empty annotation value still means a `fission spec`
 	// deployment stamped this alias.
-	if _, managed := alias.Annotations[fv1.SpecDeploymentUIDAnnotation]; managed {
+	if fv1.IsSpecManaged(alias.Annotations) {
 		return nil, fmt.Sprintf("function alias %s is managed by `fission spec` (Git); the promotion write would be reverted by the next `spec apply` — detach it from the deployment (see `fission fn rollback --detach`) before running an alias-mode canary against it",
 			aliasKey), nil
 	}

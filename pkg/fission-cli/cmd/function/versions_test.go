@@ -251,8 +251,8 @@ func TestAliasedByColumn(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "canary"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"}},
 		{ObjectMeta: metav1.ObjectMeta{Name: "staging"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"}},
 		// A digest-pinned alias that has not resolved yet has no effective
-		// target (aliasEffectiveTarget returns "") and must not appear in the
-		// column at all, for any version.
+		// target (fv1.FunctionAlias.EffectiveTarget returns "") and must not
+		// appear in the column at all, for any version.
 		{ObjectMeta: metav1.ObjectMeta{Name: "unresolved"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:abc"}},
 	}
 

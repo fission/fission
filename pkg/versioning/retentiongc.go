@@ -107,7 +107,7 @@ type SweepResult struct {
 func SweepVersions(ctx context.Context, cl versioned.Interface, fnNS, fnName string, retain int) (SweepResult, error) {
 	var result SweepResult
 
-	versions, err := listVersionsForName(ctx, cl, fnNS, fnName)
+	versions, err := ListVersionsForFunction(ctx, cl, fnNS, fnName)
 	if err != nil {
 		return result, err
 	}
@@ -173,9 +173,19 @@ func SweepVersions(ctx context.Context, cl versioned.Interface, fnNS, fnName str
 	return result, nil
 }
 
-// listVersionsForName lists the FunctionVersions in ns labeled for fnName,
-// unsorted.
-func listVersionsForName(ctx context.Context, cl versioned.Interface, ns, fnName string) ([]fv1.FunctionVersion, error) {
+// ListVersionsForFunction lists the FunctionVersions in ns labeled for
+// fnName, unsorted, via VersionFunctionNameLabel only -- the same selector
+// this package's own SweepVersions engine and every CLI list site (`fn
+// versions`, `fn describe`'s VERSIONING section, `fn delete`'s cascade
+// warning, `fn get`'s versioning summary) build.
+//
+// NOTE: this is deliberately NOT the same selector publish.go's
+// newestVersion uses (VersionFunctionNameLabel AND VersionFunctionUIDLabel)
+// -- that extra UID-scoping guards against a same-named-but-recreated
+// Function's stale versions leaking into a fresh publish sequence, a concern
+// the read-only list sites above don't have. This pre-existing inconsistency
+// is preserved as-is (no behavior change).
+func ListVersionsForFunction(ctx context.Context, cl versioned.Interface, ns, fnName string) ([]fv1.FunctionVersion, error) {
 	selector := labels.SelectorFromSet(labels.Set{fv1.VersionFunctionNameLabel: fnName}).String()
 	list, err := cl.CoreV1().FunctionVersions(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
@@ -185,13 +195,13 @@ func listVersionsForName(ctx context.Context, cl versioned.Interface, ns, fnName
 }
 
 // aliasReferencedVersions lists every FunctionAlias in ns and returns the set
-// of FunctionVersion names referenced by any of the three ref fields
-// (invariant V3's union): Spec.Version, Spec.SecondaryVersion,
-// Status.ResolvedVersion. Not scoped to a single function: a version name
-// squatting on another function's alias reference is a pre-existing naming
-// collision this function does not need to reason about, and scoping would
-// only ever widen (never narrow) what a caller with a bogus FunctionName
-// mismatch protects.
+// of FunctionVersion names referenced by any of them (fv1.FunctionAlias's
+// ReferencedVersionNames -- invariant V3's union: Spec.Version,
+// Spec.SecondaryVersion, Status.ResolvedVersion). Not scoped to a single
+// function: a version name squatting on another function's alias reference
+// is a pre-existing naming collision this function does not need to reason
+// about, and scoping would only ever widen (never narrow) what a caller with
+// a bogus FunctionName mismatch protects.
 func aliasReferencedVersions(ctx context.Context, cl versioned.Interface, ns string) (map[string]bool, error) {
 	aliases, err := cl.CoreV1().FunctionAliases(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -200,15 +210,8 @@ func aliasReferencedVersions(ctx context.Context, cl versioned.Interface, ns str
 
 	refs := make(map[string]bool, len(aliases.Items))
 	for i := range aliases.Items {
-		a := &aliases.Items[i]
-		if a.Spec.Version != "" {
-			refs[a.Spec.Version] = true
-		}
-		if a.Spec.SecondaryVersion != "" {
-			refs[a.Spec.SecondaryVersion] = true
-		}
-		if a.Status.ResolvedVersion != "" {
-			refs[a.Status.ResolvedVersion] = true
+		for _, name := range aliases.Items[i].ReferencedVersionNames() {
+			refs[name] = true
 		}
 	}
 	return refs, nil

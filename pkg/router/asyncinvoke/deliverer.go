@@ -105,7 +105,7 @@ func (h *httpDeliverer) Deliver(ctx context.Context, env Envelope, invocationID 
 	// re-delivered -- a function whose business logic legitimately answers
 	// 404 is no longer double-invoked on the version-pinned path.
 	if env.FunctionVersion != "" {
-		result := h.deliverOnce(ctx, env, invocationID, attempt, h.targetURL(funcPath+":"+env.FunctionVersion, env.Query))
+		result := h.deliverOnce(ctx, env, invocationID, attempt, h.targetURL(utils.UrlForFunctionRef(env.Function, env.Namespace, env.FunctionVersion), env.Query))
 		if result.Err == nil && result.StatusCode == http.StatusNotFound && result.routeMiss {
 			recordVersionFallback(ctx)
 			h.logger.Info("async delivery: versioned route not found, falling back to bare function route",

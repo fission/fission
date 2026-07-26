@@ -108,7 +108,7 @@ func TestGetVersionRendersOriginalPackageForOCIDigest(t *testing.T) {
 }
 
 // TestGetVersionNotFound covers the preflight: a --version name that does
-// not exist surfaces getOwnedFunctionVersion's clear error instead of an
+// not exist surfaces util.GetOwnedFunctionVersion's clear error instead of an
 // opaque downstream failure.
 func TestGetVersionNotFound(t *testing.T) {
 	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}

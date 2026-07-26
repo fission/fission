@@ -7,6 +7,7 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -124,7 +125,7 @@ func (r *FunctionVersion) ValidateDeletion(ctx context.Context, fv *v1.FunctionV
 	}
 
 	for _, a := range aliases.Items {
-		if a.Spec.Version == fv.Name || a.Spec.SecondaryVersion == fv.Name || a.Status.ResolvedVersion == fv.Name {
+		if slices.Contains(a.ReferencedVersionNames(), fv.Name) {
 			return fmt.Errorf("FunctionVersion %q is still referenced by FunctionAlias %q; repoint or delete the alias first", fv.Name, a.Name)
 		}
 	}
