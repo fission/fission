@@ -74,12 +74,18 @@ func TestMakePrometheusClient(t *testing.T) {
 }
 
 // fakeFailureClient is a deterministic failurePercentageGetter for tests.
+// calls, when non-nil, is incremented on every call — used by tests that must
+// assert an evaluation was (or was not) performed in a given tick.
 type fakeFailureClient struct {
-	pct float64
-	err error
+	pct   float64
+	err   error
+	calls *int
 }
 
 func (f fakeFailureClient) GetFunctionFailurePercentage(_ context.Context, _ string, _ []string, _, _, _ string) (float64, error) {
+	if f.calls != nil {
+		*f.calls++
+	}
 	return f.pct, f.err
 }
 
@@ -148,6 +154,35 @@ func TestRollForward(t *testing.T) {
 		done, err := mgr.rollForward(t.Context(), cc, trigger)
 		require.NoError(t, err)
 		assert.True(t, done)
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 from zero writes 100/0 but is not done", func(t *testing.T) {
+		// The step that INTRODUCES first traffic must never also be the terminal
+		// one: step() skips the failure evaluation at weight 0, so done here
+		// would mean Succeeded with zero observed evaluation windows.
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		mgr, _, c := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		done, err := mgr.rollForward(t.Context(), cc, trigger)
+		require.NoError(t, err)
+		assert.False(t, done, "a step from weight 0 must not report done — the next tick must evaluate first")
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 from nonzero weight is done", func(t *testing.T) {
+		trigger, cc := canaryFixtures(map[string]int{"new": 100, "old": 0}, 100)
+		mgr, _, c := newTestEnv(fakeFailureClient{}, trigger, cc)
+
+		done, err := mgr.rollForward(t.Context(), cc, trigger)
+		require.NoError(t, err)
+		assert.True(t, done, "a step already carrying traffic must still report done")
 
 		got := getTrigger(t, c)
 		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
@@ -247,6 +282,73 @@ func TestStep(t *testing.T) {
 		out, err := mgr.step(t.Context(), cc)
 		require.NoError(t, err)
 		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus)
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 with failing new function never reports Succeeded", func(t *testing.T) {
+		// Regression for the single-tick promote bug: with WeightIncrement >= 100
+		// the first tick used to shift 0 -> 100 AND report Succeeded — a terminal
+		// status the reconciler never revisits — without ever evaluating the new
+		// function. Now the introducing tick stays Pending and the next tick's
+		// evaluation rolls a failing function back.
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		var calls int
+		mgr, _, c := newTestEnv(fakeFailureClient{pct: 50, calls: &calls}, trigger, cc) // 50 > threshold 10
+
+		// Tick 1: introduces traffic, no evaluation possible yet, not terminal.
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out)
+		assert.Zero(t, calls, "at weight 0 there is nothing to evaluate")
+		assert.Equal(t, 100, getTrigger(t, c).Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, getTrigger(t, c).Spec.FunctionReference.FunctionWeights["old"])
+
+		// Tick 2: first evaluation window completed — threshold crossed, roll back.
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusFailed, out.terminalStatus)
+		assert.Equal(t, 1, calls)
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment >= 100 with healthy new function succeeds only after an evaluated window", func(t *testing.T) {
+		trigger, cc := canaryFixtures(map[string]int{"new": 0, "old": 100}, 100)
+		var calls int
+		mgr, _, c := newTestEnv(fakeFailureClient{pct: 5, calls: &calls}, trigger, cc) // 5 < threshold 10
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, stepOutcome{requeue: true}, out, "introducing tick must not be terminal")
+		assert.Zero(t, calls, "at weight 0 there is nothing to evaluate")
+
+		out, err = mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus)
+		assert.Equal(t, 1, calls, "exactly one evaluated window before promotion")
+
+		got := getTrigger(t, c)
+		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
+		assert.Equal(t, 0, got.Spec.FunctionReference.FunctionWeights["old"])
+	})
+
+	t.Run("increment 50 happy path keeps its one-tick shape", func(t *testing.T) {
+		// A terminal step starting from an already-nonzero (already-evaluated)
+		// weight must not be deferred by the invariant gate: it reaches Succeeded
+		// in the SAME tick as the passing evaluation, same as before the fix.
+		trigger, cc := canaryFixtures(map[string]int{"new": 50, "old": 50}, 50)
+		var calls int
+		mgr, _, c := newTestEnv(fakeFailureClient{pct: 5, calls: &calls}, trigger, cc) // 5 < threshold 10
+
+		out, err := mgr.step(t.Context(), cc)
+		require.NoError(t, err)
+		assert.Equal(t, fv1.CanaryConfigStatusSucceeded, out.terminalStatus, "terminal step from nonzero weight must not be deferred")
+		assert.Equal(t, 1, calls)
 
 		got := getTrigger(t, c)
 		assert.Equal(t, 100, got.Spec.FunctionReference.FunctionWeights["new"])
