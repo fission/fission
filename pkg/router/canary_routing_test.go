@@ -137,7 +137,7 @@ func TestGetCanaryBackend(t *testing.T) {
 		zero := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "zero"}}
 		fnMap := map[string]*fv1.Function{"zero": zero}
 		dist := []functionWeightDistribution{{name: "zero", weight: 0, sumPrefix: 0}}
-		got := getCanaryBackend(fnMap, dist)
+		got := getCanaryBackend(fnMap, dist, "")
 		require.NotNil(t, got)
 		assert.Equal(t, "zero", got.Name)
 	})
