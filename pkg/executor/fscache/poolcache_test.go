@@ -139,6 +139,32 @@ func TestPoolCache(t *testing.T) {
 			log.Panicf("found value when expected it to be nil")
 		}
 	})
+
+	t.Run("Test mark deleted marks every generation group sharing the UID", func(t *testing.T) {
+		// The cache is keyed by (UID, Generation); during a rolling function
+		// update the old and new generations' groups coexist for one function
+		// (old gen's pods draining while the new gen serves). A delete landing
+		// in that window must mark BOTH groups, not just whichever one the map
+		// iteration happens to visit first.
+		c6 := NewPoolCache(logger)
+		oldGenKey := crd.CacheKeyUG{UID: "func6", Generation: 1}
+		newGenKey := crd.CacheKeyUG{UID: "func6", Generation: 2}
+
+		c6.SetSvcValue(ctx, oldGenKey, "ip-old", &FuncSvc{
+			Name: "old",
+		}, resource.MustParse("45m"), 10, 0)
+		c6.SetSvcValue(ctx, newGenKey, "ip-new", &FuncSvc{
+			Name: "new",
+		}, resource.MustParse("45m"), 10, 0)
+
+		c6.MarkFuncDeleted(crd.CacheKeyUG{UID: "func6"})
+
+		// Iterate the whole cache so the assertion doesn't depend on map order.
+		require.Len(t, c6.cache, 2)
+		for key, grp := range c6.cache {
+			require.True(t, grp.deleted, "group at generation %d must be marked deleted", key.Generation)
+		}
+	})
 }
 
 func TestPoolCacheRequests(t *testing.T) {
