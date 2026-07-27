@@ -11,7 +11,6 @@ package endpointcache
 
 import (
 	"fmt"
-	"hash/fnv"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -359,12 +358,32 @@ const (
 // a pure function, so every router replica ranks endpoints identically with
 // no shared ring state (RFC-0023 S4), and removing an endpoint moves only the
 // keys that ranked it first (S5).
+//
+// Inlined FNV-1a (offset basis 14695981039346656037, prime 1099511628211)
+// over a local uint64 accumulator instead of fnv.New64a(): going through
+// hash.Hash64 heap-allocates the hasher on every call, and this runs once per
+// candidate endpoint per sticky-keyed Admit -- the per-request hot path.
+// Byte-for-byte identical to
+// fnv.New64a().Write([]byte(key)).Write([]byte{0}).Write([]byte(address)).Sum64()
+// for the same inputs (see TestHrwScoreMatchesFNV64a), so existing sticky
+// assignments do not shift on deploy. Mirrors the inline pattern documented
+// on shard() above, the 64-bit multi-segment analog of the same fix.
 func hrwScore(key, address string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(key))
-	_, _ = h.Write([]byte{0})
-	_, _ = h.Write([]byte(address))
-	return h.Sum64()
+	const (
+		offset64 = 14695981039346656037
+		prime64  = 1099511628211
+	)
+	h := uint64(offset64)
+	for i := 0; i < len(key); i++ {
+		h = (h ^ uint64(key[i])) * prime64
+	}
+	// FNV-1a step for the 0x00 separator byte: h ^ 0 is always h, so only the
+	// multiply survives -- still a required step, not a no-op omission.
+	h *= prime64
+	for i := 0; i < len(address); i++ {
+		h = (h ^ uint64(address[i])) * prime64
+	}
+	return h
 }
 
 // Admit picks a ready, non-quarantined endpoint with free capacity (below

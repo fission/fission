@@ -6,6 +6,7 @@ package endpointcache
 
 import (
 	"fmt"
+	"hash/fnv"
 	"sync"
 	"testing"
 
@@ -20,6 +21,83 @@ import (
 // only its keys; adding one moves only keys now ranking it first. Stickiness
 // is best-effort (S6): a saturated sticky target overflows to the
 // next-ranked admissible endpoint, never queues.
+
+// TestHrwScoreMatchesFNV64a pins hrwScore's inlined FNV-1a against the
+// standard library's hash/fnv New64a over the identical write sequence (key,
+// a single 0x00 separator byte, address): the inlining (heap-allocation fix,
+// issue #3615) must be byte-for-byte identical, or existing sticky
+// assignments would silently shift the moment it ships.
+func TestHrwScoreMatchesFNV64a(t *testing.T) {
+	t.Parallel()
+
+	stdHrwScore := func(key, address string) uint64 {
+		h := fnv.New64a()
+		_, _ = h.Write([]byte(key))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(address))
+		return h.Sum64()
+	}
+
+	strs := []string{
+		"",
+		"a",
+		"10.0.0.1:8888",
+		"session-abc-1234567890",
+		"тест-utf8",
+		"a-fairly-long-sticky-key-with-several-words-in-it-1234567890",
+		string([]byte{0x00, 0xff, 0x10, 0x7f}),
+		string([]byte{0x00}),
+	}
+	for _, key := range strs {
+		for _, address := range strs {
+			assert.Equalf(t, stdHrwScore(key, address), hrwScore(key, address),
+				"hrwScore(%q, %q)", key, address)
+		}
+	}
+}
+
+// TestHrwScoreAllocs guards the fix itself: hrwScore runs once per candidate
+// endpoint per sticky-keyed Admit call, so any heap allocation here is a
+// per-request cost multiplied by endpoint count.
+func TestHrwScoreAllocs(t *testing.T) {
+	var sink uint64
+	allocs := testing.AllocsPerRun(1000, func() {
+		sink = hrwScore("session-abc-1234567890", "10.0.0.1:8888")
+	})
+	assert.Zero(t, allocs, "hrwScore must not heap-allocate on the per-request hot path")
+	benchSinkU64 = sink
+}
+
+// benchSinkU64 defeats dead-code elimination in the benchmarks below.
+var benchSinkU64 uint64
+
+// BenchmarkHrwScoreNew/Old bracket the fix: New exercises the shipped inline
+// FNV-1a, Old inlines the previous fnv.New64a()-based implementation so a
+// side-by-side allocs/op read shows the delta.
+// Run: go test -run=^$ -bench=HrwScore -benchmem ./pkg/router/endpointcache/
+func BenchmarkHrwScoreNew(b *testing.B) {
+	var sink uint64
+	b.ReportAllocs()
+	for b.Loop() {
+		sink = hrwScore("session-abc-1234567890", "10.0.0.1:8888")
+	}
+	benchSinkU64 = sink
+}
+
+func BenchmarkHrwScoreOld(b *testing.B) {
+	var sink uint64
+	b.ReportAllocs()
+	for b.Loop() {
+		// Previous implementation: fnv.New64a() heap-allocates the hasher
+		// (behind the hash.Hash64 interface) on every call.
+		h := fnv.New64a()
+		_, _ = h.Write([]byte("session-abc-1234567890"))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte("10.0.0.1:8888"))
+		sink = h.Sum64()
+	}
+	benchSinkU64 = sink
+}
 
 // admitAll drains one Admit per key and returns key->address, releasing every
 // admission so load never influences the pick under test.
