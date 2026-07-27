@@ -150,6 +150,12 @@ type stepOutcome struct {
 // RollForwardOrBack: instead of stopping a ticker or closing a quit channel it
 // returns a stepOutcome the reconciler maps onto a ctrl.Result and a status
 // write.
+//
+// INVARIANT: the terminal Succeeded outcome requires at least one completed
+// evaluation window in which the new function actually carried traffic. The
+// failure evaluation above is skipped while the new function's weight is 0
+// (nothing to observe), so a single tick must never both introduce first
+// traffic and terminally succeed — see rollForward's done gate.
 func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (stepOutcome, error) {
 	log := m.logger.WithValues("name", cfg.Name, "namespace", cfg.Namespace)
 
@@ -230,13 +236,25 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 }
 
 // rollForward shifts WeightIncrement percent of traffic from the old function
-// to the new one, clamping at 100/0. It reports whether the new function has
-// reached 100% (the rollout is done).
+// to the new one, clamping at 100/0. It reports whether the rollout is done
+// (the new function has reached 100% AND had traffic during an evaluated
+// window).
+//
+// INVARIANT: the terminal Succeeded outcome requires at least one completed
+// evaluation window in which the new function actually carried traffic.
+// step() skips the failure evaluation while the new function's weight is 0,
+// so a step FROM weight 0 must never report done even when WeightIncrement
+// >= 100 pushes the weight straight to 100 — the rollout stays Pending for
+// one more interval and the next tick's evaluation either confirms
+// (Succeeded) or rolls the traffic back (Failed). Without this gate a
+// WeightIncrement >= 100 canary would write terminal Succeeded — after which
+// the reconciler never re-evaluates or rolls back — with the new function's
+// very first traffic, zero windows observed.
 func (m *canaryConfigMgr) rollForward(ctx context.Context, cfg *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (bool, error) {
 	weights := trigger.Spec.FunctionReference.FunctionWeights
 	done := false
 	if weights[cfg.Spec.NewFunction]+cfg.Spec.WeightIncrement >= 100 {
-		done = true
+		done = weights[cfg.Spec.NewFunction] > 0
 		weights[cfg.Spec.NewFunction] = 100
 		weights[cfg.Spec.OldFunction] = 0
 	} else {
