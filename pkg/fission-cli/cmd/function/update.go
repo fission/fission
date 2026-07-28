@@ -162,8 +162,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.RetainPods = input.Int(flagkey.FnRetainPods)
 	}
 
-	if input.IsSet(flagkey.FnProvisionedConcurrency) {
-		function.Spec.ProvisionedConcurrency = getProvisionedConcurrencyConfig(input)
+	if input.IsSet(flagkey.FnProvisionedConcurrency) || input.IsSet(flagkey.FnProvisionedSchedule) {
+		provisionedConcurrency, err := getProvisionedConcurrencyConfig(input)
+		if err != nil {
+			return err
+		}
+		function.Spec.ProvisionedConcurrency = provisionedConcurrency
 	}
 
 	if input.IsSet(flagkey.FnOnceOnly) {

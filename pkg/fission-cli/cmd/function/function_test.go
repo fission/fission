@@ -363,9 +363,11 @@ func TestGetInvokeStrategy(t *testing.T) {
 
 func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 	cases := []struct {
-		name     string
-		testArgs map[string]any
-		expected *fv1.ProvisionedConcurrencyConfig
+		name        string
+		testArgs    map[string]any
+		expected    *fv1.ProvisionedConcurrencyConfig
+		errExpected bool
+		errSubStrs  []string
 	}{
 		{
 			name:     "flag not set returns nil",
@@ -392,6 +394,37 @@ func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 100},
 			expected: &fv1.ProvisionedConcurrencyConfig{Target: 100},
 		},
+		{
+			name:     "valid schedule",
+			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			expected: &fv1.ProvisionedConcurrencyConfig{Target: 1, Windows: []fv1.ProvisionedWindow{{Name: "w1", Duration: "8h", Start: "0 9 * * *", Target: 1}}},
+		},
+		{
+			name:        "valid schedule, invalid base target",
+			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 0, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			expected:    nil,
+			errExpected: false,
+			errSubStrs:  []string{""},
+		},
+		{
+			name:        "valid schedule, no concurrency",
+			testArgs:    map[string]any{flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			expected:    nil,
+			errExpected: true,
+			errSubStrs:  []string{"provisioned concurrency window is set but provisioned concurrency is not"},
+		},
+		{
+			name:        "invalid schedule",
+			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8;start=0 9 * * *;target=1"}},
+			errExpected: true,
+			errSubStrs:  []string{"invalid duration"},
+		},
+		{
+			name:        "duplicate window name",
+			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1", "name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			errExpected: true,
+			errSubStrs:  []string{"duplicate provisioned window: w1"},
+		},
 	}
 
 	for _, c := range cases {
@@ -400,8 +433,152 @@ func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 			for k, v := range c.testArgs {
 				flags.Set(k, v)
 			}
-			got := getProvisionedConcurrencyConfig(flags)
+			got, err := getProvisionedConcurrencyConfig(flags)
+			if !c.errExpected {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				for _, substr := range c.errSubStrs {
+					require.Contains(t, err.Error(), substr)
+				}
+			}
 			require.Equal(t, c.expected, got)
+		})
+	}
+}
+
+func TestGetProvisioinedWindow(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		// Named input parameters for target function.
+		window    string
+		want      fv1.ProvisionedWindow
+		wantErr   bool
+		errSubstr []string
+	}{
+		{
+			name:   "valid window",
+			window: "name=w1;start=0 9 * * *;duration=8h;target=3",
+			want: fv1.ProvisionedWindow{
+				Name:     "w1",
+				Start:    "0 9 * * *",
+				Duration: "8h",
+				Target:   3,
+			},
+			wantErr: false,
+		},
+		{
+			name:      "invalid window",
+			window:    "",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"window details are empty"},
+		},
+		{
+			name:      "missing target",
+			window:    "name=w1;start=0 9 * * *;duration=8h",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"missing required window key: target"},
+		},
+		{
+			name:      "missing name and target",
+			window:    "start=0 9 * * *;duration=8h",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"missing required window key: name", "missing required window key: target"},
+		},
+		{
+			name:      "unknown key",
+			window:    "name=w1;start=0 9 * * *;duration=8h;target=3;unknown=1",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"invalid window definition: unknown is not a valid key"},
+		},
+		{
+			name:      "malformed key",
+			window:    "name=w1;start=0 9 * * *;duration=8h;target:3",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"invalid window definition: target:3, format is key=value"},
+		},
+		{
+			name:      "negative target",
+			window:    "name=w1;start=0 9 * * *;duration=8h;target=-1",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"target is negative"},
+		},
+		{
+			name:      "bad target",
+			window:    "name=w1;start=0 9 * * *;duration=8h;target=abc",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"invalid target:"},
+		},
+		{
+			name:   "target zero",
+			window: "name=w1;start=0 9 * * *;duration=8h;target=0",
+			want: fv1.ProvisionedWindow{
+				Name:     "w1",
+				Start:    "0 9 * * *",
+				Duration: "8h",
+				Target:   0,
+			},
+			wantErr:   false,
+			errSubstr: []string{},
+		},
+		{
+			name:      "bad duration",
+			window:    "name=w1;start=0 9 * * *;duration=abc;target=3",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"invalid duration:"},
+		},
+		{
+			name:      "negative duration",
+			window:    "name=w1;start=0 9 * * *;duration=-1h;target=3",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"duration is zero or negative"},
+		},
+		{
+			name:      "bad start",
+			window:    "name=w1;start=abc;duration=8h;target=3",
+			want:      fv1.ProvisionedWindow{},
+			wantErr:   true,
+			errSubstr: []string{"invalid start:"},
+		},
+		{
+			name:   "valid cron with comma splitting",
+			window: "name=w1;start=0 9,13,17 * * *;duration=8h;target=3",
+			want: fv1.ProvisionedWindow{
+				Name:     "w1",
+				Start:    "0 9,13,17 * * *",
+				Duration: "8h",
+				Target:   3,
+			},
+			wantErr:   false,
+			errSubstr: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := getProvisioinedWindow(tt.window)
+			if gotErr != nil {
+				if !tt.wantErr {
+					t.Errorf("getProvisioinedWindow() failed: %v", gotErr)
+				}
+				for _, substr := range tt.errSubstr {
+					require.Contains(t, gotErr.Error(), substr)
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Fatal("getProvisioinedWindow() succeeded unexpectedly")
+			}
+			require.Equal(t, tt.want, got)
 		})
 	}
 }
