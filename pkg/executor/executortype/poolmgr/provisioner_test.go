@@ -30,6 +30,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -1300,6 +1301,8 @@ func TestProvisionerScheduleStopProvisionerRemoveProvisionedConcurrency(t *testi
 	})
 }
 
+// TestProvisionerScheduleStopProvisionerDeleteFunction tests whether
+// deleting a function deletes the schedule and stops provisioning.
 func TestProvisionerScheduleStopProvisionerDeleteFunction(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		p, gpm, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
@@ -1359,6 +1362,8 @@ func countLabelledPods(t *testing.T, p *Provisioner) int {
 	return labeled
 }
 
+// TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming tests the race condition
+// where a schedule and a delete function call happens at the same time.
 func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		p, _, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
@@ -1397,6 +1402,174 @@ func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.
 		assert.Equal(t, 0, labelled)
 
 		assert.True(t, react.Load())
+	})
+}
 
+// TestProvisionerScheduleTickerTimer proves that two independent triggers of
+// reconcileFunction for the same function — a real fired per-function timer
+// (armTransition's time.AfterFunc) and a rival caller standing in for the
+// ticker's reconcileAll pass — never both run reconcileFunctionLocked at
+// once. lockFor(fn.UID) must force them to serialize.
+//
+// GetFuncSvc (fakeGPM) is deliberately NOT the probe point: fireEagerSpecializations
+// fires each pod's eagerSpecialize/GetFuncSvc call from its own background
+// goroutine, so a count there conflates "how many pods this one reconcile is
+// warming" with "how many reconciles are running" — it would climb even with
+// the lock working perfectly. Instead this test intercepts crClient's List
+// (via crfake's WithInterceptorFuncs): countProvisionedPods calls List
+// exactly once per reconcileFunctionLocked call, synchronously, right after
+// the lock is taken and before any pod work starts. So listCalls climbing
+// past what a checkpoint expects can only mean two reconciles genuinely had
+// the lock at overlapping times — a direct proxy for lock ordering.
+//
+// The test is split into two non-overlapping phases instead of one long
+// synctest.Sleep spanning both triggers. That split is forced by a real
+// synctest limitation, not a style choice: synctest.Wait/time.Sleep can only
+// return once every other goroutine in the bubble is "durably blocked" —
+// which per testing/synctest's doc comment on Wait means blocked on a
+// channel op, select, sync.Cond.Wait, or time.Sleep. A goroutine contending
+// a plain sync.Mutex.Lock — exactly what happens when a second
+// reconcileFunction call waits on lockFor — does NOT count as durably
+// blocked. If a mutex-contended goroutine and a channel-blocked goroutine
+// both exist while a Sleep/Wait needs to resolve, the bubble can never be
+// judged quiescent and the test hangs for real, caught only by go test's
+// -timeout (verified empirically: an earlier draft of this test hung this
+// exact way). Each phase below fully releases its blocked caller — close
+// the channel, then Wait — before the next contender is introduced, so a
+// mutex-contended goroutine is never left needing to survive across a
+// Sleep.
+//
+// Reusing a plain variable (a channel, a *Provisioner, a struct field) that
+// a still-live background goroutine might read is ALSO unsafe here, even
+// across phase boundaries and even when the reassignment happens earlier in
+// the same goroutine's program order: an earlier draft that swapped
+// p.crClient mid-test, and one that reassigned a captured listBlock
+// variable, both tripped -race, because synctest's fake-time ordering is
+// not a synchronization primitive the race detector recognizes. Each phase
+// below therefore builds a fully independent *Provisioner (its own
+// crClient, its own listBlock/listCalls closure) rather than mutating
+// shared state — and phase 1's Provisioner has its own real, live
+// armTransition timer explicitly stopped via p.forget(fn.UID) before phase
+// 2 starts, otherwise that leftover timer independently fires during phase
+// 2's sleep and inflates the call count (this was caught empirically: the
+// count came in one higher than expected until forget was added).
+func TestProvisionerScheduleTickerTimer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const uid = "u1"
+		// Window opens 9h into the fake clock (which always starts at
+		// midnight UTC 2000-01-01 inside synctest) and asks for 3 warm pods
+		// while open. 5 unlabeled pods (no PROVISIONED_LABEL) exist, all
+		// tagged for this function's UID, so ready starts at 0 and there's
+		// real work for fireEagerSpecializations once a reconcile sees the
+		// window open. Both phases reuse this same fn/pods/uid — forget()
+		// below is what makes that safe, so there's no need for a second
+		// function identity.
+		fn := provisionedFnWithUID("fn", uid, 0)
+		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+		}
+		pods := []*corev1.Pod{}
+		pref := []corev1.ObjectReference{}
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := readyPod(podName, uid)
+			delete(pod.Labels, fv1.PROVISIONED_LABEL)
+			pods = append(pods, pod)
+			pref = append(pref, podRef(podName, "default"))
+		}
+
+		// newProbe builds one fully independent crClient + interceptor per
+		// phase: every List of a *PodList (i.e. every countProvisionedPods
+		// call) increments the returned counter and then parks on the
+		// returned channel until the test closes it. Function-list calls
+		// (reconcileAll's own List, of *FunctionList) pass straight
+		// through — blocking those too would stall the ticker loop on a
+		// call unrelated to the thing being probed, an earlier bug in this
+		// test. Each phase gets its own counter/channel/crClient rather
+		// than reassigning shared ones, since a background goroutine (the
+		// fired timer's callback) reading a variable the main goroutine
+		// just reassigned is a data race by Go's memory model even when
+		// synctest's fake-time ordering makes it safe in practice.
+		newProbe := func() (*atomic.Int64, chan struct{}, client.Client) {
+			var listCalls atomic.Int64
+			listBlock := make(chan struct{})
+			crClient := crfake.NewClientBuilder().WithScheme(scheme()).
+				WithObjects(toClientObjects(pods...)...).
+				WithObjects(fn).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						if _, isPodList := list.(*corev1.PodList); !isPodList {
+							return cl.List(ctx, list, opts...)
+						}
+						listCalls.Add(1)
+						select {
+						case <-listBlock:
+						case <-ctx.Done():
+							return ctx.Err()
+						}
+						return cl.List(ctx, list, opts...)
+					},
+				}).Build()
+			return &listCalls, listBlock, crClient
+		}
+
+		newTestProvisioner := func(crClient client.Client) *Provisioner {
+			return NewProvisioner(
+				logr.Discard(),
+				&fakeGPM{refs: pref},
+				fClient.NewSimpleClientset(fn), //nolint:staticcheck
+				k8sfake.NewSimpleClientset(toRuntimeObjects(pods...)...),
+				crClient,
+				defaultCfg,
+			)
+		}
+
+		// Phase 1: sanity-check the lock in isolation, before any window or
+		// timer is meant to matter. At time 0 the window is closed, so
+		// this call takes the target-0/disableProvisioningLocked path — it
+		// is not simulating the ticker or the timer, just proving one
+		// caller can reach and get stuck at the probe point on its own.
+		// reconcileFunctionLocked calls armTransition unconditionally
+		// before the target-0 check, so this call also arms a real 9h
+		// timer as a side effect — forget() below stops it before phase 2,
+		// so it can't fire independently and corrupt phase 2's count.
+		listCalls1, listBlock1, crClient1 := newProbe()
+		p1 := newTestProvisioner(crClient1)
+
+		go p1.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		assert.Equal(t, int64(1), listCalls1.Load())
+		close(listBlock1)
+		p1.forget(fn.UID)
+		synctest.Wait()
+
+		// Phase 2: the real collision. A fresh Provisioner (own crClient,
+		// own probe) avoids reassigning anything p1's now-stopped timer
+		// goroutine could have read. p2.armTransition(fn) arms its own
+		// timer explicitly, since this Provisioner has never reconciled
+		// yet. Sleeping to just past the window-open edge lets that timer
+		// fire for real — this is genuinely armTransition's time.AfterFunc
+		// callback, not a stand-in for anything.
+		listCalls2, listBlock2, crClient2 := newProbe()
+		p2 := newTestProvisioner(crClient2)
+		p2.armTransition(fn)
+
+		time.Sleep(9*time.Hour + time.Nanosecond)
+		synctest.Wait()
+		// The fired timer's callback is the one stuck here — the only
+		// contender that exists at this point, so exactly 1 call.
+		assert.Equal(t, int64(1), listCalls2.Load())
+
+		// The rival caller: stands in for what would be the ticker's
+		// concurrent reconcileAll pass. Starting it here, then closing
+		// listBlock2 with no blocking call in between, is what keeps this
+		// safe under synctest — see the function doc comment above.
+		go p2.reconcileFunction(t.Context(), fn)
+		close(listBlock2)
+		synctest.Wait()
+
+		// Both reconciles reached the probe point, one after the other —
+		// proof they were serialized by lockFor, not run concurrently.
+		assert.Equal(t, int64(2), listCalls2.Load())
 	})
 }
