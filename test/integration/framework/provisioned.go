@@ -46,7 +46,7 @@ func (ns *TestNamespace) WaitForProvisionedPodsAtLeast(t *testing.T,
 		if !assert.NoErrorf(c, err, "list provisioned pods for %q", fnName) {
 			return
 		}
-		assert.GreaterOrEqualf(c, want, len(pods), "function %q: want >=%d provisioned pods, got %d", fnName, want, len(pods))
+		assert.GreaterOrEqualf(c, len(pods), want, "function %q: want >=%d provisioned pods, got %d", fnName, want, len(pods))
 	}, timeout, 2*time.Second)
 	// final fetch to return the pods (we know there are at least want)
 	pods, err := ns.ReadyProvisionedPods(ctx, fnName)
