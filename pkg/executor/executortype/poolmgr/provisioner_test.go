@@ -34,7 +34,6 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
-	"github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	fClient "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
@@ -1370,7 +1369,7 @@ func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.
 			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
 		})
 		react := atomic.Bool{}
-		fakeClient := p.fissionClient.(*fake.Clientset)
+		fakeClient := p.fissionClient.(*fClient.Clientset)
 		block := make(chan struct{})
 		fakeClient.PrependReactor("get", "functions", func(_ k8stesting.Action) (handled bool, result runtime.Object, err error) {
 			react.Store(true)
@@ -1388,14 +1387,14 @@ func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.
 			Version:  "v1",
 			Resource: "functions",
 		}
-		fakeClient.Tracker().Delete(gvr, fn.Namespace, fn.Name, metav1.DeleteOptions{})
+		require.NoError(t, fakeClient.Tracker().Delete(gvr, fn.Namespace, fn.Name, metav1.DeleteOptions{}))
 		p.forget(fn.UID)
 		p.clearProvisionedLabels(t.Context(), fn, -1)
 		close(block)
 		synctest.Wait()
 		_, ok := p.timers.Load(fn.UID)
 		assert.False(t, ok, "schedule entry should be deleted, not just recreated empty")
-		fn, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		_, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.Error(t, err)
 		assert.True(t, apierrors.IsNotFound(err))
 		labelled := countLabelledPods(t, p)

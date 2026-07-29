@@ -190,6 +190,7 @@ func (p *Provisioner) armTransition(fn *fv1.Function) {
 				return
 			}
 			p.reconcileFunction(ctx, fn)
+			metrics.RecordProvisionedWindowTransition(ctx, name, namespace)
 		})
 	} else {
 		sched.timer.Reset(delay)
