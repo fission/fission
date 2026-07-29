@@ -46,12 +46,31 @@ func (ns *TestNamespace) WaitForProvisionedPodsAtLeast(t *testing.T,
 		if !assert.NoErrorf(c, err, "list provisioned pods for %q", fnName) {
 			return
 		}
-		assert.GreaterOrEqualf(c, len(pods), want, "function %q: want >=%d provisioned pods, got %d", fnName, want, len(pods))
+		assert.GreaterOrEqualf(c, want, len(pods), "function %q: want >=%d provisioned pods, got %d", fnName, want, len(pods))
 	}, timeout, 2*time.Second)
 	// final fetch to return the pods (we know there are at least want)
 	pods, err := ns.ReadyProvisionedPods(ctx, fnName)
 	require.NoErrorf(t, err, "list provisioned pods for %q", fnName)
 	return pods
+}
+
+// WaitForProvisionedReaped waits until fnName has the expected number of
+// running provisioned pods.
+func (ns *TestNamespace) WaitForProvisionedReaped(
+	t *testing.T,
+	ctx context.Context,
+	fnName string,
+	wantRunning int,
+	timeout time.Duration,
+) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		running, err := ns.RunningFunctionPodCount(ctx, fnName)
+		if !assert.NoErrorf(c, err, "get running provisioned pod count for %q", fnName) {
+			return
+		}
+		assert.Equal(c, wantRunning, running, "function %q: want %d running provisioned pods, got %d", fnName, wantRunning, running)
+	}, timeout, 2*time.Second)
 }
 
 // WaitForNoProvisionedPods polls until fnName has zero ready+running
