@@ -39,6 +39,8 @@ import (
 // interface implicitly.
 type funcSvcGetter interface {
 	GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error)
+	UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string)
+	MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta)
 }
 
 // ProvisionerConfig configures the RFC-0026 provisioner.
@@ -485,7 +487,15 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 	funSvc, err := p.gpm.GetFuncSvc(ctx, fn)
 	if err != nil {
 		metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "error")
+		p.gpm.MarkSpecializationFailure(ctx, &fn.ObjectMeta)
 		return err
+	}
+	if funSvc == nil {
+		p.logger.Error(nil, "eager specialization failed, funcSvc is nil", "namespace", fn.Namespace, "function", fn.Name)
+		return fmt.Errorf("funSvc is nil")
+	}
+	if funSvc.Function != nil {
+		defer p.gpm.UnTapService(ctx, funSvc.Function, funSvc.Address)
 	}
 	for _, obj := range funSvc.KubernetesObjects {
 		// gp.go builds kubeObjRefs with Kind "pod" (lowercase), so match

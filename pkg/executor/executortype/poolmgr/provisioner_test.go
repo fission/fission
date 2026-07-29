@@ -48,6 +48,20 @@ type fakeGPM struct {
 	svc        *fscache.FuncSvc
 	err        error
 	refs       []corev1.ObjectReference
+
+	// untaps / markFailures count the two PoolCache accounting callbacks the
+	// provisioner owes after a GetFuncSvc. GetFuncSvc books a reservation on
+	// the caller's behalf (SetSvcValue bumps activeRequests and settles
+	// svcWaiting); the router normally settles up over the UnTap RPC, but the
+	// provisioner calls GetFuncSvc in-process and must settle up itself.
+	// Skipping either one corrupts the executor's concurrency accounting —
+	// see the "two disjoint modes" note in CLAUDE.md.
+	untaps       atomic.Int64
+	markFailures atomic.Int64
+	// lastUntapAddr records the svcHost the last UnTapService was called with,
+	// so a test can prove the release is keyed on the FuncSvc the call
+	// returned rather than on some other address.
+	lastUntapAddr atomic.Value
 }
 
 func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
@@ -71,6 +85,15 @@ func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.Fu
 		return &fscache.FuncSvc{KubernetesObjects: []corev1.ObjectReference{f.refs[(n-1)%int64(len(f.refs))]}}, f.err
 	}
 	return f.svc, f.err
+}
+
+func (f *fakeGPM) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
+	f.untaps.Add(1)
+	f.lastUntapAddr.Store(svcHost)
+}
+
+func (f *fakeGPM) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
+	f.markFailures.Add(1)
 }
 
 // podRef builds an ObjectReference for a pod in the given namespace.
@@ -680,6 +703,8 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		pod := readyPod("warm-pod", uid)
 		delete(pod.Labels, fv1.PROVISIONED_LABEL)
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			Function:          &fn.ObjectMeta,
+			Address:           "10.0.0.1:8888",
 			KubernetesObjects: []corev1.ObjectReference{podRef("warm-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn, pod)
@@ -691,6 +716,21 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		assert.Equal(t, fv1.PROVISIONED_VALUE, got.Labels[fv1.PROVISIONED_LABEL],
 			"provisioned label must be patched in")
 		assert.Equal(t, int64(1), gpm.calls.Load(), "GetFuncSvc called once")
+
+		// GetFuncSvc booked a request slot on this pod (SetSvcValue bumps
+		// activeRequests to 1, as if a caller were being served). Nobody is
+		// actually using the pod — it is only being pre-warmed — so the
+		// provisioner must hand the slot back. Without this the pod sits at
+		// activeRequests=1 forever: PoolCache.ListAvailableValue only offers
+		// svcs with activeRequests==0 to the idle reaper, so the pod is never
+		// reaped once its provisioned label is cleared, and with the default
+		// requestsPerPod=1 it is never handed to real traffic either.
+		assert.Equal(t, int64(1), gpm.untaps.Load(), "must release the booked slot exactly once")
+		assert.Equal(t, "10.0.0.1:8888", gpm.lastUntapAddr.Load(),
+			"release must use the address of the FuncSvc that booked the slot")
+		// A successful specialization already settled svcWaiting inside
+		// SetSvcValue; marking a failure here too would double-decrement.
+		assert.Zero(t, gpm.markFailures.Load(), "success path must not mark a specialization failure")
 	})
 
 	t.Run("GetFuncSvc error returns early, no patch", func(t *testing.T) {
@@ -706,6 +746,16 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		got := getPod(t, p, "warm-pod")
 		_, hasLabel := got.Labels[fv1.PROVISIONED_LABEL]
 		assert.False(t, hasLabel, "no patch on GetFuncSvc failure")
+
+		// A failed GetFuncSvc leaves the svcWaiting reservation outstanding:
+		// SetSvcValue never ran, so only MarkSpecializationFailure can settle
+		// it. Leaking it inflates concurrencyUsed and eventually makes the
+		// function look permanently at its concurrency cap.
+		assert.Equal(t, int64(1), gpm.markFailures.Load(), "failed specialization must be marked")
+		// Nothing was allotted, so there is no slot to release. GetFuncSvc
+		// returns (nil, err) on every error path, so there is no FuncSvc to
+		// key an untap on either.
+		assert.Zero(t, gpm.untaps.Load(), "nothing allotted, nothing to release")
 	})
 
 	t.Run("patch failure (pod missing) does not panic", func(t *testing.T) {
@@ -713,6 +763,8 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		// logs the error but must not panic and must not return an error
 		// (the pod is serving, just not labeled — accepted race).
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			Function:          &fn.ObjectMeta,
+			Address:           "10.0.0.2:8888",
 			KubernetesObjects: []corev1.ObjectReference{podRef("ghost-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn) // no pods seeded
@@ -721,6 +773,17 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		// eagerSpecialize returns nil even on patch failure (the error is
 		// only logged) — the pod is specialized and serving.
 		assert.NoError(t, err)
+
+		// The label patch failing says nothing about the specialization: the
+		// pod IS specialized and serving, it just is not reaper-exempt. So the
+		// booked slot still has to be released...
+		assert.Equal(t, int64(1), gpm.untaps.Load(), "slot must be released even when the label patch fails")
+		// ...but svcWaiting was already settled by SetSvcValue when GetFuncSvc
+		// succeeded. Marking a failure here decrements it a second time, which
+		// under-counts concurrencyUsed and under-enforces the concurrency cap.
+		// MarkSpecializationFailure belongs on the GetFuncSvc error path only.
+		assert.Zero(t, gpm.markFailures.Load(),
+			"a failed label patch is not a failed specialization")
 	})
 
 	t.Run("non-pod KubernetesObjects are skipped", func(t *testing.T) {
