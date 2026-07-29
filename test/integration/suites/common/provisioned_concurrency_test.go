@@ -169,6 +169,70 @@ func TestProvisionedConcurrencyWindowValidation(t *testing.T) {
 	}, 2*time.Minute, 500*time.Millisecond)
 }
 
+func TestProvisionedWindowTargetZeroUnwarms(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+	if !f.ExecutorEnvEnabled(t, ctx, "EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED") {
+		t.Skip("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED not set on executor")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("EXECUTOR_FUNCTION_SERVICES not set on executor")
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-pczu-" + ns.ID
+	fnName := "fn-pczu-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: image,
+		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+		Poolsize: 4, // >= target +2 so provisioner does not starve the pool
+	})
+	// Wait for env pool to be ready (4 pods).
+	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
+		return d.Status.ReadyReplicas == 4
+	}, "4 ready replicas", 5*time.Minute)
+	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
+
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Env: envName, Code: codePath,
+		ExecutorType:           "poolmgr",
+		ProvisionedConcurrency: 2,
+		ProvisionedSchedules: []string{
+			"name=w1;start=0 */4 * * * *;duration=120s;target=0",
+		},
+		IdleTimeout: 20,
+		FnTimeout:   5,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      "/" + fnName,
+		Method:   "GET",
+	})
+
+	// base target: 2 pods
+	t.Log("provisioner warms 2 pods without traffic")
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 3*time.Minute)
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
+	// Warm smoke: the function serves.
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
+
+	// wait for window start 4 mins: pods=0
+	t.Log("provisioner reaps pods after idle timeout")
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 0, 0, 5*time.Minute)
+	ns.WaitForProvisionedReaped(t, ctx, fnName, 0, 5*time.Minute)
+
+	// after window close, pods should be restored to 2
+	t.Log("provisioner restores pods after window close")
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 3*time.Minute)
+	ns.WaitForProvisionedReaped(t, ctx, fnName, 2, 3*time.Minute)
+}
+
 func TestProvisionedScheduledWindowCloseReapsPods(t *testing.T) {
 	t.Parallel()
 
