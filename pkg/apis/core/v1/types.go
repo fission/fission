@@ -1508,7 +1508,14 @@ type (
 		Name string `json:"name"`
 
 		// Start is a cron expression (5-field, robfig/cron, same parser as
-		// TimeTrigger) marking when each window instance opens.
+		// TimeTrigger) marking when each window instance opens. Prefix with
+		// "CRON_TZ=<zone>" (e.g. "CRON_TZ=America/New_York 0 9 * * *") to
+		// evaluate the schedule in a fixed timezone. Without a CRON_TZ
+		// prefix, the schedule is evaluated in the executor process's local
+		// timezone (UTC unless the deployment is configured otherwise) —
+		// this is intended behavior, not a default that may change; specify
+		// CRON_TZ explicitly if the window must not shift when the
+		// executor's local timezone changes.
 		// +kubebuilder:validation:MinLength=1
 		Start string `json:"start"`
 
