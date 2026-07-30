@@ -6,6 +6,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -106,6 +107,75 @@ func TestWaitForCondition(t *testing.T) {
 			t.Fatalf("expected the raw error, got %v", err)
 		}
 	})
+
+	// TestWaitForCondition/canceled reports canceled, not timed out: pins the
+	// reuse-review #6 fix (PollUntil/PollDeadlineVerb) that distinguishes an
+	// explicit ctx cancellation from a plain deadline.
+	t.Run("canceled reports canceled, not timed out", func(t *testing.T) {
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionFalse), nil }
+		err := WaitForCondition(cctx, get, "Ready", metav1.ConditionTrue, time.Millisecond)
+		if err == nil || !strings.Contains(err.Error(), "canceled while") {
+			t.Fatalf("expected a cancellation error, got %v", err)
+		}
+		if strings.Contains(err.Error(), "timed out") {
+			t.Fatalf("cancellation must not be reported as a timeout, got %v", err)
+		}
+	})
+}
+
+// TestPollUntil exercises the shared core directly: it stops on done, on a
+// check error, and distinguishes a deadline from an explicit cancellation on
+// its own ctx.Done() branch.
+func TestPollUntil(t *testing.T) {
+	t.Run("stops when check reports done", func(t *testing.T) {
+		n := 0
+		check := func(context.Context) (bool, error) {
+			n++
+			return n >= 3, nil
+		}
+		if err := PollUntil(context.Background(), time.Millisecond, check); err != nil {
+			t.Fatalf("expected success, got %v", err)
+		}
+		if n != 3 {
+			t.Fatalf("expected exactly 3 checks, got %d", n)
+		}
+	})
+
+	t.Run("returns check's error immediately", func(t *testing.T) {
+		wantErr := fmt.Errorf("boom")
+		check := func(context.Context) (bool, error) { return false, wantErr }
+		if err := PollUntil(context.Background(), time.Millisecond, check); err != wantErr {
+			t.Fatalf("expected the raw check error, got %v", err)
+		}
+	})
+
+	t.Run("deadline returns DeadlineExceeded", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		check := func(context.Context) (bool, error) { return false, nil }
+		err := PollUntil(ctx, time.Millisecond, check)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected DeadlineExceeded, got %v", err)
+		}
+		if PollDeadlineVerb(ctx) != "timed out" {
+			t.Fatalf("expected verb %q, got %q", "timed out", PollDeadlineVerb(ctx))
+		}
+	})
+
+	t.Run("explicit cancel returns Canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		check := func(context.Context) (bool, error) { return false, nil }
+		err := PollUntil(ctx, time.Millisecond, check)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected Canceled, got %v", err)
+		}
+		if PollDeadlineVerb(ctx) != "canceled while" {
+			t.Fatalf("expected verb %q, got %q", "canceled while", PollDeadlineVerb(ctx))
+		}
+	})
 }
 
 func TestRunWait(t *testing.T) {
@@ -138,4 +208,31 @@ func TestRunWait(t *testing.T) {
 			t.Fatalf("expected timeout error mentioning Function/hello, got %v", err)
 		}
 	})
+}
+
+// TestPollUntilTerminalErrorRacingCtxExpiry pins PollEnded's contract: a
+// terminal check error unrelated to ctx surfaces verbatim and classifies as
+// NOT poll-ended even when ctx expires in the same instant; PollUntil's own
+// Done branch returns a *PollEndedError that does classify.
+func TestPollUntilTerminalErrorRacingCtxExpiry(t *testing.T) {
+	terminal := errors.New("genuine terminal failure")
+	ctx, cancel := context.WithCancel(t.Context())
+	err := PollUntil(ctx, time.Millisecond, func(context.Context) (bool, error) {
+		cancel()
+		return false, terminal
+	})
+	if !errors.Is(err, terminal) {
+		t.Fatalf("terminal error must surface verbatim, got: %v", err)
+	}
+	if PollEnded(err) {
+		t.Fatalf("terminal error racing ctx expiry must NOT classify as poll-ended")
+	}
+
+	expired, cancel2 := context.WithCancel(t.Context())
+	cancel2()
+	err = PollUntil(expired, time.Millisecond, func(context.Context) (bool, error) { return false, nil })
+	var ended *PollEndedError
+	if !errors.As(err, &ended) || !PollEnded(err) {
+		t.Fatalf("ctx-ended poll must return *PollEndedError and classify as poll-ended, got: %v", err)
+	}
 }

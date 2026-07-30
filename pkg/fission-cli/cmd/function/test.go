@@ -57,6 +57,18 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("read function '%s': %w", fnName, err)
 	}
 
+	// RFC-0025: --alias/--version smoke-test a specific FunctionAlias/pinned
+	// FunctionVersion instead of the live function. Resolved to a router
+	// route suffix ("<name>:<suffix>", see utils.UrlForFunctionRef) below;
+	// the preflight Get here exists purely for CLI UX -- a typo'd
+	// --alias/--version would otherwise surface only as an opaque router 404
+	// once the request is actually sent (see the StatusNotFound handling
+	// further down).
+	suffix, err := opts.resolveTestRefSuffix(input, fnName, namespace)
+	if err != nil {
+		return err
+	}
+
 	m := &metav1.ObjectMeta{
 		Name:      fnName,
 		Namespace: namespace,
@@ -102,12 +114,20 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	// listener (8888) no longer serves that path after GHSA-3g33-6vg6-27m8.
 	// HMAC signing is applied when FISSION_INTERNAL_AUTH_SECRET is set; empty
 	// secret = pass-through (matches the chart's internalAuth.enabled=false).
+	//
+	// --async note: fnURL (built below, suffix included) is the one URL both
+	// the sync and async branches send to -- there is no separate async-only
+	// URL construction. So when --alias/--version pins this call to a
+	// suffixed route, the async enqueue itself happens off *that* resolved
+	// route: the pin applies at enqueue time, not just to the initial
+	// dispatch. A later alias move does not retarget an already-enqueued
+	// invocation.
 	internalURL, err := util.GetRouterInternalURL(input.Context(), opts.Client())
 	if err != nil {
 		return fmt.Errorf("resolving the router internal listener: %w", err)
 	}
 
-	fnURI := utils.UrlForFunction(m.Name, m.Namespace)
+	fnURI := utils.UrlForFunctionRef(m.Name, m.Namespace, suffix)
 	if input.IsSet(flagkey.FnSubPath) {
 		subPath := input.String(flagkey.FnSubPath)
 		if !strings.HasPrefix(subPath, "/") {
@@ -142,7 +162,7 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	defer resp.Body.Close()
 
 	if isAsync {
-		return handleAsyncResponse(resp)
+		return handleAsyncResponse(resp, fnName, suffix)
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -164,6 +184,11 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("router rejected the request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
+	case http.StatusNotFound:
+		if msg, ok := suffixedRouteNotFoundError(fnName, suffix, resp.Header.Get(utils.HeaderRouteMiss) != ""); ok {
+			return errors.New(msg)
+		}
+		fallthrough
 	default:
 		// On failure, render the structured RFC-0015 attribution when the router
 		// produced one (X-Fission-Component header), else the legacy raw body.
@@ -184,13 +209,50 @@ func (opts *TestSubCommand) do(input cli.Input) error {
 	}
 }
 
+// resolveTestRefSuffix reads --alias/--version (mutually exclusive) and
+// resolves the router route suffix (RFC-0025) `fission function test` should
+// target: "" for the live function, else the alias or version name. Both
+// flags are preflight-checked against the API server -- Get the named
+// FunctionAlias/FunctionVersion and confirm it actually belongs to fnName
+// (util.GetOwnedFunctionAlias/util.GetOwnedFunctionVersion, shared with
+// `fn pods`/`fn logs`) -- so a typo surfaces here as a clear error instead of
+// an opaque router 404 once the request is sent (see
+// suffixedRouteNotFoundError for the 404 that preflight can't catch: a
+// real-but-not-yet-resolved alias).
+func (opts *TestSubCommand) resolveTestRefSuffix(input cli.Input, fnName, namespace string) (string, error) {
+	aliasName := input.String(flagkey.FnTestAlias)
+	versionName := input.String(flagkey.FnTestVersion)
+
+	if err := util.MutuallyExclusive(flagkey.FnTestAlias, aliasName, flagkey.FnTestVersion, versionName); err != nil {
+		return "", err
+	}
+
+	switch {
+	case aliasName != "":
+		if _, err := util.GetOwnedFunctionAlias(input.Context(), opts.Client(), namespace, fnName, aliasName); err != nil {
+			return "", err
+		}
+		return aliasName, nil
+	case versionName != "":
+		if _, err := util.GetOwnedFunctionVersion(input.Context(), opts.Client(), namespace, fnName, versionName); err != nil {
+			return "", err
+		}
+		return versionName, nil
+	default:
+		return "", nil
+	}
+}
+
 // handleAsyncResponse interprets the router's response to a `fission function
 // test --async` (RFC-0024) request: 202 carries the durable invocation id
 // (in the X-Fission-Invocation-Id header, or the JSON body as a fallback),
 // which is printed; the response body is otherwise not awaited. The body is
 // capped at 8KiB since only NotImplemented/error bodies are ever read in full
-// here, never a function's real payload.
-func handleAsyncResponse(resp *http.Response) error {
+// here, never a function's real payload. fnName/suffix are only used to
+// upgrade a bare 404 into the RFC-0025 alias/version hint (see
+// suffixedRouteNotFoundError) -- the enqueue itself already happened against
+// the suffixed route baked into the request URL by the caller.
+func handleAsyncResponse(resp *http.Response, fnName, suffix string) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
 
 	switch resp.StatusCode {
@@ -214,9 +276,37 @@ func handleAsyncResponse(resp *http.Response) error {
 		return errors.New("async invocation is not enabled on this cluster")
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return fmt.Errorf("router rejected the async request (%s); set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled", resp.Status)
+	case http.StatusNotFound:
+		if msg, ok := suffixedRouteNotFoundError(fnName, suffix, resp.Header.Get(utils.HeaderRouteMiss) != ""); ok {
+			return errors.New(msg)
+		}
+		return fmt.Errorf("async invocation failed (%s): %s", resp.Status, strings.TrimSpace(string(body)))
 	default:
 		return fmt.Errorf("async invocation failed (%s): %s", resp.Status, strings.TrimSpace(string(body)))
 	}
+}
+
+// suffixedRouteNotFoundError turns a router route-miss 404 into an actionable
+// message when the request was for a suffixed (`:<alias>`/`:<version>`)
+// route: the preflight in resolveTestRefSuffix already confirmed the
+// FunctionAlias/FunctionVersion object exists and belongs to this function,
+// so a route-miss here means the router hasn't materialized that route yet --
+// most commonly a freshly created/repointed alias that hasn't finished its
+// async resolve pass. routeMiss is whether the 404 carried the router's
+// route-miss marker (utils.HeaderRouteMiss, stamped only by the internal
+// listener's own not-found path and stripped from function-proxied
+// responses): without it the 404 is the FUNCTION'S own response, so ok is
+// false and the caller renders it as a normal function failure instead of
+// wrongly blaming route materialization. ok is likewise false when suffix is
+// empty, since a bare function route 404 has nothing to do with RFC-0025.
+// (Version-skew note: a pre-marker router never sets the header, so against
+// an older server the hint is not shown and the 404 falls through to the
+// generic rendering -- less specific, never wrong.)
+func suffixedRouteNotFoundError(fnName, suffix string, routeMiss bool) (string, bool) {
+	if suffix == "" || !routeMiss {
+		return "", false
+	}
+	return fmt.Sprintf("alias/version route not found for function %q at %q — check `fission alias get` / that the version exists; aliases resolve asynchronously", fnName, suffix), true
 }
 
 // testQueryValues builds the request query from repeated --query key=value flags.

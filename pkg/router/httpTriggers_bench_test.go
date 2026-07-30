@@ -23,16 +23,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/router/routetable"
 	"github.com/fission/fission/pkg/utils/httpmux"
 )
 
 // benchRouteSet builds N functions and N triggers (trigger bench-i routes
 // /bench-i to function bench-fn-i) plus the function-timeout map.
-func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[types.UID]int) {
+func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[crd.CacheKeyUG]int) {
 	fns := make([]fv1.Function, 0, n)
 	triggers := make([]fv1.HTTPTrigger, 0, n)
-	fnTimeout := make(map[types.UID]int, n)
+	fnTimeout := make(map[crd.CacheKeyUG]int, n)
 	for i := range n {
 		fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("bench-fn-%d", i),
@@ -40,7 +41,7 @@ func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[types.UID]int)
 			UID:       types.UID(fmt.Sprintf("uid-%d", i)),
 		}}
 		fns = append(fns, fn)
-		fnTimeout[fn.UID] = fv1.DEFAULT_FUNCTION_TIMEOUT
+		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fv1.DEFAULT_FUNCTION_TIMEOUT
 		triggers = append(triggers, fv1.HTTPTrigger{
 			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("bench-%d", i), Namespace: "default"},
 			Spec: fv1.HTTPTriggerSpec{
@@ -133,7 +134,7 @@ func BenchmarkIncrementalWeightTick(b *testing.B) {
 		objs = append(objs, &triggers[i])
 	}
 	ts, _ := newIncrementalTS(b, objs...)
-	if err := ts.resync(b.Context(), true); err != nil {
+	if _, err := ts.resync(b.Context(), true); err != nil {
 		b.Fatal(err)
 	}
 	ts.materialize(b.Context())

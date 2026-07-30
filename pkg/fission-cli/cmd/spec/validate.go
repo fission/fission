@@ -62,8 +62,8 @@ func (opts *ValidateSubCommand) run(input cli.Input, fr *FissionResources) (err 
 	}
 
 	console.Infof("DeployUID: %v", fr.DeploymentConfig.UID)
-	console.Infof("Resources:\n * %v Functions\n * %v Environments\n * %v Packages \n * %v Http Triggers \n * %v MessageQueue Triggers\n * %v Time Triggers\n * %v Kube Watchers\n * %v Workflows\n * %v ArchiveUploadSpec\n",
-		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.Workflows), len(fr.ArchiveUploadSpecs))
+	console.Infof("Resources:\n * %v Functions\n * %v Environments\n * %v Packages \n * %v Http Triggers \n * %v MessageQueue Triggers\n * %v Time Triggers\n * %v Kube Watchers\n * %v Workflows\n * %v FunctionAliases\n * %v ArchiveUploadSpec\n",
+		len(fr.Functions), len(fr.Environments), len(fr.Packages), len(fr.HttpTriggers), len(fr.MessageQueueTriggers), len(fr.TimeTriggers), len(fr.KubernetesWatchTriggers), len(fr.Workflows), len(fr.FunctionAliases), len(fr.ArchiveUploadSpecs))
 
 	var warnings []string
 	// this does the rest of the checks, like dangling refs
@@ -200,6 +200,19 @@ func resourceConflictCheck(ctx context.Context, c cmd.Client, fr *FissionResourc
 	}
 	for _, sObj := range fr.Workflows {
 		for _, cObj := range workflowList {
+			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
+				errs = errors.Join(errs, err)
+				break
+			}
+		}
+	}
+
+	aliasList, err := getAllFunctionAliases(ctx, c, namespace)
+	if err != nil {
+		return fmt.Errorf("unable to get FunctionAliases %w", err)
+	}
+	for _, sObj := range fr.FunctionAliases {
+		for _, cObj := range aliasList {
 			if err := isResourceConflicts(deployUID, &sObj, &cObj, specAllowConflicts); err != nil {
 				errs = errors.Join(errs, err)
 				break

@@ -94,6 +94,16 @@ func selectFunctionPods(ctx context.Context, client cmd.Client, logFilter LogFil
 		}
 	}
 
+	// RFC-0025: --alias/--version resolved to a FunctionVersion name (see
+	// resolveVersionLabelFilter in cmd/function) narrows the selector to that
+	// version's pods. This is genuinely load-bearing, not cosmetic: below,
+	// the non---all-pods path picks only the single newest matching pod, so
+	// without this filter a --version/--alias request could silently read
+	// logs from the wrong (newer, differently-versioned) pod.
+	if logFilter.Version != "" {
+		selector[fv1.FUNCTION_VERSION] = logFilter.Version
+	}
+
 	podNs = util.ResolveFunctionNS(podNs)
 	podList, err := client.KubernetesClient.CoreV1().Pods(podNs).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.Set(selector).AsSelector().String(),

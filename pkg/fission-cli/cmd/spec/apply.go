@@ -112,6 +112,11 @@ func (opts *ApplySubCommand) insertNamespace(input cli.Input, fr *FissionResourc
 			fr.Workflows[i].Namespace = currentNS
 		}
 	}
+	for i := range fr.FunctionAliases {
+		if fr.FunctionAliases[i].Namespace == "" || input.Bool(flagkey.ForceNamespace) {
+			fr.FunctionAliases[i].Namespace = currentNS
+		}
+	}
 
 	return nil
 }
@@ -495,6 +500,23 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 		return nil, nil, fmt.Errorf("function apply failed: %w", err)
 	}
 	applyStatus["function"] = *ras
+
+	// Aliases apply after functions: they carry an ownerRef to the Function
+	// they target (set when the Function already exists on the cluster — see
+	// applyFunctionAliases) and, for name-pinned aliases (spec.Version), the
+	// webhook resolves against existing FunctionVersions, which only the
+	// version-control loop / `fission fn publish` create (FunctionVersion is
+	// deliberately not spec-managed). A name-pinned alias whose target version
+	// doesn't exist yet is rejected by the webhook; that error surfaces as-is
+	// so the user knows to publish first. A digest-pinned alias
+	// (spec.PackageDigest) has no such precondition — it resolves
+	// asynchronously once a matching version is published (eventual
+	// consistency, RFC-0025).
+	_, ras, err = applyFunctionAliases(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
+	if err != nil {
+		return nil, nil, fmt.Errorf("functionAlias apply failed: %w", err)
+	}
+	applyStatus["FunctionAlias"] = *ras
 
 	_, ras, err = applyHTTPTriggers(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
 	if err != nil {

@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -163,9 +164,14 @@ func (deploy *NewDeploy) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fsc
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
+// The lookup is keyed (UID, Generation), never bare UID: fn may be an
+// RFC-0025 versioned projection pinning an older Generation of a UID whose
+// live entry is also cached, and a UID-only lookup would return whichever
+// generation's fsvc was cached last — silently serving the wrong version's
+// code (IsValid only checks the backing objects exist).
 func (deploy *NewDeploy) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache")
-	return deploy.fsCache.GetByFunctionUID(fn.UID)
+	return deploy.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
@@ -361,11 +367,16 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 
 	logger := otelUtils.LoggerWithTraceID(ctx, deploy.logger)
 
-	fsvcObj, err := deploy.throttler.RunOnce(string(fn.UID), func(ableToCreate bool) (any, error) {
+	// Single-flight per (UID, Generation), not per UID: RFC-0025 versioned
+	// projections share the live function's UID but create distinct
+	// per-version Deployments, so their creates must neither serialize
+	// behind each other nor have a loser handed another generation's fsvc
+	// from the cache fallback.
+	fsvcObj, err := deploy.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (any, error) {
 		if ableToCreate {
 			return deploy.fnCreate(ctx, fn)
 		}
-		return deploy.fsCache.GetByFunctionUID(fn.UID)
+		return deploy.fsCache.GetByFunction(&fn.ObjectMeta)
 	})
 
 	if err != nil {
@@ -606,7 +617,10 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 		// deployment of the function in fission-function ns, so cleaning up resources there
 		ns := deploy.nsResolver.GetFunctionNS(newFn.Namespace)
 
-		fsvc, err := deploy.fsCache.GetByFunctionUID(newFn.UID)
+		// Live entry only: updates arrive for the live Function CR, and its
+		// versioned projections' entries (which share the UID) are immutable
+		// snapshots whose HPA must not be touched here.
+		fsvc, err := deploy.fsCache.GetLiveByFunctionUID(newFn.UID)
 		if err != nil {
 			return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(oldFn), err)
 		}
@@ -717,7 +731,10 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 // ResourceVersion as a metadata annotation (getDeployAnnotations), so compare it:
 // if stale, push the current spec. A no-op when already current.
 func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
+	// Live entry only: fn is the live Function CR here, and versioned
+	// projections sharing its UID pin immutable snapshots that must not be
+	// rewritten to the live spec.
+	fsvc, err := deploy.fsCache.GetLiveByFunctionUID(fn.UID)
 	if err != nil {
 		// Not specialized yet — no deployment to reconcile; the on-demand path will
 		// create it from the current spec when the function is first invoked.
@@ -746,7 +763,9 @@ func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Fu
 }
 
 func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Function, env *fv1.Environment) error {
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
+	// Live entry only — see updateFunction: versioned projections' entries
+	// share the UID but must keep their pinned spec.
+	fsvc, err := deploy.fsCache.GetLiveByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("error updating function due to unable to find function service cache: %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -814,24 +833,25 @@ func (deploy *NewDeploy) updateFuncDeployment(ctx context.Context, fn *fv1.Funct
 func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	var errs error
 
-	// GetByFunction now keys on UID+Generation (see #3596), not
-	// ResourceVersion, but the fn passed in on delete can still carry a
-	// Generation the cache entry was never keyed under (e.g. a delete
-	// racing a spec update, or a stale informer snapshot) — GetByFunctionUID
-	// is the UID-only lookup that doesn't depend on the caller's metadata
-	// matching the cached entry's, so it's used here to find the correct
-	// fsvc entry.
-	objName := deploy.getObjName(fn)
-	fsvc, err := deploy.fsCache.GetByFunctionUID(fn.UID)
-	if err != nil {
-		// Not in cache (never specialized, evicted, or executor restarted).
-		// The backing object names are deterministic, so proceed with
-		// cleanup using the computed name instead of failing — bailing out
-		// here would leak the Deployment/Service/HPA.
+	// GetByFunction keys on UID+Generation (see #3596), but the fn passed in
+	// on delete can carry a Generation the cache entries were never keyed
+	// under (a delete racing a spec update, or a stale informer snapshot) —
+	// so enumerate ALL cached entries for the UID instead. With RFC-0025 a
+	// UID can back several entries at once (the live function plus versioned
+	// projections, each with its own -v<seq> Deployment/Service/HPA), and
+	// deleting the live Function must tear down every one of them, not just
+	// whichever entry happened to be cached last. The computed name is always
+	// included: entries can be missing (never specialized, evicted, executor
+	// restarted) and bailing out would leak the live objects.
+	computedName := deploy.getObjName(fn)
+	objNames := map[string]struct{}{computedName: {}}
+	fsvcs := deploy.fsCache.ListByFunctionUID(fn.UID)
+	if len(fsvcs) == 0 {
 		deploy.logger.V(1).Info("fsvc not in cache, cleaning up by computed name",
-			"function", k8sCache.MetaObjectToName(fn), "obj_name", objName)
-	} else {
-		objName = fsvc.Name
+			"function", k8sCache.MetaObjectToName(fn), "obj_name", computedName)
+	}
+	for _, fsvc := range fsvcs {
+		objNames[fsvc.Name] = struct{}{}
 		if _, err := deploy.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
 			errs = errors.Join(errs, fmt.Errorf("error deleting the function from cache"))
 		}
@@ -841,34 +861,95 @@ func (deploy *NewDeploy) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := deploy.nsResolver.GetFunctionNS(fn.Namespace)
 
-	errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
+	// Cache-INDEPENDENT enumeration: the cache walk above only finds
+	// generations with a live fscache entry, and the computed name only covers
+	// the Function object passed in (typically the live spec, no version
+	// label). Per-version -v<seq> objects specialized by a previous executor
+	// incarnation — or whose entry was evicted — would leak past both, so
+	// additionally list Deployments/Services/HPAs by the identity labels every
+	// created object carries (getDeployLabels) and tear down everything found.
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy),
+		fv1.FUNCTION_UID:  string(fn.UID),
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, deploy.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
+	}
 
 	return errs
 }
 
-// getObjName returns a unique name for kubernetes objects of function
-func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
-	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.UID[len(fn.UID)-17:]
-	var functionMetadata string
-	if len(fn.Name)+len(fn.Namespace) < 35 {
-		functionMetadata = fn.Name + "-" + fn.Namespace
-	} else {
-		if len(fn.Name) > 17 {
-			functionMetadata = fn.Name[:17]
-		} else {
-			functionMetadata = fn.Name
-		}
-		if len(fn.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
-		} else {
-			functionMetadata = functionMetadata + "-" + fn.Namespace
+// CleanupFunctionVersion tears down the per-version Deployment/Service/HPA
+// set (and the fscache entry) a deleted FunctionVersion's projection left
+// behind, driven by the executor's versiongc reconciler. Without it those
+// objects leak until the whole Function is deleted: retention GC (or a manual
+// delete passing the webhook guard) removes only the FunctionVersion CR.
+//
+// Label-based teardown is used INSTEAD of an ownerReference on the objects
+// pointing at the FunctionVersion, for two reasons (see also
+// pkg/executor/versiongc's package doc):
+//   - Kubernetes ownerRefs require owner and dependent in the same namespace,
+//     but with the chart's functionNamespace value set, a default-namespace
+//     function's objects deploy to that namespace (nsResolver.GetFunctionNS)
+//     while its FunctionVersion stays in the function's namespace — the GC
+//     would treat the cross-namespace owner as absent and delete the
+//     per-version Deployment right after creation.
+//   - These objects already carry a controller ownerRef to the Function when
+//     enableOwnerReferences is on; a FunctionVersion ownerRef ADDED to it
+//     would never cascade (the GC keeps a dependent while ANY owner is
+//     alive), and REPLACING it changes teardown semantics for the flag-off /
+//     cross-namespace installs the flag exists for.
+//
+// fnNamespace is the function CR's namespace — also the FunctionVersion CR's
+// namespace and the FUNCTION_NAMESPACE label value on the objects.
+func (deploy *NewDeploy) CleanupFunctionVersion(ctx context.Context, fnNamespace, versionName string) error {
+	var errs error
+
+	// Cache first: evict the projection's entry so the idle reaper stops
+	// tracking a service whose backing objects are about to vanish, and so
+	// its object name is torn down even if a list below fails.
+	objNames := make(map[string]struct{})
+	for _, fsvc := range deploy.fsCache.ListByFunctionVersion(fnNamespace, versionName) {
+		objNames[fsvc.Name] = struct{}{}
+		if _, err := deploy.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("error deleting the function version entry from cache: %w", err))
 		}
 	}
-	// constructed name should be 63 characters long, as it is a valid k8s name
-	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
-	// with newdeploy 10 character prefix
-	return strings.ToLower(fmt.Sprintf("newdeploy-%s-%s", functionMetadata, uid))
+
+	ns := deploy.nsResolver.GetFunctionNS(fnNamespace)
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypeNewdeploy),
+		fv1.FUNCTION_NAMESPACE: fnNamespace,
+		fv1.FUNCTION_VERSION:   versionName,
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, deploy.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		errs = errors.Join(errs, deploy.cleanupNewdeploy(ctx, ns, objName))
+	}
+
+	return errs
+}
+
+// getObjName returns a unique name for kubernetes objects of function. A
+// versioned Function (fv1.FUNCTION_VERSION label present, RFC-0025) gets a
+// name suffixed with the version's bounded "-v<seq>" tail so each published
+// version's Deployment/Service/HPA is distinct; see
+// executorUtils.VersionedObjName for the truncation budget that keeps the
+// whole name within the Kubernetes 63-char limit either way. The
+// unversioned path is byte-identical to the pre-RFC-0025 behaviour.
+func (deploy *NewDeploy) getObjName(fn *fv1.Function) string {
+	return executorUtils.VersionedObjName("newdeploy-", fn)
 }
 
 func (deploy *NewDeploy) getDeployLabels(fnMeta metav1.ObjectMeta, envMeta metav1.ObjectMeta) map[string]string {

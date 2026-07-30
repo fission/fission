@@ -91,6 +91,7 @@ type Mux struct {
 	middleware  []func(http.Handler) http.Handler
 	recorder    Recorder
 	encodedPath bool
+	notFound    http.Handler
 }
 
 // Option configures a Mux at construction.
@@ -113,6 +114,22 @@ func WithMetrics(rec Recorder) Option {
 // UseEncodedPath.
 func WithEncodedPath() Option {
 	return func(m *Mux) { m.encodedPath = true }
+}
+
+// WithNotFound replaces the dispatcher's default not-found handler
+// (http.NotFound) with h. The handler runs when NO route matches the request
+// path (a 405 method mismatch still gets the method-not-allowed handler), and
+// is instrumented under the same constant not-found metrics pattern as the
+// default. A nil h keeps the default. The router uses this to stamp its
+// route-miss marker header on the internal listener's own 404s, so callers
+// (the async deliverer) can distinguish "no such route" from a 404 a function
+// chose to return.
+func WithNotFound(h http.Handler) Option {
+	return func(m *Mux) {
+		if h != nil {
+			m.notFound = h
+		}
+	}
 }
 
 // New returns a Mux configured by opts.
@@ -175,11 +192,15 @@ func (m *Mux) compile() []*compiledRoute {
 // wrapped with the middleware chain. Safe to call once configuration is done.
 func (m *Mux) Handler() http.Handler {
 	routes := m.compile()
+	notFound := m.notFound
+	if notFound == nil {
+		notFound = http.HandlerFunc(http.NotFound)
+	}
 	var h http.Handler = &dispatcher{
 		routes:           routes,
 		exact:            buildExactIndex(routes),
 		encodedPath:      m.encodedPath,
-		notFound:         instrument(m.recorder, patternNotFound, http.HandlerFunc(http.NotFound)),
+		notFound:         instrument(m.recorder, patternNotFound, notFound),
 		methodNotAllowed: instrument(m.recorder, patternMethodNotAllowed, http.HandlerFunc(methodNotAllowedHandler)),
 	}
 	// Apply middleware so the first-added wraps outermost (runs first).

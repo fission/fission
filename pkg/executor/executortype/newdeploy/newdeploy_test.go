@@ -159,7 +159,7 @@ func TestNewDeployFnDeleteCacheMiss(t *testing.T) {
 	fn := newTestNewDeployFunction()
 	fn.UID = "abcdef01-2345-6789-abcd-ef0123456789"
 
-	// fsCache is intentionally left empty so GetByFunctionUID misses.
+	// fsCache is intentionally left empty so ListByFunctionUID finds nothing.
 	require.NoError(t, deploy.fnDelete(t.Context(), fn),
 		"fnDelete must tolerate a cache miss and clean up by computed name")
 }

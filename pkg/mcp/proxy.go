@@ -94,11 +94,14 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 		return toolError("function invocation failed: server busy"), nil
 	}
 
-	// UrlForFunction folds the default namespace (→ /fission-function/<name>),
+	// UrlForFunctionRef folds the default namespace (→ /fission-function/<name>),
 	// matching how the router registers the internal route; a hardcoded
 	// /fission-function/<ns>/<name> would not resolve for default-namespace
-	// functions.
-	url := p.baseURL + utils.UrlForFunction(e.FnName, e.Namespace)
+	// functions. e.Alias, when set (RFC-0025), appends the ":<alias>" suffix
+	// so the call is proxied through the alias's currently-resolved version
+	// rather than straight to the live function -- resolution of what that
+	// routes to stays entirely router-side.
+	url := p.baseURL + utils.UrlForFunctionRef(e.FnName, e.Namespace, e.Alias)
 	if len(args) == 0 {
 		args = []byte("{}")
 	}

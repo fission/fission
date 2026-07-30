@@ -7,6 +7,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +32,10 @@ import (
 // escapes (otherwise the compiler proves an unused buffer never escapes and
 // reports 0 allocs/op, hiding the real cost).
 var benchSink []byte
+
+// benchSinkU64 is benchSink's uint64 counterpart, for benchmarks whose
+// result is a scalar hash rather than a byte slice.
+var benchSinkU64 uint64
 
 func BenchmarkWarmPathFunctionMetadataHeaderNew(b *testing.B) {
 	meta := &metav1.ObjectMeta{UID: "0a1b2c3d-uid", Name: "hello", Namespace: "default", ResourceVersion: "12345"}
@@ -59,7 +65,7 @@ func BenchmarkWarmPathFunctionCallAttrsNew(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		// Vary the status code a little to exercise the cache realistically.
-		_ = functionCallAttrs("default", "hello", "/hello", http.MethodGet, 200+(i&1))
+		_ = functionCallAttrs("default", "hello", "", "/hello", http.MethodGet, 200+(i&1))
 		i++
 	}
 }
@@ -165,6 +171,38 @@ func BenchmarkWarmPathForwardedHostHeaderOld(b *testing.B) {
 		req.Header.Set(FORWARDED, host)
 		req.Header.Set(X_FORWARDED_HOST, req.Host)
 	}
+}
+
+// BenchmarkWarmPathStickyWeightHashNew pins the fix for stickyWeightHash
+// (pkg/router/canary.go): the per-request sticky-key hash used by a weighted
+// alias / FunctionWeights canary must not heap-allocate.
+func BenchmarkWarmPathStickyWeightHashNew(b *testing.B) {
+	var sink uint64
+	b.ReportAllocs()
+	for b.Loop() {
+		sink = stickyWeightHash("session-abc-1234567890")
+	}
+	benchSinkU64 = sink
+}
+
+func BenchmarkWarmPathStickyWeightHashOld(b *testing.B) {
+	var sink uint64
+	b.ReportAllocs()
+	for b.Loop() {
+		// Previous implementation: fnv.New64a() heap-allocates the hasher
+		// (behind the hash.Hash64 interface) on every call.
+		h := fnv.New64a()
+		_, _ = h.Write([]byte("session-abc-1234567890"))
+		sink = h.Sum64()
+	}
+	benchSinkU64 = sink
+}
+
+func TestStickyWeightHashAllocs(t *testing.T) {
+	allocs := testing.AllocsPerRun(1000, func() {
+		benchSinkU64 = stickyWeightHash("session-abc-1234567890")
+	})
+	assert.Zero(t, allocs, "stickyWeightHash must not heap-allocate on the per-request hot path")
 }
 
 func BenchmarkWarmPathParamsHeaderNew(b *testing.B) {

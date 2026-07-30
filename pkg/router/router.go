@@ -495,6 +495,21 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("error registering function reconciler: %w", err)
 	}
 
+	// RFC-0025: FunctionAlias/FunctionVersion reconcilers, permissive
+	// predicates (no default GenerationChangedPredicate — see
+	// reconciler_alias.go's doc comment on why a Status-only alias repoint
+	// must still fire).
+	if err := controller.RegisterTenantScopedWithPredicates(crMgr, &fv1.FunctionAlias{},
+		&functionAliasReconciler{logger: logger.WithName("functionalias_reconciler"), client: crMgr.GetClient(), ts: triggers},
+		"router-functionalias", 0); err != nil {
+		return fmt.Errorf("error registering functionalias reconciler: %w", err)
+	}
+	if err := controller.RegisterTenantScopedWithPredicates(crMgr, &fv1.FunctionVersion{},
+		&functionVersionReconciler{logger: logger.WithName("functionversion_reconciler"), client: crMgr.GetClient(), ts: triggers},
+		"router-functionversion", 0); err != nil {
+		return fmt.Errorf("error registering functionversion reconciler: %w", err)
+	}
+
 	// Cross-process propagation: under dynamic tenancy, keep the router's resolver
 	// in step with the FissionTenant set so a namespace onboarded at runtime is
 	// admitted by the tenant-scoped reconcilers above (their MembershipPredicate
@@ -574,7 +589,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		triggers.asyncInvoker.publishTopic = publishTopic
 
 		internalURL := svcinfo.NewEnvResolver(svcinfo.FlagValues{}).RouterInternalURL()
-		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil)
+		deliverer := asyncinvoke.NewHTTPDeliverer(internalURL, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET")), nil, logger.WithName("async_deliverer"))
 		// The dispatcher resolves each destination-chain hop's config from the
 		// Manager's Function cache (the fv1↔asyncinvoke mapping lives in async.go).
 		dispatcher := asyncinvoke.New(asyncinvoke.Options{
@@ -615,7 +630,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// replay that is happening concurrently. The explicit signal
 			// covers the zero-object install (router-owned routes must
 			// still materialize) and the resync loop is the drift guard.
-			if err := triggers.resync(rctx, true); err != nil {
+			if _, err := triggers.resync(rctx, true); err != nil {
 				logger.Error(err, "initial route table resync failed; reconciler replay will converge the table")
 			}
 			triggers.signalMaterialize()

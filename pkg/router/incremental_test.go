@@ -35,8 +35,16 @@ import (
 // so materialize() has swap targets.
 func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, client.Client) {
 	t.Helper()
-	logger := loggerfactory.GetLogger()
 	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(objs...).Build()
+	return newIncrementalTSWithClient(t, cl), cl
+}
+
+// newIncrementalTSWithClient is newIncrementalTS for tests that need to build
+// the fake client themselves (e.g. with interceptor funcs simulating stale
+// LIST snapshots).
+func newIncrementalTSWithClient(t testing.TB, cl client.Client) *HTTPTriggerSet {
+	t.Helper()
+	logger := loggerfactory.GetLogger()
 	ts := &HTTPTriggerSet{
 		logger:                     logger.WithName("incremental_test"),
 		client:                     cl,
@@ -47,7 +55,7 @@ func newIncrementalTS(t testing.TB, objs ...client.Object) (*HTTPTriggerSet, cli
 	ts.initIncrementalRoutes()
 	ts.mutableRouter = newMutableRouter(logger, httpmux.New().Handler())
 	ts.internalMutableRouter = newMutableRouter(logger, httpmux.New().Handler())
-	return ts, cl
+	return ts
 }
 
 // muxes rebuilds the listener muxes from the current route-table snapshot — the
@@ -293,14 +301,16 @@ func TestIncrementalResyncHealsDrift(t *testing.T) {
 	ts, cl := newIncrementalTS(t, fn, t1)
 
 	// Initial resync populates (not drift).
-	require.NoError(t, ts.resync(t.Context(), true))
+	_, err := ts.resync(t.Context(), true)
+	require.NoError(t, err)
 	pub, internal := ts.routeTable.Sizes()
 	assert.Equal(t, 1, pub)
 	assert.Equal(t, 1, internal)
 
 	// A second pass is fully converged: every apply must be NoChange (this
 	// is exactly what the drift counter counts after startup).
-	require.NoError(t, ts.resync(t.Context(), false))
+	_, err = ts.resync(t.Context(), false)
+	require.NoError(t, err)
 	pub, internal = ts.routeTable.Sizes()
 	assert.Equal(t, 1, pub)
 	assert.Equal(t, 1, internal)
@@ -311,7 +321,8 @@ func TestIncrementalResyncHealsDrift(t *testing.T) {
 	t2.ResourceVersion = "" // the fake client rejects RVs on Create and assigns its own
 	require.NoError(t, cl.Create(t.Context(), t2))
 
-	require.NoError(t, ts.resync(t.Context(), false))
+	_, err = ts.resync(t.Context(), false)
+	require.NoError(t, err)
 	ts.materialize(t.Context())
 	public, _ := muxes(ts)
 	assert.False(t, muxMatches(public, http.MethodGet, "/one"), "resync must drop the missed delete")
@@ -389,7 +400,8 @@ func TestBuildMuxesIncrementalParity(t *testing.T) {
 		objs = append(objs, &triggers[i])
 	}
 	incrTS, _ := newIncrementalTS(t, objs...)
-	require.NoError(t, incrTS.resync(t.Context(), true))
+	_, err = incrTS.resync(t.Context(), true)
+	require.NoError(t, err)
 	incrTS.materialize(t.Context())
 	incrPublic, incrInternal := muxes(incrTS)
 
@@ -622,7 +634,8 @@ func TestIncrementalConflictLoserSurvivesHandlerSwap(t *testing.T) {
 
 	// A resync pass (which re-applies every trigger as NoChange) must not
 	// flip it either — this is the path that runs every 60s in production.
-	require.NoError(t, ts.resync(t.Context(), false))
+	_, err = ts.resync(t.Context(), false)
+	require.NoError(t, err)
 	assertLoserFalse("after resync")
 }
 

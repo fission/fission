@@ -28,6 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/executortype"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -152,9 +153,14 @@ func (caaf *Container) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 }
 
 // GetFuncSvcFromCache returns a function service from cache; error otherwise.
+// The lookup is keyed (UID, Generation), never bare UID: fn may be an
+// RFC-0025 versioned projection pinning an older Generation of a UID whose
+// live entry is also cached, and a UID-only lookup would return whichever
+// generation's fsvc was cached last — silently serving the wrong version's
+// container (IsValid only checks the backing objects exist).
 func (caaf *Container) GetFuncSvcFromCache(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
 	otelUtils.SpanTrackEvent(ctx, "GetFuncSvcFromCache", otelUtils.GetAttributesForFunction(fn)...)
-	return caaf.fsCache.GetByFunctionUID(fn.UID)
+	return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 }
 
 // DeleteFuncSvcFromCache deletes a function service from cache.
@@ -285,11 +291,16 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 		return nil, nil
 	}
 
-	fsvcObj, err := caaf.throttler.RunOnce(string(fn.UID), func(ableToCreate bool) (any, error) {
+	// Single-flight per (UID, Generation), not per UID: RFC-0025 versioned
+	// projections share the live function's UID but create distinct
+	// per-version Deployments, so their creates must neither serialize
+	// behind each other nor have a loser handed another generation's fsvc
+	// from the cache fallback.
+	fsvcObj, err := caaf.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (any, error) {
 		if ableToCreate {
 			return caaf.fnCreate(ctx, fn)
 		}
-		return caaf.fsCache.GetByFunctionUID(fn.UID)
+		return caaf.fsCache.GetByFunction(&fn.ObjectMeta)
 	})
 	if err != nil {
 		e := "error creating k8s resources for function"
@@ -500,7 +511,10 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		// deployment of the function in fission-function ns, so cleaning up resources there
 		ns := caaf.nsResolver.GetFunctionNS(newFn.Namespace)
 
-		fsvc, err := caaf.fsCache.GetByFunctionUID(newFn.UID)
+		// Live entry only: updates arrive for the live Function CR, and its
+		// versioned projections' entries (which share the UID) are immutable
+		// snapshots whose HPA must not be touched here.
+		fsvc, err := caaf.fsCache.GetLiveByFunctionUID(newFn.UID)
 		if err != nil {
 			return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(oldFn), err)
 		}
@@ -583,8 +597,9 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 }
 
 func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Function) error {
-
-	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
+	// Live entry only — see updateFunction: versioned projections' entries
+	// share the UID but must keep their pinned spec.
+	fsvc, err := caaf.fsCache.GetLiveByFunctionUID(fn.UID)
 	if err != nil {
 		return fmt.Errorf("error updating function due to unable to find function service cache %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
@@ -625,24 +640,25 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	var multierr error
 
-	// GetByFunction now keys on UID+Generation (see #3596), not
-	// ResourceVersion, but the fn passed in on delete can still carry a
-	// Generation the cache entry was never keyed under (e.g. a delete
-	// racing a spec update, or a stale informer snapshot) — GetByFunctionUID
-	// is the UID-only lookup that doesn't depend on the caller's metadata
-	// matching the cached entry's, so it's used here to find the correct
-	// fsvc entry.
-	objName := caaf.getObjName(fn)
-	fsvc, err := caaf.fsCache.GetByFunctionUID(fn.UID)
-	if err != nil {
-		// Not in cache (never specialized, evicted, or executor restarted).
-		// The backing object names are deterministic, so proceed with
-		// cleanup using the computed name instead of failing — bailing out
-		// here would leak the Deployment/Service/HPA.
+	// GetByFunction keys on UID+Generation (see #3596), but the fn passed in
+	// on delete can carry a Generation the cache entries were never keyed
+	// under (a delete racing a spec update, or a stale informer snapshot) —
+	// so enumerate ALL cached entries for the UID instead. With RFC-0025 a
+	// UID can back several entries at once (the live function plus versioned
+	// projections, each with its own -v<seq> Deployment/Service/HPA), and
+	// deleting the live Function must tear down every one of them, not just
+	// whichever entry happened to be cached last. The computed name is always
+	// included: entries can be missing (never specialized, evicted, executor
+	// restarted) and bailing out would leak the live objects.
+	computedName := caaf.getObjName(fn)
+	objNames := map[string]struct{}{computedName: {}}
+	fsvcs := caaf.fsCache.ListByFunctionUID(fn.UID)
+	if len(fsvcs) == 0 {
 		caaf.logger.V(1).Info("fsvc not in cache, cleaning up by computed name",
-			"function", k8sCache.MetaObjectToName(fn), "obj_name", objName)
-	} else {
-		objName = fsvc.Name
+			"function", k8sCache.MetaObjectToName(fn), "obj_name", computedName)
+	}
+	for _, fsvc := range fsvcs {
+		objNames[fsvc.Name] = struct{}{}
 		if _, err := caaf.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
 			multierr = errors.Join(multierr, fmt.Errorf("error deleting function from cache: %w", err))
 		}
@@ -652,33 +668,78 @@ func (caaf *Container) fnDelete(ctx context.Context, fn *fv1.Function) error {
 	// deployment of the function in fission-function ns, so cleaning up resources there
 	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
 
-	multierr = errors.Join(multierr, caaf.cleanupContainer(ctx, ns, objName))
+	// Cache-INDEPENDENT enumeration: the cache walk above only finds
+	// generations with a live fscache entry, and the computed name only covers
+	// the Function object passed in (typically the live spec, no version
+	// label). Per-version -v<seq> objects specialized by a previous executor
+	// incarnation — or whose entry was evicted — would leak past both, so
+	// additionally list Deployments/Services/HPAs by the identity labels every
+	// created object carries (getDeployLabels) and tear down everything found.
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer),
+		fv1.FUNCTION_UID:  string(fn.UID),
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, caaf.kubernetesClient, ns, selector)
+	multierr = errors.Join(multierr, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		multierr = errors.Join(multierr, caaf.cleanupContainer(ctx, ns, objName))
+	}
 	return multierr
 }
 
-// getObjName returns a unique name for kubernetes objects of function
-func (caaf *Container) getObjName(fn *fv1.Function) string {
-	// use meta uuid of function, this ensure we always get the same name for the same function.
-	uid := fn.UID[len(fn.UID)-17:]
-	var functionMetadata string
-	if len(fn.Name)+len(fn.Namespace) < 35 {
-		functionMetadata = fn.Name + "-" + fn.Namespace
-	} else {
-		if len(fn.Name) > 17 {
-			functionMetadata = fn.Name[:17]
-		} else {
-			functionMetadata = fn.Name
-		}
-		if len(fn.Namespace) > 17 {
-			functionMetadata = functionMetadata + "-" + fn.Namespace[:17]
-		} else {
-			functionMetadata = functionMetadata + "-" + fn.Namespace
+// CleanupFunctionVersion tears down the per-version Deployment/Service/HPA
+// set (and the fscache entry) a deleted FunctionVersion's projection left
+// behind, driven by the executor's versiongc reconciler. See the newdeploy
+// counterpart (and pkg/executor/versiongc's package doc) for why teardown is
+// label-based rather than an ownerReference on the objects: with the chart's
+// functionNamespace value set the objects and the FunctionVersion CR live in
+// different namespaces, which Kubernetes ownerRef GC cannot span.
+func (caaf *Container) CleanupFunctionVersion(ctx context.Context, fnNamespace, versionName string) error {
+	var errs error
+
+	// Cache first: evict the projection's entry so the idle reaper stops
+	// tracking a service whose backing objects are about to vanish, and so
+	// its object name is torn down even if a list below fails.
+	objNames := make(map[string]struct{})
+	for _, fsvc := range caaf.fsCache.ListByFunctionVersion(fnNamespace, versionName) {
+		objNames[fsvc.Name] = struct{}{}
+		if _, err := caaf.fsCache.DeleteOld(fsvc, time.Second*0); err != nil {
+			errs = errors.Join(errs, fmt.Errorf("error deleting the function version entry from cache: %w", err))
 		}
 	}
-	// constructed name should be 63 characters long, as it is a valid k8s name
-	// functionMetadata should be 35 characters long, as we take 17 characters from functionUid
-	// with the "container-" 10 character prefix
-	return strings.ToLower(fmt.Sprintf("container-%s-%s", functionMetadata, uid))
+
+	ns := caaf.nsResolver.GetFunctionNS(fnNamespace)
+	selector := labels.Set{
+		fv1.EXECUTOR_TYPE:      string(fv1.ExecutorTypeContainer),
+		fv1.FUNCTION_NAMESPACE: fnNamespace,
+		fv1.FUNCTION_VERSION:   versionName,
+	}.AsSelector().String()
+	listed, listErr := executorUtils.FunctionObjectNames(ctx, caaf.kubernetesClient, ns, selector)
+	errs = errors.Join(errs, listErr)
+	for objName := range listed {
+		objNames[objName] = struct{}{}
+	}
+
+	for objName := range objNames {
+		errs = errors.Join(errs, caaf.cleanupContainer(ctx, ns, objName))
+	}
+
+	return errs
+}
+
+// getObjName returns a unique name for kubernetes objects of function. A
+// versioned Function (fv1.FUNCTION_VERSION label present, RFC-0025) gets a
+// name suffixed with the version's bounded "-v<seq>" tail so each published
+// version's Deployment/Service/HPA is distinct; see
+// executorUtils.VersionedObjName for the truncation budget that keeps the
+// whole name within the Kubernetes 63-char limit either way. The
+// unversioned path is byte-identical to the pre-RFC-0025 behaviour.
+func (caaf *Container) getObjName(fn *fv1.Function) string {
+	return executorUtils.VersionedObjName("container-", fn)
 }
 
 func (caaf *Container) getDeployLabels(fnMeta metav1.ObjectMeta) map[string]string {

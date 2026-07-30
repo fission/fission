@@ -91,11 +91,30 @@ const (
 	FnRetainPods             = "retainpods"
 	FnProvisionedConcurrency = "provisioned-concurrency"
 
+	// RFC-0025 versioning opt-in (fn create/update).
+	FnVersioning     = "versioning"
+	FnRetainVersions = "retain-versions"
+
 	DlqID    = "id"
 	DlqAll   = "all"
 	DlqLimit = "limit"
 
 	FnTestAsync = "async"
+
+	// RFC-0025 `fission fn test --alias`/`--version`: smoke-test a specific
+	// FunctionAlias or pinned FunctionVersion instead of the live function.
+	// Mutually exclusive with each other; the strings themselves are shared
+	// with AliasName/AliasVersion/FnRollbackAlias -- flag names are scoped
+	// per-subcommand, so reuse is fine.
+	FnTestAlias   = "alias"
+	FnTestVersion = "version"
+
+	// RFC-0025 `fission fn describe --version`: render the SNAPSHOT inspector
+	// for one pinned FunctionVersion instead of the live function view. The
+	// string is reused from FnTestVersion/FnPodsVersion/FnLogVersion -- flag
+	// names are scoped per-subcommand, so this is safe (see the FnTestAlias
+	// comment above).
+	FnDescribeVersion = "version"
 
 	// RFC-0024 async invocation config (fn create/update).
 	FnAsyncMaxAttempts = "async-retry-max-attempts"
@@ -147,6 +166,8 @@ const (
 	HtGateway           = "gateway"
 	HtFnName            = "function"
 	HtFnWeight          = "weight"
+	HtFnAlias           = "function-alias"
+	HtFnVersion         = "function-version"
 	HtFilter            = HtFnName
 	HtPrefix            = "prefix"
 	HtKeepPrefix        = "keepprefix"
@@ -257,6 +278,29 @@ const (
 	TenantFunctionNamespace = "function-namespace"
 	TenantBuilderNamespace  = "builder-namespace"
 	TenantForce             = "force"
+
+	// RFC-0025 `fission fn publish`.
+	PublishDescription = "description"
+	PublishWait        = "wait"
+
+	// RFC-0025 `fission alias` (FunctionAlias) commands.
+	AliasName             = resourceName
+	AliasFunction         = "function"
+	AliasVersion          = "version"
+	AliasPackageDigest    = "package-digest"
+	AliasWeight           = "weight"
+	AliasSecondaryVersion = "secondary-version"
+	AliasClearWeight      = "clear-weight"
+	AliasWait             = "wait"
+
+	// RFC-0025 `fission fn rollback`.
+	FnRollbackAlias  = "alias"
+	FnRollbackTo     = "to"
+	FnRollbackDetach = "detach"
+	FnRollbackWait   = "wait"
+
+	// RFC-0025 `fission fn gc-versions`.
+	GCVersionsKeep = "keep"
 
 	DefaultSpecOutputDir = "fission-dump"
 )

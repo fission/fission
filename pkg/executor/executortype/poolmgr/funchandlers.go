@@ -90,6 +90,14 @@ func (gpm *GenericPoolManager) deleteIstioServiceForFunction(ctx context.Context
 // Function reconciler calls it on a spec change: poolmgr otherwise has no
 // function-update path, so a stale specialized pod (old package) could keep being
 // routed to until the idle reaper happens to recycle it.
+//
+// Unlike the interface-level RefreshFuncPods (the cms Secret/ConfigMap path,
+// which recycles everything), this path threads gpm.retainedFn
+// (versionretain.View.Retained, RFC-0025) so pods of a generation a live
+// FunctionAlias still pins survive the refresh: a live deploy (generation bump)
+// must not knock out a pinned version's warm capacity — that warm pool is the
+// whole point of alias rollback. The new live generation's own stale pods, and
+// unretained old generations, recycle as before. See refreshSparesPod (gpm.go).
 func (gpm *GenericPoolManager) refreshFuncPods(ctx context.Context, fn *fv1.Function) error {
-	return gpm.RefreshFuncPods(ctx, gpm.logger, *fn)
+	return gpm.refreshFuncPodsFiltered(ctx, gpm.logger, *fn, gpm.retainedFn)
 }

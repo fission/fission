@@ -193,6 +193,12 @@ func (inv *Invoker) execute(iv invocation) outcome {
 		return outcome{errorType: fv1.WorkflowErrPermanentError, cause: causeOf(err)}
 	}
 
+	// RFC-0025 alias/version routing is deliberately NOT wired here:
+	// WorkflowState.Function's alias/version semantics for a live-tracking
+	// step are an explicitly deferred RFC-0025 decision (see
+	// workflow_validation.go's Task-state guard, which rejects a state
+	// carrying either field at admission) — plumbing the suffix through here
+	// would make live-tracking functional and foreclose that decision.
 	url := inv.routerURL + utils.UrlForFunction(iv.stateSpec.Function.Name, iv.namespace)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

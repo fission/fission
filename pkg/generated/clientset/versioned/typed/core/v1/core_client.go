@@ -20,6 +20,8 @@ type CoreV1Interface interface {
 	EnvironmentsGetter
 	FissionTenantsGetter
 	FunctionsGetter
+	FunctionAliasesGetter
+	FunctionVersionsGetter
 	HTTPTriggersGetter
 	KubernetesWatchTriggersGetter
 	MessageQueueTriggersGetter
@@ -48,6 +50,14 @@ func (c *CoreV1Client) FissionTenants() FissionTenantInterface {
 
 func (c *CoreV1Client) Functions(namespace string) FunctionInterface {
 	return newFunctions(c, namespace)
+}
+
+func (c *CoreV1Client) FunctionAliases(namespace string) FunctionAliasInterface {
+	return newFunctionAliases(c, namespace)
+}
+
+func (c *CoreV1Client) FunctionVersions(namespace string) FunctionVersionInterface {
+	return newFunctionVersions(c, namespace)
 }
 
 func (c *CoreV1Client) HTTPTriggers(namespace string) HTTPTriggerInterface {

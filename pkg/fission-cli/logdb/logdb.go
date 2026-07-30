@@ -54,6 +54,12 @@ type LogFilter struct {
 	RequestID string
 	TraceID   string
 	Level     string
+	// Version (RFC-0025) is the FunctionVersion name --alias/--version
+	// resolved to, if either was set. The inverse of the correlation filters
+	// above: only the kubernetes driver (which reads pods directly and can
+	// filter on the fission.io/function-version pod label) honors it; other
+	// drivers ignore it.
+	Version string
 }
 
 type LogEntry struct {

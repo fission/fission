@@ -27,11 +27,30 @@ import (
 	"github.com/fission/fission/pkg/crd"
 )
 
-// failurePercentageGetter computes the error rate of the canary's new function
-// over a time window. *PrometheusApiClient satisfies it in production; unit
-// tests inject a deterministic fake.
+// failureQuery names the parameters a failure-percentage query needs,
+// replacing GetFunctionFailurePercentage's 6 positional string/[]string
+// params (thermo #6) — a bare "" in the 4th position used to silently select
+// function-pair mode, which read as an unlabeled magic value at every call
+// site. Version is that same alias-mode addition (RFC-0025 phase 5): empty
+// means function-pair mode (byte-identical query to before the shim),
+// non-empty adds a function_version label so two versions of the SAME
+// function — which share Function/Namespace/Path/Methods — are
+// distinguishable series (see
+// docs/rfc/0025-function-versions-aliases-rollback.md L181-182).
+type failureQuery struct {
+	Path      string
+	Methods   []string
+	Function  string
+	Version   string
+	Namespace string
+	Window    string
+}
+
+// failurePercentageGetter computes the error rate of the canary's new
+// function/version over a time window. *PrometheusApiClient satisfies it in
+// production; unit tests inject a deterministic fake.
 type failurePercentageGetter interface {
-	GetFunctionFailurePercentage(ctx context.Context, path string, methods []string, funcName, funcNs, window string) (float64, error)
+	GetFunctionFailurePercentage(ctx context.Context, q failureQuery) (float64, error)
 }
 
 // setCanaryConfigConditions mirrors the bare Status string onto the standard
@@ -39,7 +58,12 @@ type failurePercentageGetter interface {
 // canaryconfig/<name>` works alongside the legacy status. The mapping matches
 // the enum in pkg/apis/core/v1/const.go. It reports whether any condition
 // actually changed, so callers can skip a redundant status write.
-func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int64) bool {
+// messageOverride, when non-empty, replaces the default per-status message —
+// used for the alias-mode terminal-Failed paths (RFC-0025 plan-review
+// blocker #5) where "traffic rolled back" is wrong: a reconcile-start
+// validation refusal (missing alias, digest-pinned, spec-managed, ...) never
+// touched the alias at all.
+func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int64, messageOverride string) bool {
 	var (
 		progStatus, readyStatus metav1.ConditionStatus
 		reason, message         string
@@ -60,6 +84,9 @@ func setCanaryConfigConditions(s *fv1.CanaryConfigStatus, status string, gen int
 	default:
 		progStatus, readyStatus = metav1.ConditionUnknown, metav1.ConditionUnknown
 		reason, message = fv1.CanaryConfigReasonUnknown, "unknown canary status: "+status
+	}
+	if messageOverride != "" {
+		message = messageOverride
 	}
 	changed := conditions.Set(&s.Conditions, metav1.Condition{
 		Type:               fv1.CanaryConfigConditionProgressing,
@@ -142,6 +169,11 @@ type stepOutcome struct {
 	// requeue asks the reconciler to schedule another step after one
 	// WeightIncrementDuration. Mutually exclusive with terminalStatus.
 	requeue bool
+	// message, when non-empty, overrides the terminalStatus's default
+	// condition message (see setCanaryConfigConditions). Only ever set
+	// alongside terminalStatus == Failed, for the alias-mode reconcile-start
+	// validation refusals that never touched the alias.
+	message string
 }
 
 // step advances the rollout by one weight increment, or rolls all traffic back
@@ -150,12 +182,6 @@ type stepOutcome struct {
 // RollForwardOrBack: instead of stopping a ticker or closing a quit channel it
 // returns a stepOutcome the reconciler maps onto a ctrl.Result and a status
 // write.
-//
-// INVARIANT: the terminal Succeeded outcome requires at least one completed
-// evaluation window in which the new function actually carried traffic. The
-// failure evaluation above is skipped while the new function's weight is 0
-// (nothing to observe), so a single tick must never both introduce first
-// traffic and terminally succeed — see rollForward's done gate.
 func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (stepOutcome, error) {
 	log := m.logger.WithValues("name", cfg.Name, "namespace", cfg.Namespace)
 
@@ -170,6 +196,15 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 			return stepOutcome{requeue: true}, nil
 		}
 		return stepOutcome{}, err
+	}
+
+	// ALIAS MODE (RFC-0025 phase 5): an HTTPTrigger referencing a FunctionAlias
+	// drives the rollout by stepping FunctionAlias.Weight instead of
+	// HTTPTrigger.FunctionWeights. This branches BEFORE the function-weights
+	// guard below — an alias-referencing trigger's FunctionWeights map is
+	// irrelevant, not a misconfiguration.
+	if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName && trigger.Spec.FunctionReference.Alias != "" {
+		return m.stepAlias(ctx, cfg, trigger)
 	}
 
 	// A canary rollout only makes sense against a function-weights trigger with
@@ -187,17 +222,19 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 	// Only evaluate the failure rate once the new function is actually taking
 	// traffic; at weight 0 there is nothing to observe.
 	if trigger.Spec.FunctionReference.FunctionWeights[cfg.Spec.NewFunction] != 0 {
-		urlPath := trigger.Spec.RelativeURL
-		if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
-			urlPath = *trigger.Spec.Prefix
-		}
-		methods := trigger.Spec.Methods
-		if len(trigger.Spec.Method) > 0 && !slices.Contains(trigger.Spec.Methods, trigger.Spec.Method) {
-			methods = append(methods, trigger.Spec.Method)
-		}
+		urlPath, methods := triggerRouteInfo(trigger)
 
-		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, urlPath, methods,
-			cfg.Spec.NewFunction, cfg.Namespace, cfg.Spec.WeightIncrementDuration)
+		// Version is empty here: function-pair mode's NewFunction is
+		// already a function name, so no function_version label is added —
+		// the query is byte-identical to the pre-shim query.
+		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, failureQuery{
+			Path:      urlPath,
+			Methods:   methods,
+			Function:  cfg.Spec.NewFunction,
+			Version:   "",
+			Namespace: cfg.Namespace,
+			Window:    cfg.Spec.WeightIncrementDuration,
+		})
 		if err != nil {
 			// Transient query error — check again next window rather than aborting.
 			log.Error(err, "error calculating failure percentage; will retry")
@@ -235,21 +272,276 @@ func (m *canaryConfigMgr) step(ctx context.Context, cfg *fv1.CanaryConfig) (step
 	return stepOutcome{requeue: true}, nil
 }
 
+// triggerRouteInfo extracts the URL path and HTTP methods a canary rollout
+// evaluates Prometheus traffic for, shared by function-pair and alias mode.
+func triggerRouteInfo(trigger *fv1.HTTPTrigger) (path string, methods []string) {
+	path = trigger.Spec.RelativeURL
+	if trigger.Spec.Prefix != nil && *trigger.Spec.Prefix != "" {
+		path = *trigger.Spec.Prefix
+	}
+	methods = trigger.Spec.Methods
+	if len(trigger.Spec.Method) > 0 && !slices.Contains(trigger.Spec.Methods, trigger.Spec.Method) {
+		methods = append(methods, trigger.Spec.Method)
+	}
+	return path, methods
+}
+
+// stepAlias is the alias-mode counterpart of step()'s function-pair body
+// (RFC-0025 phase 5, docs/rfc/0025-function-versions-aliases-rollback.md
+// "CanaryConfig absorption"). ROLE MAPPING per the RFC: cfg.Spec.OldFunction
+// stays the alias's PRIMARY (Spec.Version) for the entire rollout;
+// cfg.Spec.NewFunction is the SECONDARY (Spec.SecondaryVersion); Spec.Weight
+// (the primary's share) steps DOWN from 100 by WeightIncrement each interval,
+// so the secondary's share (100-Weight) grows. Spec.Version only ever changes
+// on the single terminal SUCCESS write (rollForwardAlias's "done" path) —
+// that is the shim's one write that can produce an AliasReconciler History
+// append; every other write (progression steps, and the terminal FAILURE
+// write) leaves Spec.Version at cfg.Spec.OldFunction and so appends nothing.
+//
+// INVARIANT: the terminal promotion write requires at least one completed
+// evaluation window in which the secondary actually carried traffic. The
+// failure evaluation below is skipped at primaryWeight == 100 (the secondary
+// has no traffic to observe), so a single tick must never both introduce
+// first traffic AND terminally promote: rollForwardAlias clamps any step
+// taken FROM primaryWeight == 100 to a weighted, non-terminal state — with
+// WeightIncrement >= 100 that is {Weight: 0, SecondaryVersion: set}, all
+// traffic on the secondary but still rollback-able — so the next tick's
+// evaluation gates the promotion. Reaching rollForwardAlias with
+// primaryWeight < 100 implies this tick's evaluation ran and passed (the
+// error / no-traffic / threshold-crossed branches all return first).
+func (m *canaryConfigMgr) stepAlias(ctx context.Context, cfg *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (stepOutcome, error) {
+	aliasName := trigger.Spec.FunctionReference.Alias
+	log := m.logger.WithValues("name", cfg.Name, "namespace", cfg.Namespace, "alias", aliasName)
+
+	alias, failReason, err := m.validateAliasRollout(ctx, cfg, aliasName)
+	if err != nil {
+		return stepOutcome{}, err
+	}
+	if failReason != "" {
+		// Reconcile-start validation refused the rollout — the alias is never
+		// touched, so there is nothing to roll back.
+		log.Info("alias-mode canary validation failed; failing rollout without touching the alias", "reason", failReason)
+		return stepOutcome{terminalStatus: fv1.CanaryConfigStatusFailed, message: failReason}, nil
+	}
+
+	primaryWeight := 100
+	if alias.Spec.Weight != nil {
+		primaryWeight = *alias.Spec.Weight
+	}
+
+	// Only evaluate the failure rate once the secondary is actually taking
+	// traffic; at primary weight 100 there is nothing to observe.
+	if primaryWeight < 100 {
+		urlPath, methods := triggerRouteInfo(trigger)
+
+		// Function is the alias's FUNCTION, not cfg.Spec.NewFunction (a
+		// VERSION name) — both the primary and secondary targets are versions
+		// of that one function and so share Function/Namespace/Path/Methods;
+		// Version disambiguates which of the two a given series belongs to
+		// (RFC L181-182). Passing NewFunction as Function would match zero
+		// series, wedging the rollout in a permanent requeue (failurePercent
+		// == -1 forever).
+		failurePercent, err := m.promClient.GetFunctionFailurePercentage(ctx, failureQuery{
+			Path:      urlPath,
+			Methods:   methods,
+			Function:  alias.Spec.FunctionName,
+			Version:   cfg.Spec.NewFunction,
+			Namespace: cfg.Namespace,
+			Window:    cfg.Spec.WeightIncrementDuration,
+		})
+		if err != nil {
+			log.Error(err, "error calculating failure percentage; will retry")
+			return stepOutcome{requeue: true}, nil
+		}
+
+		if failurePercent == -1 {
+			log.Info("no requests observed for url in window", "url", urlPath)
+			return stepOutcome{requeue: true}, nil
+		}
+
+		if int(failurePercent) > cfg.Spec.FailureThreshold {
+			log.Info("failure percentage crossed threshold; rolling back alias",
+				"failure_percent", failurePercent, "threshold", cfg.Spec.FailureThreshold)
+			if err := m.rollbackAlias(ctx, cfg, alias); err != nil {
+				log.Error(err, "error rolling back alias canary")
+				return stepOutcome{}, err
+			}
+			return stepOutcome{terminalStatus: fv1.CanaryConfigStatusFailed}, nil
+		}
+	}
+
+	done, err := m.rollForwardAlias(ctx, cfg, alias)
+	if err != nil {
+		log.Error(err, "error stepping alias weight; will retry", "alias", aliasName)
+		return stepOutcome{requeue: true}, nil
+	}
+	if done {
+		log.Info("canary rollout complete; alias now fully resolves to the new version")
+		return stepOutcome{terminalStatus: fv1.CanaryConfigStatusSucceeded}, nil
+	}
+	return stepOutcome{requeue: true}, nil
+}
+
+// validateAliasRollout performs the reconcile-start checks an alias-mode
+// canary must pass before step() may touch anything (RFC-0025 plan-review
+// blocker #5): the FunctionAlias exists; it is neither digest-pinned nor
+// spec-managed — either of which the shim's writes would silently corrupt (a
+// digest-pinned alias's success write would need to clear PackageDigest,
+// converting a GitOps content pin into a name pin behind the pipeline's
+// back; a spec-managed alias would have its promotion reverted by the very
+// next `spec apply`, per the RFC's Git-ownership rule — see
+// pkg/fission-cli/cmd/function/rollback.go's identical guard); the alias's
+// CURRENT Spec.Version already equals cfg.Spec.OldFunction (the RFC's "OLD
+// stays primary throughout" role mapping is a precondition, not something
+// the shim establishes — without this check the first progression write
+// would silently repoint a live alias away from its actual current target);
+// and cfg.Spec.NewFunction/OldFunction each name a FunctionVersion belonging
+// to the alias's function. A non-empty failReason means the caller must
+// terminate the rollout Failed WITHOUT writing the alias.
+//
+// Reads go through m.apiReader (uncached), matching updateHttpTriggerWithRetries's
+// rationale: an uncached read observes a concurrent edit to the alias or its
+// target versions on the very next step rather than serving a stale
+// informer-cached copy.
+func (m *canaryConfigMgr) validateAliasRollout(ctx context.Context, cfg *fv1.CanaryConfig, aliasName string) (*fv1.FunctionAlias, string, error) {
+	alias := &fv1.FunctionAlias{}
+	aliasKey := types.NamespacedName{Namespace: cfg.Namespace, Name: aliasName}
+	if err := m.apiReader.Get(ctx, aliasKey, alias); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, fmt.Sprintf("function alias %s not found", aliasKey), nil
+		}
+		return nil, "", err
+	}
+
+	if alias.Spec.PackageDigest != "" {
+		return nil, fmt.Sprintf("function alias %s is digest-pinned (packageDigest %q); alias-mode canary requires a name-pinned alias (spec.version), not a declarative digest pin",
+			aliasKey, alias.Spec.PackageDigest), nil
+	}
+	// fv1.IsSpecManaged: key PRESENCE marks the alias spec-managed, matching
+	// pkg/fission-cli/cmd/function/rollback.go's identical guard — a
+	// present-but-empty annotation value still means a `fission spec`
+	// deployment stamped this alias.
+	if fv1.IsSpecManaged(alias.Annotations) {
+		return nil, fmt.Sprintf("function alias %s is managed by `fission spec` (Git); the promotion write would be reverted by the next `spec apply` — detach it from the deployment (see `fission fn rollback --detach`) before running an alias-mode canary against it",
+			aliasKey), nil
+	}
+
+	// Start-state precondition: the RFC's role mapping ("OLD stays primary
+	// throughout") only holds if the alias is ALREADY pointing at OldFunction
+	// before the rollout begins. Without this check the first progression
+	// write (rollForwardAlias, which always writes Spec.Version as
+	// cfg.Spec.OldFunction) would silently repoint a live alias away from
+	// whatever it actually currently serves.
+	if alias.Spec.Version != cfg.Spec.OldFunction {
+		return nil, fmt.Sprintf("function alias %s currently points at %q, expected OldFunction %q — repoint the alias or fix the canary spec",
+			aliasKey, alias.Spec.Version, cfg.Spec.OldFunction), nil
+	}
+
+	for _, versionName := range []string{cfg.Spec.NewFunction, cfg.Spec.OldFunction} {
+		v := &fv1.FunctionVersion{}
+		if err := m.apiReader.Get(ctx, types.NamespacedName{Namespace: cfg.Namespace, Name: versionName}, v); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, fmt.Sprintf("function version %s/%s not found", cfg.Namespace, versionName), nil
+			}
+			return nil, "", err
+		}
+		if v.Spec.FunctionName != alias.Spec.FunctionName {
+			return nil, fmt.Sprintf("function version %s/%s belongs to function %q, not alias %s's function %q",
+				cfg.Namespace, versionName, v.Spec.FunctionName, aliasKey, alias.Spec.FunctionName), nil
+		}
+	}
+
+	return alias, "", nil
+}
+
+// rollForwardAlias steps WeightIncrement percent of the primary's share onto
+// the alias's secondary target (cfg.Spec.NewFunction), clamping at 0. It
+// reports whether the rollout is done (the terminal promotion was written).
+// Per stepAlias's role mapping, Spec.Version is written as
+// cfg.Spec.OldFunction on every progression step — the same value it already
+// holds, so this never produces an AliasReconciler History append — and is
+// repointed to cfg.Spec.NewFunction ONLY on the terminal "done" write, the
+// shim's single History-producing write per rollout.
+//
+// The terminal branch is gated on primaryWeight < 100, enforcing stepAlias's
+// invariant: a step taken FROM the unevaluated start state (primaryWeight ==
+// 100, where stepAlias skips the failure evaluation) must land on a weighted,
+// non-terminal state so the secondary is evaluated for at least one window
+// before it can be promoted. With WeightIncrement >= 100 that state is
+// {Weight: 0, SecondaryVersion: set} — all traffic to the secondary (the
+// router's 0/100 split always picks the secondary, see getCanaryBackend),
+// but Spec.Version still the OLD primary, so the next tick can still roll
+// back. Without this gate a WeightIncrement >= 100 canary would terminally
+// promote a 100%-failing secondary in its very first tick, with zero
+// observed evaluation windows.
+func (m *canaryConfigMgr) rollForwardAlias(ctx context.Context, cfg *fv1.CanaryConfig, alias *fv1.FunctionAlias) (bool, error) {
+	primaryWeight := 100
+	if alias.Spec.Weight != nil {
+		primaryWeight = *alias.Spec.Weight
+	}
+
+	if primaryWeight < 100 && primaryWeight-cfg.Spec.WeightIncrement <= 0 {
+		m.logger.Info("alias canary rollout complete; promoting secondary to primary",
+			"name", cfg.Name, "namespace", cfg.Namespace, "alias", alias.Name, "version", cfg.Spec.NewFunction)
+		return true, m.updateFunctionAliasWithRetries(ctx, alias.Namespace, alias.Name, cfg.Spec.NewFunction, nil, "")
+	}
+
+	newWeight := max(0, primaryWeight-cfg.Spec.WeightIncrement)
+	m.logger.Info("stepped down alias primary weight",
+		"name", cfg.Name, "namespace", cfg.Namespace, "alias", alias.Name, "primary_weight", newWeight)
+	return false, m.updateFunctionAliasWithRetries(ctx, alias.Namespace, alias.Name, cfg.Spec.OldFunction, &newWeight, cfg.Spec.NewFunction)
+}
+
+// rollbackAlias repoints the alias fully back to the primary (old) target,
+// clearing Weight and SecondaryVersion. Spec.Version is written as
+// cfg.Spec.OldFunction — its value for the whole rollout — so this write
+// never changes ResolvedVersion and produces ZERO History appends; contrast
+// with rollForwardAlias's terminal "done" write, which does repoint Version
+// and is the only write that appends.
+func (m *canaryConfigMgr) rollbackAlias(ctx context.Context, cfg *fv1.CanaryConfig, alias *fv1.FunctionAlias) error {
+	return m.updateFunctionAliasWithRetries(ctx, alias.Namespace, alias.Name, cfg.Spec.OldFunction, nil, "")
+}
+
+// updateFunctionAliasWithRetries persists version/weight/secondaryVersion
+// onto the FunctionAlias named by namespace/name, retrying the
+// optimistic-concurrency conflicts a concurrent write produces — mirroring
+// updateHttpTriggerWithRetries. The re-read goes through the uncached
+// apiReader for the same reason: the cache-backed client would keep
+// re-serving the stale object on every retry.
+func (m *canaryConfigMgr) updateFunctionAliasWithRetries(ctx context.Context, namespace, name, version string, weight *int, secondaryVersion string) error {
+	key := types.NamespacedName{Namespace: namespace, Name: name}
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		alias := &fv1.FunctionAlias{}
+		if err := m.apiReader.Get(ctx, key, alias); err != nil {
+			return err
+		}
+		alias.Spec.Version = version
+		alias.Spec.Weight = weight
+		alias.Spec.SecondaryVersion = secondaryVersion
+		return m.client.Update(ctx, alias)
+	})
+	if err != nil {
+		return fmt.Errorf("error updating function alias %s: %w", key, err)
+	}
+	m.logger.V(1).Info("updated function alias rollout state", "alias", key)
+	return nil
+}
+
 // rollForward shifts WeightIncrement percent of traffic from the old function
 // to the new one, clamping at 100/0. It reports whether the rollout is done
 // (the new function has reached 100% AND had traffic during an evaluated
 // window).
 //
-// INVARIANT: the terminal Succeeded outcome requires at least one completed
-// evaluation window in which the new function actually carried traffic.
-// step() skips the failure evaluation while the new function's weight is 0,
-// so a step FROM weight 0 must never report done even when WeightIncrement
-// >= 100 pushes the weight straight to 100 — the rollout stays Pending for
-// one more interval and the next tick's evaluation either confirms
-// (Succeeded) or rolls the traffic back (Failed). Without this gate a
-// WeightIncrement >= 100 canary would write terminal Succeeded — after which
-// the reconciler never re-evaluates or rolls back — with the new function's
-// very first traffic, zero windows observed.
+// Same invariant as rollForwardAlias: the terminal Succeeded outcome requires
+// at least one completed evaluation window in which the new function actually
+// carried traffic. step() skips the failure evaluation while the new
+// function's weight is 0, so a step FROM weight 0 must never report done even
+// when WeightIncrement >= 100 pushes the weight straight to 100 — the rollout
+// stays Pending for one more interval and the next tick's evaluation either
+// confirms (Succeeded) or rolls the traffic back (Failed). Without this gate
+// a WeightIncrement >= 100 canary would write terminal Succeeded — after
+// which the reconciler never re-evaluates or rolls back — with the new
+// function's very first traffic, zero windows observed.
 func (m *canaryConfigMgr) rollForward(ctx context.Context, cfg *fv1.CanaryConfig, trigger *fv1.HTTPTrigger) (bool, error) {
 	weights := trigger.Spec.FunctionReference.FunctionWeights
 	done := false

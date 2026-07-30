@@ -21,7 +21,7 @@ func Commands() *cobra.Command {
 			flag.HtIngressRule, flag.HtIngressAnnotation, flag.HtIngressTLS,
 			flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath, flag.HtRouteAnnotation,
 			flag.HtRouteTLS, flag.HtGateway,
-			flag.HtFnWeight, flag.HtHost, flag.SpecSave, flag.SpecDry,
+			flag.HtFnWeight, flag.HtFnAlias, flag.HtFnVersion, flag.HtHost, flag.SpecSave, flag.SpecDry,
 			flag.HtPrefix, flag.HtKeepPrefix, flag.HtInvocationMode},
 	})
 
@@ -44,7 +44,7 @@ func Commands() *cobra.Command {
 			flag.HtMethod, flag.HtIngress, flag.HtIngressRule, flag.HtIngressAnnotation,
 			flag.HtIngressTLS, flag.HtRouteProvider, flag.HtRouteHost, flag.HtRoutePath,
 			flag.HtRouteAnnotation, flag.HtRouteTLS, flag.HtGateway,
-			flag.HtFnWeight, flag.HtHost, flag.HtPrefix, flag.HtKeepPrefix, flag.HtInvocationMode},
+			flag.HtFnWeight, flag.HtFnAlias, flag.HtFnVersion, flag.HtHost, flag.HtPrefix, flag.HtKeepPrefix, flag.HtInvocationMode},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{

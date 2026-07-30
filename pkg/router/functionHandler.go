@@ -17,13 +17,14 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/crd"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/error/network"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/router/streaming"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/correlation"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
@@ -54,17 +55,36 @@ type functionHandler struct {
 	httpTrigger              *fv1.HTTPTrigger
 	functionMap              map[string]*fv1.Function
 	fnWeightDistributionList []functionWeightDistribution
-	tsRoundTripperParams     *tsRoundTripperParams
-	isDebugEnv               bool
-	structuredErrors         bool
-	accessLog                bool
-	functionTimeoutMap       map[k8stypes.UID]int
+	// stickySource is the Function (RFC-0025 Task 5) whose Spec.State.Sticky
+	// governs sticky routing for this route: the single resolved function for
+	// an unweighted route, or the LIVE function for a weighted alias's split
+	// (see resolveResult.stickySource). nil for the legacy
+	// FunctionReferenceTypeFunctionWeights canary, which has no single
+	// canonical sticky config and so never extracts a key (pure random pick,
+	// unchanged from pre-Task-5 behavior). stickySource's nilness IS the
+	// mode() discriminator below — set the two together.
+	stickySource         *fv1.Function
+	tsRoundTripperParams *tsRoundTripperParams
+	isDebugEnv           bool
+	structuredErrors     bool
+	accessLog            bool
+	// functionTimeoutMap and policyByUID are keyed by crd.CacheKeyUG (UID,
+	// Generation), not UID alone: an RFC-0025 versioned backend (a weighted
+	// alias's primary/secondary target, or the internal route's fresh
+	// resolve on a live-Function event) can produce two *fv1.Function
+	// snapshots sharing a UID but differing in Generation, and each needs
+	// its own timeout/policy — collapsing on UID would let one snapshot's
+	// entry silently serve the other's streaming/proxy policy.
+	functionTimeoutMap map[crd.CacheKeyUG]int
 	// Hoisted per-route state (RFC-0014): computed once at mux build instead
 	// of per request. rtLogger is the round tripper's named logger;
 	// policyByUID holds the resolved proxy policy per backend function (the
-	// canary path selects the backend per request, hence per-UID).
+	// canary path selects the backend per request, hence per-key);
+	// basesByUID holds each backend function's internal-listener URL prefix
+	// candidates (functionURLBases) the same way, for trimFunctionPrefix.
 	rtLogger    logr.Logger
-	policyByUID map[k8stypes.UID]proxyPolicy
+	policyByUID map[crd.CacheKeyUG]proxyPolicy
+	basesByUID  map[crd.CacheKeyUG][]string
 	// asyncInvoker enqueues RFC-0024 async invocations. Set on both the public
 	// HTTPTrigger handlers and the internal direct-function handlers, so a signed
 	// direct caller can go async; the dispatcher's own deliveries are excluded by
@@ -73,10 +93,45 @@ type functionHandler struct {
 	asyncInvoker *asyncInvoker
 }
 
+// stickyMode names which of the two ways handler() derives its sticky key,
+// replacing a bare `fh.stickySource == nil` check as the hot-path
+// discriminator (thermo #5).
+//
+//   - stickyModeSingleSource: stickySource names ONE canonical Sticky config
+//     that governs the pick itself -- stickyKeyFromRequest computes a real
+//     key from it up front, and (for a weighted route) getCanaryBackend's
+//     pick is deterministic on that key. Every FunctionReferenceTypeFunctionName
+//     resolution is this mode, alias or not (see resolveResult.stickySource).
+//   - stickyModePerBackend: the legacy FunctionReferenceTypeFunctionWeights
+//     canary. Its backends are distinct named functions, each with its own
+//     independent StickyConfig -- there is no single config to key the pick
+//     on, so the pick stays unkeyed/random, and handler() recomputes the
+//     Admit-side key AFTER the pick from whichever backend won (restoring
+//     pre-Task-5 behavior).
+type stickyMode int
+
+const (
+	stickyModeSingleSource stickyMode = iota
+	stickyModePerBackend
+)
+
+// mode reports fh's stickyMode, derived from stickySource rather than a
+// separately stored field: stickySource is nil for exactly the legacy
+// per-backend canary (see its doc comment), so the derivation can never
+// drift from what stickySource itself says -- and a functionHandler built by
+// hand for a test (bypassing newFunctionHandlerBase) still gets the right
+// mode for free just by setting stickySource.
+func (fh *functionHandler) mode() stickyMode {
+	if fh.stickySource == nil {
+		return stickyModePerBackend
+	}
+	return stickyModeSingleSource
+}
+
 // proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
 // only when the route was built without a precomputed map (test harnesses).
 func (fh *functionHandler) proxyPolicyFor(fn *fv1.Function, fnTimeout time.Duration) proxyPolicy {
-	if p, ok := fh.policyByUID[fn.GetUID()]; ok {
+	if p, ok := fh.policyByUID[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)]; ok {
 		return p
 	}
 	return resolveProxyPolicy(fn, fnTimeout, fh.tsRoundTripperParams.streamIdleDefault)
@@ -89,6 +144,17 @@ func (fh *functionHandler) roundTripperLogger() logr.Logger {
 		return fh.rtLogger
 	}
 	return fh.logger.WithName("roundtripper")
+}
+
+// basesFor returns the hoisted internal-listener URL prefix candidates for
+// fn (see functionURLBases), computing them on the spot only when the route
+// was built without a precomputed map (test harnesses) — same fallback
+// pattern as proxyPolicyFor/roundTripperLogger above.
+func (fh *functionHandler) basesFor(fn *fv1.Function) []string {
+	if b, ok := fh.basesByUID[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)]; ok {
+		return b
+	}
+	return functionURLBases(&fn.ObjectMeta)
 }
 
 // asyncRequested reports whether request should be enqueued for RFC-0024 async
@@ -119,9 +185,42 @@ func (fh functionHandler) asyncRequested(request *http.Request) bool {
 }
 
 func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *http.Request) {
-	if fh.httpTrigger != nil && fh.httpTrigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionWeights {
-		// canary deployment. need to determine the function to send request to now
-		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList)
+	// RFC-0023/0025: extract the sticky key off the resolution's stable
+	// sticky-config source (fh.stickySource -- the live function for any
+	// alias resolution, the single resolved function otherwise; see
+	// resolveResult.stickySource) BEFORE any per-request backend pick. The
+	// SAME key then drives both the weighted pick below and the round
+	// tripper's Admit ranking (transport.go, via RetryingRoundTripper.
+	// stickyKey) -- computing it once and passing it down is what guarantees
+	// the two can never disagree for a weighted alias.
+	//
+	// In stickyModePerBackend (the legacy FunctionReferenceTypeFunctionWeights
+	// canary: distinct named backends, each with its own independent
+	// StickyConfig, so there is no single config to key the PICK on)
+	// stickyKey starts "" and getCanaryBackend falls back to its pre-Task-5
+	// random pick. The pre-Task-5 Admit-side behavior (honor whichever
+	// backend the pick landed on) is restored below, AFTER the pick, once
+	// fh.function is known.
+	stickyKey := stickyKeyFromRequest(fh.stickySource, request)
+
+	if len(fh.fnWeightDistributionList) > 0 {
+		// Weighted backend selection: stickyModePerBackend's legacy canary AND
+		// an RFC-0025 weighted FunctionAlias (stickyModeSingleSource,
+		// Spec.Weight != nil) both resolve to a resolveResultMultipleFunctions
+		// with a non-empty weight distribution — pick the per-request backend
+		// from it now rather than at mux-build time. NOT gated on
+		// fh.httpTrigger != nil: a weighted alias's materialized `:<alias>`
+		// internal route (buildInternalAliasHandler, routeshape.go) carries the
+		// same distribution with no httpTrigger at all, so MQ/timer/kubewatcher/
+		// MCP invocations through that route see the identical split an
+		// HTTPTrigger referencing the alias would — "weighted aliases work
+		// uniformly on all trigger types for free, because the weighted pick
+		// happens router-side" (RFC-0025).
+		//
+		// stickyKey is "" for stickyModePerBackend going in, so
+		// getCanaryBackend falls back to its pre-Task-5 random pick; for a
+		// keyed request in stickyModeSingleSource, the pick is deterministic.
+		fn := getCanaryBackend(fh.functionMap, fh.fnWeightDistributionList, stickyKey)
 		if fn == nil {
 			fh.logger.Error(nil, "could not get canary backend",
 				"fnMap", fh.functionMap,
@@ -131,6 +230,17 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 		fh.function = fn
 		fh.logger.V(1).Info("chosen function backend's metadata", "metadata", fh.function)
+
+		// Legacy canary Admit-side restore (see the top-of-function comment):
+		// in stickyModePerBackend, stickyKey is still "" here -- recompute it
+		// from the just-chosen fn, restoring the pre-Task-5 behavior of
+		// honoring whichever backend's own StickyConfig the random pick
+		// landed on. Safe to overwrite: the pick above was never keyed
+		// (stickyKey was "" going in), so there is no pick/admit disagreement
+		// to reintroduce.
+		if fh.mode() == stickyModePerBackend {
+			stickyKey = stickyKeyFromRequest(fn, request)
+		}
 	}
 
 	// url path
@@ -153,7 +263,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		}
 	}
 
-	fnTimeout := fh.functionTimeoutMap[fh.function.GetUID()]
+	fnTimeout := fh.functionTimeoutMap[crd.CacheKeyUGFromMeta(&fh.function.ObjectMeta)]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
 	}
@@ -181,6 +291,8 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		isDebugEnv:  fh.isDebugEnv,
 		funcTimeout: time.Duration(fnTimeout) * time.Second,
 		policy:      policy,
+		stickyKey:   stickyKey,
+		bases:       fh.basesFor(fh.function),
 	}
 
 	start := time.Now()
@@ -191,6 +303,14 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		BufferPool:   proxyResponseBufferPool,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
 		ModifyResponse: func(resp *http.Response) error {
+			// The route-miss marker may ONLY ever be set by the router's own
+			// internal-listener not-found handler (internalRouteMissHandler).
+			// A function response that carries it — maliciously or by accident
+			// — must not be able to spoof "this route does not exist" to the
+			// async deliverer (which would double-invoke via its bare-name
+			// fallback) or any other marker consumer. Strip it from every
+			// proxied response.
+			resp.Header.Del(utils.HeaderRouteMiss)
 			// One goroutine for metric collection + the cached-URL tap (the
 			// historical pairing — the tap is a buffered channel send and does
 			// not warrant a spawn of its own).

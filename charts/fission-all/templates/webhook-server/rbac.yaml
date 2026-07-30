@@ -8,6 +8,19 @@
 # environment (one shared mount cannot deliver a per-function scoped state
 # token).
 #
+# It also reads Functions, FunctionVersions, and FunctionAliases (RFC-0025):
+#   * functions (get)          — FunctionVersion's ValidateDeletion looks up
+#                                 the owning Function to detect the
+#                                 cascade-delete escape (owner absent/
+#                                 terminating).
+#   * functionversions (get)   — FunctionAlias's Validate resolves a
+#                                 name-pinned spec.version/secondaryVersion
+#                                 target to check it exists and belongs to the
+#                                 alias's function.
+#   * functionaliases (list)   — FunctionVersion's ValidateDeletion lists
+#                                 aliases in the namespace to veto deleting a
+#                                 version still referenced by one.
+#
 # The read is scoped to match the tenancy posture, exactly like every other
 # Fission-CRD read (fission-role-generator / dynamic-cluster-roles.yaml):
 #   * static  — a namespaced Role in each Fission resource namespace
@@ -37,6 +50,15 @@ rules:
   - apiGroups: ["fission.io"]
     resources: ["environments"]
     verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functions"]
+    verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functionversions"]
+    verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functionaliases"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -68,6 +90,15 @@ rules:
   - apiGroups: ["fission.io"]
     resources: ["environments"]
     verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functions"]
+    verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functionversions"]
+    verbs: ["get"]
+  - apiGroups: ["fission.io"]
+    resources: ["functionaliases"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

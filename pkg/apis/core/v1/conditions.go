@@ -83,6 +83,31 @@ const (
 	// workflows.enabled, so a run created with the head disabled must be
 	// distinguishable from one that is merely queued.
 	WorkflowRunConditionAccepted = "Accepted"
+
+	// FunctionAlias conditions (RFC-0025). Resolved reports whether the
+	// alias's spec target (Version or PackageDigest) currently resolves to a
+	// FunctionVersion: True with reason FunctionAliasReasonResolved once
+	// Status.ResolvedVersion is populated; False with reason
+	// FunctionAliasReasonVersionNotFound (name-pinned target missing) or
+	// FunctionAliasReasonDigestUnmatched (digest-pinned target not yet — or
+	// no longer — recorded by any FunctionVersion) otherwise.
+	FunctionAliasConditionResolved = "Resolved"
+	// FunctionAliasConditionEnvDrift surfaces the RFC-0025 "Environment &
+	// Package changes across the version boundary" gap: an Environment
+	// update bumps no Function Generation and recycles pods under EVERY
+	// version, so a version's pinned code+config can silently run against a
+	// runtime that has moved on since publish. True with reason
+	// FunctionAliasReasonEnvGenerationDrift means the resolved target
+	// FunctionVersion's EnvObservedGeneration (recorded at publish) no
+	// longer matches the live Environment's Generation — the alias is
+	// observably drifted, not blocked; rollback restores code/config, never
+	// the runtime. False with reason FunctionAliasReasonEnvCurrent means
+	// they still match. The condition is REMOVED (absent, not False) when
+	// drift is not assessable at all: the alias is unresolved, its target
+	// FunctionVersion is missing, or the Environment it names is missing —
+	// absence reads as "cannot tell", which is distinct from "checked, no
+	// drift".
+	FunctionAliasConditionEnvDrift = "EnvDrift"
 )
 
 // Standard Reason values written alongside each condition. PascalCase per
@@ -101,6 +126,15 @@ const (
 	FunctionReasonPackageFailed    = "PackageBuildFailed" // buildermgr: package build failed
 	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
 	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
+	// FunctionReasonToolAliasFallback: RFC-0025 alias-addressed Tool
+	// (Spec.Tool.Alias set) whose alias has never resolved a target — the mcp
+	// reconciler is serving a fallback entry built from THIS function's own
+	// live Tool config (not the alias's snapshot) so the tool is not
+	// invisible while the alias catches up. Distinct from
+	// FunctionReasonToolExposed so `kubectl get function -o
+	// jsonpath='{.status.conditions}'` can tell snapshot-serving from
+	// fallback-serving without reading logs.
+	FunctionReasonToolAliasFallback = "ToolAliasFallback"
 
 	// Provisioned condition reasons (RFC-0026 provisioner).
 	FunctionReasonProvisionedSatisfied = "ProvisionedSatisfied" // ProvisionedReady >= ProvisionedTarget
@@ -161,4 +195,12 @@ const (
 	// WorkflowRun condition reasons
 	WorkflowRunReasonAccepted     = "AcceptedByController"
 	WorkflowRunReasonNoController = "NoWorkflowController"
+
+	// FunctionAlias condition reasons (RFC-0025)
+	FunctionAliasReasonResolved        = "Resolved"
+	FunctionAliasReasonVersionNotFound = "VersionNotFound"
+	FunctionAliasReasonDigestUnmatched = "DigestUnmatched"
+	// EnvDrift condition reasons.
+	FunctionAliasReasonEnvGenerationDrift = "EnvGenerationDrift" // live Environment Generation has moved past the resolved version's EnvObservedGeneration
+	FunctionAliasReasonEnvCurrent         = "EnvCurrent"         // live Environment Generation still matches the resolved version's EnvObservedGeneration
 )

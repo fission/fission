@@ -139,6 +139,14 @@ func (opts *ListSubCommand) getResource(input cli.Input, namespace string, deplo
 	specKubeWatchers := filterByDeployID[fv1.KubernetesWatchTrigger](kws, deployID)
 	ShowAppliedKubeWatchers(specKubeWatchers)
 
+	var aliases []fv1.FunctionAlias
+	aliases, err = getAllFunctionAliases(input.Context(), opts.Client(), namespace)
+	if err != nil {
+		return fmt.Errorf("error getting FunctionAliases from %s namespaces: %w", printNS, err)
+	}
+	specAliases := filterByDeployID[fv1.FunctionAlias](aliases, deployID)
+	ShowFunctionAliases(specAliases)
+
 	return err
 }
 
@@ -332,6 +340,21 @@ func ShowWorkflows(wfs []fv1.Workflow) {
 	}
 }
 
+// ShowFunctionAliases displays info of FunctionAliases
+func ShowFunctionAliases(aliases []fv1.FunctionAlias) {
+	if len(aliases) > 0 {
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+		fmt.Fprintf(w, "%v", "FunctionAliases:\n")
+		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "FUNCTION", "VERSION", "PACKAGEDIGEST", "RESOLVEDVERSION")
+		for _, a := range aliases {
+			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
+				a.Name, a.Spec.FunctionName, a.Spec.Version, a.Spec.PackageDigest, a.Status.ResolvedVersion)
+		}
+		fmt.Fprintf(w, "\n")
+		w.Flush()
+	}
+}
+
 // ShowAppliedKubeWatchers displays info of kube watchers
 func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
 	if len(ws) > 0 {
@@ -427,4 +450,13 @@ func getAllKubeWatchTriggers(ctx context.Context, client cmd.Client, namespace s
 		return nil, fmt.Errorf("unable to get Kube Watchers %w", err)
 	}
 	return ws.Items, nil
+}
+
+// getAllFunctionAliases get lists of FunctionAliases in all namespaces
+func getAllFunctionAliases(ctx context.Context, client cmd.Client, namespace string) ([]fv1.FunctionAlias, error) {
+	aliases, err := client.FissionClientSet.CoreV1().FunctionAliases(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get FunctionAliases %w", err)
+	}
+	return aliases.Items, nil
 }

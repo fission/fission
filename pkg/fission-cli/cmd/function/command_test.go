@@ -30,3 +30,37 @@ func TestRunLocalIsClusterOptional(t *testing.T) {
 	assert.Equal(t, "true", runLocal.Annotations[cmd.ClusterOptionalAnnotation],
 		"run-local must be marked cluster-optional so --image works without a kubeconfig")
 }
+
+// TestPublishHelpDocumentsOutputValues guards discoverability of `fn publish
+// -o name`: the behavior has existed since printPublishResult was written
+// (publish.go), but was undocumented in the command's own help text. This
+// pins the Long description down to naming every accepted --output value.
+func TestPublishHelpDocumentsOutputValues(t *testing.T) {
+	var publish *cobra.Command
+	for _, c := range Commands().Commands() {
+		if c.Name() == "publish" {
+			publish = c
+			break
+		}
+	}
+	require.NotNil(t, publish, "publish subcommand should be registered")
+	for _, want := range []string{"name", "json", "yaml", "wide"} {
+		assert.Contains(t, publish.Long, want, "publish --help should document -o %s", want)
+	}
+}
+
+// TestRollbackHelpCrossReferencesAliasUpdate guards the UX-review breadcrumb
+// (F12): a user reaching for `fn rollback` when they actually know the exact
+// target version should be pointed at the lighter-weight `alias update
+// --version --wait` instead of history-based rollback.
+func TestRollbackHelpCrossReferencesAliasUpdate(t *testing.T) {
+	var rollback *cobra.Command
+	for _, c := range Commands().Commands() {
+		if c.Name() == "rollback" {
+			rollback = c
+			break
+		}
+	}
+	require.NotNil(t, rollback, "rollback subcommand should be registered")
+	assert.Contains(t, rollback.Long, "fission alias update --version --wait")
+}

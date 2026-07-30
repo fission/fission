@@ -167,7 +167,7 @@ func TestContainerFnDeleteCacheMiss(t *testing.T) {
 	fn := newTestContainerFunction()
 	fn.UID = "abcdef01-2345-6789-abcd-ef0123456789"
 
-	// fsCache is intentionally left empty so GetByFunctionUID misses.
+	// fsCache is intentionally left empty so ListByFunctionUID finds nothing.
 	require.NoError(t, cn.fnDelete(t.Context(), fn),
 		"fnDelete must tolerate a cache miss and clean up by computed name")
 }

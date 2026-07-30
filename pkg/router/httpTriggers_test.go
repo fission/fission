@@ -5,6 +5,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,6 +20,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	config "github.com/fission/fission/pkg/featureconfig"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpmux"
 	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/loggerfactory"
@@ -413,4 +415,111 @@ func TestInternalListener_RejectsCrossOriginPreflight(t *testing.T) {
 		"internal listener must 403 cross-origin preflight before HMAC")
 	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"),
 		"even the 403 must carry X-Content-Type-Options: nosniff")
+}
+
+// TestInternalListenerRouteMissMarker pins the C6 route-miss marker contract:
+// the internal listener's OWN not-found path (internalRouteMissHandler, wired
+// inside newListenerMuxes so it survives the atomic mux swap) stamps
+// utils.HeaderRouteMiss on a 404 for an unmatched /fission-function/... path —
+// including an unregistered `:<suffix>` route, the case the async deliverer's
+// version-pin fallback keys on — while non-function route misses and the
+// public listener's 404s stay unmarked.
+func TestInternalListenerRouteMissMarker(t *testing.T) {
+	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
+	publicMux, internalMux, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+
+	serve := func(h http.Handler, method, path string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(method, path, nil))
+		return rr
+	}
+	internal := internalMux.Handler()
+
+	// The deliverer's case: a `:<suffix>` route that was never materialized
+	// (or was GC'd) is a route miss — 404 WITH the marker.
+	rr := serve(internal, http.MethodPost, "/fission-function/myns/example:no-such-version")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "1", rr.Header().Get(utils.HeaderRouteMiss),
+		"an unregistered :<suffix> internal route must 404 WITH the route-miss marker")
+
+	// Any other unmatched /fission-function/... path is marked the same way.
+	rr = serve(internal, http.MethodPost, "/fission-function/myns/ghost")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Equal(t, "1", rr.Header().Get(utils.HeaderRouteMiss),
+		"an unregistered bare function route must 404 WITH the route-miss marker")
+
+	// A registered route is dispatched, not marked (Match-level check: the
+	// handler itself needs plumbing out of scope for a routing test).
+	assert.True(t, muxMatches(internalMux, http.MethodPost, "/fission-function/myns/example"))
+
+	// Non-function paths on the internal listener miss WITHOUT the marker —
+	// the contract is scoped to the function-route namespace.
+	rr = serve(internal, http.MethodGet, "/router-healthz")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Empty(t, rr.Header().Get(utils.HeaderRouteMiss),
+		"a non-function internal route miss must stay a plain 404")
+
+	// The public listener's 404s are never marked (its not-found handler is
+	// untouched) — including the GHSA-split /fission-function/... refusal.
+	rr = serve(publicMux.Handler(), http.MethodGet, "/fission-function/myns/example")
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Empty(t, rr.Header().Get(utils.HeaderRouteMiss),
+		"the public listener's /fission-function 404 must stay unmarked")
+}
+
+// TestInternalListenerRouteMissMarkerBehindHMAC pins the auth ordering: the
+// bundle wraps the internal mux with the HMAC ServiceVerifier OUTSIDE, so an
+// unsigned request to a nonexistent route is rejected 401 before route
+// matching — it must NOT become a marked 404 (the marker may only ever ride
+// the router's genuine not-found response to an authenticated caller).
+func TestInternalListenerRouteMissMarkerBehindHMAC(t *testing.T) {
+	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
+	_, internalMux, err := ts.buildMuxes(t.Context(), nil)
+	require.NoError(t, err)
+
+	verifier := hmacauth.ServiceVerifier([]byte("test-master"), nil, hmacauth.ServiceRouterInternal, hmacauth.VerifierOpts{
+		SkewSec:      60,
+		MaxBodyBytes: internalListenerMaxBodyBytes,
+	})
+	wrapped := verifier(internalMux.Handler())
+
+	rr := httptest.NewRecorder()
+	wrapped.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/fission-function/myns/example:gone", nil))
+	assert.Equal(t, http.StatusUnauthorized, rr.Code,
+		"an unsigned request must stay 401 — auth precedes route matching")
+	assert.Empty(t, rr.Header().Get(utils.HeaderRouteMiss),
+		"a 401 must not carry the route-miss marker")
+}
+
+// TestProxyStripsRouteMissMarkerFromFunctionResponses pins the spoof guard: a
+// function response that carries utils.HeaderRouteMiss (maliciously or by
+// accident) must have it STRIPPED by the proxy (functionHandler's
+// ModifyResponse), so the async deliverer can trust a marked 404 to be the
+// router's own route miss and never a function-crafted "please double-invoke
+// me via the bare route".
+func TestProxyStripsRouteMissMarkerFromFunctionResponses(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(utils.HeaderRouteMiss, "1") // spoof attempt
+		w.Header().Set("X-Fn-Custom", "kept")      // ordinary headers pass through
+		w.WriteHeader(http.StatusNotFound)         // the function's own 404
+		fmt.Fprint(w, "entity not found")
+	}))
+	defer upstream.Close()
+
+	fn := streamingFn("strip-uid", nil) // plain (non-streaming) poolmgr function
+	fh := newHandlerForUpstream(t, fn, upstream, 5)
+	router := httptest.NewServer(http.HandlerFunc(fh.handler))
+	defer router.Close()
+
+	resp, err := http.Get(router.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode, "the function's 404 status passes through")
+	assert.Empty(t, resp.Header.Get(utils.HeaderRouteMiss),
+		"a function-supplied route-miss marker must be stripped from the proxied response")
+	assert.Equal(t, "kept", resp.Header.Get("X-Fn-Custom"), "other response headers still pass through")
 }

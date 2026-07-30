@@ -128,10 +128,14 @@ type (
 		// functions are addressed via Istio services instead.
 		functionServicesEnabled bool
 
-		// fnSvcEnsured debounces ensureFunctionService per function UID (see
-		// maybeEnsureFunctionService): map[types.UID]time.Time of the last
-		// successful-or-in-flight ensure. Entries are dropped on function
-		// delete and on ensure failure (so the next request retries).
+		// fnSvcEnsured debounces ensureFunctionService per (function UID,
+		// version) -- see fnSvcKey: map[fnSvcKey]time.Time keyed on the
+		// struct (uid, versionLabel) pair (unversioned functions get
+		// version==""), holding the last successful-or-in-flight ensure per
+		// key so one version's debounce window never starves another's
+		// (RFC-0025). Entries are dropped on function delete
+		// (deleteFnSvcEnsuredForUID sweeps every version's entry for the
+		// UID) and on ensure failure (so the next request retries).
 		fnSvcEnsured sync.Map
 
 		// provisioner maintains warm specialized pods for functions opted
@@ -139,6 +143,15 @@ type (
 		// disabled (no env var config — see Step 9). Set in
 		// RegisterReconcilers after crClient is available.
 		provisioner *Provisioner
+
+		// retainedFn reports whether a live FunctionAlias still references a
+		// (function UID, generation) pin (RFC-0025 versionretain.View.Retained),
+		// forwarded to the idle reaper's PoolDeleteStrategy so it can exempt
+		// that generation from the "drain everything but the latest" rule. Set
+		// once via SetVersionRetain, from start.go, after the view is
+		// constructed; nil (never set — e.g. in tests) keeps the pre-RFC-0025
+		// behaviour.
+		retainedFn func(uid k8sTypes.UID, gen int64) bool
 	}
 	request struct {
 		requestType
@@ -446,7 +459,63 @@ func (gpm *GenericPoolManager) IsValid(ctx context.Context, fsvc *fscache.FuncSv
 	return false
 }
 
+// RefreshFuncPods deletes the function's specialized pods — every generation's —
+// so the next request re-specializes a warm pod. This is the ExecutorType
+// interface entry point, reached from the cms Secret/ConfigMap reconcilers on a
+// content change. It deliberately recycles alias-retained (RFC-0025) generations
+// too: Secrets/ConfigMaps are referenced by NAME (their contents are not part of
+// a FunctionVersion snapshot), and retained pods are exempt from the idle reaper
+// (versionretain), so this refresh is the only path that ever gets rotated
+// Secret/ConfigMap data into an alias-pinned version's pods — sparing them here
+// would leave e.g. revoked credentials live indefinitely. The Function
+// reconciler's spec-change refresh instead goes through refreshFuncPods
+// (funchandlers.go), which spares retained generations.
 func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.Logger, f fv1.Function) error {
+	return gpm.refreshFuncPodsFiltered(ctx, logger, f, nil)
+}
+
+// refreshSparesPod reports whether a refresh driven by the live Function f must
+// leave a listed specialized pod alone: the pod belongs to a generation OTHER
+// than f's own that a live FunctionAlias still pins (RFC-0025 warm rollback —
+// deleting it would knock out the pinned version's warm capacity and 5xx
+// in-flight alias traffic on every live deploy). retained is
+// versionretain.View.Retained (or nil = spare nothing, the pre-RFC-0025
+// behaviour).
+//
+// Pods of f's OWN generation are never spared, retained or not: the refresh is
+// the only mechanism that recycles the live generation's stale-spec pods (a
+// just-bumped spec, env update, rotated ConfigMap), and a pod labelled with the
+// new live generation re-specializes to an identical spec anyway. A pod with a
+// missing or unparsable fv1.FUNCTION_GENERATION label recycles too: the only
+// path that labels a specialized pod (choosePod's relabel via
+// specializedPodLabels, gp_pod.go) has stamped the generation since RFC-0002,
+// which predates versioning — so a label-less pod is pre-migration legacy and
+// cannot be a pinned version's pod.
+func refreshSparesPod(podLabels map[string]string, f *fv1.Function, retained func(uid k8sTypes.UID, gen int64) bool) bool {
+	if retained == nil {
+		return false
+	}
+	genStr, ok := podLabels[fv1.FUNCTION_GENERATION]
+	if !ok {
+		return false
+	}
+	gen, err := strconv.ParseInt(genStr, 10, 64)
+	if err != nil {
+		return false
+	}
+	if gen == f.Generation {
+		return false
+	}
+	return retained(f.UID, gen)
+}
+
+// refreshFuncPodsFiltered is RefreshFuncPods' body with the RFC-0025 retain
+// filter injected: pods whose generation label names an alias-retained
+// generation other than f's own survive the refresh (see refreshSparesPod).
+// The predicate is a parameter — not read from gpm.retainedFn — so each caller
+// states explicitly whether it spares (Function reconciler) or recycles
+// everything (cms Secret/ConfigMap refresh, nil).
+func (gpm *GenericPoolManager) refreshFuncPodsFiltered(ctx context.Context, logger logr.Logger, f fv1.Function, retained func(uid k8sTypes.UID, gen int64) bool) error {
 
 	env, err := gpm.fissionClient.CoreV1().Environments(f.Spec.Environment.Namespace).Get(ctx, f.Spec.Environment.Name, metav1.GetOptions{})
 	if err != nil {
@@ -480,6 +549,15 @@ func (gpm *GenericPoolManager) RefreshFuncPods(ctx context.Context, logger logr.
 	}
 
 	for _, po := range podList.Items {
+		if refreshSparesPod(po.Labels, &f, retained) {
+			logger.V(1).Info("refresh sparing alias-retained generation's pod",
+				"pod", po.Name,
+				"pod_generation", po.Labels[fv1.FUNCTION_GENERATION],
+				"function", f.Name,
+				"namespace", f.Namespace,
+				"live_generation", f.Generation)
+			continue
+		}
 		err := gpm.kubernetesClient.CoreV1().Pods(po.ObjectMeta.Namespace).Delete(ctx, po.Name, metav1.DeleteOptions{})
 		if k8serrors.IsNotFound(err) {
 			return nil
@@ -658,9 +736,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				envNS, ok6 := pod.Labels[fv1.ENVIRONMENT_NAMESPACE]
 				svcHost, ok7 := pod.Annotations[fv1.ANNOTATION_SVC_HOST]
 				env, ok8 := envMap[fmt.Sprintf("%s/%s", envNS, envName)]
-				fnGenStr, ok9 := pod.Labels[fv1.FUNCTION_GENERATION]
-
-				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 || !ok9 {
+				if !ok1 || !ok2 || !ok3 || !ok4 || !ok5 || !ok6 || !ok7 || !ok8 {
 					gpm.logger.Info("failed to adopt pod for function due to lack of necessary information",
 						"pod", pod.Name, "labels", pod.Labels, "annotations", pod.Annotations,
 						"env", env.Name)
@@ -675,20 +751,51 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				// every adopted pod, leaking stale byFunction/byAddress
 				// entries until TTL reap. Parse it from the pod's
 				// FUNCTION_GENERATION label (stamped at specialization time,
-				// gp_pod.go's specializedPodLabels) and, like every other
-				// required field above, skip adoption rather than guess if
-				// it's missing or malformed — e.g. a pre-migration pod still
-				// alive during a rolling upgrade. A skipped pod isn't lost:
-				// it stays in the cluster and either gets adopted by an
-				// executor replica still running the old code, or is reaped
-				// as idle and replaced by a fresh cold start.
-				fnGen, perr := strconv.ParseInt(fnGenStr, 10, 64)
-				if perr != nil {
-					gpm.logger.Error(perr, "failed to adopt pod for function: unparsable function-generation label",
-						"pod", pod.Name, "value", fnGenStr)
-					return
+				// gp_pod.go's specializedPodLabels). When the label is missing
+				// or malformed — a pod specialized by a release predating the
+				// label, still warm during a rolling upgrade — fall back to
+				// the live Function's CURRENT generation instead of skipping:
+				// on a completed rollout there is no old-code replica left to
+				// adopt a skipped pod, so skipping every pre-label pod turns
+				// the upgrade window AdoptExistingResources exists to smooth
+				// into a cluster-wide cold-start spike. The fallback guards on
+				// UID so a pod belonging to a deleted-and-recreated function
+				// of the same name is never adopted against the new Function.
+				var fnGen int64
+				genParsed := false
+				if fnGenStr, ok := pod.Labels[fv1.FUNCTION_GENERATION]; ok {
+					g, perr := strconv.ParseInt(fnGenStr, 10, 64)
+					if perr == nil {
+						fnGen = g
+						genParsed = true
+					} else {
+						gpm.logger.Error(perr, "unparsable function-generation label, falling back to the live Function's generation",
+							"pod", pod.Name, "value", fnGenStr)
+					}
+				}
+				if !genParsed {
+					fn, gerr := gpm.fissionClient.CoreV1().Functions(fnNS).Get(ctx, fnName, metav1.GetOptions{})
+					if gerr != nil {
+						gpm.logger.Error(gerr, "failed to adopt pod for function: no usable function-generation label and live Function lookup failed",
+							"pod", pod.Name, "function", fnName, "ns", fnNS)
+						return
+					}
+					if string(fn.UID) != fnUID {
+						gpm.logger.Info("failed to adopt pod for function: pod's function UID does not match the live Function (name reused)",
+							"pod", pod.Name, "podFunctionUID", fnUID, "liveFunctionUID", string(fn.UID))
+						return
+					}
+					fnGen = fn.Generation
 				}
 
+				// Carry the pod's version label into the synthetic meta:
+				// GetLiveByFunctionUID classifies entries as live by the
+				// ABSENCE of FUNCTION_VERSION, so an adopted versioned pod's
+				// entry must keep the label or it masquerades as live.
+				var fnLabels map[string]string
+				if v := pod.Labels[fv1.FUNCTION_VERSION]; v != "" {
+					fnLabels = map[string]string{fv1.FUNCTION_VERSION: v}
+				}
 				fsvc := fscache.FuncSvc{
 					Name: pod.Name,
 					Function: &metav1.ObjectMeta{
@@ -697,6 +804,7 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 						UID:             k8sTypes.UID(fnUID),
 						ResourceVersion: fnRV,
 						Generation:      fnGen,
+						Labels:          fnLabels,
 					},
 					Environment: &env,
 					Address:     svcHost,
@@ -920,7 +1028,21 @@ func (gpm *GenericPoolManager) cleanupPool(ctx context.Context, env *fv1.Environ
 // reconciler on delete.
 func (gpm *GenericPoolManager) markFuncDeleted(key crd.CacheKeyUG) {
 	gpm.fsCache.MarkFuncDeleted(key)
-	gpm.fnSvcEnsured.Delete(key.UID)
+	gpm.deleteFnSvcEnsuredForUID(key.UID)
+}
+
+// deleteFnSvcEnsuredForUID drops every fnSvcEnsured debounce entry for a
+// deleted function's UID, across every version -- fnSvcKey composes (UID,
+// version), and a delete only knows the UID (crd.CacheKeyUG carries no
+// version), so a plain Delete(uid) can no longer find every per-version key.
+// Cost is one full Range per function delete, an infrequent path.
+func (gpm *GenericPoolManager) deleteFnSvcEnsuredForUID(uid k8sTypes.UID) {
+	gpm.fnSvcEnsured.Range(func(k, _ any) bool {
+		if key, ok := k.(fnSvcKey); ok && key.uid == uid {
+			gpm.fnSvcEnsured.Delete(k)
+		}
+		return true
+	})
 }
 
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
@@ -1091,7 +1213,17 @@ func (gpm *GenericPoolManager) getFunctionEnv(ctx context.Context, fn *fv1.Funct
 // pods), run by the shared idle reaper.
 func (gpm *GenericPoolManager) IdleStrategy() idle.Strategy {
 	return idle.NewPoolDeleteStrategy(gpm.logger, gpm.fissionClient, gpm.fsCache, gpm.kubernetesClient,
-		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled)
+		gpm.defaultIdlePodReapTime, gpm.objectReaperIntervalSecond, gpm.functionServicesEnabled, gpm.retainedFn)
+}
+
+// SetVersionRetain wires the RFC-0025 alias-retain view's Retained method (or
+// any equivalent func) into the idle reaper's drain decision — see
+// IdleStrategy and idle.PoolDeleteStrategy.retained. Called once from
+// start.go after both the pool manager and the view exist. Not calling it
+// (e.g. in tests that construct a GenericPoolManager directly) keeps the
+// pre-RFC-0025 behaviour: every non-latest generation drains.
+func (gpm *GenericPoolManager) SetVersionRetain(retained func(uid k8sTypes.UID, gen int64) bool) {
+	gpm.retainedFn = retained
 }
 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event

@@ -195,13 +195,20 @@ type PoolDeleteStrategy struct {
 	// function-Services flag — without slices there is nothing to drain from.
 	drainBeforeDelete bool
 
+	// retained reports whether a live FunctionAlias still references a
+	// (function UID, generation) pin (RFC-0025 versionretain.View.Retained),
+	// forwarded to ListOldForPool so a non-latest generation an alias points
+	// at is not drained just because a newer generation exists. nil keeps the
+	// pre-RFC-0025 behaviour (every non-latest generation drains).
+	retained func(uid k8sTypes.UID, gen int64) bool
+
 	// Per-tick state populated by Prepare. Ticks for a strategy never overlap
 	// (wait.UntilWithContext), and Reap goroutines only read these maps.
 	envUIDs map[k8sTypes.UID]struct{}
 	fnByUID map[k8sTypes.UID]fv1.Function
 }
 
-func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface, fsCache *fscache.FunctionServiceCache, kubeClient kubernetes.Interface, reapTime, interval time.Duration, drainBeforeDelete bool) *PoolDeleteStrategy {
+func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface, fsCache *fscache.FunctionServiceCache, kubeClient kubernetes.Interface, reapTime, interval time.Duration, drainBeforeDelete bool, retained func(uid k8sTypes.UID, gen int64) bool) *PoolDeleteStrategy {
 	return &PoolDeleteStrategy{
 		logger:            logger,
 		fissionClient:     fissionClient,
@@ -210,6 +217,7 @@ func NewPoolDeleteStrategy(logger logr.Logger, fissionClient versioned.Interface
 		reapTime:          reapTime,
 		interval:          interval,
 		drainBeforeDelete: drainBeforeDelete,
+		retained:          retained,
 	}
 }
 
@@ -218,7 +226,7 @@ func (s *PoolDeleteStrategy) ExecutorType() fv1.ExecutorType { return fv1.Execut
 func (s *PoolDeleteStrategy) Interval() time.Duration        { return s.interval }
 
 func (s *PoolDeleteStrategy) ListIdle() ([]*fscache.FuncSvc, error) {
-	return s.fsCache.ListOldForPool(idleListAge)
+	return s.fsCache.ListOldForPool(idleListAge, s.retained)
 }
 
 func (s *PoolDeleteStrategy) Prepare(ctx context.Context) error {

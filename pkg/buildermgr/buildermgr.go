@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	fissionmetrics "github.com/fission/fission/pkg/utils/metrics"
+	"github.com/fission/fission/pkg/versioning"
 )
 
 const (
@@ -139,6 +140,36 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err := controller.RegisterTenantScopedWithPredicates(mgr, &fv1.Package{}, pkgReconciler, "buildermgr-package",
 		packageBuildConcurrency(), buildTriggerPredicate()); err != nil {
 		return fmt.Errorf("unable to register package reconciler: %w", err)
+	}
+
+	// RFC-0025 Phase 3: the leader-elected alias resolver. It lives in
+	// pkg/versioning (not this package) because it is a pure controller over
+	// FunctionAlias/FunctionVersion with no builder/package dependency;
+	// buildermgr hosts it purely because it is already a leader-elected
+	// Manager watching this namespace set — any single-leader Manager would do.
+	if err := versioning.RegisterAliasReconciler(mgr, bmLogger); err != nil {
+		return fmt.Errorf("unable to register function alias reconciler: %w", err)
+	}
+
+	// RFC-0025 Phase 4: the leader-elected auto-publish controller. Same
+	// rationale for living here as the alias resolver above (a pure
+	// controller with no builder/package dependency, hosted purely because
+	// this Manager is already the single leader-elected watcher of these
+	// namespaces); it additionally needs the generated clientset because the
+	// publish engine it drives (versioning.Publish) is clientset-based, not
+	// controller-runtime-client-based.
+	if err := versioning.RegisterAutoPublishReconciler(mgr, bmLogger, fissionClient); err != nil {
+		return fmt.Errorf("unable to register function auto-publish reconciler: %w", err)
+	}
+
+	// RFC-0025 Phase 4 Task 3: the leader-elected retention GC controller.
+	// Same rationale for living here as the two reconcilers above; sweeps old
+	// FunctionVersions down to each versioning-opted-in function's retain
+	// floor via the SweepVersions engine (also shared by `fission fn
+	// gc-versions`), never deleting an alias-referenced version (invariant
+	// V3; see docs/rfc/specs/aliasgc.tla).
+	if err := versioning.RegisterRetentionGCReconciler(mgr, bmLogger, fissionClient); err != nil {
+		return fmt.Errorf("unable to register function retention GC reconciler: %w", err)
 	}
 
 	// Cross-process propagation: under dynamic tenancy keep buildermgr's resolver

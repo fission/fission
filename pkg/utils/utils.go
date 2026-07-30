@@ -31,12 +31,62 @@ const (
 	ENV_DISABLE_OWNER_REFERENCES string = "DISABLE_OWNER_REFERENCES"
 )
 
+// HeaderRouteMiss marks a 404 as produced by the ROUTER'S OWN not-found path
+// on the internal listener — no /fission-function/... route matched the
+// request — as opposed to a 404 a function chose to return as its response.
+// The router sets it (value "1") ONLY in the internal mux's not-found handler
+// (pkg/router/routeshape.go, wired inside newListenerMuxes so it survives the
+// atomic mux swap) and STRIPS it from every function-proxied response
+// (functionHandler's ModifyResponse), so consumers can trust it: the async
+// deliverer's RFC-0025 version-pin fallback re-delivers to the bare-name route
+// only on a marked 404, and `fission function test` upgrades a marked 404 on a
+// `:<alias>`/`:<version>` route into the not-yet-materialized hint.
+const HeaderRouteMiss = "X-Fission-Route-Miss"
+
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {
 		prefix = fmt.Sprintf("/fission-function/%s", namespace)
 	}
 	return fmt.Sprintf("%s/%s", prefix, name)
+}
+
+// UrlForFunctionRef is UrlForFunction with a router alias/version suffix
+// (":<suffix>") appended when suffix is non-empty -- the same "name:tag"
+// grammar the router's internal `:<alias>`/`:<version>` routes register at
+// (pkg/router/routeshape.go). Callers pass a FunctionReference's Alias if
+// set, else its Version (the two are mutually exclusive -- CEL/webhook
+// enforced, see FunctionReference's doc comment in pkg/apis/core/v1/types.go);
+// a bare reference (neither set) gets exactly UrlForFunction's result.
+//
+// This exists so every RFC-0025-aware publisher (timer, kubewatcher,
+// mqtrigger's kafka/statestore/scalermanager backends) builds the suffixed
+// URL the same one way, rather than five copies of the same
+// `if suffix != "" { url += ":" + suffix }` -- resolution of what the suffix
+// actually routes to stays entirely router-side; publishers only ever build
+// a URL string.
+func UrlForFunctionRef(name, namespace, suffix string) string {
+	url := UrlForFunction(name, namespace)
+	if suffix != "" {
+		url += ":" + suffix
+	}
+	return url
+}
+
+// UrlForFunctionReference is UrlForFunctionRef with the alias/version suffix
+// selection folded in: it reads ref.Alias, falling back to ref.Version, and
+// builds the URL in one call. The two fields are mutually exclusive
+// (CEL/webhook enforced -- see FunctionReference's doc comment in
+// pkg/apis/core/v1/types.go), so this is the one place that picks between
+// them; every RFC-0025-aware publisher (timer, kubewatcher, mqtrigger's
+// kafka/statestore/scalermanager backends) should call this instead of
+// repeating the alias-else-version selection at the call site.
+func UrlForFunctionReference(ref fv1.FunctionReference, namespace string) string {
+	suffix := ref.Alias
+	if suffix == "" {
+		suffix = ref.Version
+	}
+	return UrlForFunctionRef(ref.Name, namespace, suffix)
 }
 
 // GetFunctionIstioServiceName return service name of function for istio feature

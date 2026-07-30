@@ -81,6 +81,24 @@ func TestProxyInvokeFoldsDefaultNamespace(t *testing.T) {
 	assert.Equal(t, "/fission-function/fn", gotPath, "default namespace must be folded out of the path")
 }
 
+// TestProxyInvokeAliasSuffix asserts an alias-addressed ToolEntry (RFC-0025)
+// proxies to the ":<alias>" internal route instead of the live function's
+// bare route.
+func TestProxyInvokeAliasSuffix(t *testing.T) {
+	t.Parallel()
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	_, err := p.Invoke(context.Background(), ToolEntry{Namespace: "ns", FnName: "fn", Alias: "blue"}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "/fission-function/ns/fn:blue", gotPath)
+}
+
 func TestProxyInvokeUnsignedWhenNoMaster(t *testing.T) {
 	t.Parallel()
 	var gotSig string

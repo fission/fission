@@ -87,6 +87,22 @@ type (
 		isDebugEnv  bool
 		funcTimeout time.Duration
 		policy      proxyPolicy // resolved once in handler; drives streaming behavior
+		// stickyKey is the RFC-0023 sticky routing key, precomputed ONCE by
+		// functionHandler.handler() (RFC-0025 Task 5) from the route's
+		// stickySource -- before any per-request weighted pick -- and passed
+		// down here unchanged. RoundTrip consumes it as-is rather than
+		// recomputing from fn (the chosen backend): recomputing here could
+		// disagree with the key the weighted pick already used, corrupting
+		// the pick/admit consistency invariant. "" means unkeyed (not
+		// sticky-declared, or the declared key was absent from the request).
+		stickyKey string
+		// bases is fn's hoisted functionURLBases result (RFC-0014-style,
+		// see functionHandler.basesFor), precomputed by functionHandler.handler()
+		// before RoundTrip is ever called. nil when a caller builds a
+		// RetryingRoundTripper directly without going through functionHandler
+		// (test harnesses) -- RoundTrip falls back to deriving it from fn on
+		// the spot in that case.
+		bases []string
 
 		closeContextFunc *context.CancelFunc
 		serviceURL       *url.URL
@@ -151,9 +167,11 @@ func (roundTripper *RetryingRoundTripper) settle(release func(), tapURL *url.URL
 func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
-	// RFC-0023 sticky routing: extract the declared key once — it is stable
-	// across the retry loop, and every re-resolve should rank the same owner.
-	stickyKey := stickyKeyFromRequest(roundTripper.fn, req)
+	// RFC-0023 sticky routing: the key is precomputed by functionHandler.
+	// handler() (RFC-0025 Task 5, see the stickyKey field doc) and stable
+	// across the retry loop, so every re-resolve ranks the same owner AND
+	// agrees with whatever weighted pick already consumed it.
+	stickyKey := roundTripper.stickyKey
 
 	// set the timeout for transport context
 	addForwardedHostHeader(req)
@@ -280,7 +298,14 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 
 			// rewrite the request to reflect the service url (which comes from
 			// the executor response) and the trigger's prefix specification.
-			rewriteFunctionURL(logger, req, roundTripper.trigger, fnMeta, roundTripper.serviceURL)
+			// bases is normally already hoisted (functionHandler.handler());
+			// the nil fallback only fires for a RetryingRoundTripper built
+			// directly (test harnesses bypassing functionHandler).
+			bases := roundTripper.bases
+			if bases == nil {
+				bases = functionURLBases(fnMeta)
+			}
+			rewriteFunctionURL(logger, req, roundTripper.trigger, bases, roundTripper.serviceURL)
 		}
 
 		// Do NOT assign returned request to "req"

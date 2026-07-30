@@ -12,10 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func TestHTTPDelivererDelivers(t *testing.T) {
@@ -33,7 +35,7 @@ func TestHTTPDelivererDelivers(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	env := Envelope{
 		Namespace: "ns", Function: "fn", Method: http.MethodPut, Query: "a=1",
 		Headers: map[string]string{"Content-Type": "application/json", "X-Request-Id": "r1"},
@@ -63,7 +65,7 @@ func TestHTTPDelivererCapturesAndTruncatesBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	// A destination is declared, so the response body is captured for the result
 	// envelope — and flagged truncated when it exceeds the cap.
 	env := Envelope{Namespace: "ns", Function: "fn", OnSuccess: &Destination{FunctionName: "next"}}
@@ -84,7 +86,7 @@ func TestHTTPDelivererSkipsBodyWithoutDestination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
 	require.NoError(t, res.Err)
 	assert.Equal(t, http.StatusOK, res.StatusCode)
@@ -105,7 +107,7 @@ func TestHTTPDelivererCapturesOnlyFiringDestinationBody(t *testing.T) {
 		}))
 		defer srv.Close()
 		env.Namespace, env.Function = "ns", "fn"
-		return NewHTTPDeliverer(srv.URL, nil, nil).Deliver(context.Background(), env, "id", 1).Body
+		return NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard()).Deliver(context.Background(), env, "id", 1).Body
 	}
 	onSuccess := Envelope{OnSuccess: &Destination{FunctionName: "s"}}
 	onFailure := Envelope{OnFailure: &Destination{FunctionName: "f"}}
@@ -124,7 +126,7 @@ func TestHTTPDelivererDefaultNamespaceFold(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	d.Deliver(context.Background(), Envelope{Namespace: "default", Function: "fn"}, "id", 1)
 	assert.Equal(t, "/fission-function/fn", gotPath, "default namespace folds (matches the registered route)")
 }
@@ -137,7 +139,7 @@ func TestHTTPDelivererMethodDefaultsPost(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	d := NewHTTPDeliverer(srv.URL, nil, nil)
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1) // Method empty
 	assert.Equal(t, http.MethodPost, gotMethod)
 }
@@ -148,7 +150,7 @@ func TestHTTPDelivererTransportError(t *testing.T) {
 	url := srv.URL
 	srv.Close() // now unreachable → dial error
 
-	d := NewHTTPDeliverer(url, nil, nil)
+	d := NewHTTPDeliverer(url, nil, nil, logr.Discard())
 	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "fn"}, "id", 1)
 	assert.Error(t, res.Err, "a transport failure sets Err")
 	assert.Zero(t, res.StatusCode)
@@ -170,16 +172,169 @@ func TestHTTPDelivererHMACAcceptedByVerifier(t *testing.T) {
 
 	env := Envelope{Namespace: "ns", Function: "fn", Body: []byte("x")}
 
-	signed := NewHTTPDeliverer(srv.URL, master, nil)
+	signed := NewHTTPDeliverer(srv.URL, master, nil, logr.Discard())
 	res := signed.Deliver(context.Background(), env, "id", 1)
 	require.NoError(t, res.Err)
 	assert.Equal(t, http.StatusOK, res.StatusCode, "signed delivery accepted")
 	assert.True(t, reached)
 
 	reached = false
-	unsigned := NewHTTPDeliverer(srv.URL, nil, nil)
+	unsigned := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
 	res = unsigned.Deliver(context.Background(), env, "id", 1)
 	require.NoError(t, res.Err) // a rejection is an HTTP status, not a transport error
 	assert.NotEqual(t, http.StatusOK, res.StatusCode, "unsigned delivery rejected")
 	assert.False(t, reached, "unsigned delivery blocked before the handler")
+}
+
+// TestHTTPDelivererVersionPinned_TargetsVersionedRoute proves a
+// FunctionVersion-pinned envelope (RFC-0025 Task 5) is delivered at the
+// `:<version>` suffixed internal route, not the bare function route.
+func TestHTTPDelivererVersionPinned_TargetsVersionedRoute(t *testing.T) {
+	t.Parallel()
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{Namespace: "ns", Function: "hello", FunctionVersion: "hello-v1"}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Equal(t, "/fission-function/ns/hello:hello-v1", gotPath, "delivers at the versioned route")
+}
+
+// TestHTTPDelivererVersionPinned_FallsBackOnMarkedNotFound proves the RFC-0025
+// Task 5 GC'd-route recovery: a route-miss-MARKED 404 on the versioned route
+// (utils.HeaderRouteMiss, stamped only by the router's own internal-listener
+// not-found handler) retries immediately against the bare function route,
+// within the SAME attempt (the caller sees exactly one DeliveryResult, and it
+// reflects the bare route's outcome, not the 404).
+func TestHTTPDelivererVersionPinned_FallsBackOnMarkedNotFound(t *testing.T) {
+	t.Parallel()
+	var gotPaths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPaths = append(gotPaths, r.URL.Path)
+		if strings.Contains(r.URL.Path, ":") {
+			// Versioned route GC'd: the router's own not-found handler stamps
+			// the route-miss marker on its 404.
+			w.Header().Set(utils.HeaderRouteMiss, "1")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK) // bare route still serves
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{Namespace: "ns", Function: "hello", FunctionVersion: "hello-vGONE"}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusOK, res.StatusCode, "the fallback attempt's outcome is what the caller sees")
+	require.Len(t, gotPaths, 2, "exactly two HTTP attempts: versioned then bare, within one Deliver call")
+	assert.Equal(t, "/fission-function/ns/hello:hello-vGONE", gotPaths[0])
+	assert.Equal(t, "/fission-function/ns/hello", gotPaths[1])
+}
+
+// TestHTTPDelivererVersionPinned_MarkedNotFoundFallsBackExactlyOnce proves the
+// fallback cannot cascade: when the BARE route's response is also a marked 404
+// (function deleted entirely, both routes gone), the deliverer stops after the
+// single fallback — two HTTP attempts total, and the caller sees the 404 to
+// settle through the normal matrix (dead-letter), not a retry loop.
+func TestHTTPDelivererVersionPinned_MarkedNotFoundFallsBackExactlyOnce(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set(utils.HeaderRouteMiss, "1")
+		w.WriteHeader(http.StatusNotFound) // every route is a route miss
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{Namespace: "ns", Function: "hello", FunctionVersion: "hello-vGONE"}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusNotFound, res.StatusCode)
+	assert.Equal(t, 2, attempts, "exactly one fallback: versioned then bare, never a third attempt")
+}
+
+// TestHTTPDelivererVersionPinned_NoFallbackOnPlainFunction404 is the C6
+// regression guard: a PLAIN 404 — no route-miss marker — is the FUNCTION'S own
+// response (the versioned route exists and served the request; the function's
+// business logic answered 404), so the deliverer must deliver exactly ONCE and
+// relay the 404 into the normal non-2xx settle path (body captured for the
+// OnFailure destination, classify → dead-letter), never re-deliver to the
+// bare-name route. Pre-fix, this scenario double-invoked the function's
+// non-idempotent side effects on every version-pinned async delivery.
+func TestHTTPDelivererVersionPinned_NoFallbackOnPlainFunction404(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNotFound) // the function's own "entity not found"
+		_, _ = io.WriteString(w, `{"error":"no such entity"}`)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{
+		Namespace: "ns", Function: "lookup", FunctionVersion: "lookup-v3",
+		OnFailure: &Destination{FunctionName: "on-fail"},
+	}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, 1, attempts, "a plain function 404 must be delivered exactly once — no bare-route fallback (the pre-fix double invocation)")
+	assert.Equal(t, "/fission-function/ns/lookup:lookup-v3", gotPath, "the one delivery went to the versioned route")
+	assert.Equal(t, http.StatusNotFound, res.StatusCode, "the function's 404 is relayed as-is into the settle matrix")
+	assert.Equal(t, []byte(`{"error":"no such entity"}`), res.Body, "non-2xx body captured for OnFailure, like any other function error status")
+	assert.Equal(t, actionKill, classify(res), "settles like any permanent 4xx: dead-letter, not retry/fallback")
+}
+
+// TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus proves the fallback
+// is scoped to exactly a route-miss-marked 404 on the versioned route -- any
+// OTHER status (this test uses 500) is relayed as-is, with only ONE attempt.
+// (The plain-404-vs-marked-404 distinction has its own tests above; this one
+// pins the status gate.)
+func TestHTTPDelivererVersionPinned_NoFallbackOnOtherStatus(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	env := Envelope{Namespace: "ns", Function: "hello", FunctionVersion: "hello-v1"}
+	res := d.Deliver(context.Background(), env, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusInternalServerError, res.StatusCode)
+	assert.Equal(t, 1, attempts, "a non-404 status is relayed without a fallback attempt")
+}
+
+// TestHTTPDelivererUnversioned_NoFallbackMachinery proves an unversioned
+// envelope (FunctionVersion == "", the pre-Task-5 shape) is unaffected: one
+// attempt at the bare route, even on a 404 (nothing to fall back to).
+func TestHTTPDelivererUnversioned_NoFallbackMachinery(t *testing.T) {
+	t.Parallel()
+	var attempts int
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	d := NewHTTPDeliverer(srv.URL, nil, nil, logr.Discard())
+	res := d.Deliver(context.Background(), Envelope{Namespace: "ns", Function: "hello"}, "id", 1)
+	require.NoError(t, res.Err)
+	assert.Equal(t, http.StatusNotFound, res.StatusCode)
+	assert.Equal(t, 1, attempts)
+	assert.Equal(t, "/fission-function/ns/hello", gotPath)
 }
