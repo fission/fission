@@ -33,12 +33,17 @@ func newScheduleCronParser() cron.Parser {
 // are drawn from small fixed grammars rather than free text, so the budget
 // is spent on window-arithmetic edge cases instead of bouncing off parse
 // errors (see plan Stage 1, section 1a).
-func genWindow(t *rapid.T, namePrefix string) fv1.ProvisionedWindow {
+func genWindow(t *rapid.T, namePrefix string, forceTZ bool) fv1.ProvisionedWindow {
 	minute := rapid.SampledFrom([]string{"0", "15", "30", "45", "*"}).Draw(t, "minute")
 	hour := rapid.SampledFrom([]string{"0", "9", "13", "23", "*"}).Draw(t, "hour")
 	dow := rapid.SampledFrom([]string{"*", "6", "0,6", "1-5"}).Draw(t, "dow")
 	cronBody := minute + " " + hour + " * * " + dow
-	tzPrefix := rapid.SampledFrom([]string{"", "CRON_TZ=UTC", "CRON_TZ=America/New_York", "CRON_TZ=Asia/Kolkata"}).Draw(t, "tzPrefix")
+	tzPrefix := ""
+	if forceTZ {
+		tzPrefix = rapid.SampledFrom([]string{"CRON_TZ=UTC", "CRON_TZ=America/New_York", "CRON_TZ=Asia/Kolkata"}).Draw(t, "tzPrefix")
+	} else {
+		tzPrefix = rapid.SampledFrom([]string{"", "CRON_TZ=UTC", "CRON_TZ=America/New_York", "CRON_TZ=Asia/Kolkata"}).Draw(t, "tzPrefix")
+	}
 	cronString := ""
 	if tzPrefix == "" {
 		cronString = cronBody
@@ -65,7 +70,7 @@ func drawWindows(t *rapid.T, namePrefix string, max int) []fv1.ProvisionedWindow
 	windows := []fv1.ProvisionedWindow{}
 	n := rapid.IntRange(0, max).Draw(t, "numWindows")
 	for range n {
-		windows = append(windows, genWindow(t, namePrefix))
+		windows = append(windows, genWindow(t, namePrefix, false))
 	}
 	return windows
 }
@@ -131,7 +136,7 @@ func drawHostileOrWideInstant(t *rapid.T) time.Time {
 
 func TestGenWindowProducesParseableWindows(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		window := genWindow(t, "smoke")
+		window := genWindow(t, "smoke", false)
 		require.NoError(t, fv1.IsValidCronSpec(window.Start))
 		dur, err := time.ParseDuration(window.Duration)
 		require.NoError(t, err)
@@ -387,7 +392,7 @@ func TestWindowActiveAtOracle(t *testing.T) {
 // and the oracle must agree on whether the window is open.
 func TestWindowActiveAtMatchesOracle(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		window := genWindow(t, "p1")
+		window := genWindow(t, "p1", false)
 		now := drawInstantNearFire(t, window)
 		gotOracle, oracleErr := windowActiveAtOracle(window, now)
 		gotProd, prodErr := windowActiveAt(window, now)
@@ -445,7 +450,7 @@ func TestEffectiveTargetAtMatchesMaxOpenWindowTarget(t *testing.T) {
 func TestScheduleEvaluationIsTotal(t *testing.T) {
 	// windowActiveAt is total
 	rapid.Check(t, func(t *rapid.T) {
-		window := genWindow(t, "p2")
+		window := genWindow(t, "p2", false)
 		now := drawHostileOrWideInstant(t)
 		_, err := windowActiveAt(window, now)
 		require.NoError(t, err)
@@ -465,6 +470,16 @@ func TestScheduleEvaluationIsTotal(t *testing.T) {
 	})
 }
 
+// TestEffectiveTargetAtIsOrderAndDuplicateInvariant is property 4 (Stage 1):
+// the effective target must not depend on the order windows are listed in
+// (a config comes from a CRD list, whose order is not meaningful), and must
+// not change if a window happens to appear twice. Both halves self-compare
+// against the original config rather than using the oracle, since what's
+// being checked is invariance under a transformation, not correctness
+// against ground truth. The duplicate check deliberately builds its list
+// from the original (unshuffled) windows, not the already-shuffled ones, so
+// a failure there can only mean duplicate-handling is broken — not a
+// leftover order-handling bug resurfacing under a different shuffle.
 func TestEffectiveTargetAtIsOrderAndDuplicateInvariant(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		windows := drawWindows(t, "p4", 4)
@@ -509,5 +524,42 @@ func TestEffectiveTargetAtIsOrderAndDuplicateInvariant(t *testing.T) {
 		require.Equal(t, 0, len(errs))
 
 		require.Equal(t, originalTarget, dupTarget)
+	})
+}
+
+// TestWindowActiveAtIsTimezoneInvariantForPrefixedSpecs is property 5
+// (Stage 1): windowActiveAt is deterministic (same inputs, same output every
+// time), and a window whose cron carries an explicit CRON_TZ prefix must
+// answer the same way regardless of what time.Location the passed-in instant
+// happens to be expressed in — the same real moment, relabeled, must not
+// change the answer, since the spec named its own timezone explicitly.
+//
+// This invariance is deliberately NOT asserted for un-prefixed specs. An
+// un-prefixed cron is evaluated in whatever location the passed-in instant
+// carries — i.e. it follows the caller's (in production, the executor
+// process's) timezone. That is intended, documented behaviour, not a gap:
+// users who want a fixed zone write CRON_TZ=. Only prefixed specs get the
+// invariance check here.
+func TestWindowActiveAtIsTimezoneInvariantForPrefixedSpecs(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		window := genWindow(t, "p5", true)
+		instant := drawHostileOrWideInstant(t)
+		location := rapid.SampledFrom([]string{"UTC", "America/New_York", "Asia/Kolkata", "Australia/Lord_Howe"}).Draw(t, "location")
+		otherLoc, err := time.LoadLocation(location)
+		require.NoError(t, err)
+		instantOther := instant.In(otherLoc)
+		w1, err := windowActiveAt(window, instant)
+		require.NoError(t, err)
+		w2, err := windowActiveAt(window, instantOther)
+		require.NoError(t, err)
+		require.Equal(t, w1, w2, "window=%+v instant=%s otherLoc=%s", window, instant, otherLoc)
+
+		// trivial determinisim
+		wA, err := windowActiveAt(window, instant)
+		require.NoError(t, err)
+		wB, err := windowActiveAt(window, instant)
+		require.NoError(t, err)
+
+		require.Equal(t, wA, wB, "window=%+v instant=%s", window, instant)
 	})
 }
