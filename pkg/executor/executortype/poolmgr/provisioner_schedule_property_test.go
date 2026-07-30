@@ -29,6 +29,25 @@ func newScheduleCronParser() cron.Parser {
 	return cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 }
 
+func genDenseWindow(t *rapid.T, namePrefix string) fv1.ProvisionedWindow {
+	second := rapid.SampledFrom([]string{"*", "*/5", "*/10"}).Draw(t, "second")
+	minute := "*"
+	hour := "*"
+	dow := "*"
+	cronString := second + " " + minute + " " + hour + " * * " + dow
+	duration := rapid.SampledFrom([]string{"300h", "500h", "800h", "1000h"}).Draw(t, "duration")
+	target := rapid.IntRange(0, 10).Draw(t, "target")
+	id := uuid.New().String()
+	short := id[:6]
+	name := fmt.Sprintf("%s-%s", namePrefix, short)
+	return fv1.ProvisionedWindow{
+		Name:     name,
+		Start:    cronString,
+		Duration: duration,
+		Target:   target,
+	}
+}
+
 // genWindow draws one random, always-valid ProvisionedWindow. Cron fields
 // are drawn from small fixed grammars rather than free text, so the budget
 // is spent on window-arithmetic edge cases instead of bouncing off parse
@@ -448,25 +467,29 @@ func TestEffectiveTargetAtMatchesMaxOpenWindowTarget(t *testing.T) {
 // effectiveTargetAt must return (never panic, never hang) for any instant,
 // however hostile, and effectiveTargetAt's result must never be negative.
 func TestScheduleEvaluationIsTotal(t *testing.T) {
-	// windowActiveAt is total
-	rapid.Check(t, func(t *rapid.T) {
-		window := genWindow(t, "p2", false)
-		now := drawHostileOrWideInstant(t)
-		_, err := windowActiveAt(window, now)
-		require.NoError(t, err)
+	t.Run("windowActiveAtIsTotal", func(t *testing.T) {
+		// windowActiveAt is total
+		rapid.Check(t, func(t *rapid.T) {
+			window := genWindow(t, "p2", false)
+			now := drawHostileOrWideInstant(t)
+			_, err := windowActiveAt(window, now)
+			require.NoError(t, err)
+		})
 	})
-	// effectiveTargetAt is total
-	rapid.Check(t, func(t *rapid.T) {
-		windows := drawWindows(t, "p3", 4)
-		target := rapid.IntRange(1, 10).Draw(t, "target")
-		pcConfig := fv1.ProvisionedConcurrencyConfig{
-			Target:  target,
-			Windows: windows,
-		}
-		now := drawHostileOrWideInstant(t)
-		gotTarget, errs := effectiveTargetAt(&pcConfig, now)
-		require.Equal(t, 0, len(errs))
-		require.GreaterOrEqual(t, gotTarget, 0)
+	t.Run("effectiveTargetAtIsTotal", func(t *testing.T) {
+		// effectiveTargetAt is total
+		rapid.Check(t, func(t *rapid.T) {
+			windows := drawWindows(t, "p3", 4)
+			target := rapid.IntRange(1, 10).Draw(t, "target")
+			pcConfig := fv1.ProvisionedConcurrencyConfig{
+				Target:  target,
+				Windows: windows,
+			}
+			now := drawHostileOrWideInstant(t)
+			gotTarget, errs := effectiveTargetAt(&pcConfig, now)
+			require.Equal(t, 0, len(errs))
+			require.GreaterOrEqual(t, gotTarget, 0)
+		})
 	})
 }
 
@@ -554,12 +577,31 @@ func TestWindowActiveAtIsTimezoneInvariantForPrefixedSpecs(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, w1, w2, "window=%+v instant=%s otherLoc=%s", window, instant, otherLoc)
 
-		// trivial determinisim
+		// trivial determinism
 		wA, err := windowActiveAt(window, instant)
 		require.NoError(t, err)
 		wB, err := windowActiveAt(window, instant)
 		require.NoError(t, err)
 
 		require.Equal(t, wA, wB, "window=%+v instant=%s", window, instant)
+	})
+}
+
+// TestWindowActiveAtCapsDenseCronAsActive is property 6 (Stage 1): when a
+// window's cron fires far more often than its duration lasts, the walk to
+// find the most recent fire hits lastSched's maxScheduleIterations cap, and
+// windowActiveAt must report the window as active in that case (the give-up
+// path's documented contract — a cron this dense can never fully close).
+// genDenseWindow forces minute and hour to "*" and picks a duration large
+// enough to guarantee the cap is hit across several second-level densities
+// (*, */5, */10), so the give-up path's return value is exercised under more
+// than the one hand-picked shape the existing example test covers.
+func TestWindowActiveAtCapsDenseCronAsActive(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		window := genDenseWindow(t, "p6")
+		instant := drawUniformInstant(t)
+		got, err := windowActiveAt(window, instant)
+		require.NoError(t, err)
+		require.True(t, got, "window=%+v instant=%s", window, instant)
 	})
 }
