@@ -6,6 +6,7 @@ package poolmgr
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -603,5 +604,65 @@ func TestWindowActiveAtCapsDenseCronAsActive(t *testing.T) {
 		got, err := windowActiveAt(window, instant)
 		require.NoError(t, err)
 		require.True(t, got, "window=%+v instant=%s", window, instant)
+	})
+}
+
+// runMalformedWindowSubtest is the shared body for property 7's three
+// malformation kinds: draw a valid config, record its baseline target,
+// corrupt a copy of one existing window via corrupt, insert that copy at a
+// random position, and require the target is unchanged and exactly one
+// error names the bad window.
+func runMalformedWindowSubtest(t *testing.T, corrupt func(*fv1.ProvisionedWindow)) {
+	rapid.Check(t, func(t *rapid.T) {
+		windows := drawWindows(t, "p7", 4)
+		baseTarget := rapid.IntRange(0, 10).Draw(t, "baseTarget")
+		cfg := fv1.ProvisionedConcurrencyConfig{
+			Target:  baseTarget,
+			Windows: windows,
+		}
+		instant := drawUniformInstant(t)
+		originalTarget, errs := effectiveTargetAt(&cfg, instant)
+		require.Equal(t, 0, len(errs))
+
+		if len(windows) == 0 {
+			return
+		}
+		randIndex := rapid.IntRange(0, len(windows)-1).Draw(t, "randIndex")
+		randWindow := windows[randIndex]
+		corrupt(&randWindow)
+		randInsert := rapid.IntRange(0, len(windows)).Draw(t, "randInsert")
+		windows = slices.Insert(windows, randInsert, randWindow)
+		cfgNew := fv1.ProvisionedConcurrencyConfig{
+			Target:  baseTarget,
+			Windows: windows,
+		}
+		newTarget, errs := effectiveTargetAt(&cfgNew, instant)
+		require.Equal(t, 1, len(errs))
+		require.Contains(t, errs[0].Error(), randWindow.Name)
+		require.Equal(t, originalTarget, newTarget, "cfg=%+v newcfg=%+v instant=%s", cfg, cfgNew, instant)
+	})
+}
+
+// TestEffectiveTargetAtIsolatesMalformedWindow is property 7 (Stage 1): a
+// single malformed window injected anywhere into an otherwise-valid config
+// must not change the effective target, and must appear as exactly one
+// named error — one bad window (unparseable cron, unparseable duration, or
+// non-positive duration; three separate failure paths in windowActiveAt)
+// must never take down evaluation of the rest of the config.
+func TestEffectiveTargetAtIsolatesMalformedWindow(t *testing.T) {
+	t.Run("ZeroDuration", func(t *testing.T) {
+		runMalformedWindowSubtest(t, func(w *fv1.ProvisionedWindow) {
+			w.Duration = "0"
+		})
+	})
+	t.Run("BadDuration", func(t *testing.T) {
+		runMalformedWindowSubtest(t, func(w *fv1.ProvisionedWindow) {
+			w.Duration = "BadDuration"
+		})
+	})
+	t.Run("BadCron", func(t *testing.T) {
+		runMalformedWindowSubtest(t, func(w *fv1.ProvisionedWindow) {
+			w.Start = "BadCron"
+		})
 	})
 }
