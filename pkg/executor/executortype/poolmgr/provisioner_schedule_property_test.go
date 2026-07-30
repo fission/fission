@@ -464,3 +464,50 @@ func TestScheduleEvaluationIsTotal(t *testing.T) {
 		require.GreaterOrEqual(t, gotTarget, 0)
 	})
 }
+
+func TestEffectiveTargetAtIsOrderAndDuplicateInvariant(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		windows := drawWindows(t, "p4", 4)
+		baseTarget := rapid.IntRange(0, 10).Draw(t, "baseTarget")
+		var instant time.Time
+		if len(windows) > 0 {
+			index := rapid.IntRange(0, len(windows)-1).Draw(t, "index")
+			instant = drawInstantNearFire(t, windows[index])
+		} else {
+			instant = drawUniformInstant(t)
+		}
+		cfgOriginal := fv1.ProvisionedConcurrencyConfig{
+			Target:  baseTarget,
+			Windows: windows,
+		}
+		originalTarget, errs := effectiveTargetAt(&cfgOriginal, instant)
+		require.Equal(t, 0, len(errs))
+		if len(windows) == 0 {
+			return
+		}
+
+		// shuffle windows
+		shuffledWindows := rapid.Permutation(windows).Draw(t, "shuffledWindows")
+		cfgShuffled := fv1.ProvisionedConcurrencyConfig{
+			Target:  baseTarget,
+			Windows: shuffledWindows,
+		}
+		shuffledTarget, errs := effectiveTargetAt(&cfgShuffled, instant)
+		require.Equal(t, 0, len(errs))
+
+		require.Equal(t, originalTarget, shuffledTarget)
+
+		dupIndex := rapid.IntRange(0, len(windows)-1).Draw(t, "dupIndex")
+		windows = append(windows, windows[dupIndex])
+
+		cfgDupe := fv1.ProvisionedConcurrencyConfig{
+			Target:  baseTarget,
+			Windows: windows,
+		}
+		dupTarget, errs := effectiveTargetAt(&cfgDupe, instant)
+
+		require.Equal(t, 0, len(errs))
+
+		require.Equal(t, originalTarget, dupTarget)
+	})
+}
