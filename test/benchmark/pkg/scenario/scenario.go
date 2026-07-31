@@ -459,6 +459,13 @@ const (
 // pool). methods controls the route's allowed HTTP methods. The returned
 // fnName feeds per-function PromQL (e.g. the cold-start counter delta).
 func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, runtime warmRuntime, poolsize, requestsPerPod int, methods []string) (route, fnName string, err error) {
+	return provisionWarmFunctionNamed(ctx, sc, "", executor, runtime, poolsize, requestsPerPod, methods)
+}
+
+// provisionWarmFunctionNamed is provisionWarmFunction with a name prefix, for
+// scenarios that provision more than one function in the same scope (scope
+// names are label+run scoped, so two unprefixed calls collide on "env"/"fn").
+func provisionWarmFunctionNamed(ctx context.Context, sc *harness.Scope, prefix string, executor fv1.ExecutorType, runtime warmRuntime, poolsize, requestsPerPod int, methods []string) (route, fnName string, err error) {
 	env := sc.Env()
 	image, code, entrypoint := env.Images.Python, pythonHello, "main"
 	if runtime == runtimeNode {
@@ -468,7 +475,7 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.
 	if image == "" {
 		return "", "", skip("runtime image unset (PYTHON_RUNTIME_IMAGE / NODE_RUNTIME_IMAGE)")
 	}
-	envName := sc.Name("env")
+	envName := sc.Name(prefix + "env")
 	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: image, Version: 1, Poolsize: poolsize}); err != nil {
 		return "", "", err
 	}
@@ -476,7 +483,7 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.
 	if executor != fv1.ExecutorTypePoolmgr {
 		minScale = 1
 	}
-	fnName = sc.Name("fn")
+	fnName = sc.Name(prefix + "fn")
 	route = "/" + fnName
 	if err = sc.CreateCodeFunction(ctx, harness.FunctionOptions{
 		Name: fnName, Env: envName, Code: []byte(code), Entrypoint: entrypoint,

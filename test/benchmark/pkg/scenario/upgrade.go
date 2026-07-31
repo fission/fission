@@ -106,11 +106,11 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	// Fixtures on the still-old control plane. The poolmgr route also takes
 	// POST so the async batch can reuse it.
 	methods := []string{http.MethodGet, http.MethodPost}
-	poolRoute, poolFn, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypePoolmgr, runtimeNode, u.poolsize, 500, methods)
+	poolRoute, poolFn, err := provisionWarmFunctionNamed(ctx, sc, "pm-", fv1.ExecutorTypePoolmgr, runtimeNode, u.poolsize, 500, methods)
 	if err != nil {
 		return res, err
 	}
-	ndRoute, ndFn, err := provisionWarmFunction(ctx, sc, fv1.ExecutorTypeNewdeploy, runtimeNode, u.poolsize, 500, methods)
+	ndRoute, ndFn, err := provisionWarmFunctionNamed(ctx, sc, "nd-", fv1.ExecutorTypeNewdeploy, runtimeNode, u.poolsize, 500, methods)
 	if err != nil {
 		return res, err
 	}
