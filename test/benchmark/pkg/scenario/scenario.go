@@ -491,7 +491,7 @@ func provisionWarmFunctionNamed(ctx context.Context, sc *harness.Scope, prefix s
 	}); err != nil {
 		return "", "", err
 	}
-	if err = sc.CreateRoute(ctx, harness.RouteOptions{Function: fnName, URL: route, Methods: methods}); err != nil {
+	if err = sc.CreateRoute(ctx, harness.RouteOptions{Name: sc.Name(prefix + "route"), Function: fnName, URL: route, Methods: methods}); err != nil {
 		return "", "", err
 	}
 	if err = env.WaitForRoutable(ctx, route, 3*time.Minute); err != nil {
