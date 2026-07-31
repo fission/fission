@@ -26,7 +26,7 @@ require (
 	github.com/minio/minio-go/v7 v7.2.0
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.0
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/ohler55/ojg v1.28.2
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.24.1
