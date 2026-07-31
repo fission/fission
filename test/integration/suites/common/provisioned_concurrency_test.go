@@ -268,7 +268,7 @@ func TestProvisionedScheduledWindowCloseReapsPods(t *testing.T) {
 		ExecutorType:           "poolmgr",
 		ProvisionedConcurrency: 1,
 		ProvisionedSchedules: []string{
-			"name=w1;start=0 */6 * * * *;duration=15s;target=3",
+			"name=w1;start=0 */4 * * * *;duration=15s;target=3",
 		},
 		IdleTimeout: 20,
 		FnTimeout:   5,
@@ -281,8 +281,8 @@ func TestProvisionedScheduledWindowCloseReapsPods(t *testing.T) {
 
 	// floor raised 1->3 via scheduled window
 	t.Log("provisioner warms 3 pods without traffic")
-	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 3, 7*time.Minute)
-	ns.WaitForProvisionedStatus(t, ctx, fnName, 3, 3, 7*time.Minute)
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 3, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 3, 3, 5*time.Minute)
 	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
 	// Warm smoke: the function serves.
 	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
