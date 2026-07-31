@@ -35,7 +35,7 @@ require (
 	github.com/prometheus/otlptranslator v1.0.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
-	github.com/sanketsudake/go-portless v0.3.0
+	github.com/sanketsudake/go-portless v0.4.0
 	github.com/sanketsudake/go-portless/k8s v0.3.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
