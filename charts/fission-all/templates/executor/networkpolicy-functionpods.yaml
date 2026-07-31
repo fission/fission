@@ -35,11 +35,16 @@ spec:
     # executor → fetcher sidecar (POST /specialize), and executor → env
     # runtime (POST /v2/specialize) for poolmgr image-volume pods
     # (RFC-0001 Path B), which carry no fetcher to relay the load call
-    # (newdeploy Path B pods keep theirs). executor
-    # runs in the release namespace; namespaceSelector: {} permits
-    # cross-ns because this policy lives in functionNamespace.
+    # (newdeploy Path B pods keep theirs). executor runs in the release
+    # namespace, which may differ from functionNamespace (where this
+    # policy lives), so the namespaceSelector names it explicitly. The
+    # namespaceSelector and podSelector are entries of ONE from element,
+    # so they AND: a pod merely labelled `svc: executor` in any other
+    # namespace does not match.
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               svc: executor
@@ -51,9 +56,11 @@ spec:
     # router → env runtime (user-trigger traffic). Router resolves the
     # function's service URL via executor.GetServiceForFunction and then
     # proxies on the env's port (8888). Router is in the release
-    # namespace; same cross-ns rationale as above.
+    # namespace; same AND-of-selectors shape as above.
     - from:
-        - namespaceSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
           podSelector:
             matchLabels:
               application: fission-router
