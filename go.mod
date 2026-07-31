@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.50.3
+	github.com/IBM/sarama v1.60.1
 	github.com/anishathalye/porcupine v1.3.0
 	github.com/bep/debounce v1.2.1
 	github.com/coder/websocket v1.8.15
