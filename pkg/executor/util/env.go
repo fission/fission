@@ -16,7 +16,7 @@ import (
 // the named runtime container of an already-merged pod spec. It must run
 // AFTER every MergeContainer/MergePodSpec call so no later merge can reorder
 // the result. No-op when the function declares neither Env nor EnvFrom, which
-// keeps pre-RFC pod specs byte-identical (E6).
+// keeps pod specs byte-identical for every function that predates the fields.
 //
 // Ordering delivers the guarantee (not validation): the container's existing
 // env — the environment podspec's merged entries plus the platform vars the

@@ -10,7 +10,9 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
@@ -106,4 +108,34 @@ func splitEnvSourceRef(flagName, ref string) (objName, key, envName string, err 
 		return "", "", "", fmt.Errorf("--%s %q has an empty :ENV rename", flagName, ref)
 	}
 	return objName, key, envName, nil
+}
+
+// applyFunctionEnvFlags applies the three RFC-0030 env flags to fn, replacing
+// Spec.Env and Spec.EnvFrom together when any of them is passed. They have to
+// move as a unit because a key-level --env-from-* reference becomes an Env
+// entry, so the flags feed both fields jointly; passing only some of them
+// therefore drops what the others contributed, which warns rather than
+// happening in silence. Shared by fn update and fn update-container.
+func applyFunctionEnvFlags(input cli.Input, fn *fv1.Function) error {
+	envFlags := []string{flagkey.FnEnvVar, flagkey.FnEnvFromSecret, flagkey.FnEnvFromConfigMap}
+	set := make([]string, 0, len(envFlags))
+	for _, f := range envFlags {
+		if input.IsSet(f) {
+			set = append(set, f)
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	if (len(fn.Spec.Env) > 0 || len(fn.Spec.EnvFrom) > 0) && len(set) < len(envFlags) {
+		console.Warn(fmt.Sprintf("--%s replace the function's entire environment: variables set through the flags you did not pass will be removed. Pass every env flag the function needs in one update.",
+			strings.Join(set, "/--")))
+	}
+	env, envFrom, err := parseFunctionEnvFlags(input)
+	if err != nil {
+		return err
+	}
+	fn.Spec.Env = env
+	fn.Spec.EnvFrom = envFrom
+	return nil
 }

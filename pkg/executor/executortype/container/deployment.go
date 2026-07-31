@@ -180,19 +180,24 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		return nil, err
 	}
 
+	// Platform-owned env for the user container, computed once: it seeds the
+	// container AND is re-appended last by ApplyFunctionEnv below, whose
+	// kubelet-last-wins ordering is what keeps these names authoritative.
+	platformEnv := []apiv1.EnvVar{
+		{
+			Name:  fv1.ResourceVersionCount,
+			Value: fmt.Sprintf("%d", rvCount),
+		},
+	}
+
 	container := &apiv1.Container{
 		Name:                   fn.Name,
 		ImagePullPolicy:        cn.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
-		Env: []apiv1.EnvVar{
-			{
-				Name:  fv1.ResourceVersionCount,
-				Value: fmt.Sprintf("%d", rvCount),
-			},
-		},
-		EnvFrom: envFromSources,
+		Env:       platformEnv,
+		EnvFrom:   envFromSources,
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Resources: resources,
 	}
@@ -215,10 +220,7 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	// After MergePodSpec, so the user's own podspec cannot reorder the
 	// platform-last guarantee (env podspec < EnvFrom < Env, platform above all).
-	if err := util.ApplyFunctionEnv(&pod.Spec, fn.Name, deployNamespace, fn, []apiv1.EnvVar{{
-		Name:  fv1.ResourceVersionCount,
-		Value: fmt.Sprintf("%d", rvCount),
-	}}); err != nil {
+	if err := util.ApplyFunctionEnv(&pod.Spec, fn.Name, deployNamespace, fn, platformEnv); err != nil {
 		return nil, err
 	}
 

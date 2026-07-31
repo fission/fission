@@ -6,7 +6,6 @@ package function
 
 import (
 	"fmt"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -86,30 +85,8 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.ConfigMaps = configMaps
 	}
 
-	// Same replace-when-provided semantics as --secret/--configmap, but the
-	// three env flags feed two fields jointly (a key-level --env-from-* ref
-	// becomes an Env entry), so replacing on any single flag would silently
-	// delete what the others contributed. Partial use therefore warns loudly
-	// (the update path is lenient elsewhere too) rather than dropping the
-	// function's other variables in silence.
-	envFlags := []string{flagkey.FnEnvVar, flagkey.FnEnvFromSecret, flagkey.FnEnvFromConfigMap}
-	setEnvFlags := make([]string, 0, len(envFlags))
-	for _, f := range envFlags {
-		if input.IsSet(f) {
-			setEnvFlags = append(setEnvFlags, f)
-		}
-	}
-	if len(setEnvFlags) > 0 {
-		if (len(function.Spec.Env) > 0 || len(function.Spec.EnvFrom) > 0) && len(setEnvFlags) < len(envFlags) {
-			console.Warn(fmt.Sprintf("--%s replace the function's entire environment: variables set through the flags you did not pass will be removed. Pass every env flag the function needs in one update.",
-				strings.Join(setEnvFlags, "/--")))
-		}
-		fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
-		if err != nil {
-			return err
-		}
-		function.Spec.Env = fnEnv
-		function.Spec.EnvFrom = fnEnvFrom
+	if err := applyFunctionEnvFlags(input, function); err != nil {
+		return err
 	}
 
 	if len(envName) > 0 {
