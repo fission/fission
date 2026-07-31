@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -154,4 +155,65 @@ func TestHTTPTargetSuccessAndError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHTTPTargetObserve pins the per-request observation contract the upgrade
+// scoring depends on: a transport-level failure (no response at all) reports
+// status 0, while an HTTP response reports its status and the captured header —
+// so "no Ready endpoints" (connection refused, no attribution header) is
+// distinguishable from a platform-attributed error response.
+func TestHTTPTargetObserve(t *testing.T) {
+	t.Parallel()
+
+	type obs struct {
+		status    int
+		headerVal string
+		err       bool
+	}
+	var got []obs
+	var mu sync.Mutex
+	observe := func(status int, headerVal string, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, obs{status: status, headerVal: headerVal, err: err != nil})
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fail" {
+			w.Header().Set("X-Attribution", "router")
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	mk := func(url string) *HTTPTarget {
+		return NewHTTPTarget(HTTPTargetConfig{
+			URL:           url,
+			ObserveHeader: "X-Attribution",
+			Observe:       observe,
+			Timeout:       2 * time.Second,
+		})
+	}
+
+	_, err := mk(srv.URL + "/ok").Do(t.Context())
+	require.NoError(t, err)
+	_, err = mk(srv.URL + "/fail").Do(t.Context())
+	require.Error(t, err)
+
+	// A server that no longer exists: transport error, no response.
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+	_, err = mk(deadURL).Do(t.Context())
+	require.Error(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, got, 3)
+	assert.Equal(t, obs{status: http.StatusOK, headerVal: "", err: false}, got[0])
+	assert.Equal(t, obs{status: http.StatusBadGateway, headerVal: "router", err: true}, got[1])
+	assert.Equal(t, obs{status: 0, headerVal: "", err: true}, got[2],
+		"a request that produced no response must observe status 0")
 }

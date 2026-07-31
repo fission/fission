@@ -106,6 +106,15 @@ type Params struct {
 	IndexScaleCount   int      `json:"indexScaleCount"`
 	RouteChurnCount   int      `json:"routeChurnCount"`
 	BuildTimeout      Duration `json:"buildTimeout"`
+
+	// UpgradeCmd is the shell command upgrade-under-load executes mid-load
+	// (helm upgrade …). The scenario is built ONLY when this is non-empty, so
+	// a regular benchmark run can never upgrade the cluster it is measuring.
+	UpgradeCmd      string   `json:"upgradeCmd"`
+	UpgradeBaseline Duration `json:"upgradeBaseline"` // pre-upgrade load window
+	UpgradeSettle   Duration `json:"upgradeSettle"`   // post-rollout load window
+	UpgradeRPS      int      `json:"upgradeRPS"`      // per-target request rate
+	UpgradeTimeout  Duration `json:"upgradeTimeout"`  // upgrade cmd + rollout budget
 }
 
 // DefaultParams returns the standard full-run parameters.
@@ -132,6 +141,10 @@ func DefaultParams() Params {
 		IndexScaleCount:           1000,
 		RouteChurnCount:           500,
 		BuildTimeout:              Duration(5 * time.Minute),
+		UpgradeBaseline:           Duration(30 * time.Second),
+		UpgradeSettle:             Duration(2 * time.Minute),
+		UpgradeRPS:                20,
+		UpgradeTimeout:            Duration(10 * time.Minute),
 	}
 }
 
@@ -200,6 +213,18 @@ func (p Params) normalize() Params {
 	if p.BuildTimeout == 0 {
 		p.BuildTimeout = d.BuildTimeout
 	}
+	if p.UpgradeBaseline == 0 {
+		p.UpgradeBaseline = d.UpgradeBaseline
+	}
+	if p.UpgradeSettle == 0 {
+		p.UpgradeSettle = d.UpgradeSettle
+	}
+	if p.UpgradeRPS == 0 {
+		p.UpgradeRPS = d.UpgradeRPS
+	}
+	if p.UpgradeTimeout == 0 {
+		p.UpgradeTimeout = d.UpgradeTimeout
+	}
 	return p
 }
 
@@ -226,6 +251,16 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &asyncInvoke{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &eventingTopic{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &provisionedWarm{burstTarget: p.ProvisionedWarmTarget, poolsize: p.ProvisionedWarmPoolsize, iterations: p.ProvisionedWarmIterations})
+	if p.UpgradeCmd != "" {
+		out = append(out, &upgradeUnderLoad{
+			cmd:      p.UpgradeCmd,
+			baseline: p.UpgradeBaseline.D(),
+			settle:   p.UpgradeSettle.D(),
+			rps:      p.UpgradeRPS,
+			poolsize: p.Poolsize,
+			timeout:  p.UpgradeTimeout.D(),
+		})
+	}
 	return out
 }
 
