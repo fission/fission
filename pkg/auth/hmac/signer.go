@@ -84,6 +84,18 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 			return nil, closeErr
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
+		// GetBody must be repopulated alongside Body. Rewind-aware
+		// retry layers (net/http's replay after a broken connection,
+		// pkg/utils/httpretry) refuse to retry a request whose GetBody
+		// is nil, so leaving it unset silently makes signed requests
+		// un-retryable; and a naive caller re-submitting the same
+		// *http.Request re-reads the consumed reader above and sends —
+		// re-signed on the second pass through this signer — an EMPTY
+		// body, which the verifier happily accepts: silent success with
+		// an empty payload rather than a 401.
+		r.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(body)), nil
+		}
 	}
 	ts := s.now().Unix()
 	// Sign over the request-URI (path + raw query) so query parameters

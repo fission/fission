@@ -63,6 +63,58 @@ func TestSignerHandlesNilBody(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 }
 
+// TestSignerRepopulatesGetBody pins the retry contract: the signer buffers
+// and replaces the request body, so it must also repopulate GetBody — the
+// hook net/http and pkg/utils/httpretry use to rewind a request per
+// attempt (both refuse to retry when it is nil, and a naive re-submission
+// of the same *http.Request would re-sign the consumed — empty — reader,
+// which the verifier accepts).
+func TestSignerRepopulatesGetBody(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+
+	var gotBodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		ts, err := strconv.ParseInt(r.Header.Get(HeaderTimestamp), 10, 64)
+		require.NoError(t, err)
+		require.True(t, Verify(secret, r.Method, r.URL.Path, body, ts, r.Header.Get(HeaderSignature)),
+			"every attempt must carry a signature valid for the body it sent")
+		gotBodies = append(gotBodies, string(body))
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	signer := NewSigner(secret, http.DefaultTransport, time.Now)
+
+	// Build a request whose GetBody is nil, like a caller handing the
+	// transport a bare reader net/http cannot rewind on its own.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/archive", nil)
+	require.NoError(t, err)
+	req.Body = io.NopCloser(strings.NewReader("payload"))
+	require.Nil(t, req.GetBody, "precondition: the raw request must not be rewindable")
+
+	resp, err := signer.RoundTrip(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	// The signer consumed the original reader, so it must have left a
+	// rewind hook behind for any retry layer above it.
+	require.NotNil(t, req.GetBody, "signer must repopulate GetBody after buffering the body")
+
+	// Simulate a retry the way httpretry does: rewind Body via GetBody,
+	// then run the same request through the signer again. The second
+	// attempt must carry the full payload, freshly signed — not an empty
+	// body from the consumed reader.
+	req.Body, err = req.GetBody()
+	require.NoError(t, err)
+	resp, err = signer.RoundTrip(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, []string{"payload", "payload"}, gotBodies,
+		"the retried attempt must re-send (and re-sign) the original body, never an empty one")
+}
+
 // TestSignerBindsQueryParameter pins the security-critical contract from
 // the design doc (docs/internal-auth/00-design.md): a captured signature
 // for /v1/archive?id=A must NOT verify against /v1/archive?id=B within
