@@ -6,6 +6,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
@@ -35,7 +36,18 @@ func main() {
 	if mode := os.Getenv("CRDS_MODE"); mode == crdsModeHook {
 		// Adoption of hand-applied CRDs needs --force-conflicts: they carry
 		// managedFields owned by kubectl-create as an Update operation.
-		force := os.Getenv("CRDS_FORCE_CONFLICTS") != "false"
+		// Parsed strictly: this flag decides whether a conflicting writer is
+		// silently overridden, so a typo must not fall through to the
+		// destructive side.
+		force := true
+		if v := os.Getenv("CRDS_FORCE_CONFLICTS"); v != "" {
+			parsed, perr := strconv.ParseBool(v)
+			if perr != nil {
+				logger.Error(perr, "CRDS_FORCE_CONFLICTS must be a boolean", "value", v)
+				os.Exit(1)
+			}
+			force = parsed
+		}
 		if err := preupgradeClient.ApplyCRDs(ctx, force); err != nil {
 			logger.Error(err, "failed to apply CRDs; the release's controllers would run against stale schemas")
 			os.Exit(1)

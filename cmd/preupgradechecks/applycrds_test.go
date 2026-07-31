@@ -6,6 +6,10 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -108,4 +112,39 @@ spec:
 			assert.Error(t, err)
 		})
 	}
+}
+
+// TestChartCRDNamesMatchEmbeddedBundle guards the one piece of this design
+// that is hand-maintained: the chart's RBAC fences the hook's mutating verbs
+// to an explicit list of CRD names, while the binary discovers its bundle by
+// glob. Add a CRD and forget the helper and nothing fails until a user's
+// upgrade dies with a 403 on the release that introduces the new schema.
+func TestChartCRDNamesMatchEmbeddedBundle(t *testing.T) {
+	t.Parallel()
+
+	helpers, err := os.ReadFile(filepath.Join("..", "..", "charts", "fission-all", "templates", "_helpers.tpl"))
+	require.NoError(t, err)
+
+	const marker = `{{- define "fission.crdNames" -}}`
+	idx := strings.Index(string(helpers), marker)
+	require.GreaterOrEqual(t, idx, 0, "fission.crdNames helper not found in _helpers.tpl")
+	rest := string(helpers)[idx+len(marker):]
+	body, _, found := strings.Cut(rest, "{{- end -}}")
+	require.True(t, found, "fission.crdNames helper is not terminated")
+
+	chartNames := strings.Fields(body)
+
+	manifests, err := crds.All()
+	require.NoError(t, err)
+	embedded := make([]string, 0, len(manifests))
+	for _, m := range manifests {
+		name, _, err := crdApplyBody(m)
+		require.NoError(t, err)
+		embedded = append(embedded, name)
+	}
+
+	sort.Strings(chartNames)
+	sort.Strings(embedded)
+	assert.Equal(t, embedded, chartNames,
+		"fission.crdNames in charts/fission-all/templates/_helpers.tpl must list exactly the CRDs embedded from crds/v1")
 }

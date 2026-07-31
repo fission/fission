@@ -5,8 +5,12 @@ kind: Role
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
-    helm.sh/hook: pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation
+    # pre-install as well as pre-upgrade: with crds.mode=hook the checker runs
+    # on a fresh cluster and lists Fission CRs, so the namespaced grant must
+    # exist then too — otherwise the install fails with a 403 AFTER the CRDs
+    # have been applied.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
     helm.sh/hook-weight: "-2"
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
@@ -60,8 +64,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
-    helm.sh/hook: pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
+    helm.sh/hook-weight: "-1"
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}-fission-cr"
   namespace: {{ .namespace }}
