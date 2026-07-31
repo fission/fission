@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Please refer using [latest stable release](https://github.com/fission/fission/releases/latest) of Fission. 
+The latest two minor release lines receive security fixes; see [RELEASES.md](RELEASES.md) for the full support policy.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| >=1.20.x   | :white_check_mark: |
-| < 1.20.0   | :x:                |
+| latest two minors (currently 1.27.x, 1.26.x) | :white_check_mark: |
+| older | :x:                |
 
 ## Reporting a Vulnerability
 
