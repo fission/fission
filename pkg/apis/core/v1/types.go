@@ -1491,6 +1491,7 @@ type (
 		// +optional
 		// +listType=map
 		// +listMapKey=name
+		// +kubebuilder:validation:MaxItems=32
 		Windows []ProvisionedWindow `json:"windows,omitempty"`
 	}
 

@@ -403,8 +403,8 @@ func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 			name:        "valid schedule, invalid base target",
 			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 0, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
 			expected:    nil,
-			errExpected: false,
-			errSubStrs:  []string{""},
+			errExpected: true,
+			errSubStrs:  []string{"requires"},
 		},
 		{
 			name:        "valid schedule, no concurrency",

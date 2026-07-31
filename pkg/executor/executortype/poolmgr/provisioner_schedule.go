@@ -124,31 +124,35 @@ func windowActiveAt(window fv1.ProvisionedWindow, now time.Time) (bool, error) {
 	if dur <= 0 {
 		return false, fmt.Errorf("window duration must be positive")
 	}
+	// sched.Next returns the first fire strictly after now-dur, so t <= now
+	// implies now-dur < t <= now: the window opened at t and closes at t+dur,
+	// which is after now. Any fire in (now-dur, now] therefore means the
+	// window is open — no need to walk forward to the most recent fire.
 	t := sched.Next(now.Add(-dur))
 	if t.IsZero() || t.After(now) {
 		return false, nil
-	} else {
-		var capped bool
-		t, capped = lastSched(sched, t, now)
-		if capped {
-			return true, nil
-		}
-		return now.Sub(t) < dur, nil
 	}
+	return true, nil
 }
 
+// maxScheduleIterations bounds lastSched's forward walk. A cron denser than
+// its window duration would otherwise walk unboundedly; hitting the cap is
+// reported as capped=true and treated as permanently active.
+const maxScheduleIterations = 100_000
+
+// lastSched walks forward from t and returns the last fire <= now.
+// capped=true means the walk hit maxScheduleIterations without converging.
 func lastSched(sched cron.Schedule, t time.Time, now time.Time) (time.Time, bool) {
-	iterations := 0
-	for {
-		if iterations >= 100_000 {
-			return time.Time{}, true
+	for range maxScheduleIterations {
+		next := sched.Next(t)
+		// robfig/cron returns the zero time when no fire exists within its
+		// 5-year search horizon (e.g. "0 0 29 2 *" crossing the non-leap
+		// year 1800). Zero is not After(now), so without this guard the walk
+		// restarts from year 1 and burns the entire iteration budget.
+		if next.IsZero() || next.After(now) {
+			return t, false
 		}
-		t2 := sched.Next(t)
-		if t2.After(now) {
-			break
-		}
-		t = t2
-		iterations++
+		t = next
 	}
-	return t, false
+	return time.Time{}, true
 }

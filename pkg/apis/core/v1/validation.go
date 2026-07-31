@@ -661,6 +661,16 @@ func (pc *ProvisionedConcurrencyConfig) Validate() error {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Target", pc.Target, "must be >= 1"))
 	}
 
+	// Bound the window count: each window costs an independent cron parse plus
+	// a schedule walk on every executor reconcile pass, held under the
+	// per-function reconcile lock inside a 10-slot semaphore, so an unbounded
+	// list is a cross-tenant starvation vector for the provisioner.
+	const maxProvisionedWindows = 32
+	if len(pc.Windows) > maxProvisionedWindows {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", len(pc.Windows),
+			fmt.Sprintf("must not exceed %d windows", maxProvisionedWindows)))
+	}
+
 	windows := make(map[string]struct{})
 	for i, window := range pc.Windows {
 		if len(window.Name) == 0 {
@@ -669,11 +679,9 @@ func (pc *ProvisionedConcurrencyConfig) Validate() error {
 		if err := IsValidCronSpec(window.Start); err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "start is invalid: "+err.Error(), "window name: "+window.Name))
 		}
-		d, err := time.ParseDuration(window.Duration)
-		if err != nil {
+		if d, err := time.ParseDuration(window.Duration); err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "duration is invalid: "+err.Error(), "window name: "+window.Name))
-		}
-		if d <= 0 {
+		} else if d <= 0 {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.ProvisionedConcurrency.Windows", i, "duration must be > 0", "window name: "+window.Name))
 		}
 		if _, ok := windows[window.Name]; ok {

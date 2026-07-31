@@ -163,9 +163,15 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	}
 
 	if input.IsSet(flagkey.FnProvisionedConcurrency) || input.IsSet(flagkey.FnProvisionedSchedule) {
+		existing := function.Spec.ProvisionedConcurrency
 		provisionedConcurrency, err := getProvisionedConcurrencyConfig(input)
 		if err != nil {
 			return err
+		}
+		// Preserve configured windows when only the base target was given, so
+		// bumping --provisioned-concurrency does not silently drop the schedule.
+		if provisionedConcurrency != nil && existing != nil && !input.IsSet(flagkey.FnProvisionedSchedule) {
+			provisionedConcurrency.Windows = existing.Windows
 		}
 		function.Spec.ProvisionedConcurrency = provisionedConcurrency
 	}

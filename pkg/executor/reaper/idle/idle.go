@@ -207,7 +207,8 @@ type PoolDeleteStrategy struct {
 	envUIDs map[k8sTypes.UID]struct{}
 	fnByUID map[k8sTypes.UID]fv1.Function
 
-	// provisionedPods is a map of pod names to struct{}, keyed by namespace which have the fission.io/provisioned label.
+	// provisionedPods is the set of "<namespace>/<name>" keys for pods carrying
+	// the fission.io/provisioned label, refreshed on every Prepare.
 	provisionedPods map[string]struct{}
 }
 
@@ -242,15 +243,16 @@ func (s *PoolDeleteStrategy) Prepare(ctx context.Context) error {
 		return err
 	}
 	s.envUIDs, s.fnByUID = envUIDs, fnByUID
-	s.provisionedPods, err = listPodsbyNamespace(ctx, s.kubeClient)
+	s.provisionedPods, err = listProvisionedPodKeys(ctx, s.kubeClient)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// listPodsbyNamespace returns a map of pod names to struct{}, keyed by namespace which have the fission.io/provisioned label.
-func listPodsbyNamespace(ctx context.Context, kubeClient kubernetes.Interface) (map[string]struct{}, error) {
+// listProvisionedPodKeys returns the set of "<namespace>/<name>" keys for
+// pods carrying the fission.io/provisioned label.
+func listProvisionedPodKeys(ctx context.Context, kubeClient kubernetes.Interface) (map[string]struct{}, error) {
 	result := make(map[string]struct{})
 	for _, namespace := range utils.DefaultNSResolver().FunctionNamespaces() {
 		pods, err := kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
@@ -285,13 +287,8 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	// generation bump, spec deletion). Per-pod-label check: only pods
 	// carrying fission.io/provisioned=true are exempt, so overflow pods
 	// (target drop, window close) are reaped normally.
-	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok && fn.Spec.ProvisionedConcurrency != nil {
-		key := podKeyFromFsvc(fsvc)
-		if key != "" {
-			if _, provisioned := s.provisionedPods[key]; provisioned {
-				return nil
-			}
-		}
+	if _, provisioned := s.provisionedPods[podKeyFromFsvc(fsvc)]; provisioned {
+		return nil
 	}
 	// For a function whose environment no longer exists, reap the idle pod as
 	// usual but log to notify the user.

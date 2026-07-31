@@ -747,11 +747,11 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		_, hasLabel := got.Labels[fv1.PROVISIONED_LABEL]
 		assert.False(t, hasLabel, "no patch on GetFuncSvc failure")
 
-		// A failed GetFuncSvc leaves the svcWaiting reservation outstanding:
-		// SetSvcValue never ran, so only MarkSpecializationFailure can settle
-		// it. Leaking it inflates concurrencyUsed and eventually makes the
-		// function look permanently at its concurrency cap.
-		assert.Equal(t, int64(1), gpm.markFailures.Load(), "failed specialization must be marked")
+		// GetFuncSvc never took a svcWaiting reservation in the first place
+		// (only ReserveCapacity/GetFuncSvcFromCache do), so there is nothing
+		// for MarkSpecializationFailure to settle here. Calling it anyway
+		// would steal a concurrent caller's real reservation instead.
+		assert.Zero(t, gpm.markFailures.Load(), "GetFuncSvc failure must not mark a specialization failure")
 		// Nothing was allotted, so there is no slot to release. GetFuncSvc
 		// returns (nil, err) on every error path, so there is no FuncSvc to
 		// key an untap on either.
@@ -1353,8 +1353,8 @@ func TestProvisionerScheduleStopProvisionerRemoveProvisionedConcurrency(t *testi
 		p.reconcileFunction(t.Context(), fn)
 		synctest.Wait()
 		assert.Nil(t, fn.Spec.ProvisionedConcurrency, "expected provisionedconcurrency to be nil")
-		sched = p.scheduleFor(fn)
-		assert.Nil(t, sched.timer)
+		_, hasSched := p.timers.Load(fn.UID)
+		assert.False(t, hasSched, "expected disableProvisioning to drop the function's schedule entry")
 
 		// update crClient cache
 		updateCrClient(t, p)

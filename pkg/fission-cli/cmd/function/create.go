@@ -60,6 +60,9 @@ func getProvisionedConcurrencyConfig(input cli.Input) (*fv1.ProvisionedConcurren
 	target := input.Int(flagkey.FnProvisionedConcurrency)
 	if target <= 0 {
 		// 0 or negative = off switch (update path clears the config)
+		if input.IsSet(flagkey.FnProvisionedSchedule) {
+			return nil, fmt.Errorf("--%s requires --%s >= 1, got %d", flagkey.FnProvisionedSchedule, flagkey.FnProvisionedConcurrency, target)
+		}
 		return nil, nil
 	}
 	var windows []fv1.ProvisionedWindow
