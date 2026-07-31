@@ -47,7 +47,7 @@ spec:
         - name: JWT_SIGNING_KEY
           valueFrom:
             secretKeyRef:
-              name: router
+              name: {{ include "fission.authenticationSecretName" . }}
               key: jwtSigningKey
         {{- else if .Values.mcp.allowInsecure }}
         # No signing key: the MCP endpoint runs UNAUTHENTICATED — every caller gets

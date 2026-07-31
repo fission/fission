@@ -247,6 +247,17 @@ http://router-internal.{{ .Release.Namespace }}:{{ include "fission.routerIntern
 {{- end -}}
 
 {{/*
+fission.authenticationSecretName is the Secret the router and MCP deployments
+read auth credentials (username/password) and the JWT signing key from —
+either a user-managed Secret named by authentication.existingSecret (which
+must carry the keys username, password and jwtSigningKey) or the
+chart-generated "router" Secret (templates/router/secret.yaml).
+*/}}
+{{- define "fission.authenticationSecretName" -}}
+{{ .Values.authentication.existingSecret | default "router" }}
+{{- end -}}
+
+{{/*
 fission.podNamespaceEnv injects POD_NAMESPACE via the downward API — the
 namespace fission-bundle's AddressResolver derives sibling-service URL
 defaults from when a URL flag/env is not explicitly set.

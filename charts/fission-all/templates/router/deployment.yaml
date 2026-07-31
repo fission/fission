@@ -52,17 +52,17 @@ spec:
         - name: AUTH_USERNAME
           valueFrom:
             secretKeyRef:
-              name: router
+              name: {{ include "fission.authenticationSecretName" . }}
               key: username
         - name: AUTH_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: router
+              name: {{ include "fission.authenticationSecretName" . }}
               key: password
         - name: JWT_SIGNING_KEY
           valueFrom:
             secretKeyRef:
-              name: router
+              name: {{ include "fission.authenticationSecretName" . }}
               key: jwtSigningKey
         {{- end }}      
         - name: POD_NAMESPACE
