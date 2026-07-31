@@ -347,9 +347,28 @@ func (spec FunctionSpec) Validate() error {
 
 	for _, s := range spec.Secrets {
 		errs = errors.Join(errs, s.Validate())
+		// The runtime redirect ships with RFC-0030's files-mode phase; until
+		// then a set MountPath must be rejected, never silently ignored.
+		if s.MountPath != "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
+		}
 	}
 	for _, c := range spec.ConfigMaps {
 		errs = errors.Join(errs, c.Validate())
+		if c.MountPath != "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
+		}
+	}
+
+	if len(spec.Env) > 0 || len(spec.EnvFrom) > 0 {
+		errs = errors.Join(errs, validateFunctionEnv(spec.Env, spec.EnvFrom))
+		// Poolmgr injection rides the specialize payload and needs the
+		// capability-gated runtime contract (RFC-0030 §3); until that phase
+		// lands, reject rather than deploy a function whose DATABASE_URL
+		// would be silently empty. Empty executor type defaults to poolmgr.
+		if et := spec.InvokeStrategy.ExecutionStrategy.ExecutorType; et == ExecutorTypePoolmgr || et == "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Env", "", "env/envFrom are not supported on the poolmgr executor yet (lands with RFC-0030 phase 2); use the newdeploy or container executor"))
+		}
 	}
 
 	if !reflect.DeepEqual(spec.InvokeStrategy, InvokeStrategy{}) {
