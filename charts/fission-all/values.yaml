@@ -1499,30 +1499,6 @@ networkPolicy:
 ## isolation only, matching pre-1.(N+1) behaviour.
 internalAuth:
   enabled: true
-  # secret: "" — the HMAC master. Set it explicitly, or point existingSecret at
-  #   a Secret you manage, or leave both unset and let autoGenerate mint one.
+  # secret: "" — auto-generated on first install; preserved on upgrade.
   # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
-
-  ## existingSecret names a Secret you manage (in the release namespace) holding
-  ## the master under the key `secret`, and optionally a previous value under
-  ## `oldSecret` during a rotation window. When set, the chart neither generates
-  ## nor templates the master, and the control plane reads it directly.
-  ##
-  ## This is the recommended input for GitOps: Argo CD and Flux render with
-  ## `helm template`, where Helm's `lookup` always returns empty, so a
-  ## chart-generated master cannot be preserved across syncs by templating alone.
-  ##
-  existingSecret: ""
-
-  ## autoGenerate controls whether the chart may mint the master itself when
-  ## neither `secret` nor `existingSecret` is set. Generation happens in an
-  ## idempotent pre-install hook Job — creating the Secret only if absent — so
-  ## the value survives any renderer, including repeated `helm template` syncs,
-  ## rather than being re-minted at render time.
-  ##
-  ## Set false to require an explicit input: render then fails rather than
-  ## silently bringing up a cluster whose internal-auth key nobody recorded.
-  ## GitOps installs should set false and supply existingSecret.
-  ##
-  autoGenerate: true
 

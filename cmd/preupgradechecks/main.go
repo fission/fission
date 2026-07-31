@@ -33,22 +33,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// The internal-auth generator is a separate one-shot mode, not part of the
-	// upgrade checks: it runs pre-install only, under a ServiceAccount that can
-	// create a Secret and nothing else. It returns rather than falling through.
-	if len(os.Args) > 1 && os.Args[1] == "generate-internal-auth" {
-		namespace, name, perr := internalAuthGenParams()
-		if perr != nil {
-			logger.Error(perr, "internal-auth generator misconfigured")
-			os.Exit(1)
-		}
-		if gerr := GenerateInternalAuthSecret(ctx, preupgradeClient.k8sClient, logger, namespace, name); gerr != nil {
-			logger.Error(gerr, "failed to generate the internal-auth master")
-			os.Exit(1)
-		}
-		return
-	}
-
 	if mode := os.Getenv("CRDS_MODE"); mode == crdsModeHook {
 		// Adoption of hand-applied CRDs needs --force-conflicts: they carry
 		// managedFields owned by kubectl-create as an Update operation.
