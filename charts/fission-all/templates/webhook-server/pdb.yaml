@@ -1,0 +1,27 @@
+{{- /*
+Same render guard as the router's PDB: emitted only when the Deployment can
+actually satisfy it. A minAvailable: 1 budget on a single-replica Deployment
+blocks node drains forever. The webhook has no autoscaler, so replicas is the
+only evidence available here.
+*/}}
+{{- if and .Values.webhook.podDisruptionBudget.enabled (ge (int (.Values.webhook.replicas | default 1)) 2) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fission-webhook
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: webhook-service
+    application: fission-webhook
+spec:
+  {{- if .Values.webhook.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.webhook.podDisruptionBudget.minAvailable }}
+  {{- end }}
+  {{- if .Values.webhook.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.webhook.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      svc: webhook-service
+      application: fission-webhook
+{{- end }}

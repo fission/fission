@@ -68,17 +68,30 @@ func TestPanicRecoveryMiddleware(t *testing.T) {
 // populated.
 func TestRouterReadinessHandler(t *testing.T) {
 	tests := []struct {
-		name  string
-		ready bool
-		want  int
+		name string
+		// synced is nil when the slice-fed data plane is off, matching the
+		// nil endpointsSynced the router leaves in that mode.
+		ready  bool
+		synced *bool
+		want   int
 	}{
-		{"mux built -> ready", true, http.StatusOK},
-		{"mux not built -> unavailable", false, http.StatusServiceUnavailable},
+		{"mux built, slice plane off -> ready", true, nil, http.StatusOK},
+		{"mux not built -> unavailable", false, nil, http.StatusServiceUnavailable},
+		{"mux built, index synced -> ready", true, new(true), http.StatusOK},
+		// The window this closes: the mux is serving, but the endpoint index
+		// has not seen its informer replay, so warm traffic would fall back to
+		// the executor — a latency cliff mid-upgrade (RFC-0028 §2).
+		{"mux built, index still filling -> unavailable", true, new(false), http.StatusServiceUnavailable},
+		{"index synced but mux not built -> unavailable", false, new(true), http.StatusServiceUnavailable},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := &HTTPTriggerSet{}
 			ts.ready.Store(tc.ready)
+			if tc.synced != nil {
+				synced := *tc.synced
+				ts.endpointsSynced = func() bool { return synced }
+			}
 			rec := httptest.NewRecorder()
 			ts.routerReadinessHandler(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 			assert.Equal(t, tc.want, rec.Code)

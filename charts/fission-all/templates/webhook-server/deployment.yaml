@@ -7,7 +7,11 @@ metadata:
     svc: webhook-service
     application: fission-webhook
 spec:
-  replicas: 1
+  replicas: {{ .Values.webhook.replicas | default 1 }}
+  {{- with .Values.webhook.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       svc: webhook-service

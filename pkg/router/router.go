@@ -448,9 +448,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// functions.
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		index := endpointcache.NewIndex()
-		if err := endpointcache.RegisterInformer(ctx, crMgr, index, logger); err != nil {
+		endpointsSynced, err := endpointcache.RegisterInformer(ctx, crMgr, index, logger)
+		if err != nil {
 			return fmt.Errorf("error registering endpointslice informer: %w", err)
 		}
+		// Gate readiness on the index having seen the initial replay, not just
+		// on the Manager's cache being populated: a Ready replica with a
+		// partially-filled index serves warm traffic through the executor
+		// fallback instead of the fast path — a latency cliff precisely during
+		// a rolling upgrade (RFC-0028 §2).
+		triggers.endpointsSynced = endpointsSynced
 		endpointcache.RegisterSizeGauge(index)
 		execResolver, ok := triggers.addressResolver.(*executorResolver)
 		if !ok {
