@@ -243,6 +243,12 @@ jobs:
           docker exec kind-control-plane sh -c \
             'mkdir -p /fission-coverage && chown 10001:10001 /fission-coverage && chmod 0700 /fission-coverage'
           SKAFFOLD_PROFILE=kind-ci make skaffold-deploy
+          # Pin a single router for the benchmark only. The chart default is 2
+          # (RFC-0028), but this leg's pprof capture port-forwards to
+          # items[0] — one replica's profile against the whole offered load —
+          # and every recorded regression bar was measured single-replica.
+          kubectl -n fission scale deploy/router --replicas=1
+          kubectl -n fission rollout status deploy/router --timeout=3m
 
       - name: Install released Fission (helm)
         if: ${{ matrix.fission_version != 'HEAD' }}
@@ -265,6 +271,7 @@ jobs:
           helm install fission fission-charts/fission-all \
             --version "${ver#v}" -n fission --skip-crds --wait --timeout 8m \
             --set routerServiceType=NodePort \
+            --set router.replicas=1 \
             --set pprof.enabled=true \
             --set prometheus.serviceEndpoint=http://prometheus-operated.monitoring.svc.cluster.local:9090 \
             --set serviceMonitor.enabled=true \

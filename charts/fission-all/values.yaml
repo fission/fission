@@ -230,14 +230,7 @@ executor:
   ##       maxSurge: 1
   ##       maxUnavailable: 0
   ##
-  ## Surge-then-drain by default: a new pod becomes Ready (which gates on the
-  ## mux build and the endpoint index) before an old one is taken down, so a
-  ## rollout never dips below the current replica count.
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+  strategy: {}
   ## terminationGracePeriodSeconds gives in-flight work time to drain on
   ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
   ## above GRACEFUL_SHUTDOWN_TIMEOUT.
@@ -402,16 +395,43 @@ router:
   ##       maxSurge: 1
   ##       maxUnavailable: 0
   ##
-  strategy: {}
+  ## Surge-then-drain by default: a new pod becomes Ready (which gates on the
+  ## mux build and the endpoint index) before an old one is taken down, so a
+  ## rollout never dips below the current replica count. Explicit rather than
+  ## relying on the Kubernetes 25% defaults, which allow maxUnavailable > 0
+  ## once the router is scaled past 3 replicas — exactly when a dip hurts most.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   ## terminationGracePeriodSeconds gives in-flight requests time to drain on
-  ## shutdown. Keep it at or above GRACEFUL_SHUTDOWN_TIMEOUT.
+  ## shutdown. Keep it at or above gracefulShutdownTimeout.
   ##
-  ## 90s rather than the Kubernetes default of 30: the drain has to outlast the
-  ## longest in-flight request, and the default function timeout alone is 60s.
-  ## A grace period shorter than the request timeout turns every rollout into
-  ## truncated responses for the slowest requests in flight.
+  ## 90s rather than the Kubernetes default of 30, sized above
+  ## gracefulShutdownTimeout below, which is in turn sized above the default
+  ## 60s function timeout: a drain shorter than the longest in-flight request
+  ## turns every rollout into truncated responses for the slowest requests.
   ##
   terminationGracePeriodSeconds: 90
+  ## gracefulShutdownTimeout bounds how long the router keeps serving in-flight
+  ## requests after SIGTERM before force-closing them (GRACEFUL_SHUTDOWN_TIMEOUT).
+  ## Raising terminationGracePeriodSeconds alone does nothing: the code caps the
+  ## drain at 30s unless this is set, so the extra grace would be spent idle
+  ## while a 60s invocation is cut off at 30.
+  ##
+  ## Keep terminationGracePeriodSeconds > gracefulShutdownTimeout > the longest
+  ## expected function timeout.
+  ##
+  gracefulShutdownTimeout: 75s
+  ## preStopSleep delays the drain so the pod's removal from the Service
+  ## EndpointSlice propagates to every kube-proxy BEFORE the listener closes.
+  ## Without it a terminating router still receives connections it can no
+  ## longer accept, which surfaces as connection-refused — a platform-attributed
+  ## failure with no response and no attribution header (RFC-0028 §1). Set to
+  ## 0 to disable.
+  ##
+  preStopSleep: 5
   ## podDisruptionBudget protects router availability during voluntary
   ## disruptions (node drains, cluster upgrades).
   ##
@@ -420,8 +440,10 @@ router:
   ## minAvailable: 1 PDB on a genuinely single-replica Deployment blocks node
   ## drains forever — so setting replicas: 1 silently and correctly drops the
   ## PDB rather than deadlocking the cluster. An HPA/KEDA-scaled router keeps
-  ## replicas: 1 in its spec while running more, so it must NOT lose its PDB
-  ## to a naive replica check.
+  ## replicas: 1 in its spec while running more, so an autoscaler counts as
+  ## evidence too — but only when its OWN floor (minReplicas) is >= 2, since
+  ## an autoscaler idling at minReplicas: 1 is still a single-replica
+  ## Deployment and would deadlock exactly the same way.
   ##
   podDisruptionBudget:
     enabled: true

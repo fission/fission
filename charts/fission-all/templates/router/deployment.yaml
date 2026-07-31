@@ -38,6 +38,18 @@ spec:
       containers:
       - name: router
         image: {{ include "fission-bundleImage" . | quote }}
+        {{- if gt (int (.Values.router.preStopSleep | default 0)) 0 }}
+        lifecycle:
+          preStop:
+            # Delay the drain so this pod's removal from the Service
+            # EndpointSlice reaches every kube-proxy BEFORE the listener
+            # closes. Without it a terminating router still receives
+            # connections it can no longer accept: connection-refused, which
+            # the RFC-0028 §1 gate counts as a platform failure precisely
+            # because it produces no response and no attribution header.
+            sleep:
+              seconds: {{ int .Values.router.preStopSleep }}
+        {{- end }}
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: ["/fission-bundle"]
         args:
@@ -69,6 +81,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- with .Values.router.gracefulShutdownTimeout }}
+        # Without this the drain is capped at the code default of 30s, so a
+        # larger terminationGracePeriodSeconds would be spent idle while a
+        # longer-running invocation is force-closed (RFC-0028 §2).
+        - name: GRACEFUL_SHUTDOWN_TIMEOUT
+          value: {{ . | quote }}
+        {{- end }}
         - name: ROUTER_ROUND_TRIP_TIMEOUT
           value: {{ .Values.router.roundTrip.timeout | default "50ms" | quote }}
         - name: ROUTER_ROUNDTRIP_TIMEOUT_EXPONENT
@@ -198,6 +217,20 @@ spec:
       serviceAccountName: fission-router
       {{- with .Values.router.terminationGracePeriodSeconds }}
       terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- if and (not .Values.router.deployAsDaemonSet) (ge (int (.Values.router.replicas | default 1)) 2) }}
+      # Spread replicas across nodes, or two of them can land on one node and a
+      # single drain takes out the whole data plane — the outage replicas: 2
+      # exists to prevent. ScheduleAnyway so single-node clusters (kind) still
+      # schedule both.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              svc: router
+              application: fission-router
       {{- end }}
       volumes:
       - name: config-volume

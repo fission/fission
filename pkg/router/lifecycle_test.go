@@ -68,10 +68,10 @@ func TestPanicRecoveryMiddleware(t *testing.T) {
 // populated.
 func TestRouterReadinessHandler(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
+		ready bool
 		// synced is nil when the slice-fed data plane is off, matching the
 		// nil endpointsSynced the router leaves in that mode.
-		ready  bool
 		synced *bool
 		want   int
 	}{

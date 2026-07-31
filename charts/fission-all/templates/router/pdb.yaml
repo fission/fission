@@ -3,11 +3,13 @@ Render only when the router can actually satisfy the budget. A
 minAvailable: 1 PDB on a genuinely single-replica Deployment makes every node
 drain block forever, so replicas: 1 drops the PDB rather than deadlocking the
 cluster. But an HPA/KEDA-scaled router keeps replicas: 1 in its spec while
-running more, so the guard must accept an autoscaler as evidence too — a naive
-replica check would strip the PDB from exactly the installs that need it most
-(RFC-0028 §2).
+running more, so the guard accepts an autoscaler as evidence too — but only
+when the autoscaler's own floor is >= 2, because one idling at minReplicas: 1
+is still a single-replica Deployment and deadlocks identically (RFC-0028 §2).
 */}}
-{{- $scaled := or (ge (int (.Values.router.replicas | default 1)) 2) .Values.router.autoscaling.enabled (dig "keda" "enabled" false .Values.router) }}
+{{- $hpaFloor := and .Values.router.autoscaling.enabled (ge (int (.Values.router.autoscaling.minReplicas | default 1)) 2) }}
+{{- $kedaFloor := and (dig "keda" "enabled" false .Values.router) (ge (int (dig "keda" "minReplicas" 1 .Values.router)) 2) }}
+{{- $scaled := or (ge (int (.Values.router.replicas | default 1)) 2) $hpaFloor $kedaFloor }}
 {{- if and (not .Values.router.deployAsDaemonSet) .Values.router.podDisruptionBudget.enabled $scaled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
