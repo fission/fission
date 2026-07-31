@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
@@ -46,18 +49,106 @@ func Create(input cli.Input) error {
 
 // getProvisionedConcurrencyConfig builds a ProvisionedConcurrencyConfig from
 // the --provisioned-concurrency flag, or nil when the flag is not set (the
-// classic on-demand cold-start path). PR 1 supports only the base Target;
-// schedule windows arrive in PR 2.
-func getProvisionedConcurrencyConfig(input cli.Input) *fv1.ProvisionedConcurrencyConfig {
+// classic on-demand cold-start path).
+func getProvisionedConcurrencyConfig(input cli.Input) (*fv1.ProvisionedConcurrencyConfig, error) {
 	if !input.IsSet(flagkey.FnProvisionedConcurrency) {
-		return nil
+		if input.IsSet(flagkey.FnProvisionedSchedule) {
+			return nil, fmt.Errorf("provisioned concurrency window is set but provisioned concurrency is not")
+		}
+		return nil, nil
 	}
 	target := input.Int(flagkey.FnProvisionedConcurrency)
 	if target <= 0 {
 		// 0 or negative = off switch (update path clears the config)
-		return nil
+		if input.IsSet(flagkey.FnProvisionedSchedule) {
+			return nil, fmt.Errorf("--%s requires --%s >= 1, got %d", flagkey.FnProvisionedSchedule, flagkey.FnProvisionedConcurrency, target)
+		}
+		return nil, nil
 	}
-	return &fv1.ProvisionedConcurrencyConfig{Target: target}
+	var windows []fv1.ProvisionedWindow
+	seen := make(map[string]bool)
+	if input.IsSet(flagkey.FnProvisionedSchedule) {
+		for _, window := range input.StringSlice(flagkey.FnProvisionedSchedule) {
+			w, err := getProvisioinedWindow(window)
+			if err != nil {
+				return nil, err
+			}
+			if seen[w.Name] {
+				return nil, fmt.Errorf("duplicate provisioned window: %s", w.Name)
+			}
+			windows = append(windows, w)
+			seen[w.Name] = true
+		}
+	}
+	cfg := &fv1.ProvisionedConcurrencyConfig{Target: target, Windows: windows}
+	return cfg, nil
+}
+
+// getProvisioinedWindow parses a provisioned window string into a ProvisionedWindow, or returns an error.
+func getProvisioinedWindow(window string) (fv1.ProvisionedWindow, error) {
+	var w fv1.ProvisionedWindow
+
+	if len(window) == 0 {
+		return w, fmt.Errorf("window details are empty")
+	}
+
+	requiredKeys := []string{"name", "duration", "start", "target"}
+
+	pairs := strings.Split(window, ";")
+	m := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		key, value, ok := strings.Cut(pair, "=")
+		if !ok {
+			return w, fmt.Errorf("invalid window definition: %s, format is key=value", pair)
+		}
+		m[key] = value
+	}
+
+	var errs []error
+
+	// all required keys must be present
+	required := make(map[string]bool, len(requiredKeys))
+	for _, key := range requiredKeys {
+		required[key] = true
+		if _, ok := m[key]; !ok {
+			errs = append(errs, fmt.Errorf("missing required window key: %s", key))
+		}
+	}
+
+	// no extra/unknown keys allowed
+	for key := range m {
+		if !required[key] {
+			errs = append(errs, fmt.Errorf("invalid window definition: %s is not a valid key", key))
+		}
+	}
+
+	if len(errs) > 0 {
+		return w, errors.Join(errs...)
+	}
+	target, err := strconv.Atoi(m["target"])
+	if err != nil {
+		return w, fmt.Errorf("invalid target: %w", err)
+	}
+	if target < 0 {
+		return w, fmt.Errorf("target is negative")
+	}
+	duration, err := time.ParseDuration(m["duration"])
+	if err != nil {
+		return w, fmt.Errorf("invalid duration: %w", err)
+	}
+	if duration <= 0 {
+		return w, fmt.Errorf("duration is zero or negative")
+	}
+	if err := fv1.IsValidCronSpec(m["start"]); err != nil {
+		return w, fmt.Errorf("invalid start: %w", err)
+	}
+	w = fv1.ProvisionedWindow{
+		Name:     m["name"],
+		Duration: m["duration"],
+		Start:    m["start"],
+		Target:   target,
+	}
+	return w, nil
 }
 
 // getStreamingConfig builds a StreamingConfig from the --streaming* flags, or
@@ -463,6 +554,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
+	provisionedConcurrency, err := getProvisionedConcurrencyConfig(input)
+	if err != nil {
+		return err
+	}
+
 	opts.function = &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fnName,
@@ -480,7 +576,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			State:                  getStateConfig(input, nil),
 			Invocation:             invocation,
 			Versioning:             versioningConfig,
-			ProvisionedConcurrency: getProvisionedConcurrencyConfig(input),
+			ProvisionedConcurrency: provisionedConcurrency,
 			Concurrency:            fnConcurrency,
 			RequestsPerPod:         requestsPerPod,
 			RetainPods:             retainPods,

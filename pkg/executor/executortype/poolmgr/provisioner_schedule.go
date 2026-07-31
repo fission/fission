@@ -1,0 +1,158 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package poolmgr
+
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/robfig/cron/v3"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+)
+
+type perWindow struct {
+	name        string
+	schedule    cron.Schedule
+	activeUntil time.Time
+	nextOpen    time.Time
+	capped      bool
+}
+
+type fnSchedule struct {
+	name       string
+	namespace  string
+	generation int64
+	windows    map[string]*perWindow
+	timer      *time.Timer
+	mu         sync.Mutex
+}
+
+func (f *fnSchedule) reBuildWindows(fn *fv1.Function, logger logr.Logger) {
+	f.windows = make(map[string]*perWindow)
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	for _, window := range fn.Spec.ProvisionedConcurrency.Windows {
+		sched, err := cronSpecParser.Parse(window.Start)
+		if err != nil {
+			logger.Error(err, "cron parser failed to parse", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		}
+		dur, err := time.ParseDuration(window.Duration)
+		if err != nil {
+			logger.Error(err, "time duration parse failed to parse", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		} else if dur <= 0 {
+			logger.Error(fmt.Errorf("window duration must be positive"), "time duration must >0", "function", fn.Name, "namespace", fn.Namespace, "window", window.Name)
+			f.windows[window.Name] = nil
+			continue
+		}
+		now := time.Now()
+		pw := &perWindow{name: window.Name, schedule: sched}
+		t := sched.Next(now.Add(-dur))
+		if t.IsZero() || t.After(now) {
+			// window not active
+			pw.activeUntil = time.Time{}
+			pw.nextOpen = sched.Next(now)
+		} else {
+			// window active
+			t, capped := lastSched(sched, t, now)
+			pw.capped = capped
+			if capped {
+				pw.activeUntil = time.Time{}
+			} else {
+				pw.activeUntil = t.Add(dur)
+			}
+			pw.nextOpen = time.Time{}
+		}
+		f.windows[window.Name] = pw
+	}
+}
+
+// effectiveTargetAt returns the effective provisioned target for cfg at
+// instant now: cfg.Target if no window is currently active, or the max
+// Target across all currently-active windows. If activeWindow.Target <= base.Target, activeWindow wins over base.
+// Pure: no I/O,
+// no wall-clock reads, so property/DST tests can hammer it directly.
+// Windows that fail to evaluate (malformed cron/duration, e.g. from a raw
+// kubectl write bypassing admission) are skipped rather than aborting the
+// whole evaluation, and returned in badWindows for the caller to log.
+func effectiveTargetAt(cfg *fv1.ProvisionedConcurrencyConfig, now time.Time) (int, []error) {
+	if cfg == nil {
+		return 0, nil
+	}
+	target := cfg.Target
+	badWindows := []error{}
+	maxActiveTarget := 0
+	active := false
+	for _, window := range cfg.Windows {
+		if windowActive, err := windowActiveAt(window, now); err != nil {
+			e := fmt.Errorf("window %s failed: %w", window.Name, err)
+			badWindows = append(badWindows, e)
+		} else if windowActive {
+			maxActiveTarget = max(maxActiveTarget, window.Target)
+			active = true
+		}
+	}
+	if active {
+		target = maxActiveTarget
+	}
+	return target, badWindows
+}
+
+// windowActiveAt reports whether window is open at instant now. robfig/cron's
+// Schedule only exposes Next(t) — "next fire strictly after t" — so the most
+// recent fire <= now is found by walking forward from a safe lower bound
+// (now-duration) until the next candidate would overshoot now. A cron denser
+// than duration is capped at maxScheduleIterations walks and treated as
+// active, since that density alone implies the window can never fully close.
+func windowActiveAt(window fv1.ProvisionedWindow, now time.Time) (bool, error) {
+	cronSpecParser := cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	sched, err := cronSpecParser.Parse(window.Start)
+	if err != nil {
+		return false, err
+	}
+	dur, err := time.ParseDuration(window.Duration)
+	if err != nil {
+		return false, err
+	}
+	if dur <= 0 {
+		return false, fmt.Errorf("window duration must be positive")
+	}
+	// sched.Next returns the first fire strictly after now-dur, so t <= now
+	// implies now-dur < t <= now: the window opened at t and closes at t+dur,
+	// which is after now. Any fire in (now-dur, now] therefore means the
+	// window is open — no need to walk forward to the most recent fire.
+	t := sched.Next(now.Add(-dur))
+	if t.IsZero() || t.After(now) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// maxScheduleIterations bounds lastSched's forward walk. A cron denser than
+// its window duration would otherwise walk unboundedly; hitting the cap is
+// reported as capped=true and treated as permanently active.
+const maxScheduleIterations = 100_000
+
+// lastSched walks forward from t and returns the last fire <= now.
+// capped=true means the walk hit maxScheduleIterations without converging.
+func lastSched(sched cron.Schedule, t time.Time, now time.Time) (time.Time, bool) {
+	for range maxScheduleIterations {
+		next := sched.Next(t)
+		// robfig/cron returns the zero time when no fire exists within its
+		// 5-year search horizon (e.g. "0 0 29 2 *" crossing the non-leap
+		// year 1800). Zero is not After(now), so without this guard the walk
+		// restarts from year 1 and burns the entire iteration budget.
+		if next.IsZero() || next.After(now) {
+			return t, false
+		}
+		t = next
+	}
+	return time.Time{}, true
+}

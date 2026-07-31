@@ -7,23 +7,30 @@ package poolmgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-logr/logr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -40,10 +47,25 @@ type fakeGPM struct {
 	block      chan struct{} // if non-nil, each call blocks until this is closed
 	svc        *fscache.FuncSvc
 	err        error
+	refs       []corev1.ObjectReference
+
+	// untaps / markFailures count the two PoolCache accounting callbacks the
+	// provisioner owes after a GetFuncSvc. GetFuncSvc books a reservation on
+	// the caller's behalf (SetSvcValue bumps activeRequests and settles
+	// svcWaiting); the router normally settles up over the UnTap RPC, but the
+	// provisioner calls GetFuncSvc in-process and must settle up itself.
+	// Skipping either one corrupts the executor's concurrency accounting —
+	// see the "two disjoint modes" note in CLAUDE.md.
+	untaps       atomic.Int64
+	markFailures atomic.Int64
+	// lastUntapAddr records the svcHost the last UnTapService was called with,
+	// so a test can prove the release is keyed on the FuncSvc the call
+	// returned rather than on some other address.
+	lastUntapAddr atomic.Value
 }
 
 func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error) {
-	f.calls.Add(1)
+	n := f.calls.Add(1)
 	cur := f.concurrent.Add(1)
 	for {
 		peak := f.peakConc.Load()
@@ -59,7 +81,19 @@ func (f *fakeGPM) GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.Fu
 			return nil, ctx.Err()
 		}
 	}
+	if f.refs != nil {
+		return &fscache.FuncSvc{KubernetesObjects: []corev1.ObjectReference{f.refs[(n-1)%int64(len(f.refs))]}}, f.err
+	}
 	return f.svc, f.err
+}
+
+func (f *fakeGPM) UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string) {
+	f.untaps.Add(1)
+	f.lastUntapAddr.Store(svcHost)
+}
+
+func (f *fakeGPM) MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta) {
+	f.markFailures.Add(1)
 }
 
 // podRef builds an ObjectReference for a pod in the given namespace.
@@ -227,7 +261,8 @@ func provisionedFnWithUID(name, uid string, target int) *fv1.Function {
 func getPod(t *testing.T, p *Provisioner, name string) *corev1.Pod {
 	t.Helper()
 	got, err := p.kubernetesClient.CoreV1().Pods("default").Get(
-		t.Context(), name, metav1.GetOptions{})
+		t.Context(), name, metav1.GetOptions{},
+	)
 	require.NoError(t, err)
 	return got
 }
@@ -236,7 +271,8 @@ func getPod(t *testing.T, p *Provisioner, name string) *corev1.Pod {
 func getFnStatus(t *testing.T, p *Provisioner, name string) fv1.FunctionStatus {
 	t.Helper()
 	got, err := p.fissionClient.CoreV1().Functions("default").Get(
-		t.Context(), name, metav1.GetOptions{})
+		t.Context(), name, metav1.GetOptions{},
+	)
 	require.NoError(t, err)
 	return got.Status
 }
@@ -295,22 +331,26 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 		{
 			"unset = off",
 			nil,
-			ProvisionerConfig{}, false, false,
+			ProvisionerConfig{},
+			false, false,
 		},
 		{
 			"false = off",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "false"},
-			ProvisionerConfig{}, false, false,
+			ProvisionerConfig{},
+			false, false,
 		},
 		{
 			"garbage bool = off with error",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "yes"},
-			ProvisionerConfig{}, false, true,
+			ProvisionerConfig{},
+			false, true,
 		},
 		{
 			"enabled, defaults",
 			map[string]string{"EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED": "true"},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second},
+			true, false,
 		},
 		{
 			"enabled, overrides",
@@ -320,7 +360,8 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "8",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "1m",
 			},
-			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute}, true, false,
+			ProvisionerConfig{MaxPerFunction: 50, MaxInflightPerFunction: 8, ReconcileInterval: time.Minute},
+			true, false,
 		},
 		{
 			"enabled, garbage ints fall back to defaults",
@@ -330,7 +371,8 @@ func TestProvisionerConfigFromEnv(t *testing.T) {
 				"EXECUTOR_PROVISIONED_MAX_INFLIGHT_PER_FUNCTION": "",
 				"EXECUTOR_PROVISIONED_RECONCILE_INTERVAL":        "notaduration",
 			},
-			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second}, true, false,
+			ProvisionerConfig{MaxPerFunction: 20, MaxInflightPerFunction: 4, ReconcileInterval: 30 * time.Second},
+			true, false,
 		},
 	}
 	for _, tt := range tests {
@@ -661,6 +703,8 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		pod := readyPod("warm-pod", uid)
 		delete(pod.Labels, fv1.PROVISIONED_LABEL)
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			Function:          &fn.ObjectMeta,
+			Address:           "10.0.0.1:8888",
 			KubernetesObjects: []corev1.ObjectReference{podRef("warm-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn, pod)
@@ -672,6 +716,21 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		assert.Equal(t, fv1.PROVISIONED_VALUE, got.Labels[fv1.PROVISIONED_LABEL],
 			"provisioned label must be patched in")
 		assert.Equal(t, int64(1), gpm.calls.Load(), "GetFuncSvc called once")
+
+		// GetFuncSvc booked a request slot on this pod (SetSvcValue bumps
+		// activeRequests to 1, as if a caller were being served). Nobody is
+		// actually using the pod — it is only being pre-warmed — so the
+		// provisioner must hand the slot back. Without this the pod sits at
+		// activeRequests=1 forever: PoolCache.ListAvailableValue only offers
+		// svcs with activeRequests==0 to the idle reaper, so the pod is never
+		// reaped once its provisioned label is cleared, and with the default
+		// requestsPerPod=1 it is never handed to real traffic either.
+		assert.Equal(t, int64(1), gpm.untaps.Load(), "must release the booked slot exactly once")
+		assert.Equal(t, "10.0.0.1:8888", gpm.lastUntapAddr.Load(),
+			"release must use the address of the FuncSvc that booked the slot")
+		// A successful specialization already settled svcWaiting inside
+		// SetSvcValue; marking a failure here too would double-decrement.
+		assert.Zero(t, gpm.markFailures.Load(), "success path must not mark a specialization failure")
 	})
 
 	t.Run("GetFuncSvc error returns early, no patch", func(t *testing.T) {
@@ -687,6 +746,16 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		got := getPod(t, p, "warm-pod")
 		_, hasLabel := got.Labels[fv1.PROVISIONED_LABEL]
 		assert.False(t, hasLabel, "no patch on GetFuncSvc failure")
+
+		// GetFuncSvc never took a svcWaiting reservation in the first place
+		// (only ReserveCapacity/GetFuncSvcFromCache do), so there is nothing
+		// for MarkSpecializationFailure to settle here. Calling it anyway
+		// would steal a concurrent caller's real reservation instead.
+		assert.Zero(t, gpm.markFailures.Load(), "GetFuncSvc failure must not mark a specialization failure")
+		// Nothing was allotted, so there is no slot to release. GetFuncSvc
+		// returns (nil, err) on every error path, so there is no FuncSvc to
+		// key an untap on either.
+		assert.Zero(t, gpm.untaps.Load(), "nothing allotted, nothing to release")
 	})
 
 	t.Run("patch failure (pod missing) does not panic", func(t *testing.T) {
@@ -694,6 +763,8 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		// logs the error but must not panic and must not return an error
 		// (the pod is serving, just not labeled — accepted race).
 		gpm := &fakeGPM{svc: &fscache.FuncSvc{
+			Function:          &fn.ObjectMeta,
+			Address:           "10.0.0.2:8888",
 			KubernetesObjects: []corev1.ObjectReference{podRef("ghost-pod", "default")},
 		}}
 		p := newTestProvisionerWithGPM(t, gpm, fn) // no pods seeded
@@ -702,6 +773,17 @@ func TestProvisioner_eagerSpecialize(t *testing.T) {
 		// eagerSpecialize returns nil even on patch failure (the error is
 		// only logged) — the pod is specialized and serving.
 		assert.NoError(t, err)
+
+		// The label patch failing says nothing about the specialization: the
+		// pod IS specialized and serving, it just is not reaper-exempt. So the
+		// booked slot still has to be released...
+		assert.Equal(t, int64(1), gpm.untaps.Load(), "slot must be released even when the label patch fails")
+		// ...but svcWaiting was already settled by SetSvcValue when GetFuncSvc
+		// succeeded. Marking a failure here decrements it a second time, which
+		// under-counts concurrencyUsed and under-enforces the concurrency cap.
+		// MarkSpecializationFailure belongs on the GetFuncSvc error path only.
+		assert.Zero(t, gpm.markFailures.Load(),
+			"a failed label patch is not a failed specialization")
 	})
 
 	t.Run("non-pod KubernetesObjects are skipped", func(t *testing.T) {
@@ -1113,4 +1195,443 @@ func TestProvisioner_RunZeroIntervalNoPanic(t *testing.T) {
 func metaFindCondition(st fv1.FunctionStatus, ct string) *metav1.Condition {
 	cond := meta.FindStatusCondition(st.Conditions, ct)
 	return cond
+}
+
+// ---------------------------------------------------------------------------
+// schedule tests
+// ---------------------------------------------------------------------------
+
+// setupWindowProvisioner creates a provisioner seeded with 5 unlabeled pods
+// for a function with the given provisioned-concurrency windows, runs the
+// initial reconcile, and asserts the starting target is 0.
+// It returns the provisioner, the fake GPM (for call-count assertions),
+// and the refreshed Function object.
+func setupWindowProvisioner(t *testing.T, windows []fv1.ProvisionedWindow) (*Provisioner, *fakeGPM, *fv1.Function) {
+	t.Helper()
+	const uid = "u1"
+	fn := provisionedFnWithUID("fn", uid, 0)
+	fn.Spec.ProvisionedConcurrency.Windows = windows
+	pods := []*corev1.Pod{}
+	pref := []corev1.ObjectReference{}
+	for i := range 5 {
+		podName := fmt.Sprintf("pod%d", i)
+		pod := readyPod(podName, uid)
+		delete(pod.Labels, fv1.PROVISIONED_LABEL)
+		pods = append(pods, pod)
+		pref = append(pref, podRef(podName, "default"))
+	}
+	gpm := &fakeGPM{
+		refs: pref,
+	}
+	p := newTestProvisionerWithGPM(t, gpm, fn, pods...)
+	return p, gpm, fn
+}
+
+// TestProvisionerArmTransitionSyncBubbleTest tests a multi window function.
+// It first checks if the target is zero at 12AM
+// Then it check if the target is 3 at 9AM
+// Then it checks if the target is 5 at 12PM
+// Then it checks if the target is 3 at 2PM
+// Then it checks if the target is 0 at 12AM next day
+func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, gpm, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+			{Name: "window2", Start: "CRON_TZ=UTC 0 12 * * *", Duration: "2h", Target: 5},
+		})
+		p.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		fn, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+
+		// check if window 1 provisioned target is updated
+		time.Sleep(9 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		labeled := countLabelledPods(t, p)
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(3), gpm.calls.Load())
+
+		// update crClient cache
+		updateCrClient(t, p)
+
+		// check if window 2 provisioned target is updated
+		time.Sleep(3 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 5, fn.Status.ProvisionedTarget, "expected 5 target, got: ", fn.Status.ProvisionedTarget)
+		labeled = countLabelledPods(t, p)
+		assert.Equal(t, 5, labeled, "expected 5 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(5), gpm.calls.Load())
+		// update crClient cache
+		updateCrClient(t, p)
+
+		// window 2 is over, check if provisioned target is updated to window1 target
+		time.Sleep(2 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		labeled = countLabelledPods(t, p)
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(5), gpm.calls.Load())
+		// update crClient cache
+		updateCrClient(t, p)
+
+		// window1 is over, check if provisioned target is updated to 0
+		time.Sleep(3 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := getPod(t, p, podName)
+			assert.Equal(t, "", pod.Labels[fv1.PROVISIONED_LABEL],
+				"provisioned label must be removed")
+		}
+		assert.Equal(t, int64(5), gpm.calls.Load())
+	})
+}
+
+// updateCrClient mirrors provisioned-label state from the
+// kubernetesClient (where labelPods writes) into the crClient (where
+// the provisioner reconciler reads via List). Call this between
+// time-advance steps so the next reconcile sees up-to-date labels.
+func updateCrClient(t *testing.T, p *Provisioner) {
+	t.Helper()
+	for i := range 5 {
+		podName := fmt.Sprintf("pod%d", i)
+		var cur corev1.Pod
+		require.NoError(t, p.crClient.Get(t.Context(), client.ObjectKey{Namespace: "default", Name: podName}, &cur))
+		src := getPod(t, p, podName)
+		if v, ok := src.Labels[fv1.PROVISIONED_LABEL]; ok {
+			cur.Labels[fv1.PROVISIONED_LABEL] = v
+		} else {
+			delete(cur.Labels, fv1.PROVISIONED_LABEL)
+		}
+		require.NoError(t, p.crClient.Update(t.Context(), &cur))
+	}
+}
+
+func TestProvisionerScheduleStopProvisionerRemoveProvisionedConcurrency(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, gpm, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+		})
+		p.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		fn, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+
+		// check if window 1 provisioned target is updated
+		time.Sleep(9 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		labeled := countLabelledPods(t, p)
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(3), gpm.calls.Load())
+
+		// update crClient cache
+		updateCrClient(t, p)
+
+		// get functions schedule
+		sched := p.scheduleFor(fn)
+		assert.NotNil(t, sched.timer)
+
+		// remove provisionedconcurrency from function
+		fn.Spec.ProvisionedConcurrency = nil
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Update(t.Context(), fn, metav1.UpdateOptions{})
+		require.NoError(t, err)
+		p.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		assert.Nil(t, fn.Spec.ProvisionedConcurrency, "expected provisionedconcurrency to be nil")
+		_, hasSched := p.timers.Load(fn.UID)
+		assert.False(t, hasSched, "expected disableProvisioning to drop the function's schedule entry")
+
+		// update crClient cache
+		updateCrClient(t, p)
+		labeled = countLabelledPods(t, p)
+		assert.Equal(t, 0, labeled, "expected 0 pods to be labeled, instead got ", labeled)
+	})
+}
+
+// TestProvisionerScheduleStopProvisionerDeleteFunction tests whether
+// deleting a function deletes the schedule and stops provisioning.
+func TestProvisionerScheduleStopProvisionerDeleteFunction(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, gpm, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+		})
+		p.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		fn, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
+
+		// check if window 1 provisioned target is updated
+		time.Sleep(9 * time.Hour)
+		synctest.Wait()
+		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.NoError(t, err, "no error expected fetching latest function")
+		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
+		labeled := countLabelledPods(t, p)
+		assert.Equal(t, 3, labeled, "expected 3 pods to be labeled, instead got ", labeled)
+		assert.Equal(t, int64(3), gpm.calls.Load())
+
+		// update crClient cache
+		updateCrClient(t, p)
+
+		// get functions schedule
+		sched := p.scheduleFor(fn)
+		assert.NotNil(t, sched.timer)
+
+		// delete function
+		err = p.fissionClient.CoreV1().Functions(fn.Namespace).Delete(t.Context(), fn.Name, metav1.DeleteOptions{})
+		require.NoError(t, err)
+		p.forget(fn.UID)
+		p.clearProvisionedLabels(t.Context(), fn, -1)
+		synctest.Wait()
+
+		_, ok := p.timers.Load(fn.UID)
+		assert.False(t, ok, "schedule entry should be deleted, not just recreated empty")
+
+		// update crClient cache
+		updateCrClient(t, p)
+		labeled = countLabelledPods(t, p)
+		assert.Equal(t, 0, labeled, "expected 0 pods to be labeled, instead got ", labeled)
+	})
+}
+
+// countLabelledPods counts the number of pods with the provisioned label set to "true".
+func countLabelledPods(t *testing.T, p *Provisioner) int {
+	t.Helper()
+	labeled := 0
+	for i := range 5 {
+		podName := fmt.Sprintf("pod%d", i)
+		pod := getPod(t, p, podName)
+		if pod.Labels[fv1.PROVISIONED_LABEL] == "true" {
+			labeled++
+		}
+	}
+	return labeled
+}
+
+// TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming tests the race condition
+// where a schedule and a delete function call happens at the same time.
+func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, _, fn := setupWindowProvisioner(t, []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+		})
+		react := atomic.Bool{}
+		fakeClient := p.fissionClient.(*fClient.Clientset)
+		block := make(chan struct{})
+		fakeClient.PrependReactor("get", "functions", func(_ k8stesting.Action) (handled bool, result runtime.Object, err error) {
+			react.Store(true)
+			select {
+			case <-block:
+			case <-t.Context().Done():
+				return true, nil, t.Context().Err()
+			}
+			return false, nil, nil
+		})
+		synctest.Wait()
+		time.Sleep(9 * time.Hour)
+		gvr := schema.GroupVersionResource{
+			Group:    "fission.io",
+			Version:  "v1",
+			Resource: "functions",
+		}
+		require.NoError(t, fakeClient.Tracker().Delete(gvr, fn.Namespace, fn.Name, metav1.DeleteOptions{}))
+		p.forget(fn.UID)
+		p.clearProvisionedLabels(t.Context(), fn, -1)
+		close(block)
+		synctest.Wait()
+		_, ok := p.timers.Load(fn.UID)
+		assert.False(t, ok, "schedule entry should be deleted, not just recreated empty")
+		_, err := p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
+		assert.Error(t, err)
+		assert.True(t, apierrors.IsNotFound(err))
+		labelled := countLabelledPods(t, p)
+		assert.Equal(t, 0, labelled)
+
+		assert.True(t, react.Load())
+	})
+}
+
+// TestProvisionerScheduleTickerTimer proves that two independent triggers of
+// reconcileFunction for the same function — a real fired per-function timer
+// (armTransition's time.AfterFunc) and a rival caller standing in for the
+// ticker's reconcileAll pass — never both run reconcileFunctionLocked at
+// once. lockFor(fn.UID) must force them to serialize.
+//
+// GetFuncSvc (fakeGPM) is deliberately NOT the probe point: fireEagerSpecializations
+// fires each pod's eagerSpecialize/GetFuncSvc call from its own background
+// goroutine, so a count there conflates "how many pods this one reconcile is
+// warming" with "how many reconciles are running" — it would climb even with
+// the lock working perfectly. Instead this test intercepts crClient's List
+// (via crfake's WithInterceptorFuncs): countProvisionedPods calls List
+// exactly once per reconcileFunctionLocked call, synchronously, right after
+// the lock is taken and before any pod work starts. So listCalls climbing
+// past what a checkpoint expects can only mean two reconciles genuinely had
+// the lock at overlapping times — a direct proxy for lock ordering.
+//
+// The test is split into two non-overlapping phases instead of one long
+// synctest.Sleep spanning both triggers. That split is forced by a real
+// synctest limitation, not a style choice: synctest.Wait/time.Sleep can only
+// return once every other goroutine in the bubble is "durably blocked" —
+// which per testing/synctest's doc comment on Wait means blocked on a
+// channel op, select, sync.Cond.Wait, or time.Sleep. A goroutine contending
+// a plain sync.Mutex.Lock — exactly what happens when a second
+// reconcileFunction call waits on lockFor — does NOT count as durably
+// blocked. If a mutex-contended goroutine and a channel-blocked goroutine
+// both exist while a Sleep/Wait needs to resolve, the bubble can never be
+// judged quiescent and the test hangs for real, caught only by go test's
+// -timeout (verified empirically: an earlier draft of this test hung this
+// exact way). Each phase below fully releases its blocked caller — close
+// the channel, then Wait — before the next contender is introduced, so a
+// mutex-contended goroutine is never left needing to survive across a
+// Sleep.
+//
+// Reusing a plain variable (a channel, a *Provisioner, a struct field) that
+// a still-live background goroutine might read is ALSO unsafe here, even
+// across phase boundaries and even when the reassignment happens earlier in
+// the same goroutine's program order: an earlier draft that swapped
+// p.crClient mid-test, and one that reassigned a captured listBlock
+// variable, both tripped -race, because synctest's fake-time ordering is
+// not a synchronization primitive the race detector recognizes. Each phase
+// below therefore builds a fully independent *Provisioner (its own
+// crClient, its own listBlock/listCalls closure) rather than mutating
+// shared state — and phase 1's Provisioner has its own real, live
+// armTransition timer explicitly stopped via p.forget(fn.UID) before phase
+// 2 starts, otherwise that leftover timer independently fires during phase
+// 2's sleep and inflates the call count (this was caught empirically: the
+// count came in one higher than expected until forget was added).
+func TestProvisionerScheduleTickerTimer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const uid = "u1"
+		// Window opens 9h into the fake clock (which always starts at
+		// midnight UTC 2000-01-01 inside synctest) and asks for 3 warm pods
+		// while open. 5 unlabeled pods (no PROVISIONED_LABEL) exist, all
+		// tagged for this function's UID, so ready starts at 0 and there's
+		// real work for fireEagerSpecializations once a reconcile sees the
+		// window open. Both phases reuse this same fn/pods/uid — forget()
+		// below is what makes that safe, so there's no need for a second
+		// function identity.
+		fn := provisionedFnWithUID("fn", uid, 0)
+		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{
+			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
+		}
+		pods := []*corev1.Pod{}
+		pref := []corev1.ObjectReference{}
+		for i := range 5 {
+			podName := fmt.Sprintf("pod%d", i)
+			pod := readyPod(podName, uid)
+			delete(pod.Labels, fv1.PROVISIONED_LABEL)
+			pods = append(pods, pod)
+			pref = append(pref, podRef(podName, "default"))
+		}
+
+		// newProbe builds one fully independent crClient + interceptor per
+		// phase: every List of a *PodList (i.e. every countProvisionedPods
+		// call) increments the returned counter and then parks on the
+		// returned channel until the test closes it. Function-list calls
+		// (reconcileAll's own List, of *FunctionList) pass straight
+		// through — blocking those too would stall the ticker loop on a
+		// call unrelated to the thing being probed, an earlier bug in this
+		// test. Each phase gets its own counter/channel/crClient rather
+		// than reassigning shared ones, since a background goroutine (the
+		// fired timer's callback) reading a variable the main goroutine
+		// just reassigned is a data race by Go's memory model even when
+		// synctest's fake-time ordering makes it safe in practice.
+		newProbe := func() (*atomic.Int64, chan struct{}, client.Client) {
+			var listCalls atomic.Int64
+			listBlock := make(chan struct{})
+			crClient := crfake.NewClientBuilder().WithScheme(scheme()).
+				WithObjects(toClientObjects(pods...)...).
+				WithObjects(fn).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						if _, isPodList := list.(*corev1.PodList); !isPodList {
+							return cl.List(ctx, list, opts...)
+						}
+						listCalls.Add(1)
+						select {
+						case <-listBlock:
+						case <-ctx.Done():
+							return ctx.Err()
+						}
+						return cl.List(ctx, list, opts...)
+					},
+				}).Build()
+			return &listCalls, listBlock, crClient
+		}
+
+		newTestProvisioner := func(crClient client.Client) *Provisioner {
+			return NewProvisioner(
+				logr.Discard(),
+				&fakeGPM{refs: pref},
+				fClient.NewSimpleClientset(fn), //nolint:staticcheck
+				k8sfake.NewSimpleClientset(toRuntimeObjects(pods...)...),
+				crClient,
+				defaultCfg,
+			)
+		}
+
+		// Phase 1: sanity-check the lock in isolation, before any window or
+		// timer is meant to matter. At time 0 the window is closed, so
+		// this call takes the target-0/disableProvisioningLocked path — it
+		// is not simulating the ticker or the timer, just proving one
+		// caller can reach and get stuck at the probe point on its own.
+		// reconcileFunctionLocked calls armTransition unconditionally
+		// before the target-0 check, so this call also arms a real 9h
+		// timer as a side effect — forget() below stops it before phase 2,
+		// so it can't fire independently and corrupt phase 2's count.
+		listCalls1, listBlock1, crClient1 := newProbe()
+		p1 := newTestProvisioner(crClient1)
+
+		go p1.reconcileFunction(t.Context(), fn)
+		synctest.Wait()
+		assert.Equal(t, int64(1), listCalls1.Load())
+		close(listBlock1)
+		p1.forget(fn.UID)
+		synctest.Wait()
+
+		// Phase 2: the real collision. A fresh Provisioner (own crClient,
+		// own probe) avoids reassigning anything p1's now-stopped timer
+		// goroutine could have read. p2.armTransition(fn) arms its own
+		// timer explicitly, since this Provisioner has never reconciled
+		// yet. Sleeping to just past the window-open edge lets that timer
+		// fire for real — this is genuinely armTransition's time.AfterFunc
+		// callback, not a stand-in for anything.
+		listCalls2, listBlock2, crClient2 := newProbe()
+		p2 := newTestProvisioner(crClient2)
+		p2.armTransition(fn)
+
+		time.Sleep(9*time.Hour + time.Nanosecond)
+		synctest.Wait()
+		// The fired timer's callback is the one stuck here — the only
+		// contender that exists at this point, so exactly 1 call.
+		assert.Equal(t, int64(1), listCalls2.Load())
+
+		// The rival caller: stands in for what would be the ticker's
+		// concurrent reconcileAll pass. Starting it here, then closing
+		// listBlock2 with no blocking call in between, is what keeps this
+		// safe under synctest — see the function doc comment above.
+		go p2.reconcileFunction(t.Context(), fn)
+		close(listBlock2)
+		synctest.Wait()
+
+		// Both reconciles reached the probe point, one after the other —
+		// proof they were serialized by lockFor, not run concurrently.
+		assert.Equal(t, int64(2), listCalls2.Load())
+	})
 }

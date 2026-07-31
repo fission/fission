@@ -84,14 +84,17 @@ type Params struct {
 	// BurstSize is the number of simultaneous first-requests the cold-burst
 	// scenarios fire; sized above Poolsize so the burst forces pool exhaustion
 	// and refill rather than being absorbed by warm pods.
-	BurstSize         int                `json:"burstSize"`
-	WarmDuration      Duration           `json:"warmDuration"`
-	WarmWarmup        Duration           `json:"warmWarmup"`
-	WarmConcurrency   int                `json:"warmConcurrency"`
-	ConcurrencyLevels []int              `json:"concurrencyLevels"`
-	RPSLevels         []int              `json:"rpsLevels"`
-	PayloadSizes      []int              `json:"payloadSizes"` // bytes
-	Executors         []fv1.ExecutorType `json:"executors"`
+	BurstSize                 int                `json:"burstSize"`
+	ProvisionedWarmTarget     int                `json:"provisionedWarmTarget"`     // A's target during the burst
+	ProvisionedWarmPoolsize   int                `json:"provisionedWarmPoolsize"`   // pool size for the shared env
+	ProvisionedWarmIterations int                `json:"provisionedWarmIterations"` // B cold-start samples per phase
+	WarmDuration              Duration           `json:"warmDuration"`
+	WarmWarmup                Duration           `json:"warmWarmup"`
+	WarmConcurrency           int                `json:"warmConcurrency"`
+	ConcurrencyLevels         []int              `json:"concurrencyLevels"`
+	RPSLevels                 []int              `json:"rpsLevels"`
+	PayloadSizes              []int              `json:"payloadSizes"` // bytes
+	Executors                 []fv1.ExecutorType `json:"executors"`
 
 	// Number of Secrets/ConfigMaps the cold-start-poolmgr-configdeps scenario's
 	// function references, sizing the per-reference specialization-time lookups.
@@ -108,24 +111,27 @@ type Params struct {
 // DefaultParams returns the standard full-run parameters.
 func DefaultParams() Params {
 	return Params{
-		Poolsize:             3,
-		ColdIterations:       20,
-		Repetitions:          1,
-		BurstSize:            10,
-		WarmDuration:         Duration(60 * time.Second),
-		WarmWarmup:           Duration(10 * time.Second),
-		WarmConcurrency:      50,
-		ConcurrencyLevels:    []int{10, 50, 100, 250, 500},
-		RPSLevels:            []int{100, 250, 500, 1000},
-		PayloadSizes:         []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
-		Executors:            []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
-		ConfigDepsSecrets:    5,
-		ConfigDepsConfigMaps: 5,
-		AutoscaleMaxScale:    5,
-		AutoscaleObserve:     Duration(3 * time.Minute),
-		IndexScaleCount:      1000,
-		RouteChurnCount:      500,
-		BuildTimeout:         Duration(5 * time.Minute),
+		Poolsize:                  3,
+		ColdIterations:            20,
+		Repetitions:               1,
+		BurstSize:                 10,
+		ProvisionedWarmTarget:     20,
+		ProvisionedWarmPoolsize:   30,
+		ProvisionedWarmIterations: 10,
+		WarmDuration:              Duration(60 * time.Second),
+		WarmWarmup:                Duration(10 * time.Second),
+		WarmConcurrency:           50,
+		ConcurrencyLevels:         []int{10, 50, 100, 250, 500},
+		RPSLevels:                 []int{100, 250, 500, 1000},
+		PayloadSizes:              []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
+		Executors:                 []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
+		ConfigDepsSecrets:         5,
+		ConfigDepsConfigMaps:      5,
+		AutoscaleMaxScale:         5,
+		AutoscaleObserve:          Duration(3 * time.Minute),
+		IndexScaleCount:           1000,
+		RouteChurnCount:           500,
+		BuildTimeout:              Duration(5 * time.Minute),
 	}
 }
 
@@ -142,6 +148,15 @@ func (p Params) normalize() Params {
 	}
 	if p.BurstSize == 0 {
 		p.BurstSize = d.BurstSize
+	}
+	if p.ProvisionedWarmTarget == 0 {
+		p.ProvisionedWarmTarget = d.ProvisionedWarmTarget
+	}
+	if p.ProvisionedWarmPoolsize == 0 {
+		p.ProvisionedWarmPoolsize = d.ProvisionedWarmPoolsize
+	}
+	if p.ProvisionedWarmIterations == 0 {
+		p.ProvisionedWarmIterations = d.ProvisionedWarmIterations
 	}
 	if p.WarmDuration == 0 {
 		p.WarmDuration = d.WarmDuration
@@ -210,6 +225,7 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &routeChurn{count: p.RouteChurnCount})
 	out = append(out, &asyncInvoke{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &eventingTopic{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
+	out = append(out, &provisionedWarm{burstTarget: p.ProvisionedWarmTarget, poolsize: p.ProvisionedWarmPoolsize, iterations: p.ProvisionedWarmIterations})
 	return out
 }
 

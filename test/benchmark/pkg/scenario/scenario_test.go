@@ -102,6 +102,18 @@ func TestAsyncInvokeScenarioRegistered(t *testing.T) {
 		"async-invoke must stay out of the fast per-PR smoke subset")
 }
 
+// TestProvisionedWarmScenarioRegistered pins that the RFC-0026 P5 starvation
+// guardrail (function A's eager warm-up burst vs. function B's cold-start
+// latency) is built and is deliberately OFF the smoke subset — it runs in
+// the weekly/dispatch suite only, never per-PR.
+func TestProvisionedWarmScenarioRegistered(t *testing.T) {
+	t.Parallel()
+	all := BuildAll(DefaultParams())
+	assert.Contains(t, Names(all), "provisioned-warm-starvation")
+	assert.NotContains(t, Names(Select(all, nil, []string{"smoke"})), "provisioned-warm-starvation",
+		"provisioned-warm starvation guardrail must stay out of the fast per-PR smoke subset")
+}
+
 func TestColdBurstScenariosRegistered(t *testing.T) {
 	t.Parallel()
 	names := Names(BuildAll(DefaultParams()))

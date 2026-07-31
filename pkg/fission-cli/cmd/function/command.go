@@ -36,6 +36,7 @@ func Commands() *cobra.Command {
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 			flag.FnProvisionedConcurrency,
 			flag.FnVersioning, flag.FnRetainVersions,
+			flag.FnProvisionedSchedule,
 
 			// TODO retired pkg & trigger related flags from function cmd
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
@@ -106,6 +107,7 @@ func Commands() *cobra.Command {
 			flag.FnOnceOnly, flag.Labels, flag.Annotation, flag.FnRetainPods,
 			flag.FnProvisionedConcurrency,
 			flag.FnVersioning, flag.FnRetainVersions,
+			flag.FnProvisionedSchedule,
 
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,

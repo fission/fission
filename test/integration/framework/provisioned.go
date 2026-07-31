@@ -54,6 +54,25 @@ func (ns *TestNamespace) WaitForProvisionedPodsAtLeast(t *testing.T,
 	return pods
 }
 
+// WaitForProvisionedReaped waits until fnName has the expected number of
+// running provisioned pods.
+func (ns *TestNamespace) WaitForProvisionedReaped(
+	t *testing.T,
+	ctx context.Context,
+	fnName string,
+	wantRunning int,
+	timeout time.Duration,
+) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		running, err := ns.RunningFunctionPodCount(ctx, fnName)
+		if !assert.NoErrorf(c, err, "get running provisioned pod count for %q", fnName) {
+			return
+		}
+		assert.Equal(c, wantRunning, running, "function %q: want %d running provisioned pods, got %d", fnName, wantRunning, running)
+	}, timeout, 2*time.Second)
+}
+
 // WaitForNoProvisionedPods polls until fnName has zero ready+running
 // provisioned pods. Use after disabling provisioned concurrency
 // (--provisioned-concurrency 0) to assert labels cleared + pods gone.

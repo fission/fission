@@ -30,3 +30,12 @@ scenarios:
   cold-burst-distinct-fn:
     metrics:
       failures: { max: 3 }
+  provisioned-warm-starvation:
+    metrics:
+      # RFC-0026 P5: function B's cold start while function A is eagerly
+      # warming must stay under 2x B's own no-contention baseline, measured
+      # once at the start of the same run. Fixed ceiling by design, not
+      # derived from sample runs — see RFC-0026 lines 93/129 and the PR2
+      # missing-invariants plan, Stage 3 decisions 4/5.
+      contended_ratio: { max: 2.0 }
+      failures: { max: 3 }
