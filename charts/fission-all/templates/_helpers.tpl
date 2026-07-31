@@ -160,16 +160,49 @@ forcing the chart to render an empty key.
 - name: FISSION_INTERNAL_AUTH_SECRET
   valueFrom:
     secretKeyRef:
-      name: fission-internal-auth
+      name: {{ include "fission.internalAuthSecretName" . }}
       key: secret
 - name: FISSION_INTERNAL_AUTH_SECRET_OLD
   valueFrom:
     secretKeyRef:
-      name: fission-internal-auth
+      name: {{ include "fission.internalAuthSecretName" . }}
       key: oldSecret
       optional: true
 {{- end }}
 {{- end }}
+
+{{/*
+fission.internalAuthSecretName is the Secret every control-plane pod reads the
+HMAC master from: a user-managed Secret named by internalAuth.existingSecret,
+or the chart's own "fission-internal-auth".
+*/}}
+{{- define "fission.internalAuthSecretName" -}}
+{{ .Values.internalAuth.existingSecret | default "fission-internal-auth" }}
+{{- end -}}
+
+{{/*
+fission.internalAuthGenerated is non-empty when the chart is responsible for
+producing the HMAC master itself — i.e. neither an inline value nor a
+user-managed Secret was supplied. It also enforces the input contract
+(RFC-0029 §3): the master must never be minted blind.
+
+Rendering CANNOT distinguish `helm template` from a genuine first install —
+lookup is empty in both, .Release.IsInstall is true in both (Argo sets it every
+sync), and .Capabilities carries no renderer signal. So "fail when rendering
+blind" is not expressible, and the guard is an explicit opt-in instead:
+autoGenerate must be true, and generation happens in an idempotent pre-install
+hook Job rather than in a template, so the value survives any renderer.
+*/}}
+{{- define "fission.internalAuthGenerated" -}}
+{{- if .Values.internalAuth.enabled -}}
+{{- if and (not .Values.internalAuth.secret) (not .Values.internalAuth.existingSecret) -}}
+{{- if not (dig "autoGenerate" true .Values.internalAuth) -}}
+{{- fail "internalAuth requires a master key: set internalAuth.secret, or internalAuth.existingSecret, or internalAuth.autoGenerate=true to let a pre-install hook Job mint one" -}}
+{{- end -}}
+true
+{{- end -}}
+{{- end -}}
+{{- end -}}
 
 {{/*
 Define the svc's name
