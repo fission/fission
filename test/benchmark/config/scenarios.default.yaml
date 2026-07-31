@@ -10,6 +10,14 @@ repetitions: 1
 # Simultaneous first-requests for the cold-burst scenarios; > poolsize so the
 # burst forces pool exhaustion + refill instead of being absorbed by warm pods.
 burstSize: 10
+# Function A's provisioned target during the P5 starvation-guardrail
+# scenario's treatment phase; sized to trigger a real eager warm-up burst.
+provisionedWarmTarget: 20
+# Pool size for that scenario's shared environment; bigger than the burst so
+# pool exhaustion isn't what's being measured.
+provisionedWarmPoolsize: 30
+# Cold-start samples per phase (baseline, then treatment) for function B.
+provisionedWarmIterations: 10
 warmDuration: 60s
 warmWarmup: 10s
 warmConcurrency: 50

@@ -90,6 +90,7 @@ const (
 	FnLogAllPods             = "all-pods"
 	FnRetainPods             = "retainpods"
 	FnProvisionedConcurrency = "provisioned-concurrency"
+	FnProvisionedSchedule    = "provisioned-schedule"
 
 	// RFC-0025 versioning opt-in (fn create/update).
 	FnVersioning     = "versioning"

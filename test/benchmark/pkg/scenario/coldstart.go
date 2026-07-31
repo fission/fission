@@ -86,26 +86,13 @@ func (c *coldStart) Run(ctx context.Context, sc *harness.Scope) (report.Scenario
 	return res, nil
 }
 
-// measureOne creates one function+route, measures the first successful request,
-// and tears the pair down (its own sub-scope, derived from the runner's scope
-// so repetition-unique labels reach the resource names) regardless of outcome.
+// measureOne wraps measureColdStart with cold-start's own executor/scale
+// options.
 func (c *coldStart) measureOne(ctx context.Context, sc *harness.Scope, envName string, i int) (time.Duration, bool) {
-	env := sc.Env()
-	iter := sc.SubScope(fmt.Sprintf("i%d", i))
-	defer iter.CleanupDetached(ctx, time.Minute)
-
-	fnName := iter.Name("fn")
-	route := "/" + fnName
-	if err := iter.CreateCodeFunction(ctx, harness.FunctionOptions{
-		Name: fnName, Env: envName, Code: []byte(pythonHello), Entrypoint: "main",
+	return measureColdStart(ctx, sc, envName, "i", i, harness.FunctionOptions{
+		Code: []byte(pythonHello), Entrypoint: "main",
 		ExecutorType: c.executor, MinScale: 0, MaxScale: 1,
-	}); err != nil {
-		return 0, false
-	}
-	if err := iter.CreateRoute(ctx, harness.RouteOptions{Function: fnName, URL: route}); err != nil {
-		return 0, false
-	}
-	return measureFirstSuccess(ctx, env.RouterURL()+route, 3*time.Minute)
+	})
 }
 
 // measureFirstSuccess polls url and returns the cold-start latency. 404s mean

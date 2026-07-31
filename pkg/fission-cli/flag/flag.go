@@ -165,6 +165,7 @@ var (
 	FnLogVersion             = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Show logs for a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias; kubernetes dbtype only"}
 	FnRetainPods             = Flag{Type: Int, Name: flagkey.FnRetainPods, Usage: "Number of pods to retain after pods specialization.", DefaultValue: 0}
 	FnProvisionedConcurrency = Flag{Type: Int, Name: flagkey.FnProvisionedConcurrency, Usage: "Number of warm specialized pods to maintain eagerly (poolmgr only). 0 (default)=no provisioned concurrency", DefaultValue: 0}
+	FnProvisionedSchedule    = Flag{Type: StringSlice, Name: flagkey.FnProvisionedSchedule, Usage: "name=<window-name>;start=<cron(0 9 * * *)>;duration=<10h(time.Duration)>;target=<number of pods>", DefaultValue: []string{}}
 	FnVersioning             = Flag{Type: String, Name: flagkey.FnVersioning, Usage: "Opt the function into immutable version snapshots and named aliases; one of 'auto' (mint a version on every runtime-affecting update), 'manual' (mint only on `fission fn publish`), or 'off' (disable, update only)"}
 	FnRetainVersions         = Flag{Type: Int, Name: flagkey.FnRetainVersions, Usage: "Number of unaliased versions to keep per function before older ones are garbage collected (requires --versioning auto|manual, or an existing versioning config); disambiguates from --retainpods, which retains specialized pods rather than function versions"}
 

@@ -103,12 +103,7 @@ func TestProvisionedConcurrencyRejectsNewdeploy(t *testing.T) {
 	assert.Contains(t, out+err.Error(), "provisionedConcurrency is only supported with executortype")
 }
 
-// TestProvisionedConcurrencyRejectsWindows verifies the admission webhook
-// rejects scheduled windows on a provisioned-concurrency function. Windows
-// are RFC-0026 PR 2; the webhook returns "scheduled windows are not yet
-// supported" (validation.go). No CLI flag for windows, so the update is
-// done via the typed clientset.
-func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
+func TestProvisionedConcurrencyWindowValidation(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -134,10 +129,6 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 
-	// Fetch the live CR, add a scheduled window, attempt update — webhook
-	// must reject. Retry on conflict: the provisioner may write status
-	// (bumping resourceVersion) between our Get and Update, causing a
-	// stale-version conflict that masks the webhook error.
 	var err error
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		fn := ns.GetFunction(t, ctx, fnName)
@@ -147,14 +138,211 @@ func TestProvisionedConcurrencyRejectsWindows(t *testing.T) {
 			Duration: "1h",
 			Target:   1,
 		}}
-		_, err = f.FissionClient().CoreV1().Functions(ns.Name).Update(ctx, fn, metav1.UpdateOptions{})
-		// Conflict = retry (provisioner raced us). Webhook error = done.
+		fn, err = f.FissionClient().CoreV1().Functions(ns.Name).Update(ctx, fn, metav1.UpdateOptions{})
+		// Conflict = retry (provisioner raced us)
 		if apierrors.IsConflict(err) {
 			return // keep polling
 		}
-		assert.Error(c, err, "expected webhook rejection of scheduled windows")
-		assert.Contains(c, err.Error(), "scheduled windows are not yet supported")
+		assert.NoError(c, err)
+		assert.Equal(c, []fv1.ProvisionedWindow{{
+			Name:     "w1",
+			Start:    "0 0 * * *",
+			Duration: "1h",
+			Target:   1,
+		}}, fn.Spec.ProvisionedConcurrency.Windows)
 	}, 2*time.Minute, 500*time.Millisecond)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		fn := ns.GetFunction(t, ctx, fnName)
+		fn.Spec.ProvisionedConcurrency.Windows = []fv1.ProvisionedWindow{{
+			Name:     "w1",
+			Start:    "invalid cron",
+			Duration: "1h",
+			Target:   1,
+		}}
+		_, err = f.FissionClient().CoreV1().Functions(ns.Name).Update(ctx, fn, metav1.UpdateOptions{})
+		// Conflict = retry (provisioner raced us)
+		if apierrors.IsConflict(err) {
+			return // keep polling
+		}
+		assert.Error(c, err)
+		assert.Contains(c, err.Error(), "start is invalid")
+	}, 2*time.Minute, 500*time.Millisecond)
+}
+
+func TestProvisionedWindowTargetZeroUnwarms(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+	if !f.ExecutorEnvEnabled(t, ctx, "EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED") {
+		t.Skip("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED not set on executor")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("EXECUTOR_FUNCTION_SERVICES not set on executor")
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-pczu-" + ns.ID
+	fnName := "fn-pczu-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: image,
+		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+		Poolsize: 4, // >= target +2 so provisioner does not starve the pool
+	})
+	// Wait for env pool to be ready (4 pods).
+	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
+		return d.Status.ReadyReplicas == 4
+	}, "4 ready replicas", 5*time.Minute)
+	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
+
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Env: envName, Code: codePath,
+		ExecutorType:           "poolmgr",
+		ProvisionedConcurrency: 2,
+		ProvisionedSchedules: []string{
+			"name=w1;start=0 */4 * * * *;duration=120s;target=0",
+		},
+		IdleTimeout: 20,
+		FnTimeout:   5,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      "/" + fnName,
+		Method:   "GET",
+	})
+
+	// base target: 2 pods
+	t.Log("provisioner warms 2 pods without traffic")
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 2, 3*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 3*time.Minute)
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
+	// Warm smoke: the function serves.
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
+
+	// wait for window start 4 mins: pods=0
+	t.Log("provisioner reaps pods after idle timeout")
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 0, 0, 5*time.Minute)
+	ns.WaitForProvisionedReaped(t, ctx, fnName, 0, 5*time.Minute)
+
+	// after window close, pods should be restored to 2
+	t.Log("provisioner restores pods after window close")
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 2, 2, 3*time.Minute)
+	ns.WaitForProvisionedReaped(t, ctx, fnName, 2, 3*time.Minute)
+}
+
+func TestProvisionedScheduledWindowCloseReapsPods(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+	if !f.ExecutorEnvEnabled(t, ctx, "EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED") {
+		t.Skip("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED not set on executor")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("EXECUTOR_FUNCTION_SERVICES not set on executor")
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-pcrc-" + ns.ID
+	fnName := "fn-pcrc-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: image,
+		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+		Poolsize: 5, // >= target +2 so provisioner does not starve the pool
+	})
+	// Wait for env pool to be ready (5 pods).
+	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
+		return d.Status.ReadyReplicas == 5
+	}, "5 ready replicas", 5*time.Minute)
+	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
+
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Env: envName, Code: codePath,
+		ExecutorType:           "poolmgr",
+		ProvisionedConcurrency: 1,
+		ProvisionedSchedules: []string{
+			"name=w1;start=0 */4 * * * *;duration=60s;target=3",
+		},
+		IdleTimeout: 20,
+		FnTimeout:   5,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      "/" + fnName,
+		Method:   "GET",
+	})
+
+	// floor raised 1->3 via scheduled window
+	t.Log("provisioner warms 3 pods without traffic")
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 3, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 3, 3, 5*time.Minute)
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
+	// Warm smoke: the function serves.
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
+
+	t.Log("provisioner reaps pods after idle timeout")
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 1, 1, 180*time.Second)
+	ns.WaitForProvisionedReaped(t, ctx, fnName, 1, 180*time.Second)
+}
+
+func TestProvisionedScheduledWindowRaisesFloor(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+	if !f.ExecutorEnvEnabled(t, ctx, "EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED") {
+		t.Skip("EXECUTOR_PROVISIONED_CONCURRENCY_ENABLED not set on executor")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("EXECUTOR_FUNCTION_SERVICES not set on executor")
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-pcrf-" + ns.ID
+	fnName := "fn-pcrf-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: image,
+		MinCPU: 20, MaxCPU: 100, MinMemory: 128, MaxMemory: 256,
+		Poolsize: 5, // >= target +2 so provisioner does not starve the pool
+	})
+	codePath := framework.WriteTestData(t, "nodejs/hello/hello.js")
+
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Env: envName, Code: codePath,
+		ExecutorType:           "poolmgr",
+		ProvisionedConcurrency: 1,
+		ProvisionedSchedules: []string{
+			"name=w1;start=*/20 * * * * *;duration=2m;target=3",
+		},
+		IdleTimeout: 30,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{
+		Function: fnName,
+		URL:      "/" + fnName,
+		Method:   "GET",
+	})
+	// Wait for env pool to be ready (5 pods).
+	ns.WaitForPoolDeployment(t, ctx, envName, func(d *appsv1.Deployment) bool {
+		return d.Status.ReadyReplicas == 5
+	}, "5 ready replicas", 5*time.Minute)
+
+	// floor raised 1->3 via scheduled window
+	t.Log("provisioner warms 3 pods without traffic")
+	ns.WaitForProvisionedPodsAtLeast(t, ctx, fnName, 3, 5*time.Minute)
+	ns.WaitForProvisionedStatus(t, ctx, fnName, 3, 3, 5*time.Minute)
+	ns.WaitForFunctionConditionTrue(t, ctx, fnName, fv1.FunctionConditionProvisioned, 30*time.Second)
+	// Warm smoke: the function serves.
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("hello"))
 }
 
 // TestProvisionedConcurrencyLifecycle exercises the RFC-0026 PR1 provisioner

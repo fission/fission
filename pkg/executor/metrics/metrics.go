@@ -79,7 +79,15 @@ var (
 		"fission_provisioned_eager_specializations_total",
 		"The number of provisioned eager specializations attempts by outcome (success|error) for each function, function_namespace.",
 	)
+	fissionProvisionedWindowTransitions = metrics.Int64Counter(
+		"fission_provisioned_window_transitions_total",
+		"The number of provisioned window transitions for each function, function_namespace.",
+	)
 )
+
+func RecordProvisionedWindowTransition(ctx context.Context, fnName, fnNamespace string) {
+	fissionProvisionedWindowTransitions.Add(ctx, 1, functionLabels(fnName, fnNamespace))
+}
 
 func RecordEagerSpecialization(ctx context.Context, fnName, fnNamespace string, outcome string) {
 	fissionEagerSpecializations.Add(ctx, 1, functionLabels(fnName, fnNamespace), metric.WithAttributes(

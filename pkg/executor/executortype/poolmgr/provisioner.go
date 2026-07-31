@@ -39,6 +39,8 @@ import (
 // interface implicitly.
 type funcSvcGetter interface {
 	GetFuncSvc(ctx context.Context, fn *fv1.Function) (*fscache.FuncSvc, error)
+	UnTapService(ctx context.Context, fnMeta *metav1.ObjectMeta, svcHost string)
+	MarkSpecializationFailure(ctx context.Context, fnMeta *metav1.ObjectMeta)
 }
 
 // ProvisionerConfig configures the RFC-0026 provisioner.
@@ -107,6 +109,8 @@ type Provisioner struct {
 	inflight sync.Map // map[types.UID]*atomic.Int32
 
 	reconcileLocks sync.Map // map[types.UID]*sync.Mutex
+
+	timers sync.Map // map[types.UID]*fnSchedule
 }
 
 // lockFor returns the per-function reconcile lock for fnUID, creating it on
@@ -122,6 +126,86 @@ type Provisioner struct {
 func (p *Provisioner) lockFor(fnUID types.UID) *sync.Mutex {
 	lock, _ := p.reconcileLocks.LoadOrStore(fnUID, &sync.Mutex{})
 	return lock.(*sync.Mutex)
+}
+
+func (p *Provisioner) scheduleFor(fn *fv1.Function) *fnSchedule {
+	sched, _ := p.timers.LoadOrStore(fn.UID, &fnSchedule{name: fn.Name, namespace: fn.Namespace})
+	return sched.(*fnSchedule)
+}
+
+func (p *Provisioner) armTransition(fn *fv1.Function) {
+	if fn.Spec.ProvisionedConcurrency == nil {
+		return
+	}
+	sched := p.scheduleFor(fn)
+	sched.mu.Lock()
+	var next time.Time
+	defer sched.mu.Unlock()
+	now := time.Now()
+	needsRebuild := (sched.generation != fn.Generation) || (len(sched.windows) == 0)
+	if !needsRebuild {
+		for _, pw := range sched.windows {
+			if pw == nil || pw.capped {
+				continue
+			}
+			edge := pw.activeUntil
+			if edge.IsZero() {
+				edge = pw.nextOpen
+			}
+			if !edge.After(now) {
+				needsRebuild = true
+				break
+			}
+		}
+	}
+	if needsRebuild {
+		sched.reBuildWindows(fn, p.logger)
+		sched.generation = fn.Generation
+	}
+	for _, pw := range sched.windows {
+		if pw == nil || pw.capped {
+			continue
+		}
+		var candidate time.Time
+		if pw.activeUntil.IsZero() {
+			candidate = pw.nextOpen
+		} else {
+			candidate = pw.activeUntil
+		}
+		if next.IsZero() || candidate.Before(next) {
+			next = candidate
+		}
+	}
+	if next.IsZero() || !next.After(now) {
+		return
+	}
+	// Floor the delay: a window whose cron fires about as often as its duration
+	// (e.g. start "* * * * * *", duration "2s") otherwise re-arms roughly every
+	// second, and each firing runs a full reconcileFunction — a pod LIST plus an
+	// unconditional status write — outside both ReconcileInterval and the
+	// maxConcurrentReconciles semaphore.
+	const minTransitionDelay = 10 * time.Second
+	delay := max(time.Until(next), minTransitionDelay)
+	if sched.timer == nil {
+		name, namespace := fn.Name, fn.Namespace
+		sched.timer = time.AfterFunc(delay, func() {
+			ctx := context.Background()
+			latest, err := p.fissionClient.CoreV1().Functions(namespace).Get(ctx, name, metav1.GetOptions{})
+			if err != nil {
+				p.logger.Error(err, "error fetching latest function", "function", name, "namespace", namespace)
+				return
+			}
+			executorType := latest.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType
+			if latest.Spec.ProvisionedConcurrency == nil || (executorType != fv1.ExecutorTypePoolmgr && executorType != "") {
+				p.logger.Info("provisioned concurrency no longer applies to this function", "function", name, "namespace", namespace, "executorType", executorType)
+				return
+			}
+			p.reconcileFunction(ctx, latest)
+			metrics.RecordProvisionedWindowTransition(ctx, name, namespace)
+		})
+	} else {
+		sched.timer.Reset(delay)
+	}
 }
 
 // ProvisionerConfigFromEnv builds ProvisionerConfig from
@@ -179,6 +263,7 @@ func NewProvisioner(
 		config:           config,
 		inflight:         sync.Map{},
 		reconcileLocks:   sync.Map{},
+		timers:           sync.Map{},
 	}
 }
 
@@ -262,6 +347,7 @@ func (p *Provisioner) reconcileFunction(ctx context.Context, fn *fv1.Function) {
 // MUST hold the per-function reconcile lock (lockFor(fn.UID)).
 func (p *Provisioner) reconcileFunctionLocked(ctx context.Context, fn *fv1.Function) {
 	target := p.effectiveTarget(fn)
+	p.armTransition(fn)
 	if target == 0 {
 		p.disableProvisioningLocked(ctx, fn)
 		return
@@ -412,6 +498,13 @@ func (p *Provisioner) eagerSpecialize(ctx context.Context, fn *fv1.Function) err
 		metrics.RecordEagerSpecialization(ctx, fn.Name, fn.Namespace, "error")
 		return err
 	}
+	if funSvc == nil {
+		p.logger.Error(nil, "eager specialization failed, funcSvc is nil", "namespace", fn.Namespace, "function", fn.Name)
+		return fmt.Errorf("funSvc is nil")
+	}
+	if funSvc.Function != nil {
+		defer p.gpm.UnTapService(ctx, funSvc.Function, funSvc.Address)
+	}
 	for _, obj := range funSvc.KubernetesObjects {
 		// gp.go builds kubeObjRefs with Kind "pod" (lowercase), so match
 		// case-insensitively rather than relying on canonical capitalization.
@@ -524,10 +617,18 @@ func (p *Provisioner) updateFunctionStatus(ctx context.Context, fn *fv1.Function
 	})
 }
 
-// computes the effectiveTarget: minimum of provisioned concurreny target
-// and max per function. The schedule will be added in PR2
+// effectiveTarget resolves the function's effective provisioned target via
+// effectiveTargetAt (base Target, overridden by any active schedule window),
+// logs any windows that failed to evaluate, and clamps to the namespace-wide
+// MaxPerFunction cap.
 func (p *Provisioner) effectiveTarget(fn *fv1.Function) int {
-	return min(fn.Spec.ProvisionedConcurrency.Target, p.config.MaxPerFunction)
+	target, errs := effectiveTargetAt(fn.Spec.ProvisionedConcurrency, time.Now())
+	if len(errs) > 0 {
+		for _, e := range errs {
+			p.logger.Error(e, "provisioned concurrency window evaluation failed", "function", fn.Name, "namespace", fn.Namespace)
+		}
+	}
+	return min(target, p.config.MaxPerFunction)
 }
 
 // disableProvisioning clears all provisioned labels, zeroes the function's
@@ -548,6 +649,17 @@ func (p *Provisioner) disableProvisioning(ctx context.Context, fn *fv1.Function)
 func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Function) {
 	p.clearProvisionedLabels(ctx, fn, -1)
 	p.inflight.Delete(fn.UID)
+	if fn.Spec.ProvisionedConcurrency == nil {
+		if v, ok := p.timers.Load(fn.UID); ok {
+			sched := v.(*fnSchedule)
+			sched.mu.Lock()
+			if sched.timer != nil {
+				sched.timer.Stop()
+			}
+			sched.mu.Unlock()
+		}
+		p.timers.Delete(fn.UID)
+	}
 	if err := p.updateFunctionStatus(ctx, fn, 0, 0, 0); err != nil {
 		p.logger.Error(err, "Unable to update status of the function",
 			"function", fn.Name, "namespace", fn.Namespace)
@@ -560,4 +672,13 @@ func (p *Provisioner) disableProvisioningLocked(ctx context.Context, fn *fv1.Fun
 func (p *Provisioner) forget(fnUID types.UID) {
 	p.reconcileLocks.Delete(fnUID)
 	p.inflight.Delete(fnUID)
+	if v, ok := p.timers.Load(fnUID); ok {
+		sched := v.(*fnSchedule)
+		sched.mu.Lock()
+		if sched.timer != nil {
+			sched.timer.Stop()
+		}
+		sched.mu.Unlock()
+	}
+	p.timers.Delete(fnUID)
 }

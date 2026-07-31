@@ -84,6 +84,10 @@ type FunctionOptions struct {
 	// (RFC-0026: keep N poolmgr pods warm). Poolmgr-only; webhook rejects
 	// other executor types.
 	ProvisionedConcurrency int
+	// ProvisionedSchedules, when set, passes `--provisioned-schedule <schedule>`
+	// ProvisionedConcurrency must also be set.
+	// Multiple schedules can be specified as separate --provisioned-schedule flags.
+	ProvisionedSchedules []string
 	// IdleTimeout, when > 0, passes `--idletimeout <n>` (seconds before an
 	// idle poolmgr pod is reaped).
 	IdleTimeout int
@@ -221,6 +225,9 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	if opts.ProvisionedConcurrency > 0 {
 		args = append(args, "--provisioned-concurrency", strconv.Itoa(opts.ProvisionedConcurrency))
+	}
+	for _, schedule := range opts.ProvisionedSchedules {
+		args = append(args, "--provisioned-schedule", schedule)
 	}
 	if opts.IdleTimeout > 0 {
 		args = append(args, "--idletimeout", strconv.Itoa(opts.IdleTimeout))
