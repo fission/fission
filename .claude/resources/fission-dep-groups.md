@@ -55,6 +55,24 @@ Pre-v2.20.0, KEDA shipped a go.mod that `require`d `controller-runtime`/`client-
 If a future KEDA re-caps controller-runtime at vX, cap k8s core at the highest minor controller-runtime vX supports, and expect the unblock to be a single event (KEDA shipping against the newer controller-runtime).
 Diagnose a re-regression with `go mod graph | grep '<bad-version>'` and `go list -m sigs.k8s.io/controller-runtime`.
 
+## The nested `test/benchmark` module
+
+`test/benchmark/go.mod` is a **separate module** that ends with `replace github.com/fission/fission => ../../`.
+Because it resolves the root module from the working tree, every root dependency bump leaves its own `go.mod`/`go.sum` stale.
+Run `(cd test/benchmark && go mod tidy)` in the **same commit** as each root bump, and stage `test/benchmark/go.mod` + `test/benchmark/go.sum` alongside `go.mod` + `go.sum`.
+
+Symptom if you skip it: `make codegen` fails — controller-gen's `paths=./...` walks into the nested module and reports
+`load packages in root ".../test/benchmark": err: exit status 1: ... go: updates to go.mod needed; to update it: go mod tidy`.
+The error names a missing transitive dep (e.g. `hdrhistogram-go`), which misleadingly looks like a root-module tidy problem.
+`go build ./pkg/... ./cmd/...` does **not** cover this module — build it explicitly with `(cd test/benchmark && go build ./...)`.
+
+## Build scopes that the default gate misses
+
+Two consumer sets compile only under extra flags, so a dep they own can break with `make code-checks` still green:
+- **Integration suite** (`test/integration/`, build tag `integration`) — owns `go-portless`, and uses `gateway-api` and the k8s clients.
+  Verify with `go vet -tags=integration ./test/...`.
+- **Nested benchmark module** — see above.
+
 ## Fission build/gate commands
 
 - Lint: `make code-checks` (golangci-lint against `.golangci.yaml`, + `make verify-gomod`).
