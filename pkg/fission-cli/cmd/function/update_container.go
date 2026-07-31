@@ -109,7 +109,18 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 	// The three env flags feed Env and EnvFrom jointly, so any of them
 	// replaces both fields; warn when only some were passed rather than
 	// silently dropping what the others contributed (see fn update).
-	if input.IsSet(flagkey.FnEnvVar) || input.IsSet(flagkey.FnEnvFromSecret) || input.IsSet(flagkey.FnEnvFromConfigMap) {
+	envFlags := []string{flagkey.FnEnvVar, flagkey.FnEnvFromSecret, flagkey.FnEnvFromConfigMap}
+	setEnvFlags := make([]string, 0, len(envFlags))
+	for _, f := range envFlags {
+		if input.IsSet(f) {
+			setEnvFlags = append(setEnvFlags, f)
+		}
+	}
+	if len(setEnvFlags) > 0 {
+		if (len(function.Spec.Env) > 0 || len(function.Spec.EnvFrom) > 0) && len(setEnvFlags) < len(envFlags) {
+			console.Warn(fmt.Sprintf("--%s replace the function's entire environment: variables set through the flags you did not pass will be removed. Pass every env flag the function needs in one update.",
+				strings.Join(setEnvFlags, "/--")))
+		}
 		fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
 		if err != nil {
 			return err

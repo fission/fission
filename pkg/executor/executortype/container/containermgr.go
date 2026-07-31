@@ -589,6 +589,14 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 		deployChanged = true
 	}
 
+	// RFC-0030 per-function env lands in the pod template — see the newdeploy
+	// counterpart: an env-only edit must roll the deployment, or the CR and
+	// the running container disagree indefinitely.
+	if !reflect.DeepEqual(oldFn.Spec.Env, newFn.Spec.Env) ||
+		!reflect.DeepEqual(oldFn.Spec.EnvFrom, newFn.Spec.EnvFrom) {
+		deployChanged = true
+	}
+
 	if deployChanged {
 		return caaf.updateFuncDeployment(ctx, newFn)
 	}

@@ -110,7 +110,7 @@ func TestApplyFunctionEnv(t *testing.T) {
 		require.NoError(t, ApplyFunctionEnv(litSpec, "runtime", "fission-function", litFn, platform))
 	})
 
-	t.Run("missing container name is a no-op", func(t *testing.T) {
+	t.Run("missing container name is an error, not a silent drop", func(t *testing.T) {
 		t.Parallel()
 		spec, want := basePodSpec(), basePodSpec()
 		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{Env: []apiv1.EnvVar{{Name: "A", Value: "1"}}}}

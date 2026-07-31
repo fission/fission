@@ -24,10 +24,18 @@ import (
 // Env is appended, then the platform vars are re-appended LAST. The kubelet
 // resolves duplicate env names last-wins and gives literal env precedence
 // over envFrom, so platform names win unconditionally over both user literals
-// and EnvFrom-expanded keys, while the function's own keys win over its
-// environment's podspec (env podspec < EnvFrom < Env, per the RFC's merge
-// precedence). Function EnvFrom sources append after any existing sources,
-// so later-wins matches the declared order.
+// and EnvFrom-expanded keys, and the function's Env wins over its
+// environment's podspec.
+//
+// The EnvFrom tier is weaker than the RFC's end-state precedence, and the gap
+// is inherent to native injection rather than an oversight: the kubelet
+// expands envFrom before container env, so a literal set by the environment
+// podspec still beats an EnvFrom-supplied key of the same name, and this
+// function cannot strip what it cannot enumerate (an object's data keys are
+// not knowable at pod-build time). Function EnvFrom sources append after any
+// existing sources, so later-wins holds among envFrom sources themselves.
+// Full precedence lands with the poolmgr phase, which resolves values itself.
+//
 // It returns an error when the function declares env but containerName is not
 // in the pod spec: silently dropping a declared DATABASE_URL is the failure
 // mode this whole feature exists to prevent, so a name mismatch must be loud.

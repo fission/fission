@@ -678,33 +678,9 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 		}
 	}
 
-	if oldFn.Spec.Environment != newFn.Spec.Environment ||
-		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
-		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName {
+	if podTemplateChanged(oldFn, newFn) {
 		deploy.logger.V(1).Info("deployment changed", "msg", "deployment changed")
 		deployChanged = true
-	}
-
-	// If length of slice has changed then no need to check individual elements
-	if len(oldFn.Spec.Secrets) != len(newFn.Spec.Secrets) {
-		deployChanged = true
-	} else {
-		for i, newSecret := range newFn.Spec.Secrets {
-			if newSecret != oldFn.Spec.Secrets[i] {
-				deployChanged = true
-				break
-			}
-		}
-	}
-	if len(oldFn.Spec.ConfigMaps) != len(newFn.Spec.ConfigMaps) {
-		deployChanged = true
-	} else {
-		for i, newConfig := range newFn.Spec.ConfigMaps {
-			if newConfig != oldFn.Spec.ConfigMaps[i] {
-				deployChanged = true
-				break
-			}
-		}
 	}
 
 	if deployChanged {
@@ -992,4 +968,22 @@ func (deploy *NewDeploy) IdleStrategy() idle.Strategy {
 
 func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {
 	return nil
+}
+
+// podTemplateChanged reports whether a function update changes anything that
+// is baked into the deployment's pod template, so updateFunction knows to roll
+// it. Every field the deployment builder reads must be listed here: a field
+// that lands in the pod template but is missing from this diff leaves the CR
+// and the running container disagreeing indefinitely, because updateFunction
+// is the only steady-state path that rewrites the template (the RV-annotation
+// catch-all in reconcileDeploymentSpec runs only on the old == nil branch).
+func podTemplateChanged(oldFn, newFn *fv1.Function) bool {
+	return oldFn.Spec.Environment != newFn.Spec.Environment ||
+		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||
+		oldFn.Spec.Package.FunctionName != newFn.Spec.Package.FunctionName ||
+		!apiequality.Semantic.DeepEqual(oldFn.Spec.Secrets, newFn.Spec.Secrets) ||
+		!apiequality.Semantic.DeepEqual(oldFn.Spec.ConfigMaps, newFn.Spec.ConfigMaps) ||
+		// RFC-0030 per-function env lands in the pod template too.
+		!apiequality.Semantic.DeepEqual(oldFn.Spec.Env, newFn.Spec.Env) ||
+		!apiequality.Semantic.DeepEqual(oldFn.Spec.EnvFrom, newFn.Spec.EnvFrom)
 }
