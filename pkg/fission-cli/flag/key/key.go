@@ -50,6 +50,9 @@ const (
 	FnSecret                 = "secret"
 	FnForce                  = force
 	FnCfgMap                 = "configmap"
+	FnEnvVar                 = "env-var"
+	FnEnvFromSecret          = "env-from-secret"
+	FnEnvFromConfigMap       = "env-from-configmap"
 	FnExecutorType           = "executortype"
 	FnExecutionTimeout       = "fntimeout"
 	FnTestTimeout            = "timeout"

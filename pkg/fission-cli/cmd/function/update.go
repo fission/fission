@@ -85,6 +85,18 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.ConfigMaps = configMaps
 	}
 
+	// Same replace-when-provided semantics as --secret/--configmap: the
+	// provided list replaces the function's env; an update that doesn't
+	// mention the flags leaves the existing fields intact.
+	if input.IsSet(flagkey.FnEnvVar) || input.IsSet(flagkey.FnEnvFromSecret) || input.IsSet(flagkey.FnEnvFromConfigMap) {
+		fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
+		if err != nil {
+			return err
+		}
+		function.Spec.Env = fnEnv
+		function.Spec.EnvFrom = fnEnvFrom
+	}
+
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
 	}
