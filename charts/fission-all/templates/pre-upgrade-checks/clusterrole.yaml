@@ -3,8 +3,8 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-preupgrade
   annotations:
-    helm.sh/hook: pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
     helm.sh/hook-weight: "-2"
 rules:
 - apiGroups:
@@ -15,3 +15,39 @@ rules:
   - get
   - list
   - watch
+{{- if eq (include "fission.crdsMode" .) "hook" }}
+{{- /*
+crds.mode=hook needs CRD write. Scoping it takes two rules, because RBAC
+resourceNames does NOT restrict create (the object name is unknown at
+authorization time) — a rule combining resourceNames with create grants
+nothing for create, and server-side apply is a PATCH that additionally needs
+create when the target is absent, so a resourceNames-only grant would fail on
+a fresh cluster and break the one-shot install this mode exists for.
+
+So: the mutating verbs are fenced to Fission's own CRDs by name, and create is
+constrained OUTSIDE RBAC by the ValidatingAdmissionPolicy alongside this file
+— which is load-bearing, not belt-and-braces. No delete, no wildcards.
+
+The privilege is real: cluster-wide CRD patch permits attaching a
+spec.conversion webhook to any CRD (interposing on every read and write of
+that type) or stripping schema/CEL constraints from Fission's own CRDs.
+crds.mode=none is the escape hatch for orgs that will not grant it.
+*/}}
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - patch
+  - update
+  resourceNames:
+{{- range $name := splitList " " (include "fission.crdNames" .) }}
+  - {{ $name }}
+{{- end }}
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+{{- end }}

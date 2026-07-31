@@ -1,0 +1,56 @@
+{{- if eq (include "fission.crdsMode" .) "hook" }}
+{{- /*
+This policy is what constrains the hook ServiceAccount's `create` on CRDs.
+RBAC cannot: resourceNames does not restrict create, so the ClusterRole
+alongside this file grants unscoped create and relies on admission to fence
+it. Without this policy the hook's identity could create a CRD in any group
+and attach a conversion webhook to it — interposing on every read and write
+of that type cluster-wide.
+
+Bound to the hook SA by username in matchConditions, so it constrains that
+identity only and never interferes with a cluster admin managing CRDs.
+
+Rendered as a hook itself (weight below the RBAC) so the policy exists before
+the Job it governs. It is NOT deleted with the hook: a policy that vanishes
+after the hook would leave the next upgrade's create unconstrained during the
+window before it is re-created.
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-crd-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/resource-policy: keep
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apiextensions.k8s.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["customresourcedefinitions"]
+  matchConditions:
+    - name: only-the-fission-crd-hook
+      expression: 'request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:fission-preupgrade"'
+  validations:
+    - expression: 'object.spec.group.endsWith("fission.io")'
+      message: "the Fission CRD hook may only manage fission.io CustomResourceDefinitions"
+      reason: Forbidden
+    - expression: '!has(object.spec.conversion) || object.spec.conversion.strategy == "None"'
+      message: "the Fission CRD hook may not set a conversion strategy other than None"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Name }}-fission-crd-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-4"
+    helm.sh/resource-policy: keep
+spec:
+  policyName: {{ .Release.Name }}-fission-crd-guard
+  validationActions: [Deny]
+{{- end }}
