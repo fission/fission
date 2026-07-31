@@ -268,7 +268,7 @@ func TestProvisionedScheduledWindowCloseReapsPods(t *testing.T) {
 		ExecutorType:           "poolmgr",
 		ProvisionedConcurrency: 1,
 		ProvisionedSchedules: []string{
-			"name=w1;start=0 */4 * * * *;duration=60s;target=3",
+			"name=w1;start=0 */4 * * * *;duration=15s;target=3",
 		},
 		IdleTimeout: 20,
 		FnTimeout:   5,
