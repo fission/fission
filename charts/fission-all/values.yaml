@@ -1230,6 +1230,14 @@ authentication:
   ## signing the JWT token
   ##
   jwtSigningKey:
+  ## existingSecret names a pre-created Secret in the release namespace
+  ## carrying the keys username, password and jwtSigningKey. When set, the
+  ## chart does not generate the "router" Secret and the router and MCP
+  ## deployments read from the named Secret instead. Recommended for GitOps
+  ## renderers (e.g. Argo CD), which run `helm template` where the chart's
+  ## lookup-based preservation of generated values cannot work.
+  ##
+  existingSecret:
   ## jwtExpiryTime is the JWT expiry time
   ## in seconds
   ## default '120'
