@@ -1,7 +1,7 @@
 # RFC-0021: Statestore — a standard durable-state interface for the control plane
 
 - Status: Implemented ([#3574](https://github.com/fission/fission/pull/3574), merged 2026-07-14): `pkg/statestore` with memory/SQLite/Postgres/HTTP-client drivers, external + embedded modes, KVStore/EventLog/Queue capabilities and the shared conformance suite. The optional Redis KV driver is deferred (YAGNI — no consumer needs it). Consumed by RFC-0024 (async), RFC-0027 (eventing).
-- Tracking issue: TBD
+- Tracking issue: [#3567](https://github.com/fission/fission/issues/3567) (epic [#3566](https://github.com/fission/fission/issues/3566))
 - Supersedes: —
 - Targets: Fission v1.N (enabler for RFC-0022 workflows, RFC-0023 stateful functions, RFC-0024 async invocation)
 - Requires: nothing new from Kubernetes; an **externally deployed** Postgres (recommended for production) or the built-in embedded mode for local/small deployments — Fission never deploys or manages a database product.

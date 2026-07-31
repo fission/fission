@@ -1,7 +1,7 @@
 # RFC-0024: Async invocation — retries, dead-letter queue, and destinations
 
 - Status: Implemented ([#3578](https://github.com/fission/fission/pull/3578) phase 1, [#3579](https://github.com/fission/fission/pull/3579) destinations, [#3580](https://github.com/fission/fission/pull/3580) DLQ CLI + KEDA scaler, merged 2026-07-14–15): async invoke mode, durable enqueue + at-least-once dispatch, per-function retry/max-age, DLQ + redrive, on-success/failure destinations (function or statestore topic), KEDA queue-depth scaler.
-- Tracking issue: TBD
+- Tracking issue: [#3570](https://github.com/fission/fission/issues/3570) (epic [#3566](https://github.com/fission/fission/issues/3566))
 - Supersedes: —
 - Targets: Fission v1.N+1
 - Requires: RFC-0021 statestore (`Queue` capability); composes with RFC-0022 (workflow steps inherit retry/DLQ semantics) and reuses `pkg/mqtrigger` publishers for topic destinations.
