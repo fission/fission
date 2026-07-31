@@ -3,6 +3,7 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-preupgrade
   annotations:
+    # pre-install: see the fission.crdsMode helper in _helpers.tpl.
     helm.sh/hook: pre-install,pre-upgrade
     helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
     helm.sh/hook-weight: "-2"

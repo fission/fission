@@ -319,6 +319,15 @@ ownership fight nobody wins.
                    CRD bundle embedded in its own image, before the release
                    manifests roll. This also delivers RFC-0028's
                    CRDs-before-controllers ordering.
+
+                   This is why the hook Job and every object it depends on
+                   (ServiceAccount, ClusterRole, ClusterRoleBinding, and the
+                   namespaced Role/RoleBinding) are annotated
+                   pre-install AS WELL AS pre-upgrade: in this mode the hook
+                   delivers the CRDs a FRESH cluster has none of, which is
+                   what makes a one-shot `helm install` work. Anything the
+                   Job needs must also carry a hook-weight strictly below
+                   the Job's, or Helm may order the Job first.
   none           — bring your own (`kubectl create -k crds/v1` /
                    `make create-crds`); the hook only checks presence, exactly
                    as it does today.

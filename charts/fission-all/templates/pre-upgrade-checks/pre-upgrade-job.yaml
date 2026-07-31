@@ -21,8 +21,7 @@ metadata:
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
-    # pre-install as well: crds.mode=hook must deliver the CRD bundle on a
-    # fresh cluster, which is what makes a one-shot `helm install` work.
+    # pre-install: see the fission.crdsMode helper in _helpers.tpl.
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-delete-policy": hook-succeeded
     "helm.sh/hook-weight": "1"

@@ -5,10 +5,9 @@ kind: Role
 metadata:
 {{- if eq "preupgrade" .component }}
   annotations:
-    # pre-install as well as pre-upgrade: with crds.mode=hook the checker runs
-    # on a fresh cluster and lists Fission CRs, so the namespaced grant must
-    # exist then too — otherwise the install fails with a 403 AFTER the CRDs
-    # have been applied.
+    # pre-install: see the fission.crdsMode helper in _helpers.tpl. Without it
+    # the checker lists Fission CRs on a fresh cluster with no namespaced
+    # grant and the install fails with a 403 AFTER applying the CRDs.
     helm.sh/hook: pre-install,pre-upgrade
     helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
     helm.sh/hook-weight: "-2"
