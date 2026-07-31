@@ -137,7 +137,12 @@ jobs:
         run: |
           NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
           echo "Router via NodePort: http://$NODE_IP:${{ env.ROUTER_NODEPORT }}"
-          UPGRADE_CMD="kubectl replace -k $GITHUB_WORKSPACE/crds/v1 && helm upgrade --namespace ${{ env.FISSION_NAMESPACE }} --set ${{ env.HELM_VARS_HEAD }} fission $GITHUB_WORKSPACE/charts/fission-all"
+          # Server-side apply, not replace/client-side apply: HEAD introduces CRDs
+          # absent on the N-1 release (replace cannot create), four CRD YAMLs
+          # exceed the 262KB client-side-apply annotation limit, and the
+          # kubectl-create-owned managedFields of the originals require
+          # --force-conflicts on first SSA adoption (the RFC-0029 §1 flow).
+          UPGRADE_CMD="kubectl apply --server-side --force-conflicts -k $GITHUB_WORKSPACE/crds/v1 && helm upgrade --namespace ${{ env.FISSION_NAMESPACE }} --set ${{ env.HELM_VARS_HEAD }} fission $GITHUB_WORKSPACE/charts/fission-all"
           cd test/benchmark
           go build -o fission-benchmark ./cmd/fission-benchmark
           ./fission-benchmark run \
