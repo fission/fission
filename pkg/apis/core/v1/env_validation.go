@@ -85,11 +85,20 @@ func validateFunctionEnv(env []apiv1.EnvVar, envFrom []apiv1.EnvFromSource) erro
 				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Env", e.Name, "valueFrom supports only secretKeyRef and configMapKeyRef (downward-API refs cannot be honored portably across executors)"))
 			}
 			refs := 0
-			if e.ValueFrom.SecretKeyRef != nil {
+			// An empty object name passes the API server's schema (name is
+			// optional on LocalObjectReference) but makes the built pod spec
+			// unadmittable, leaving the function healthy-looking with no pods.
+			if ref := e.ValueFrom.SecretKeyRef; ref != nil {
 				refs++
+				if ref.Name == "" {
+					errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Env", e.Name, "secretKeyRef.name must not be empty"))
+				}
 			}
-			if e.ValueFrom.ConfigMapKeyRef != nil {
+			if ref := e.ValueFrom.ConfigMapKeyRef; ref != nil {
 				refs++
+				if ref.Name == "" {
+					errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Env", e.Name, "configMapKeyRef.name must not be empty"))
+				}
 			}
 			if refs != 1 && e.ValueFrom.FieldRef == nil && e.ValueFrom.ResourceFieldRef == nil {
 				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Env", e.Name, "valueFrom must name exactly one of secretKeyRef or configMapKeyRef"))
@@ -98,11 +107,17 @@ func validateFunctionEnv(env []apiv1.EnvVar, envFrom []apiv1.EnvFromSource) erro
 	}
 	for i, src := range envFrom {
 		refs := 0
-		if src.SecretRef != nil {
+		if ref := src.SecretRef; ref != nil {
 			refs++
+			if ref.Name == "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.EnvFrom", i, "secretRef.name must not be empty"))
+			}
 		}
-		if src.ConfigMapRef != nil {
+		if ref := src.ConfigMapRef; ref != nil {
 			refs++
+			if ref.Name == "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.EnvFrom", i, "configMapRef.name must not be empty"))
+			}
 		}
 		if refs != 1 {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.EnvFrom", i, "each envFrom source must name exactly one of secretRef or configMapRef"))

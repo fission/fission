@@ -13,6 +13,16 @@ package v1
 type SecretReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`
+	// MountPath redirects this secret's file projection from the default
+	// /secrets/<namespace>/<name> to the given path, which is relative to
+	// the /secrets root (RFC-0030 §4): generic pool pods share a fixed
+	// volume set frozen at pool creation, so an arbitrary absolute path is
+	// not materializable there, and the container executor applies the
+	// same constraint for cross-executor consistency. Empty keeps today's
+	// layout. The runtime redirect ships in a later RFC-0030 phase; until
+	// then admission rejects a non-empty value rather than silently
+	// ignoring it.
+	MountPath *string `json:"mountPath,omitempty"`
 }
 
 // SecretReferenceApplyConfiguration constructs a declarative configuration of the SecretReference type for use with
@@ -34,5 +44,13 @@ func (b *SecretReferenceApplyConfiguration) WithNamespace(value string) *SecretR
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *SecretReferenceApplyConfiguration) WithName(value string) *SecretReferenceApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithMountPath sets the MountPath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the MountPath field is set to the value of the last call.
+func (b *SecretReferenceApplyConfiguration) WithMountPath(value string) *SecretReferenceApplyConfiguration {
+	b.MountPath = &value
 	return b
 }

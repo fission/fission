@@ -32,6 +32,25 @@ type FunctionSpecApplyConfiguration struct {
 	Secrets []SecretReferenceApplyConfiguration `json:"secrets,omitempty"`
 	// Reference to a list of configmaps.
 	ConfigMaps []ConfigMapReferenceApplyConfiguration `json:"configmaps,omitempty"`
+	// Env lists per-function environment variables set on the function's
+	// runtime container: literals, plus key-level references into
+	// same-namespace Secrets/ConfigMaps via valueFrom (secretKeyRef /
+	// configMapKeyRef only — fieldRef and resourceFieldRef are rejected at
+	// admission because poolmgr's specialize-time injection cannot honor
+	// pod-level field refs portably; RFC-0030 §1). Function Env wins over
+	// EnvFrom, which wins over the environment podspec's merged env.
+	// Platform-reserved names (FISSION_*, RESOURCE_VERSION_COUNT, and the
+	// interpreter/proxy-hijack set) are denied at admission and enforced
+	// at injection. Additive and backward compatible.
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// EnvFrom projects whole same-namespace Secrets/ConfigMaps into the
+	// function's environment, with an optional prefix; later sources win
+	// over earlier ones (Kubernetes semantics), and function Env literals
+	// win over all EnvFrom keys. Reserved platform names expanded from a
+	// referenced object are dropped at injection time (data keys are
+	// mutable after admission, so a webhook cannot see them). Additive
+	// and backward compatible.
+	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
 	// cpu and memory resources as per K8S standards
 	// This is only for newdeploy to set up resource limitation
 	// when creating deployment for a function.
@@ -145,6 +164,26 @@ func (b *FunctionSpecApplyConfiguration) WithConfigMaps(values ...*ConfigMapRefe
 			panic("nil value passed to WithConfigMaps")
 		}
 		b.ConfigMaps = append(b.ConfigMaps, *values[i])
+	}
+	return b
+}
+
+// WithEnv adds the given value to the Env field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Env field.
+func (b *FunctionSpecApplyConfiguration) WithEnv(values ...corev1.EnvVar) *FunctionSpecApplyConfiguration {
+	for i := range values {
+		b.Env = append(b.Env, values[i])
+	}
+	return b
+}
+
+// WithEnvFrom adds the given value to the EnvFrom field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the EnvFrom field.
+func (b *FunctionSpecApplyConfiguration) WithEnvFrom(values ...corev1.EnvFromSource) *FunctionSpecApplyConfiguration {
+	for i := range values {
+		b.EnvFrom = append(b.EnvFrom, values[i])
 	}
 	return b
 }

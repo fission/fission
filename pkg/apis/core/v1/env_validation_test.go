@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestIsReservedEnvName(t *testing.T) {
@@ -102,6 +104,50 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 			Env: []apiv1.EnvVar{{Name: "DATABASE_URL", Value: "postgres://db"}},
 		}
 	}
+
+	// The webhook calls ValidateForAdmission, NOT Validate — a rule that only
+	// Validate runs is enforced on the CLI path alone and bypassed by
+	// kubectl/GitOps writers. Every RFC-0030 rule must survive this path.
+	t.Run("rules are enforced on the admission path the webhook uses", func(t *testing.T) {
+		t.Parallel()
+		fn := Function{
+			ObjectMeta: metav1.ObjectMeta{Name: "f", Namespace: "default"},
+			Spec:       newdeploySpec(),
+		}
+		fn.Spec.Env = []apiv1.EnvVar{{Name: "FISSION_STATE_URL", Value: "http://evil"}}
+		require.Error(t, fn.ValidateForAdmission(), "reserved name must be rejected at admission")
+
+		fn.Spec.Env = []apiv1.EnvVar{{Name: "POD", ValueFrom: &apiv1.EnvVarSource{
+			FieldRef: &apiv1.ObjectFieldSelector{FieldPath: "metadata.name"}}}}
+		require.Error(t, fn.ValidateForAdmission(), "downward-API valueFrom must be rejected at admission")
+
+		fn.Spec.Env = []apiv1.EnvVar{{Name: "DATABASE_URL", Value: "postgres://db"}}
+		fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = ExecutorTypePoolmgr
+		require.Error(t, fn.ValidateForAdmission(), "poolmgr gate must be rejected at admission")
+
+		fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = ExecutorTypeNewdeploy
+		fn.Spec.Secrets = []SecretReference{{Namespace: "default", Name: "s", MountPath: "app"}}
+		require.Error(t, fn.ValidateForAdmission(), "mountPath gate must be rejected at admission")
+
+		fn.Spec.Secrets = nil
+		require.NoError(t, fn.ValidateForAdmission(), "a valid newdeploy function must pass")
+	})
+
+	t.Run("container executor rejects envFrom alongside legacy references", func(t *testing.T) {
+		t.Parallel()
+		s := newdeploySpec()
+		s.Env = nil
+		s.InvokeStrategy.ExecutionStrategy.ExecutorType = ExecutorTypeContainer
+		s.PodSpec = &apiv1.PodSpec{Containers: []apiv1.Container{{Name: "c", Image: "img"}}}
+		s.EnvFrom = []apiv1.EnvFromSource{{
+			SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}}}}
+		require.NoError(t, s.validateEnvForAdmission())
+
+		// The executor skips the legacy synthesis when EnvFrom is set, so
+		// carrying both would silently drop the legacy projection.
+		s.Secrets = []SecretReference{{Namespace: "default", Name: "legacy"}}
+		require.Error(t, s.validateEnvForAdmission())
+	})
 
 	t.Run("newdeploy with env passes", func(t *testing.T) {
 		t.Parallel()

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -41,20 +42,20 @@ func TestApplyFunctionEnv(t *testing.T) {
 	t.Run("no-op without new fields keeps the spec byte-identical", func(t *testing.T) {
 		t.Parallel()
 		spec, want := basePodSpec(), basePodSpec()
-		ApplyFunctionEnv(spec, "runtime", &fv1.Function{}, platform)
+		require.NoError(t, ApplyFunctionEnv(spec, "runtime", "default", &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}}, platform))
 		assert.Equal(t, want, spec)
 	})
 
 	t.Run("platform vars are re-appended last, user env in between", func(t *testing.T) {
 		t.Parallel()
 		spec := basePodSpec()
-		fn := &fv1.Function{Spec: fv1.FunctionSpec{
+		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{
 			Env: []apiv1.EnvVar{{Name: "DATABASE_URL", Value: "postgres://db"}},
 			EnvFrom: []apiv1.EnvFromSource{{
 				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}},
 			}},
 		}}
-		ApplyFunctionEnv(spec, "runtime", fn, platform)
+		require.NoError(t, ApplyFunctionEnv(spec, "runtime", "default", fn, platform))
 
 		runtime := spec.Containers[0]
 		names := make([]string, 0, len(runtime.Env))
@@ -76,12 +77,12 @@ func TestApplyFunctionEnv(t *testing.T) {
 	t.Run("a user literal shadowing a platform name never ends up last", func(t *testing.T) {
 		t.Parallel()
 		spec := basePodSpec()
-		fn := &fv1.Function{Spec: fv1.FunctionSpec{
+		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{
 			// Admission denies this, but admission is UX — injection order is
 			// the guarantee (RFC-0030 §1).
 			Env: []apiv1.EnvVar{{Name: "FISSION_STATE_URL", Value: "http://evil"}},
 		}}
-		ApplyFunctionEnv(spec, "runtime", fn, platform)
+		require.NoError(t, ApplyFunctionEnv(spec, "runtime", "default", fn, platform))
 
 		runtime := spec.Containers[0]
 		last := runtime.Env[len(runtime.Env)-1]
@@ -89,11 +90,31 @@ func TestApplyFunctionEnv(t *testing.T) {
 		assert.Equal(t, "http://statesvc", last.Value, "the platform value must be the winning (last) entry")
 	})
 
+	t.Run("object references are refused when the pod namespace differs", func(t *testing.T) {
+		t.Parallel()
+		spec, want := basePodSpec(), basePodSpec()
+		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{
+			EnvFrom: []apiv1.EnvFromSource{{
+				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}},
+			}},
+		}}
+		require.Error(t, ApplyFunctionEnv(spec, "runtime", "fission-function", fn, platform),
+			"a LocalObjectReference would resolve in the pod namespace while rotation tracks the function namespace")
+		assert.Equal(t, want, spec)
+
+		// Literals resolve nothing, so the split-namespace install keeps working for them.
+		litSpec := basePodSpec()
+		litFn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{
+			Env: []apiv1.EnvVar{{Name: "LOG_LEVEL", Value: "debug"}},
+		}}
+		require.NoError(t, ApplyFunctionEnv(litSpec, "runtime", "fission-function", litFn, platform))
+	})
+
 	t.Run("missing container name is a no-op", func(t *testing.T) {
 		t.Parallel()
 		spec, want := basePodSpec(), basePodSpec()
-		fn := &fv1.Function{Spec: fv1.FunctionSpec{Env: []apiv1.EnvVar{{Name: "A", Value: "1"}}}}
-		ApplyFunctionEnv(spec, "no-such-container", fn, platform)
-		assert.Equal(t, want, spec)
+		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "default"}, Spec: fv1.FunctionSpec{Env: []apiv1.EnvVar{{Name: "A", Value: "1"}}}}
+		require.Error(t, ApplyFunctionEnv(spec, "no-such-container", "default", fn, platform))
+		assert.Equal(t, want, spec, "a failed apply must not partially mutate the spec")
 	})
 }

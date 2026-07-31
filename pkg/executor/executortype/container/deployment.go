@@ -215,10 +215,12 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	// After MergePodSpec, so the user's own podspec cannot reorder the
 	// platform-last guarantee (env podspec < EnvFrom < Env, platform above all).
-	util.ApplyFunctionEnv(&pod.Spec, fn.Name, fn, []apiv1.EnvVar{{
+	if err := util.ApplyFunctionEnv(&pod.Spec, fn.Name, deployNamespace, fn, []apiv1.EnvVar{{
 		Name:  fv1.ResourceVersionCount,
 		Value: fmt.Sprintf("%d", rvCount),
-	}})
+	}}); err != nil {
+		return nil, err
+	}
 
 	var ownerReferences []metav1.OwnerReference
 	if cn.enableOwnerReferences {

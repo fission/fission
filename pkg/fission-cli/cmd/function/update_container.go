@@ -106,6 +106,18 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 		function.Spec.ConfigMaps = configMaps
 	}
 
+	// The three env flags feed Env and EnvFrom jointly, so any of them
+	// replaces both fields; warn when only some were passed rather than
+	// silently dropping what the others contributed (see fn update).
+	if input.IsSet(flagkey.FnEnvVar) || input.IsSet(flagkey.FnEnvFromSecret) || input.IsSet(flagkey.FnEnvFromConfigMap) {
+		fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
+		if err != nil {
+			return err
+		}
+		function.Spec.Env = fnEnv
+		function.Spec.EnvFrom = fnEnvFrom
+	}
+
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {

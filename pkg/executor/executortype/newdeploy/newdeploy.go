@@ -244,9 +244,6 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
 
-	// After every merge, so nothing can reorder the platform-last guarantee.
-	util.ApplyFunctionEnv(&pod.Spec, env.Name, fn, platformEnv)
-
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {
 		ownerReferences = []metav1.OwnerReference{
@@ -307,6 +304,18 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		// would otherwise re-enable the kubelet auto-mount on the user
 		// container. See GHSA-85g2-pmrx-r49q.
 		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
+	}
+
+	// RFC-0030 per-function env. This must run AFTER the
+	// env.Spec.Runtime.PodSpec merge (and after the container merge above):
+	// MergePodSpec appends the environment podspec container's Env/EnvFrom,
+	// so applying earlier would let the environment's entries land last and
+	// win — inverting the specified precedence (env podspec < function
+	// EnvFrom < function Env) — and would leave a duplicate env name for
+	// MergeContainer to reject outright. It also targets mainContainerName,
+	// not env.Name: a custom runtime container renames the user container.
+	if err := util.ApplyFunctionEnv(&deployment.Spec.Template.Spec, mainContainerName, deployNamespace, fn, platformEnv); err != nil {
+		return nil, err
 	}
 
 	// Re-mount the fission-fetcher SA token at the canonical Kubernetes
