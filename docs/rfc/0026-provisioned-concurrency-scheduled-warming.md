@@ -1,7 +1,10 @@
 # RFC-0026: Provisioned concurrency and scheduled warming
 
-- Status: Proposed
-- Tracking issue: TBD
+- Status: Partially implemented ([#3581](https://github.com/fission/fission/pull/3581), merged 2026-07-22; lock/forget-race fix [#3603](https://github.com/fission/fission/pull/3603)) — **phase 1** shipped: `FunctionSpec.ProvisionedConcurrency` (`Target`, `Windows` accepted by the CRD but not yet evaluated) + webhook validation (cron syntax, per-function/namespace caps, poolmgr-only), the `pkg/executor/executortype/poolmgr` `Provisioner` (eager specialization from the generic pool, `fission.io/provisioned` labelling, reaper exemption, per-function reconcile locks, in-flight pacing), `FunctionStatus` provisioned conditions, metrics, and integration + serial-restart tests.
+  Phase 3's generation handling landed with phase 1 (provisioning targets the live generation only; stale-generation labels are cleared across all generations), and the RFC-0025 warm-rollback interaction is owned by the idle reaper's alias-retention path rather than the provisioner.
+  **Phase 2** (scheduled windows — cron transitions, overlapping-window max, restart re-derivation) is in flight in [#3606](https://github.com/fission/fission/pull/3606); until it merges `effectiveTarget` is `min(Target, MaxPerFunction)` and `Windows` is validated but not evaluated.
+  **Phase 4** (RFC-0020 bench scenario + user-facing sizing/cost docs) remains.
+- Tracking issue: [#3572](https://github.com/fission/fission/issues/3572) (epic [#3566](https://github.com/fission/fission/issues/3566))
 - Supersedes: —
 - Targets: Fission v1.N (smallest of the set; no statestore dependency)
 - Requires: RFC-0002 EndpointSlice data plane (shipped, default-on) for instant router visibility of pre-specialized pods; reuses `robfig/cron` parsing conventions from `pkg/timer`.

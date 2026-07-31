@@ -1,7 +1,7 @@
 # RFC-0027: Statestore-backed eventing — a built-in message-queue provider
 
 - Status: Implemented ([#3582](https://github.com/fission/fission/pull/3582) docs/spec, [#3583](https://github.com/fission/fission/pull/3583) EventLog AppendAny/Head + topic destinations, [#3584](https://github.com/fission/fission/pull/3584) statestore MQ provider + zero-broker e2e, [#3585](https://github.com/fission/fission/pull/3585) broker egress + `fission topic` CLI + KEDA lag scaler, merged 2026-07-15–16): pub/sub function pipelines with zero external brokers, kafka egress as the scale path. The orphan-stream age sweep (a published-but-never-subscribed topic is bounded by the backlog cap but not age-trimmed) is deferred — it needs an `EventLog` stream-listing primitive.
-- Tracking issue: TBD
+- Tracking issue: — (published after epic [#3566](https://github.com/fission/fission/issues/3566) was opened; no dedicated sub-issue)
 - Supersedes: — (completes the topic-destination step RFC-0024 deferred as design decision D1)
 - Targets: Fission v1.N+2
 - Requires: RFC-0021 statestore (`Queue`, `EventLog`, `KVStore`) with a small Phase-1 EventLog extension (see Design); RFC-0024 async invocation — fully merged (#3578, #3579, #3580), including the DLQ admin API/CLI + `Queue.Purge` that Phase 3 of this RFC extends.
