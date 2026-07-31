@@ -161,13 +161,21 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	resources := cn.getResources(fn)
 
-	// Other executor types rely on Environments to add configmaps and secrets
-	envFromSources, err := util.ConvertConfigSecrets(ctx, fn, cn.kubernetesClient)
-	if err != nil {
-		return nil, err
+	// Other executor types rely on Environments to add configmaps and secrets.
+	// When the function declares RFC-0030 EnvFrom, that field is authoritative
+	// and the legacy whole-object synthesis from the name-only references is
+	// skipped — one source of truth, no double-injection (RFC-0030 §2). The
+	// legacy synthesis is preserved byte-for-byte when the new field is absent.
+	var envFromSources []apiv1.EnvFromSource
+	if len(fn.Spec.EnvFrom) == 0 {
+		var err error
+		envFromSources, err = util.ConvertConfigSecrets(ctx, fn, cn.kubernetesClient)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec)
 	if err != nil {
 		return nil, err
 	}
@@ -204,6 +212,13 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))
+
+	// After MergePodSpec, so the user's own podspec cannot reorder the
+	// platform-last guarantee (env podspec < EnvFrom < Env, platform above all).
+	util.ApplyFunctionEnv(&pod.Spec, fn.Name, fn, []apiv1.EnvVar{{
+		Name:  fv1.ResourceVersionCount,
+		Value: fmt.Sprintf("%d", rvCount),
+	}})
 
 	var ownerReferences []metav1.OwnerReference
 	if cn.enableOwnerReferences {

@@ -164,10 +164,24 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// rollback, set RevisionHistoryLimit to 0 to disable this feature.
 	revisionHistoryLimit := int32(0)
 
-	rvCount, err := util.ReferencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
+	rvCount, err := util.ReferencedResourcesRVSum(ctx, deploy.kubernetesClient, fn.Namespace, fn.Spec)
 	if err != nil {
 		return nil, err
 	}
+
+	// Platform-owned env for the user container. Kept as one slice because
+	// ApplyFunctionEnv re-appends it LAST when the function declares its own
+	// env — kubelet last-wins is what keeps these names authoritative
+	// (RFC-0030 §1); admission's reserved-name denylist is only fast feedback.
+	platformEnv := append([]apiv1.EnvVar{
+		{
+			Name:  fv1.ResourceVersionCount,
+			Value: fmt.Sprintf("%d", rvCount),
+		},
+		// RFC-0023 state API env (nil when functionState is off). The token
+		// itself arrives via the specialize-on-startup fetcher, which writes
+		// it to the shared mount (see fetcher.StateTokenFileName).
+	}, util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,
@@ -176,15 +190,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		TerminationMessagePath: "/dev/termination-log",
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
-		Env: append([]apiv1.EnvVar{
-			{
-				Name:  fv1.ResourceVersionCount,
-				Value: fmt.Sprintf("%d", rvCount),
-			},
-			// RFC-0023 state API env (nil when functionState is off). The token
-			// itself arrives via the specialize-on-startup fetcher, which writes
-			// it to the shared mount (see fetcher.StateTokenFileName).
-		}, util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...),
+		Env:       platformEnv,
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Ports: []apiv1.ContainerPort{
 			{
@@ -237,6 +243,9 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret(env.Spec.ImagePullSecret, pod.Spec))
+
+	// After every merge, so nothing can reorder the platform-last guarantee.
+	util.ApplyFunctionEnv(&pod.Spec, env.Name, fn, platformEnv)
 
 	var ownerReferences []metav1.OwnerReference
 	if deploy.enableOwnerReferences {

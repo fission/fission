@@ -139,14 +139,39 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 // The sum is returned as int64: resource versions are int64 etcd revisions and
 // can exceed 2^31-1 on long-running clusters, so narrowing to int would risk
 // truncation (and collisions that mask a genuine change).
-func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int64, error) {
+// The signature takes the whole FunctionSpec because the reference surface is
+// wider than Spec.Secrets/ConfigMaps: objects referenced only via
+// Env[].valueFrom / EnvFrom (RFC-0030) must contribute too — Kubernetes never
+// refreshes env in a running container, so a rotation the sum misses would
+// propagate to nothing (silently stale credentials).
+func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, namespace string, spec fv1.FunctionSpec) (int64, error) {
 	var rvCount int64
 
-	for _, ref := range secrets {
-		if ref.Namespace != namespace {
-			continue
+	// Deduplicate: the same object referenced via Spec.Secrets AND an env
+	// field must contribute once, or removing one of two references would
+	// change the sum and roll pods for a content-identical state.
+	secretNames := make(map[string]struct{})
+	for _, ref := range spec.Secrets {
+		if ref.Namespace == namespace {
+			secretNames[ref.Name] = struct{}{}
 		}
-		s, err := client.CoreV1().Secrets(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	}
+	// Env references are same-namespace by construction (LocalObjectReference).
+	for _, name := range spec.EnvSecretNames() {
+		secretNames[name] = struct{}{}
+	}
+	cfgmapNames := make(map[string]struct{})
+	for _, ref := range spec.ConfigMaps {
+		if ref.Namespace == namespace {
+			cfgmapNames[ref.Name] = struct{}{}
+		}
+	}
+	for _, name := range spec.EnvConfigMapNames() {
+		cfgmapNames[name] = struct{}{}
+	}
+
+	for name := range secretNames {
+		s, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				continue
@@ -157,11 +182,8 @@ func ReferencedResourcesRVSum(ctx context.Context, client kubernetes.Interface, 
 		rvCount += rv
 	}
 
-	for _, ref := range cfgmaps {
-		if ref.Namespace != namespace {
-			continue
-		}
-		cfg, err := client.CoreV1().ConfigMaps(namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+	for name := range cfgmapNames {
+		cfg, err := client.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				continue
