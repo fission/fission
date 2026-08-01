@@ -398,7 +398,11 @@ func (spec FunctionSpec) Validate() error {
 // (iterating an embedded PodSpec exceeds the CEL cost budget; GHSA-v455-mv2v-5g92)
 // and the RFC-0024 async invocation bounds (metav1.Duration CEL rules are unproven
 // in this CRD, so the ordering/positivity checks live in Go and run at admission)
-// and provisioned-concurrency Windows-emptiness (RFC-0026 PR 1 limitation).
+// and provisioned-concurrency Windows-emptiness (RFC-0026 PR 1 limitation)
+// and the RFC-0030 env rules (iterating env sources likewise exceeds the CEL
+// cost budget; these MUST live here rather than in Validate(), which the
+// webhook does not call — a rule only Validate() runs is enforced on the CLI
+// path alone and bypassed by kubectl/GitOps writers).
 func (spec FunctionSpec) validateForAdmission() error {
 	var errs error
 	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
@@ -408,6 +412,53 @@ func (spec FunctionSpec) validateForAdmission() error {
 	if spec.ProvisionedConcurrency != nil {
 		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
 	}
+	errs = errors.Join(errs, spec.validateEnvForAdmission())
+	return errs
+}
+
+// validateEnvForAdmission holds the RFC-0030 phase-1 rules: the env source
+// narrowing and reserved-name denylist, plus the two "not implemented yet"
+// gates that must reject rather than silently ignore.
+func (spec FunctionSpec) validateEnvForAdmission() error {
+	var errs error
+
+	// The runtime redirect ships with RFC-0030's files-mode phase; until then
+	// a set MountPath must be rejected, never silently ignored.
+	for _, s := range spec.Secrets {
+		if s.MountPath != "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
+		}
+	}
+	for _, c := range spec.ConfigMaps {
+		if c.MountPath != "" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
+		}
+	}
+
+	if len(spec.Env) == 0 && len(spec.EnvFrom) == 0 {
+		return errs
+	}
+
+	errs = errors.Join(errs, validateFunctionEnv(spec.Env, spec.EnvFrom))
+
+	// Poolmgr injection rides the specialize payload and needs the
+	// capability-gated runtime contract (RFC-0030 §3); until that phase
+	// lands, reject rather than deploy a function whose DATABASE_URL
+	// would be silently empty. Empty executor type defaults to poolmgr.
+	if et := spec.InvokeStrategy.ExecutionStrategy.ExecutorType; et == ExecutorTypePoolmgr || et == "" {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Env", "", "env/envFrom are not supported on the poolmgr executor yet (lands with RFC-0030 phase 2); use the newdeploy or container executor"))
+	}
+
+	// On the container executor the legacy name-only references are
+	// synthesized into EnvFrom by the executor; when the function declares
+	// EnvFrom itself that synthesis is skipped (one source of truth), so
+	// carrying both would silently drop the legacy projection. Reject the
+	// combination instead of dropping it.
+	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer &&
+		len(spec.EnvFrom) > 0 && (len(spec.Secrets) > 0 || len(spec.ConfigMaps) > 0) {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.EnvFrom", "", "on the container executor, envFrom replaces the secrets/configmaps projection: declare the objects in envFrom instead of alongside it"))
+	}
+
 	return errs
 }
 

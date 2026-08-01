@@ -13,6 +13,11 @@ package v1
 type ConfigMapReferenceApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	Name      *string `json:"name,omitempty"`
+	// MountPath redirects this configmap's file projection from the
+	// default /configs/<namespace>/<name>; relative to the /configs root.
+	// See SecretReference.MountPath for the constraint rationale and the
+	// phase gating.
+	MountPath *string `json:"mountPath,omitempty"`
 }
 
 // ConfigMapReferenceApplyConfiguration constructs a declarative configuration of the ConfigMapReference type for use with
@@ -34,5 +39,13 @@ func (b *ConfigMapReferenceApplyConfiguration) WithNamespace(value string) *Conf
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *ConfigMapReferenceApplyConfiguration) WithName(value string) *ConfigMapReferenceApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithMountPath sets the MountPath field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the MountPath field is set to the value of the last call.
+func (b *ConfigMapReferenceApplyConfiguration) WithMountPath(value string) *ConfigMapReferenceApplyConfiguration {
+	b.MountPath = &value
 	return b
 }

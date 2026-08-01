@@ -26,10 +26,14 @@ import (
 // future field addition fails loudly until it is categorized here (and in
 // RuntimeAffecting itself).
 var affectingFields = map[string]struct{}{
-	"Environment":     {},
-	"Package":         {},
-	"Secrets":         {},
-	"ConfigMaps":      {},
+	"Environment": {},
+	"Package":     {},
+	"Secrets":     {},
+	"ConfigMaps":  {},
+	// RFC-0030 per-function env: lands in the runtime container's process
+	// environment, so any change respecializes/rolls pods.
+	"Env":             {},
+	"EnvFrom":         {},
 	"Resources":       {},
 	"InvokeStrategy":  {},
 	"Streaming":       {},
@@ -185,6 +189,14 @@ func goldenTableCases() []goldenTableCase {
 		}, true},
 		{"ConfigMaps", func(s *fv1.FunctionSpec) {
 			s.ConfigMaps = append(s.ConfigMaps, fv1.ConfigMapReference{Namespace: "ns", Name: "cm2"})
+		}, true},
+		{"Env", func(s *fv1.FunctionSpec) {
+			s.Env = append(s.Env, apiv1.EnvVar{Name: "DATABASE_URL", Value: "postgres://db"})
+		}, true},
+		{"EnvFrom", func(s *fv1.FunctionSpec) {
+			s.EnvFrom = append(s.EnvFrom, apiv1.EnvFromSource{
+				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}},
+			})
 		}, true},
 		{"Resources", func(s *fv1.FunctionSpec) {
 			s.Resources.Limits = apiv1.ResourceList{apiv1.ResourceCPU: resource.MustParse("200m")}

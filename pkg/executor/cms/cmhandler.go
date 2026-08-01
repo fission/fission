@@ -6,6 +6,7 @@ package cms
 
 import (
 	"context"
+	"slices"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -22,12 +23,23 @@ func getConfigmapRelatedFuncs(ctx context.Context, m *metav1.ObjectMeta, fission
 	// In future a cache that populates at start and is updated on changes might be better solution
 	relatedFunctions := make([]fv1.Function, 0)
 	for _, f := range funcList.Items {
-		for _, cm := range f.Spec.ConfigMaps {
-			if (cm.Name == m.Name) && (cm.Namespace == m.Namespace) {
-				relatedFunctions = append(relatedFunctions, f)
-				break
-			}
+		if functionReferencesConfigMap(&f, m) {
+			relatedFunctions = append(relatedFunctions, f)
 		}
 	}
 	return relatedFunctions, nil
+}
+
+// functionReferencesConfigMap is the ConfigMap counterpart of
+// functionReferencesSecret: Spec.ConfigMaps plus the RFC-0030 env fields.
+func functionReferencesConfigMap(f *fv1.Function, m *metav1.ObjectMeta) bool {
+	for _, cm := range f.Spec.ConfigMaps {
+		if (cm.Name == m.Name) && (cm.Namespace == m.Namespace) {
+			return true
+		}
+	}
+	if f.Namespace != m.Namespace {
+		return false
+	}
+	return slices.Contains(f.Spec.EnvConfigMapNames(), m.Name)
 }

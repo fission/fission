@@ -21,6 +21,7 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnCfgMap, flag.FnSecret,
+			flag.FnEnvVar, flag.FnEnvFromSecret, flag.FnEnvFromConfigMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 			flag.FnStreaming, flag.FnStreamingProtocol,
@@ -92,6 +93,7 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{
 			flag.FnEnvName, flag.FnEntryPoint, flag.FnPkgName,
 			flag.FnExecutorType, flag.FnSecret, flag.FnCfgMap,
+			flag.FnEnvVar, flag.FnEnvFromSecret, flag.FnEnvFromConfigMap,
 			flag.FnSpecializationTimeout, flag.FnExecutionTimeout,
 			flag.FnIdleTimeout, flag.FnConcurrency, flag.FnRequestsPerPod,
 			flag.FnStreaming, flag.FnStreamingProtocol,
@@ -205,6 +207,7 @@ func Commands() *cobra.Command {
 		Optional: []flag.Flag{
 			flag.FnPort, flag.FnCommand, flag.FnArgs,
 			flag.FnCfgMap, flag.FnSecret,
+			flag.FnEnvVar, flag.FnEnvFromSecret, flag.FnEnvFromConfigMap,
 			flag.FnExecutionTimeout,
 			flag.FnIdleTimeout,
 			flag.FnTerminationGracePeriod,
@@ -230,6 +233,7 @@ func Commands() *cobra.Command {
 			flag.FnImageName, flag.FnPort,
 			flag.FnCommand, flag.FnArgs,
 			flag.FnSecret, flag.FnCfgMap,
+			flag.FnEnvVar, flag.FnEnvFromSecret, flag.FnEnvFromConfigMap,
 			flag.FnExecutionTimeout, flag.FnIdleTimeout,
 			flag.Labels, flag.Annotation,
 

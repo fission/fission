@@ -47,16 +47,17 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 	tests := []struct {
 		name    string
 		objects []runtime.Object
-		secrets []fv1.SecretReference
-		cfgmaps []fv1.ConfigMapReference
+		spec    fv1.FunctionSpec
 		want    int64
 	}{
 		{
 			name:    "sums referenced secret and configmap resource versions",
 			objects: []runtime.Object{secret(ns, "s1", "10"), configMap(ns, "c1", "20")},
-			secrets: []fv1.SecretReference{secretRef(ns, "s1")},
-			cfgmaps: []fv1.ConfigMapReference{configMapRef(ns, "c1")},
-			want:    30,
+			spec: fv1.FunctionSpec{
+				Secrets:    []fv1.SecretReference{secretRef(ns, "s1")},
+				ConfigMaps: []fv1.ConfigMapReference{configMapRef(ns, "c1")},
+			},
+			want: 30,
 		},
 		{
 			name: "ignores unreferenced objects in the namespace",
@@ -64,9 +65,11 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 				secret(ns, "s1", "10"), secret(ns, "s2", "99"),
 				configMap(ns, "c1", "20"), configMap(ns, "c2", "77"),
 			},
-			secrets: []fv1.SecretReference{secretRef(ns, "s1")},
-			cfgmaps: []fv1.ConfigMapReference{configMapRef(ns, "c1")},
-			want:    30,
+			spec: fv1.FunctionSpec{
+				Secrets:    []fv1.SecretReference{secretRef(ns, "s1")},
+				ConfigMaps: []fv1.ConfigMapReference{configMapRef(ns, "c1")},
+			},
+			want: 30,
 		},
 		{
 			name:    "empty references return zero without listing",
@@ -76,14 +79,53 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 		{
 			name:    "missing referenced object contributes zero and does not error",
 			objects: []runtime.Object{secret(ns, "s1", "10")},
-			secrets: []fv1.SecretReference{secretRef(ns, "s1"), secretRef(ns, "ghost")},
-			want:    10,
+			spec: fv1.FunctionSpec{
+				Secrets: []fv1.SecretReference{secretRef(ns, "s1"), secretRef(ns, "ghost")},
+			},
+			want: 10,
 		},
 		{
 			name:    "cross-namespace reference is skipped",
 			objects: []runtime.Object{secret("other", "s1", "10")},
-			secrets: []fv1.SecretReference{secretRef("other", "s1")},
-			want:    0,
+			spec: fv1.FunctionSpec{
+				Secrets: []fv1.SecretReference{secretRef("other", "s1")},
+			},
+			want: 0,
+		},
+		{
+			name:    "env valueFrom references contribute (RFC-0030)",
+			objects: []runtime.Object{secret(ns, "s1", "10"), configMap(ns, "c1", "20")},
+			spec: fv1.FunctionSpec{
+				Env: []apiv1.EnvVar{
+					{Name: "A", ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
+						LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}, Key: "k"}}},
+					{Name: "B", ValueFrom: &apiv1.EnvVarSource{ConfigMapKeyRef: &apiv1.ConfigMapKeySelector{
+						LocalObjectReference: apiv1.LocalObjectReference{Name: "c1"}, Key: "k"}}},
+				},
+			},
+			want: 30,
+		},
+		{
+			name:    "envFrom references contribute (RFC-0030)",
+			objects: []runtime.Object{secret(ns, "s1", "10"), configMap(ns, "c1", "20")},
+			spec: fv1.FunctionSpec{
+				EnvFrom: []apiv1.EnvFromSource{
+					{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}}},
+					{ConfigMapRef: &apiv1.ConfigMapEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "c1"}}},
+				},
+			},
+			want: 30,
+		},
+		{
+			name:    "object referenced via both channels contributes once",
+			objects: []runtime.Object{secret(ns, "s1", "10")},
+			spec: fv1.FunctionSpec{
+				Secrets: []fv1.SecretReference{secretRef(ns, "s1")},
+				EnvFrom: []apiv1.EnvFromSource{
+					{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}}},
+				},
+			},
+			want: 10,
 		},
 	}
 
@@ -91,7 +133,7 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			client := fake.NewClientset(tc.objects...)
-			got, err := ReferencedResourcesRVSum(t.Context(), client, ns, tc.secrets, tc.cfgmaps)
+			got, err := ReferencedResourcesRVSum(t.Context(), client, ns, tc.spec)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
 		})
