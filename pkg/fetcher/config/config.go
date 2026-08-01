@@ -70,7 +70,7 @@ type Config struct {
 // The storage key stays optional even then: storagesvc dual-accepts a
 // master-derived signature, so an unprovisioned fetcher degrades gracefully.
 func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
-	const chartSecret = "fission-internal-auth"
+	chartSecret := fv1.InternalAuthSecretName()
 	keysSecret := fv1.TenantAuthKeysSecret
 
 	// Require the fetcher key only where it is guaranteed to be provisioned (a

@@ -24,14 +24,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/storagesvc"
 )
-
-// internalAuthSecretName is the chart-installed Secret that holds the
-// shared HMAC key used for internal control-plane authentication. The
-// chart's name is fixed; see charts/fission-all/templates/internal-auth-secret.yaml.
-const internalAuthSecretName = "fission-internal-auth"
 
 // internalAuthSecretKey is the data key inside that Secret.
 const internalAuthSecretKey = "secret"
@@ -146,7 +142,7 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 	if kubeClient == nil {
 		return nil, nil
 	}
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, internalAuthSecretName, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, fv1.InternalAuthSecretName(), metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -156,7 +152,7 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 	value, ok := secret.Data[internalAuthSecretKey]
 	if !ok || len(value) == 0 {
 		return nil, fmt.Errorf("secret %s/%s exists but has no %q key with a non-empty value; either the chart's internalAuth materialisation has been overridden or the Secret was hand-authored",
-			namespace, internalAuthSecretName, internalAuthSecretKey)
+			namespace, fv1.InternalAuthSecretName(), internalAuthSecretKey)
 	}
 	return value, nil
 }
