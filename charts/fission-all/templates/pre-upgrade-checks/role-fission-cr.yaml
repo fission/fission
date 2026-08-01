@@ -5,3 +5,53 @@
 {{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "preupgrade") $) }}
 {{- end }}
 {{- end }}
+{{- if include "fission.adoptSecretNames" . }}
+---
+{{- /*
+Retention-adoption grant (see cmd/preupgradechecks/adoptsecrets.go). The hook
+annotates chart-generated Secrets with helm.sh/resource-policy=keep before Helm
+computes its deletion set, so a template can stop rendering them without the
+live object being pruned.
+
+get+patch, fenced by resourceNames to exactly the Secrets the chart generates,
+in the release namespace only. resourceNames DOES restrict get and patch (both
+name the object in the request path), so this cannot read or modify any other
+Secret. No list, no watch, no create, no delete — in particular no `list`,
+which would let this identity enumerate every Secret in the namespace.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "{{ .Release.Name }}-preupgrade-adopt"
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
+    helm.sh/hook-weight: "-2"
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "patch"]
+  resourceNames:
+{{- range $name := splitList " " (include "fission.adoptSecretNames" .) }}
+  - {{ $name }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: "{{ .Release.Name }}-preupgrade-adopt"
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
+    helm.sh/hook-weight: "-1"
+subjects:
+  - kind: ServiceAccount
+    name: fission-preupgrade
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: "{{ .Release.Name }}-preupgrade-adopt"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

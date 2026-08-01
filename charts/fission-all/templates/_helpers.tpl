@@ -357,3 +357,27 @@ a forbidden error on the upgrade that introduces its schema change.
 {{- define "fission.crdNames" -}}
 canaryconfigs.fission.io environments.fission.io fissiontenants.fission.io functionaliases.fission.io functions.fission.io functionversions.fission.io httptriggers.fission.io kuberneteswatchtriggers.fission.io messagequeuetriggers.fission.io packages.fission.io timetriggers.fission.io workflowruns.fission.io workflows.fission.io
 {{- end -}}
+
+{{/*
+fission.adoptSecretNames is the space-separated list of chart-generated Secrets
+the pre-upgrade hook stamps helm.sh/resource-policy=keep onto, so that moving
+their generation out of the templating layer does not prune the live object on
+the next upgrade (RFC-0029 §3; mechanism verified on Helm v4.2.3).
+
+Only Secrets the chart itself may have created belong here — never one supplied
+via an existingSecret value, which the operator owns and Helm never manages.
+Empty when nothing needs adopting, which makes the whole migration render away.
+*/}}
+{{- define "fission.adoptSecretNames" -}}
+{{- $names := list -}}
+{{- if and .Values.internalAuth.enabled (not .Values.internalAuth.existingSecret) -}}
+{{- $names = append $names "fission-internal-auth" -}}
+{{- end -}}
+{{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
+{{- $names = append $names "router" -}}
+{{- end -}}
+{{- if not .Values.webhook.certManager.enabled -}}
+{{- $names = append $names "fission-webhook-certs" -}}
+{{- end -}}
+{{- join " " $names -}}
+{{- end -}}

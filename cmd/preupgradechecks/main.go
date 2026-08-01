@@ -33,6 +33,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Stamp retention onto chart-generated Secrets BEFORE Helm applies the
+	// release manifests and computes its deletion set — a pre-upgrade hook is
+	// the only place that ordering holds. Without it, a template that stops
+	// rendering a Secret prunes the live one, which for the internal-auth
+	// master wedges every control-plane pod (see adoptsecrets.go).
+	if names := adoptSecretNames(os.Getenv("ADOPT_SECRETS")); len(names) > 0 {
+		ns := os.Getenv("POD_NAMESPACE")
+		if ns == "" {
+			logger.Error(nil, "ADOPT_SECRETS set but POD_NAMESPACE is empty; cannot adopt")
+			os.Exit(1)
+		}
+		if err := AdoptSecretsForKeep(ctx, preupgradeClient.k8sClient, logger, ns, names); err != nil {
+			logger.Error(err, "failed to annotate secrets for retention; a later upgrade could prune them")
+			os.Exit(1)
+		}
+	}
+
 	if mode := os.Getenv("CRDS_MODE"); mode == crdsModeHook {
 		// Adoption of hand-applied CRDs needs --force-conflicts: they carry
 		// managedFields owned by kubectl-create as an Update operation.
