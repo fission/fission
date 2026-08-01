@@ -7,6 +7,7 @@ package util
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	apiv1 "k8s.io/api/core/v1"
 
@@ -22,6 +23,37 @@ const (
 	SharedSecretRoot = "/secrets"
 	SharedConfigRoot = "/configs"
 )
+
+// maxVolumeNameLen is the DNS-label limit Kubernetes enforces on volume names.
+const maxVolumeNameLen = 63
+
+// projectedFileMode matches the mode the fetcher writes its files with, so a
+// function sees the same permissions on every executor. Fidelity is the whole
+// point of reproducing this layout natively.
+const projectedFileMode = 0750
+
+// volumeName builds a bounded, unique volume name.
+//
+// Both properties are load-bearing. Object names may already be a full 63-char
+// DNS label, so a prefixed name can overflow the limit; and the SAME object may
+// legitimately be referenced twice with different mount paths — admission only
+// rejects colliding DIRECTORIES, not repeated objects — which would otherwise
+// yield two volumes with one name and a pod the apiserver refuses.
+//
+// The index guarantees uniqueness; the object name is kept for readability in
+// `kubectl describe pod` and truncated to fit around it.
+func volumeName(kind, objName string, index int) string {
+	suffix := fmt.Sprintf("-%d", index)
+	prefix := "fission-" + kind + "-"
+	room := maxVolumeNameLen - len(prefix) - len(suffix)
+	if room < 0 {
+		room = 0
+	}
+	if len(objName) > room {
+		objName = objName[:room]
+	}
+	return strings.TrimSuffix(prefix+objName, "-") + suffix
+}
 
 // MountPathVolumes builds the native Volumes and VolumeMounts that give the
 // CONTAINER executor the same file layout the fetcher produces elsewhere.
@@ -45,19 +77,17 @@ func MountPathVolumes(fn *fv1.Function) ([]apiv1.Volume, []apiv1.VolumeMount, er
 		if err != nil {
 			return err
 		}
-		// Volume names must be DNS labels and unique within the pod; derive one
-		// from the kind and object name rather than the path, which may contain
-		// separators.
-		volName := fmt.Sprintf("fission-%s-%s", kind, objName)
+		volName := volumeName(kind, objName, len(volumes))
 		vol := apiv1.Volume{Name: volName}
 		if kind == "secret" {
 			vol.VolumeSource = apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{SecretName: objName},
+				Secret: &apiv1.SecretVolumeSource{SecretName: objName, DefaultMode: new(int32(projectedFileMode))},
 			}
 		} else {
 			vol.VolumeSource = apiv1.VolumeSource{
 				ConfigMap: &apiv1.ConfigMapVolumeSource{
 					LocalObjectReference: apiv1.LocalObjectReference{Name: objName},
+					DefaultMode:          new(int32(projectedFileMode)),
 				},
 			}
 		}

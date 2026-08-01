@@ -5,6 +5,7 @@
 package util
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,5 +103,59 @@ func TestMountPathVolumes(t *testing.T) {
 		// A secret and a configmap may share an object NAME; the volume names
 		// must still differ.
 		assert.Len(t, seen, 3)
+	})
+}
+
+// TestMountPathVolumeNamesAreBoundedAndUnique pins the two ways a derived
+// volume name breaks a pod outright.
+func TestMountPathVolumeNamesAreBoundedAndUnique(t *testing.T) {
+	t.Parallel()
+
+	// Admission rejects colliding DIRECTORIES, not repeated objects — so one
+	// Secret at two mount paths is legal, and must not yield two volumes with
+	// the same name (the apiserver refuses such a pod).
+	t.Run("the same object at two paths gets distinct volumes", func(t *testing.T) {
+		t.Parallel()
+		vols, mounts, err := MountPathVolumes(fnWith(
+			[]fv1.SecretReference{
+				{Namespace: "default", Name: "s", MountPath: "a"},
+				{Namespace: "default", Name: "s", MountPath: "b"},
+			}, nil))
+		require.NoError(t, err)
+		require.Len(t, vols, 2)
+		assert.NotEqual(t, vols[0].Name, vols[1].Name, "duplicate volume names make the pod unschedulable")
+		assert.Equal(t, vols[0].Name, mounts[0].Name)
+		assert.Equal(t, vols[1].Name, mounts[1].Name)
+		assert.Equal(t, SharedSecretRoot+"/a", mounts[0].MountPath)
+		assert.Equal(t, SharedSecretRoot+"/b", mounts[1].MountPath)
+	})
+
+	// Object names may already be a full 63-char DNS label, so a prefixed
+	// volume name can overflow the limit Kubernetes enforces.
+	t.Run("a maximal object name stays within the DNS-label limit", func(t *testing.T) {
+		t.Parallel()
+		long := strings.Repeat("a", 63)
+		vols, _, err := MountPathVolumes(fnWith(
+			[]fv1.SecretReference{{Namespace: "default", Name: long, MountPath: "x"}}, nil))
+		require.NoError(t, err)
+		require.Len(t, vols, 1)
+		assert.LessOrEqual(t, len(vols[0].Name), maxVolumeNameLen,
+			"a volume name over 63 chars is rejected by the apiserver")
+		assert.NotEmpty(t, vols[0].Name)
+	})
+
+	// The fetcher writes its files with this mode; the native projection must
+	// match or the same function sees different permissions per executor.
+	t.Run("projected files match the fetcher's mode", func(t *testing.T) {
+		t.Parallel()
+		vols, _, err := MountPathVolumes(fnWith(
+			[]fv1.SecretReference{{Namespace: "default", Name: "s", MountPath: "a"}},
+			[]fv1.ConfigMapReference{{Namespace: "default", Name: "c", MountPath: "b"}}))
+		require.NoError(t, err)
+		require.Len(t, vols, 2)
+		require.NotNil(t, vols[0].Secret.DefaultMode)
+		assert.EqualValues(t, projectedFileMode, *vols[0].Secret.DefaultMode)
+		require.NotNil(t, vols[1].ConfigMap.DefaultMode)
+		assert.EqualValues(t, projectedFileMode, *vols[1].ConfigMap.DefaultMode)
 	})
 }
