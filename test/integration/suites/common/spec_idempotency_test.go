@@ -37,29 +37,6 @@ import (
 // exercised.
 func TestSpecApplyIsIdempotent(t *testing.T) {
 	t.Parallel()
-	// SKIPPED: this documents a CONFIRMED bug, not a passing contract.
-	//
-	// Measured on CI (v1.34.8, 2026-08-01): reapplying a byte-identical spec
-	// directory moved the function's PackageRef.ResourceVersion 4785 -> 4789
-	// and its generation 1 -> 2. So every GitOps sync of an unchanged spec
-	// recycles pods and mints an RFC-0025 version.
-	//
-	// Root cause is in the apply engine, not the spec files. applyResourceType
-	// records a NO-OP package's CURRENT live metadata, and apply.go's
-	// cross-reference pass then copies that ResourceVersion into every
-	// referencing function. The package's ResourceVersion drifts on controller
-	// STATUS writes (buildermgr records a content hash), so the copy carries
-	// drift that has nothing to do with the spec. Same defect class as the
-	// `fn update` stamp fixed in #3635, in a second code path.
-	//
-	// The fix is not simply skipping the stamp: the function in the spec file
-	// carries no ResourceVersion, so leaving it empty also differs from live
-	// and still forces an update. The engine has to preserve the LIVE
-	// function's stamp when the referenced package was a no-op this apply.
-	//
-	// RFC-0029 §4 lists this as phase-4 work (#3296, #1491). Unskip with the
-	// fix.
-	t.Skip("known non-idempotency in the spec apply engine — see the comment above and RFC-0029 phase 4 (#3296, #1491)")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
