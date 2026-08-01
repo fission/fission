@@ -1209,6 +1209,33 @@ canaryDeployment:
     runAsUser: 10001
     runAsGroup: 10001
 
+## crds controls how Fission's CustomResourceDefinitions are delivered
+## (RFC-0029). Single-writer by design: exactly one mechanism ever writes the
+## CRD objects.
+##
+crds:
+  ## mode selects the delivery mechanism:
+  ##   hook (default) - the pre-install/pre-upgrade checks Job server-side-applies
+  ##                    the CRD bundle embedded in its image, before the release
+  ##                    manifests roll. Makes `helm install` one-shot on a fresh
+  ##                    cluster and keeps CRDs upgraded with the chart. Requires
+  ##                    preUpgradeChecks.enabled and grants that hook's
+  ##                    ServiceAccount CRD write, fenced by name for update/patch
+  ##                    and by a ValidatingAdmissionPolicy for create.
+  ##   none           - bring your own (kubectl create -k crds/v1 / make create-crds);
+  ##                    the hook only checks that the CRDs are present. Use this if
+  ##                    your organization will not grant CRD write to a chart.
+  ##
+  mode: hook
+  ## forceConflicts adopts CRDs applied by the documented kubectl flow, whose
+  ## managedFields are owned by kubectl-create: without it the first
+  ## server-side apply conflicts on exactly the fields a schema-changing
+  ## upgrade must change. Set false to make such a conflict fail the upgrade
+  ## instead — which preserves hand-edits to a Fission CRD (added printer
+  ## columns, relaxed validation) at the cost of stopping until reconciled.
+  ##
+  forceConflicts: true
+
 ## Enable authentication for fission function invocation via Fission router
 ##
 authentication:

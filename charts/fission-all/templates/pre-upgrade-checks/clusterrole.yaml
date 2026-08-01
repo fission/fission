@@ -3,8 +3,9 @@ kind: ClusterRole
 metadata:
   name: {{ .Release.Name }}-preupgrade
   annotations:
-    helm.sh/hook: pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation
+    # pre-install: see the fission.crdsMode helper in _helpers.tpl.
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
     helm.sh/hook-weight: "-2"
 rules:
 - apiGroups:
@@ -15,3 +16,39 @@ rules:
   - get
   - list
   - watch
+{{- if eq (include "fission.crdsMode" .) "hook" }}
+{{- /*
+crds.mode=hook needs CRD write, granted as ONE name-scoped rule.
+
+The obvious reading of RBAC — "resourceNames cannot restrict create, because
+the object name is unknown at authorization time" — is true for a POST to the
+collection but NOT for how this hook writes. It only ever server-side-applies,
+which is a PATCH to a NAMED resource: the name is in the request path, so
+resourceNames applies to the create authorization that SSA additionally needs
+when the target is absent. Verified against a live apiserver: a single
+resourceNames-scoped {create,patch,update} rule successfully applies a CRD
+that does not exist yet.
+
+That matters because the alternative — an unscoped create rule fenced only by
+admission — would grant this ServiceAccount the ability to create a CRD in ANY
+group, with a ValidatingAdmissionPolicy as the only thing standing in the way.
+Here RBAC itself is the fence and the policy alongside this file is genuine
+defence-in-depth. No delete, no wildcards, nothing outside these names.
+
+The privilege is still real within its scope: patching Fission's own CRDs can
+strip their schema/CEL constraints. crds.mode=none is the escape hatch for
+orgs that will not grant CRD write to a chart at all.
+*/}}
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - create
+  - patch
+  - update
+  resourceNames:
+{{- range $name := splitList " " (include "fission.crdNames" .) }}
+  - {{ $name }}
+{{- end }}
+{{- end }}

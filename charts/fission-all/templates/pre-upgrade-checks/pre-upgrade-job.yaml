@@ -1,3 +1,11 @@
+{{- /*
+crds.mode=hook delivers the CRDs through THIS Job, so it must actually run:
+failing render is the only way to avoid a silent no-op install that ships no
+schemas at all.
+*/}}
+{{- if and (eq (include "fission.crdsMode" .) "hook") (not .Values.preUpgradeChecks.enabled) }}
+{{- fail "crds.mode=hook delivers the CRDs through the pre-upgrade-checks Job, so preUpgradeChecks.enabled must be true (or set crds.mode=none)" }}
+{{- end }}
 {{- if .Values.preUpgradeChecks.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -13,7 +21,8 @@ metadata:
   annotations:
     # This is what defines this resource as a hook. Without this line, the
     # job is considered part of the release.
-    "helm.sh/hook": pre-upgrade
+    # pre-install: see the fission.crdsMode helper in _helpers.tpl.
+    "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-delete-policy": hook-succeeded
     "helm.sh/hook-weight": "1"
 spec:
@@ -32,6 +41,16 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         env:
+        - name: CRDS_MODE
+          value: {{ include "fission.crdsMode" . | quote }}
+        - name: CRDS_FORCE_CONFLICTS
+          # Adoption of hand-applied CRDs needs force: they carry managedFields
+          # owned by kubectl-create as an Update, so a first server-side apply
+          # from a new field manager conflicts on exactly the fields a
+          # schema-changing upgrade must change. Set false to make such a
+          # conflict fail loudly instead (hand-edits to a Fission CRD are then
+          # preserved, and the upgrade stops until they are reconciled).
+          value: {{ dig "forceConflicts" true (.Values.crds | default dict) | quote }}
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}
         {{- if .Values.terminationMessagePath }}
