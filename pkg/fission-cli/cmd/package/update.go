@@ -165,6 +165,12 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	}
 
 	if !needToUpdate {
+		// NOTE: this returns the CALLER'S OWN ObjectMeta, unchanged — nothing
+		// was written, so there is no new ResourceVersion to report. Callers
+		// must not treat "returned meta == passed-in meta" as "nothing to do":
+		// `fn update --pkg <other-package>` lands here (it re-points a function
+		// at a package it does not modify) and still has to re-stamp the
+		// function's PackageRef, or the function keeps serving the old package.
 		return &pkg.ObjectMeta, nil
 	}
 
