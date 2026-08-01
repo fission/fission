@@ -409,6 +409,11 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
+	fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
+	if err != nil {
+		return err
+	}
+
 	if input.String(flagkey.FnExecutorType) == string(fv1.ExecutorTypeContainer) {
 		return fmt.Errorf("this command does not support creating function of executor type container. Check `fission function run-container --help`")
 	}
@@ -567,6 +572,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		Spec: fv1.FunctionSpec{
 			Secrets:                secrets,
 			ConfigMaps:             cfgmaps,
+			Env:                    fnEnv,
+			EnvFrom:                fnEnvFrom,
 			Resources:              *resourceReq,
 			InvokeStrategy:         *invokeStrategy,
 			FunctionTimeout:        fnTimeout,

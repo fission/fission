@@ -308,3 +308,52 @@ pkg/svcinfo.PortWorkflow (RFC-0022).
 {{- define "fission.workflowPort" -}}
 {{ (.Values.workflows | default dict).port | default 8892 }}
 {{- end -}}
+
+{{/*
+fission.crdsMode is the CRD delivery mechanism (RFC-0029 §1), normalised and
+validated. Single-writer by design — exactly one mechanism ever writes the CRD
+objects, because two server-side appliers under different field managers is an
+ownership fight nobody wins.
+
+  hook (default) — the pre-install/pre-upgrade Job server-side-applies the
+                   CRD bundle embedded in its own image, before the release
+                   manifests roll. This also delivers RFC-0028's
+                   CRDs-before-controllers ordering.
+
+                   This is why the hook Job and every object it depends on
+                   (ServiceAccount, ClusterRole, ClusterRoleBinding, and the
+                   namespaced Role/RoleBinding) are annotated
+                   pre-install AS WELL AS pre-upgrade: in this mode the hook
+                   delivers the CRDs a FRESH cluster has none of, which is
+                   what makes a one-shot `helm install` work. Anything the
+                   Job needs must also carry a hook-weight strictly below
+                   the Job's, or Helm may order the Job first.
+  none           — bring your own (`kubectl create -k crds/v1` /
+                   `make create-crds`); the hook only checks presence, exactly
+                   as it does today.
+
+The RFC's third mode, `manifests` (CRDs templated into the rendered set for
+Argo/Flux diffing), needs the generated YAML to live inside the chart
+directory — Helm's .Files cannot read outside it — so it lands with the
+chart-packaging change rather than being half-shipped here.
+*/}}
+{{- define "fission.crdsMode" -}}
+{{- $mode := dig "mode" "hook" (.Values.crds | default dict) -}}
+{{- if eq $mode "manifests" -}}
+{{- fail "crds.mode=manifests is not available yet (it needs the CRD manifests packaged inside the chart); use hook or none" -}}
+{{- end -}}
+{{- if not (has $mode (list "hook" "none")) -}}
+{{- fail (printf "crds.mode must be one of hook|none, got %q" $mode) -}}
+{{- end -}}
+{{- $mode -}}
+{{- end -}}
+
+{{/*
+fission.crdNames is the space-separated list of Fission CRD object names the
+hook's RBAC fences its mutating verbs to. It must stay in lockstep with
+crds/v1 — a CRD missing here is one the hook cannot update, which surfaces as
+a forbidden error on the upgrade that introduces its schema change.
+*/}}
+{{- define "fission.crdNames" -}}
+canaryconfigs.fission.io environments.fission.io fissiontenants.fission.io functionaliases.fission.io functions.fission.io functionversions.fission.io httptriggers.fission.io kuberneteswatchtriggers.fission.io messagequeuetriggers.fission.io packages.fission.io timetriggers.fission.io workflowruns.fission.io workflows.fission.io
+{{- end -}}

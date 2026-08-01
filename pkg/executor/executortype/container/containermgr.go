@@ -231,7 +231,7 @@ func (caaf *Container) RefreshFuncPods(ctx context.Context, logger logr.Logger, 
 
 	// Ideally there should be only one deployment but for now we rely on label/selector to ensure that condition
 	for _, deployment := range dep.Items {
-		rvCount, err := executorUtils.ReferencedResourcesRVSum(ctx, caaf.kubernetesClient, deployment.Namespace, f.Spec.Secrets, f.Spec.ConfigMaps)
+		rvCount, err := executorUtils.ReferencedResourcesRVSum(ctx, caaf.kubernetesClient, deployment.Namespace, f.Spec)
 		if err != nil {
 			return err
 		}
@@ -586,6 +586,14 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 	}
 
 	if !reflect.DeepEqual(oldFn.Spec.PodSpec, newFn.Spec.PodSpec) {
+		deployChanged = true
+	}
+
+	// RFC-0030 per-function env lands in the pod template — see the newdeploy
+	// counterpart: an env-only edit must roll the deployment, or the CR and
+	// the running container disagree indefinitely.
+	if !reflect.DeepEqual(oldFn.Spec.Env, newFn.Spec.Env) ||
+		!reflect.DeepEqual(oldFn.Spec.EnvFrom, newFn.Spec.EnvFrom) {
 		deployChanged = true
 	}
 

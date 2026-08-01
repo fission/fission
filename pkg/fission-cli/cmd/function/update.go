@@ -85,6 +85,10 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.ConfigMaps = configMaps
 	}
 
+	if err := applyFunctionEnvFlags(input, function); err != nil {
+		return err
+	}
+
 	if len(envName) > 0 {
 		function.Spec.Environment.Name = envName
 	}

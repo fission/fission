@@ -106,6 +106,10 @@ func (opts *UpdateContainerSubCommand) complete(input cli.Input) error {
 		function.Spec.ConfigMaps = configMaps
 	}
 
+	if err := applyFunctionEnvFlags(input, function); err != nil {
+		return err
+	}
+
 	if input.IsSet(flagkey.FnExecutionTimeout) {
 		fnTimeout := input.Int(flagkey.FnExecutionTimeout)
 		if fnTimeout <= 0 {

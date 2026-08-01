@@ -1,0 +1,59 @@
+{{- if eq (include "fission.crdsMode" .) "hook" }}
+{{- /*
+Defence-in-depth over the ClusterRole alongside this file, which already
+fences every mutating verb to Fission's own CRDs by name. This policy adds
+the constraint RBAC cannot express at all: that the hook may not attach a
+conversion webhook to a CRD it legitimately owns — which would interpose on
+every read and write of that type cluster-wide.
+
+Exact group equality, not a suffix match: "evilfission.io" ends with
+"fission.io", so endsWith would admit any attacker-registrable domain. This
+matches the applier's own check (cmd/preupgradechecks/applycrds.go).
+
+Bound to the hook SA by username in matchConditions, so it constrains that
+identity only and never interferes with a cluster admin managing CRDs.
+
+Rendered as a hook (weight below the RBAC) so it exists before the Job it
+governs. Note Helm's hook default is before-hook-creation, so it IS deleted
+and recreated on each install/upgrade — at weight -5, long before the Job at
+weight 1, and the RBAC it backs is name-scoped independently, so the recreate
+window grants nothing extra. helm.sh/resource-policy is not consulted for
+hook resources; it is not set here to avoid implying otherwise.
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-crd-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apiextensions.k8s.io"]
+        apiVersions: ["*"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["customresourcedefinitions"]
+  matchConditions:
+    - name: only-the-fission-crd-hook
+      expression: 'request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:fission-preupgrade"'
+  validations:
+    - expression: 'object.spec.group == "fission.io"'
+      message: "the Fission CRD hook may only manage fission.io CustomResourceDefinitions"
+      reason: Forbidden
+    - expression: '!has(object.spec.conversion) || object.spec.conversion.strategy == "None"'
+      message: "the Fission CRD hook may not set a conversion strategy other than None"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Name }}-fission-crd-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-4"
+spec:
+  policyName: {{ .Release.Name }}-fission-crd-guard
+  validationActions: [Deny]
+{{- end }}

@@ -74,6 +74,11 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 
 	fnIdleTimeout := input.Int(flagkey.FnIdleTimeout)
 
+	fnEnv, fnEnvFrom, err := parseFunctionEnvFlags(input)
+	if err != nil {
+		return err
+	}
+
 	secretNames := input.StringSlice(flagkey.FnSecret)
 	cfgMapNames := input.StringSlice(flagkey.FnCfgMap)
 
@@ -167,6 +172,8 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 		Spec: fv1.FunctionSpec{
 			Secrets:         secrets,
 			ConfigMaps:      cfgmaps,
+			Env:             fnEnv,
+			EnvFrom:         fnEnvFrom,
 			Resources:       *resourceReq,
 			InvokeStrategy:  *invokeStrategy,
 			FunctionTimeout: fnTimeout,

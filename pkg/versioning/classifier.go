@@ -52,6 +52,15 @@ func RuntimeAffecting(old, new fv1.FunctionSpec) bool {
 	case !equality.Semantic.DeepEqual(old.ConfigMaps, new.ConfigMaps):
 		return true
 
+	// Env: per-function environment variables (RFC-0030) land in the runtime
+	// container's process environment — always affects pod contents.
+	case !equality.Semantic.DeepEqual(old.Env, new.Env):
+		return true
+
+	// EnvFrom: whole-object env projection (RFC-0030), same reasoning as Env.
+	case !equality.Semantic.DeepEqual(old.EnvFrom, new.EnvFrom):
+		return true
+
 	// Resources: CPU/memory requests and limits change the pod spec the
 	// executor creates.
 	case !equality.Semantic.DeepEqual(old.Resources, new.Resources):

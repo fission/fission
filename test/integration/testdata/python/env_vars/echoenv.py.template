@@ -1,0 +1,14 @@
+import os
+
+
+def main():
+    # Echo the requested variables as KEY=VALUE lines so a test can assert on
+    # the values the RUNTIME actually received, not on the pod spec — the
+    # whole point of RFC-0030 is what reaches the process.
+    keys = "{{ FN_ENV_KEYS }}".split(",")
+    lines = []
+    for k in keys:
+        if not k:
+            continue
+        lines.append("%s=%s" % (k, os.environ.get(k, "<unset>")))
+    return "\n".join(lines), 200

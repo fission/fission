@@ -161,15 +161,33 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 
 	resources := cn.getResources(fn)
 
-	// Other executor types rely on Environments to add configmaps and secrets
-	envFromSources, err := util.ConvertConfigSecrets(ctx, fn, cn.kubernetesClient)
+	// Other executor types rely on Environments to add configmaps and secrets.
+	// When the function declares RFC-0030 EnvFrom, that field is authoritative
+	// and the legacy whole-object synthesis from the name-only references is
+	// skipped — one source of truth, no double-injection (RFC-0030 §2). The
+	// legacy synthesis is preserved byte-for-byte when the new field is absent.
+	var envFromSources []apiv1.EnvFromSource
+	if len(fn.Spec.EnvFrom) == 0 {
+		var err error
+		envFromSources, err = util.ConvertConfigSecrets(ctx, fn, cn.kubernetesClient)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec)
 	if err != nil {
 		return nil, err
 	}
 
-	rvCount, err := util.ReferencedResourcesRVSum(ctx, cn.kubernetesClient, fn.Namespace, fn.Spec.Secrets, fn.Spec.ConfigMaps)
-	if err != nil {
-		return nil, err
+	// Platform-owned env for the user container, computed once: it seeds the
+	// container AND is re-appended last by ApplyFunctionEnv below, whose
+	// kubelet-last-wins ordering is what keeps these names authoritative.
+	platformEnv := []apiv1.EnvVar{
+		{
+			Name:  fv1.ResourceVersionCount,
+			Value: fmt.Sprintf("%d", rvCount),
+		},
 	}
 
 	container := &apiv1.Container{
@@ -178,13 +196,8 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		TerminationMessagePath: "/dev/termination-log",
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
-		Env: []apiv1.EnvVar{
-			{
-				Name:  fv1.ResourceVersionCount,
-				Value: fmt.Sprintf("%d", rvCount),
-			},
-		},
-		EnvFrom: envFromSources,
+		Env:       platformEnv,
+		EnvFrom:   envFromSources,
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Resources: resources,
 	}
@@ -204,6 +217,12 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))
+
+	// After MergePodSpec, so the user's own podspec cannot reorder the
+	// platform-last guarantee (env podspec < EnvFrom < Env, platform above all).
+	if err := util.ApplyFunctionEnv(&pod.Spec, fn.Name, deployNamespace, fn, platformEnv); err != nil {
+		return nil, err
+	}
 
 	var ownerReferences []metav1.OwnerReference
 	if cn.enableOwnerReferences {

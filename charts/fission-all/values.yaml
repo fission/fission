@@ -395,17 +395,58 @@ router:
   ##       maxSurge: 1
   ##       maxUnavailable: 0
   ##
-  strategy: {}
+  ## Surge-then-drain by default: a new pod becomes Ready (which gates on the
+  ## mux build and the endpoint index) before an old one is taken down, so a
+  ## rollout never dips below the current replica count. Explicit rather than
+  ## relying on the Kubernetes 25% defaults, which allow maxUnavailable > 0
+  ## once the router is scaled past 3 replicas — exactly when a dip hurts most.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   ## terminationGracePeriodSeconds gives in-flight requests time to drain on
-  ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
-  ## above GRACEFUL_SHUTDOWN_TIMEOUT.
+  ## shutdown. Keep it at or above gracefulShutdownTimeout.
   ##
-  terminationGracePeriodSeconds: null
-  ## podDisruptionBudget (opt-in) protects router availability during voluntary
-  ## disruptions. Only meaningful with replicas > 1 (not a DaemonSet).
+  ## 90s rather than the Kubernetes default of 30, sized above
+  ## gracefulShutdownTimeout below, which is in turn sized above the default
+  ## 60s function timeout: a drain shorter than the longest in-flight request
+  ## turns every rollout into truncated responses for the slowest requests.
+  ##
+  terminationGracePeriodSeconds: 90
+  ## gracefulShutdownTimeout bounds how long the router keeps serving in-flight
+  ## requests after SIGTERM before force-closing them (GRACEFUL_SHUTDOWN_TIMEOUT).
+  ## Raising terminationGracePeriodSeconds alone does nothing: the code caps the
+  ## drain at 30s unless this is set, so the extra grace would be spent idle
+  ## while a 60s invocation is cut off at 30.
+  ##
+  ## Keep terminationGracePeriodSeconds > gracefulShutdownTimeout > the longest
+  ## expected function timeout.
+  ##
+  gracefulShutdownTimeout: 75s
+  ## preStopSleep delays the drain so the pod's removal from the Service
+  ## EndpointSlice propagates to every kube-proxy BEFORE the listener closes.
+  ## Without it a terminating router still receives connections it can no
+  ## longer accept, which surfaces as connection-refused — a platform-attributed
+  ## failure with no response and no attribution header (RFC-0028 §1). Set to
+  ## 0 to disable.
+  ##
+  preStopSleep: 5
+  ## podDisruptionBudget protects router availability during voluntary
+  ## disruptions (node drains, cluster upgrades).
+  ##
+  ## Enabled by default, but the template renders it only when the router can
+  ## actually satisfy it: replicas >= 2, OR an autoscaler is enabled. A
+  ## minAvailable: 1 PDB on a genuinely single-replica Deployment blocks node
+  ## drains forever — so setting replicas: 1 silently and correctly drops the
+  ## PDB rather than deadlocking the cluster. An HPA/KEDA-scaled router keeps
+  ## replicas: 1 in its spec while running more, so an autoscaler counts as
+  ## evidence too — but only when its OWN floor (minReplicas) is >= 2, since
+  ## an autoscaler idling at minReplicas: 1 is still a single-replica
+  ## Deployment and would deadlock exactly the same way.
   ##
   podDisruptionBudget:
-    enabled: false
+    enabled: true
     minAvailable: 1
     # maxUnavailable:
   ## autoscaling (opt-in) deploys a HorizontalPodAutoscaler for the router. The
@@ -450,7 +491,13 @@ router:
   deployAsDaemonSet: false
   ## replicas decides how many router pods to deploy. Only used when deployAsDaemonSet is false.
   ##
-  replicas: 1
+  ## Two by default (RFC-0028): the router is the data plane, and a single
+  ## replica means every rollout, node drain or eviction is a traffic outage.
+  ## Small-footprint installs (kind, single-node) can set 1 and get exactly the
+  ## previous behaviour, including no PodDisruptionBudget — the PDB renders
+  ## only when it is safe (see podDisruptionBudget below).
+  ##
+  replicas: 2
   ## svcAddressMaxRetries is the max times for router to retry with a specific function service address
   ##
   svcAddressMaxRetries: 5
@@ -623,6 +670,40 @@ buildermgr:
 ## It contains validation and mutation for functions, triggers, environments, Kubernetes event watches, etc.
 ##
 webhook:
+  ## replicas decides how many webhook pods to deploy.
+  ##
+  ## The webhook is fail-closed (failurePolicy: Fail on every configuration),
+  ## so while it has zero Ready endpoints EVERY Fission CR write errors. Two
+  ## replicas by default (RFC-0028) so a rollout or an eviction is not a
+  ## write outage.
+  ##
+  ## NOTE: replicas alone does not make upgrades seamless on the default cert
+  ## path — the serving cert is still minted per render, so the caBundle can
+  ## race the still-serving old cert. cert-manager (webhook.certManager.enabled)
+  ## is the supported path for that; see RFC-0028 §2.
+  ##
+  replicas: 2
+
+  ## podDisruptionBudget protects webhook availability during voluntary
+  ## disruptions. Same render guard as the router's: it is emitted only when
+  ## replicas >= 2, because a minAvailable: 1 budget on a single-replica
+  ## Deployment blocks node drains forever.
+  ##
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+    # maxUnavailable:
+
+  ## strategy is the Deployment rollout strategy for the webhook. Surge-first,
+  ## so a new pod is Ready before an old one goes away — with a fail-closed
+  ## webhook, a gap is a cluster-wide CR-write outage.
+  ##
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
   ## Pod resources as:
   ##  resources:
   ##    limits:
@@ -1208,6 +1289,33 @@ canaryDeployment:
     fsGroup: 10001
     runAsUser: 10001
     runAsGroup: 10001
+
+## crds controls how Fission's CustomResourceDefinitions are delivered
+## (RFC-0029). Single-writer by design: exactly one mechanism ever writes the
+## CRD objects.
+##
+crds:
+  ## mode selects the delivery mechanism:
+  ##   hook (default) - the pre-install/pre-upgrade checks Job server-side-applies
+  ##                    the CRD bundle embedded in its image, before the release
+  ##                    manifests roll. Makes `helm install` one-shot on a fresh
+  ##                    cluster and keeps CRDs upgraded with the chart. Requires
+  ##                    preUpgradeChecks.enabled and grants that hook's
+  ##                    ServiceAccount CRD write, fenced by name for update/patch
+  ##                    and by a ValidatingAdmissionPolicy for create.
+  ##   none           - bring your own (kubectl create -k crds/v1 / make create-crds);
+  ##                    the hook only checks that the CRDs are present. Use this if
+  ##                    your organization will not grant CRD write to a chart.
+  ##
+  mode: hook
+  ## forceConflicts adopts CRDs applied by the documented kubectl flow, whose
+  ## managedFields are owned by kubectl-create: without it the first
+  ## server-side apply conflicts on exactly the fields a schema-changing
+  ## upgrade must change. Set false to make such a conflict fail the upgrade
+  ## instead — which preserves hand-edits to a Fission CRD (added printer
+  ## columns, relaxed validation) at the cost of stopping until reconciled.
+  ##
+  forceConflicts: true
 
 ## Enable authentication for fission function invocation via Fission router
 ##
