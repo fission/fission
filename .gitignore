@@ -66,3 +66,8 @@ examples
 .envrc
 common.log
 kind-132.yaml
+
+# Maven build output from the JVM testdata trees. `ZipTestDataTree` ships the
+# whole source tree to the builder, which runs mvn itself — a locally-built
+# target/ is both redundant and easy to commit by accident.
+test/integration/testdata/**/target/

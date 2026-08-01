@@ -706,6 +706,20 @@ func (in *FunctionSpec) DeepCopyInto(out *FunctionSpec) {
 		*out = make([]ConfigMapReference, len(*in))
 		copy(*out, *in)
 	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]corev1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.EnvFrom != nil {
+		in, out := &in.EnvFrom, &out.EnvFrom
+		*out = make([]corev1.EnvFromSource, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	in.Resources.DeepCopyInto(&out.Resources)
 	in.InvokeStrategy.DeepCopyInto(&out.InvokeStrategy)
 	if in.IdleTimeout != nil {

@@ -256,11 +256,26 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 		// Preserve existing Conditions across the status replacement so
 		// transitions aren't accidentally wiped when build outcome changes.
 		existingConds := fresh.Status.Conditions
+		// The status is replaced wholesale, so the content hash must be
+		// re-established here or the build path would leave it empty — and an
+		// empty hash reads as "not yet recorded", making the next edit look
+		// like a seed rather than a change. After a FAILED build that means
+		// the user's fix is swallowed and the package stays failed.
+		//
+		// The hash comes from the CALLER'S pkg — the content this operation is
+		// actually about — and deliberately NOT from fresh.Spec. A spec change
+		// landing mid-build is dropped by the trigger predicate (no second
+		// build while one is in flight), so re-reading the spec here would
+		// record the hash of content this build never saw: the package would
+		// look converged on the new content while serving the old, and nothing
+		// would re-enqueue it. Recording what was actually built instead leaves
+		// the hashes unequal, which is what makes the next reconcile converge.
 		fresh.Status = fv1.PackageStatus{
 			BuildStatus:         status,
 			BuildLog:            buildLogs,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 			Conditions:          existingConds,
+			ContentHash:         PackageContentHash(pkg.Spec),
 		}
 		setPackageBuildCondition(&fresh.Status, status, buildLogs, fresh.Generation)
 		setPackageOCIPublishCondition(&fresh.Status, uploadResp, fresh.Generation)

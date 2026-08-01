@@ -997,6 +997,17 @@ type (
 		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
+		// MountPath redirects this secret's file projection from the default
+		// /secrets/<namespace>/<name> to the given path, which is relative to
+		// the /secrets root (RFC-0030 §4): generic pool pods share a fixed
+		// volume set frozen at pool creation, so an arbitrary absolute path is
+		// not materializable there, and the container executor applies the
+		// same constraint for cross-executor consistency. Empty keeps today's
+		// layout. The runtime redirect ships in a later RFC-0030 phase; until
+		// then admission rejects a non-empty value rather than silently
+		// ignoring it.
+		// +optional
+		MountPath string `json:"mountPath,omitempty"`
 	}
 
 	// ConfigMapReference is a reference to a kubernetes configmap.
@@ -1005,6 +1016,12 @@ type (
 		// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 		// +kubebuilder:validation:MaxLength=63
 		Name string `json:"name"`
+		// MountPath redirects this configmap's file projection from the
+		// default /configs/<namespace>/<name>; relative to the /configs root.
+		// See SecretReference.MountPath for the constraint rationale and the
+		// phase gating.
+		// +optional
+		MountPath string `json:"mountPath,omitempty"`
 	}
 
 	// BuildStatus indicates the current build status of a package.
@@ -1045,6 +1062,30 @@ type (
 		// BuildLog stores build log during the compilation.
 		// +optional
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
+
+		// ContentHash fingerprints the package's INPUT content (RFC-0029 §3):
+		// the source archive when one is present, otherwise the deployment
+		// archive. A source package's deployment is the build's own product,
+		// so folding it in would make every successful build look like a
+		// fresh change and rebuild forever.
+		//
+		// It is what makes a Git-applied Package
+		// converge without the CLI: buildermgr compares the spec's current
+		// hash against this one to decide whether the content actually
+		// changed, rather than relying on the CLI's status->pending poke.
+		//
+		// It also covers packages that never build. A deploy-only or OCI
+		// package settles at BuildStatusNone, so the build-success path that
+		// re-stamps referencing Functions never runs for it — exactly the
+		// digest-pinned-OCI-in-Git golden path. Keying the re-stamp on this
+		// hash instead covers both shapes on one code path.
+		//
+		// An EMPTY value means "not yet recorded" and must never read as
+		// "changed": every package has an empty hash on the first reconcile
+		// after this ships, and treating that as a change would rebuild the
+		// whole cluster at once. The reconciler seeds it without rebuilding.
+		// +optional
+		ContentHash string `json:"contentHash,omitempty"`
 
 		// LastUpdateTimestamp will store the timestamp the package was last updated
 		// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
@@ -1147,6 +1188,38 @@ type (
 		// +listType=map
 		// +listMapKey=name
 		ConfigMaps []ConfigMapReference `json:"configmaps,omitempty"`
+
+		// Env lists per-function environment variables set on the function's
+		// runtime container: literals, plus key-level references into
+		// same-namespace Secrets/ConfigMaps via valueFrom (secretKeyRef /
+		// configMapKeyRef only — fieldRef and resourceFieldRef are rejected at
+		// admission because poolmgr's specialize-time injection cannot honor
+		// pod-level field refs portably; RFC-0030 §1). Function Env wins over
+		// EnvFrom, which wins over the environment podspec's merged env.
+		// Platform-reserved names (FISSION_*, RESOURCE_VERSION_COUNT, and the
+		// interpreter/proxy-hijack set) are denied at admission and enforced
+		// at injection. Additive and backward compatible.
+		// +optional
+		// +nullable
+		Env []apiv1.EnvVar `json:"env,omitempty"`
+
+		// EnvFrom projects whole same-namespace Secrets/ConfigMaps into the
+		// function's environment, with an optional prefix; later sources win
+		// over earlier ones (Kubernetes semantics), and function Env literals
+		// win over all EnvFrom keys.
+		//
+		// Two phase-1 limits, both inherent to native (kubelet) injection:
+		// the kubelet expands envFrom BEFORE container env, so a name the
+		// environment podspec sets as a literal still beats an EnvFrom-supplied
+		// key of the same name; and reserved platform names appearing as data
+		// keys of a referenced object are not filtered (they are unknowable at
+		// admission and mutable afterwards) — they are only shadowed by the
+		// platform vars actually present on the container. Key-level filtering
+		// and full precedence arrive with the poolmgr phase, which resolves
+		// values itself. Additive and backward compatible.
+		// +optional
+		// +nullable
+		EnvFrom []apiv1.EnvFromSource `json:"envFrom,omitempty"`
 
 		// cpu and memory resources as per K8S standards
 		// This is only for newdeploy to set up resource limitation

@@ -21,6 +21,23 @@ type PackageStatusApplyConfiguration struct {
 	BuildStatus *corev1.BuildStatus `json:"buildstatus,omitempty"`
 	// BuildLog stores build log during the compilation.
 	BuildLog *string `json:"buildlog,omitempty"`
+	// ContentHash fingerprints the package's source and deployment
+	// archives (RFC-0029 §3). It is what makes a Git-applied Package
+	// converge without the CLI: buildermgr compares the spec's current
+	// hash against this one to decide whether the content actually
+	// changed, rather than relying on the CLI's status->pending poke.
+	//
+	// It also covers packages that never build. A deploy-only or OCI
+	// package settles at BuildStatusNone, so the build-success path that
+	// re-stamps referencing Functions never runs for it — exactly the
+	// digest-pinned-OCI-in-Git golden path. Keying the re-stamp on this
+	// hash instead covers both shapes on one code path.
+	//
+	// An EMPTY value means "not yet recorded" and must never read as
+	// "changed": every package has an empty hash on the first reconcile
+	// after this ships, and treating that as a change would rebuild the
+	// whole cluster at once. The reconciler seeds it without rebuilding.
+	ContentHash *string `json:"contentHash,omitempty"`
 	// LastUpdateTimestamp will store the timestamp the package was last updated
 	// metav1.Time is a wrapper around time.Time which supports correct marshaling to YAML and JSON.
 	// https://github.com/kubernetes/apimachinery/blob/44bd77c24ef93cd3a5eb6fef64e514025d10d44e/pkg/apis/meta/v1/time.go#L26-L35
@@ -48,6 +65,14 @@ func (b *PackageStatusApplyConfiguration) WithBuildStatus(value corev1.BuildStat
 // If called multiple times, the BuildLog field is set to the value of the last call.
 func (b *PackageStatusApplyConfiguration) WithBuildLog(value string) *PackageStatusApplyConfiguration {
 	b.BuildLog = &value
+	return b
+}
+
+// WithContentHash sets the ContentHash field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ContentHash field is set to the value of the last call.
+func (b *PackageStatusApplyConfiguration) WithContentHash(value string) *PackageStatusApplyConfiguration {
+	b.ContentHash = &value
 	return b
 }
 
