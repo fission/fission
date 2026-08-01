@@ -133,6 +133,13 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 
 	logger := r.logger.WithValues("package", pkg.Name, "namespace", pkg.Namespace)
 	seeding := pkg.Status.ContentHash == ""
+	if seeding {
+		// Recorded without propagating. Logged because it is the one path that
+		// deliberately swallows a content change, and status is user-writable —
+		// an empty ContentHash written by hand suppresses exactly one
+		// propagation, and without this line it would do so silently.
+		logger.Info("seeding package content hash without propagating (first observation of this package)")
+	}
 
 	if !seeding && !pkg.Spec.Source.IsEmpty() {
 		// Source changed: re-enter the build queue. updatePackage records the
@@ -157,25 +164,20 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error re-stamping functions after content change: %w", err)
 		}
-		if stamped == 0 {
-			// Every referencing Function already points at this package —
-			// the CLI stamped them itself, which is what `fission fn update`
-			// does right after writing the package.
-			//
-			// Recording the hash here would be an unnecessary STATUS write,
-			// and a status write bumps the Package's ResourceVersion, which
-			// the CLI then copies into every Function's PackageRef on the
-			// NEXT `fn update` (fission-cli/cmd/function/update.go). That is a
-			// FunctionSpec change, so it mints an RFC-0025 version for an
-			// update the classifier deliberately treats as non-affecting.
-			//
-			// Skipping the write is safe: the next reconcile re-derives the
-			// same hash, finds the functions still current, and does nothing
-			// again — idempotent, and it costs no writes. A genuine Git-driven
-			// change leaves functions stale, so that path still acts.
-			return ctrl.Result{}, nil
-		}
-		logger.Info("package content changed, re-stamped referencing functions", "functions", stamped)
+		// stamped == 0 means every referencing Function already points at this
+		// package — the CLI stamped them itself. That is the CONVERGED state,
+		// so the hash is still recorded below.
+		//
+		// An earlier version skipped the write here, to avoid a status write
+		// whose ResourceVersion bump the CLI would copy into every Function on
+		// the next `fn update`. That traded one bug for a worse one: the
+		// recorded hash then lagged a revision behind the spec forever, so
+		// reverting to the previously-recorded content — incident-response
+		// rollback, the case RFC-0029 G4 exists for — compared equal and was
+		// silently swallowed. The RV-copying is fixed at its source instead
+		// (fission-cli/cmd/function/update.go now re-stamps only when the
+		// package actually changed).
+		logger.Info("package content change reconciled", "functions_restamped", stamped)
 	}
 
 	if err := r.recordContentHash(ctx, pkg, current); err != nil {

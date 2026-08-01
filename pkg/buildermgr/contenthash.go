@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"strings"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -29,9 +30,10 @@ import (
 // the delivered bytes could differ: the OCI image reference and digest, the
 // URL and its checksum, or the literal bytes. What stays out matters as much.
 // ResourceVersion is excluded because it changes on every write including
-// status updates. ImagePullSecrets and SubPath are excluded because they alter
-// how the same content is reached, not what it is — rotating a pull secret
-// must not rebuild the world.
+// status updates. ImagePullSecrets is excluded because it alters how the same
+// content is reached, not what it is — rotating a pull secret must not rebuild
+// the world. SubPath is NOT excluded: it selects which subtree of the image
+// becomes the deployment root, so it genuinely changes the delivered bytes.
 //
 // The empty package hashes to a stable non-empty value, so "no content" is
 // still distinguishable from "not yet recorded" (the empty string).
@@ -66,6 +68,15 @@ func hashArchive(h io.Writer, label string, a fv1.Archive) {
 		write(h, "oci")
 		write(h, a.OCI.Image)
 		write(h, a.OCI.Digest)
+		// SubPath selects WHICH SUBTREE of the image becomes the deployment
+		// root, so it changes the delivered bytes — unlike ImagePullSecrets,
+		// which only changes how the same bytes are reached. Repointing a
+		// package at a patched directory inside the same image (digest
+		// unchanged) must converge, or running pods serve the unpatched
+		// subtree forever while newly created pods serve the patched one.
+		// Normalised the way the executor does, so cosmetic slash churn is
+		// not a content change.
+		write(h, strings.Trim(a.OCI.SubPath, "/"))
 	}
 	if a.Checksum.Sum != "" {
 		write(h, "checksum")

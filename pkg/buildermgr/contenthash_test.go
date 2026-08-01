@@ -93,16 +93,33 @@ func TestPackageContentHash(t *testing.T) {
 		assert.NotEqual(t, PackageContentHash(a), PackageContentHash(b))
 	})
 
-	t.Run("stable across delivery-only metadata", func(t *testing.T) {
+	t.Run("stable across a pull-secret rotation", func(t *testing.T) {
 		t.Parallel()
-		// Rotating a pull secret or pointing at a different subdirectory
-		// changes how the same bytes are reached, not what they are — hashing
-		// them would rebuild the world on a credential rotation.
+		// ImagePullSecrets changes how the same bytes are reached, not what
+		// they are — hashing it would rebuild the world on a credential
+		// rotation.
 		base := oci("registry/app:v1", "sha256:"+repeat("a", 64))
-		withExtras := oci("registry/app:v1", "sha256:"+repeat("a", 64))
-		withExtras.Deployment.OCI.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: "regcred"}}
-		withExtras.Deployment.OCI.SubPath = "app"
-		assert.Equal(t, PackageContentHash(base), PackageContentHash(withExtras))
+		rotated := oci("registry/app:v1", "sha256:"+repeat("a", 64))
+		rotated.Deployment.OCI.ImagePullSecrets = []apiv1.LocalObjectReference{{Name: "regcred"}}
+		assert.Equal(t, PackageContentHash(base), PackageContentHash(rotated))
+	})
+
+	t.Run("subPath is content, not delivery metadata", func(t *testing.T) {
+		t.Parallel()
+		// SubPath selects WHICH SUBTREE of the image becomes the deployment
+		// root. Repointing a package at a patched directory inside the same
+		// image — a plausible shape for a security fix — must converge, or
+		// running pods serve the unpatched subtree forever while newly created
+		// pods serve the patched one.
+		base := oci("registry/app:v1", "sha256:"+repeat("a", 64))
+		patched := oci("registry/app:v1", "sha256:"+repeat("a", 64))
+		patched.Deployment.OCI.SubPath = "app-patched"
+		assert.NotEqual(t, PackageContentHash(base), PackageContentHash(patched))
+
+		// Cosmetic slash churn is not a content change.
+		slashed := oci("registry/app:v1", "sha256:"+repeat("a", 64))
+		slashed.Deployment.OCI.SubPath = "app-patched/"
+		assert.Equal(t, PackageContentHash(patched), PackageContentHash(slashed))
 	})
 
 	t.Run("length-prefixed so fields cannot be spliced", func(t *testing.T) {

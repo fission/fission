@@ -353,19 +353,17 @@ func TestReconcileContentChange(t *testing.T) {
 		assert.Equal(t, PackageContentHash(pkg.Spec), gotPkg.Status.ContentHash)
 	})
 
-	t.Run("no status write when the CLI already stamped the functions", func(t *testing.T) {
+	t.Run("records the hash even when the CLI already stamped the functions", func(t *testing.T) {
 		t.Parallel()
-		// This is the regression that broke RFC-0025 auto-publish in CI.
-		// `fission fn update` writes the Package and THEN stamps referencing
-		// Functions itself, so by the time this reconciles there is nothing to
-		// do. Recording the hash anyway is a STATUS write, and a status write
-		// bumps the Package's ResourceVersion — which the CLI copies into
-		// every Function's PackageRef on the NEXT `fn update`, minting a
-		// version for an update the classifier treats as non-affecting.
+		// Nothing to re-stamp is the CONVERGED state, so the hash must still be
+		// recorded. An earlier version skipped this write to avoid a
+		// ResourceVersion bump the CLI would copy onto every Function — but
+		// that left the recorded hash a revision behind forever, so reverting
+		// to the previously-recorded content compared EQUAL and was silently
+		// swallowed. Incident-response rollback is exactly what RFC-0029 G4
+		// requires to work, so the RV-copying is fixed in the CLI instead.
 		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
 		pkg := ociPkg("p", digestB, staleHash)
-		// The function already points at this package's current RV, exactly as
-		// the CLI leaves it.
 		fn := fnForPkg("f", "p", pkg.ResourceVersion, nil)
 		fc := newFissionFake(pkg, fn)
 		r := newTestPackageReconciler(t, fc, pkg)
@@ -375,8 +373,33 @@ func TestReconcileContentChange(t *testing.T) {
 
 		gotPkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
 		require.NoError(t, err)
-		assert.Equal(t, staleHash, gotPkg.Status.ContentHash,
-			"with nothing to re-stamp, the reconciler must not write status at all")
+		assert.Equal(t, PackageContentHash(pkg.Spec), gotPkg.Status.ContentHash,
+			"the converged state must be recorded, or a later revert to this content reads as no change")
+	})
+
+	t.Run("a revert to previously-recorded content still propagates", func(t *testing.T) {
+		t.Parallel()
+		// The rollback case: content A was recorded, the spec moved to B, and
+		// the operator reverts to A. The reconciler must re-stamp — this is the
+		// bug the skip above introduced.
+		hashA := PackageContentHash(ociPkg("p", digestA, "").Spec)
+		// Spec is back at A while the recorded hash says B.
+		pkg := ociPkg("p", digestA, PackageContentHash(ociPkg("p", digestB, "").Spec))
+		fn := fnForPkg("f", "p", "stale-rv", nil)
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, pkg.ResourceVersion, got.Spec.Package.PackageRef.ResourceVersion,
+			"reverting to known-good content must re-stamp, not be swallowed")
+
+		gotPkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, hashA, gotPkg.Status.ContentHash)
 	})
 
 	t.Run("opt-out annotation is honored on the content path", func(t *testing.T) {
