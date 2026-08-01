@@ -357,3 +357,55 @@ a forbidden error on the upgrade that introduces its schema change.
 {{- define "fission.crdNames" -}}
 canaryconfigs.fission.io environments.fission.io fissiontenants.fission.io functionaliases.fission.io functions.fission.io functionversions.fission.io httptriggers.fission.io kuberneteswatchtriggers.fission.io messagequeuetriggers.fission.io packages.fission.io timetriggers.fission.io workflowruns.fission.io workflows.fission.io
 {{- end -}}
+
+{{/*
+fission.adoptSecretNames is the space-separated list of chart-generated Secrets
+the pre-upgrade hook stamps helm.sh/resource-policy=keep onto, so that moving
+their generation out of the templating layer does not prune the live object on
+the next upgrade (RFC-0029 §3; mechanism verified on Helm v4.2.3).
+
+Only Secrets the chart itself may have created belong here — never one supplied
+via an existingSecret value, which the operator owns and Helm never manages.
+Empty when nothing needs adopting, which makes the whole migration render away.
+*/}}
+{{- define "fission.adoptSecretNames" -}}
+{{- $names := list -}}
+{{- if and .Values.internalAuth.enabled (not .Values.internalAuth.existingSecret) -}}
+{{- $names = append $names "fission-internal-auth" -}}
+{{- end -}}
+{{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
+{{- $names = append $names "router" -}}
+{{- end -}}
+{{- if not .Values.webhook.certManager.enabled -}}
+{{- $names = append $names "fission-webhook-certs" -}}
+{{- end -}}
+{{- join " " $names -}}
+{{- end -}}
+
+{{/*
+fission.adoptSecretNamespaces is the namespace set the retention adoption runs
+over. It mirrors internal-auth-secret.yaml's own replication set exactly: under
+STATIC tenancy the master is copied into defaultNamespace and every
+additionalFissionNamespaces, because kubelet cannot resolve a cross-namespace
+secretKeyRef. Leaving those copies out means they prune on upgrade and function
+pods come up unsigned — a silent failure, described in full on
+AdoptSecretsForKeep in cmd/preupgradechecks/adoptsecrets.go.
+
+Under dynamic/cluster tenancy the tenant copies are INTENTIONALLY removed (each
+tenant gets a controller-owned derived key instead), so pinning them with a keep
+annotation would fight that design — hence the same tenancy gate.
+*/}}
+{{- define "fission.adoptSecretNamespaces" -}}
+{{- $namespaces := list .Release.Namespace -}}
+{{- if eq (include "fission.tenancyMode" .) "static" -}}
+{{-   if and .Values.defaultNamespace (ne .Values.defaultNamespace .Release.Namespace) -}}
+{{-     $namespaces = append $namespaces .Values.defaultNamespace -}}
+{{-   end -}}
+{{-   range $ns := .Values.additionalFissionNamespaces -}}
+{{-     if not (has $ns $namespaces) -}}
+{{-       $namespaces = append $namespaces $ns -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- join " " $namespaces -}}
+{{- end -}}
