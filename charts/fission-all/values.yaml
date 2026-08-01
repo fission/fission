@@ -1587,9 +1587,18 @@ networkPolicy:
 ## the live value and wedging the control plane.
 ##
 ## Two consequences worth knowing:
-##   * After `helm uninstall`, live key material remains in the namespace.
-##     Remove it explicitly if you are decommissioning:
-##       kubectl delete secret fission-internal-auth router fission-webhook-certs -n <ns>
+##   * After `helm uninstall`, live key material remains — and NOT only in the
+##     release namespace. Under static tenancy `fission-internal-auth` is
+##     replicated into `defaultNamespace` and every entry of
+##     `additionalFissionNamespaces` (kubelet cannot resolve a cross-namespace
+##     secretKeyRef), and those copies are annotated for retention too. Deleting
+##     it in the release namespace alone leaves usable key material behind.
+##     When decommissioning, remove it from every namespace it was replicated
+##     into:
+##       kubectl delete secret router fission-webhook-certs -n <release-ns>
+##       for ns in <release-ns> <defaultNamespace> <additionalFissionNamespaces...>; do
+##         kubectl delete secret fission-internal-auth -n "$ns" --ignore-not-found
+##       done
 ##   * `helm uninstall && helm install` no longer rotates this material — the
 ##     reinstall finds the surviving Secrets and reuses them. To rotate after a
 ##     suspected compromise, delete the Secrets explicitly (above) or set the
