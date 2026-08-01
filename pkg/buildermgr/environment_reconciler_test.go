@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -325,4 +326,89 @@ func TestEnvironmentReconcilePrunesStaleGeneration(t *testing.T) {
 	assert.True(t, apierrors.IsNotFound(err), "stale-generation builder deployment must be pruned")
 	_, err = r.kubernetesClient.CoreV1().Services(ns).Get(t.Context(), env.Name+"-2", metav1.GetOptions{})
 	require.NoError(t, err, "current-generation builder service must exist")
+}
+
+// TestEnvironmentReconcileRollsDriftedBuilder is issue #776: builder drift that
+// does NOT bump the Environment's ResourceVersion must still roll the builder.
+//
+// Everything the builder pod is made of that comes from the chart rather than
+// the CR — the fetcher image, the builder image-pull policy, the pod-spec patch
+// — changes without the Environment being touched. The name and selector are
+// keyed on the RV, so they still match, and the reconciler used to find a
+// Deployment and do nothing. The builder then ran the previous image until
+// someone deleted the Deployment by hand; deleting the POD did nothing, because
+// the ReplicaSet recreated it from the same stale template.
+func TestEnvironmentReconcileRollsDriftedBuilder(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "7"
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	// First reconcile creates the builder at the current desired spec.
+	_, err := r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+
+	name := env.Name + "-7"
+	created, err := r.kubernetesClient.AppsV1().Deployments(ns).Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err)
+	originalHash := created.Annotations[builderSpecHashAnnotation]
+	require.NotEmpty(t, originalHash, "the created builder must carry a spec hash to compare against later")
+
+	// Drift the live Deployment the way a chart-level change would: the pod
+	// template no longer matches what the reconciler would produce, while the
+	// Environment — and therefore the name, selector and RV label — is untouched.
+	drifted := created.DeepCopy()
+	drifted.Spec.Template.Spec.Containers[0].Image = "fission/python-builder:STALE"
+	drifted.Annotations[builderSpecHashAnnotation] = "sha256:stale"
+	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Update(t.Context(), drifted, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	_, err = r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+
+	got, err := r.kubernetesClient.AppsV1().Deployments(ns).Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, env.Spec.Builder.Image, got.Spec.Template.Spec.Containers[0].Image,
+		"a drifted builder must be rolled back onto the desired image")
+	assert.Equal(t, originalHash, got.Annotations[builderSpecHashAnnotation],
+		"the spec hash must be re-stamped so the next reconcile is a no-op")
+	assert.Equal(t, name, got.Name,
+		"the Deployment must be updated in place: buildPackage resolves <env>-<rv> as a DNS hostname")
+}
+
+// TestEnvironmentReconcileDoesNotRollAnUndriftedBuilder is the other half, and
+// the direction whose failure mode is silent: a reconciler that rewrote the
+// Deployment every pass would roll every builder on every resync forever.
+// Comparing the apiserver's view of the PodSpec would do exactly that, since it
+// defaults fields we never set — hence hashing our own desired object instead.
+func TestEnvironmentReconcileDoesNotRollAnUndriftedBuilder(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "7"
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	_, err := r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Get(t.Context(), env.Name+"-7", metav1.GetOptions{})
+	require.NoError(t, err)
+
+	// Count Deployment writes with a reactor rather than comparing
+	// ResourceVersion: the fake clientset does not bump RV on Update, so an
+	// RV comparison passes even when the reconciler rewrites the object on
+	// every pass — the exact regression this test exists to catch.
+	var updates int
+	fakeCS, ok := r.kubernetesClient.(*k8sfake.Clientset)
+	require.True(t, ok, "test reconciler must use the fake clientset")
+	fakeCS.PrependReactor("update", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		return false, nil, nil
+	})
+
+	for range 3 {
+		_, err = r.Reconcile(t.Context(), envReq(env))
+		require.NoError(t, err)
+	}
+
+	assert.Zero(t, updates,
+		"repeated reconciles of an unchanged environment must not write the Deployment at all")
 }

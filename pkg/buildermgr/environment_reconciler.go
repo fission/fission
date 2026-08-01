@@ -6,6 +6,8 @@ package buildermgr
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -34,6 +36,11 @@ const (
 	LABEL_ENV_RESOURCEVERSION = "envResourceVersion"
 	LABEL_DEPLOYMENT_OWNER    = "owner"
 	BUILDER_MGR               = "buildermgr"
+
+	// builderSpecHashAnnotation carries a hash of the builder pod template the
+	// reconciler last applied, so drift that does NOT bump the Environment's
+	// ResourceVersion is still detectable (RFC-0028 phase 3, issue #776).
+	builderSpecHashAnnotation = "fission.io/builder-spec-hash"
 )
 
 var (
@@ -187,10 +194,59 @@ func (r *EnvironmentReconciler) ensureBuilder(ctx context.Context, env *fv1.Envi
 			return fmt.Errorf("error creating builder deployment for environment %s in namespace %s: %w", env.Name, ns, err)
 		}
 	case 1:
-		// already present
+		if err := r.reconcileBuilderDeployment(ctx, env, ns, &deployList[0]); err != nil {
+			return fmt.Errorf("error reconciling builder deployment for environment %s in namespace %s: %w", env.Name, ns, err)
+		}
 	default:
 		return fmt.Errorf("found more than one builder deployment for environment %s in namespace %s", env.Name, ns)
 	}
+	return nil
+}
+
+// reconcileBuilderDeployment rolls an existing builder Deployment whose pod
+// template no longer matches what this reconciler would create.
+//
+// The Environment's ResourceVersion is NOT a sufficient trigger (issue #776).
+// Everything the builder pod is made of that comes from the chart rather than
+// the CR — the fetcher image, the builder image-pull policy, the pod-spec patch
+// — changes without the Environment being touched at all. The RV-keyed
+// name/selector stays identical, so the old code found a matching Deployment
+// and did nothing, and the builder kept running the previous image until
+// someone deleted the Deployment by hand. Deleting the POD does not help
+// either: the ReplicaSet just recreates it from the same stale template.
+//
+// The Deployment is updated in place rather than recreated: its name is
+// <env>-<rv>, which buildPackage resolves as a DNS hostname, so renaming or
+// recreating per-generation would break in-flight builds.
+func (r *EnvironmentReconciler) reconcileBuilderDeployment(ctx context.Context, env *fv1.Environment, ns string, live *appsv1.Deployment) error {
+	desired, err := r.genBuilderDeployment(env, ns)
+	if err != nil {
+		return err
+	}
+	want := desired.Annotations[builderSpecHashAnnotation]
+	if live.Annotations[builderSpecHashAnnotation] == want {
+		return nil
+	}
+
+	// Carry the live object's identity so this is an update, not a create, and
+	// so we do not clobber annotations set by anything else.
+	updated := live.DeepCopy()
+	updated.Spec = desired.Spec
+	updated.Labels = desired.Labels
+	if updated.Annotations == nil {
+		updated.Annotations = map[string]string{}
+	}
+	updated.Annotations[builderSpecHashAnnotation] = want
+
+	if _, err := r.kubernetesClient.AppsV1().Deployments(ns).Update(ctx, updated, metav1.UpdateOptions{}); err != nil {
+		return err
+	}
+	// An empty previous hash means the Deployment predates this annotation, so
+	// the first reconcile after upgrade rolls every builder exactly once — a
+	// one-time cost, not ongoing churn, because the hash matches from then on.
+	r.logger.Info("builder deployment spec drifted, rolling it",
+		"deployment", updated.Name, "namespace", ns,
+		"previous", live.Annotations[builderSpecHashAnnotation], "current", want)
 	return nil
 }
 
@@ -381,7 +437,11 @@ func builderAuthEnvVars(namespace string) []apiv1.EnvVar {
 	}
 }
 
-func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
+// genBuilderDeployment computes the DESIRED builder Deployment for an
+// Environment. Split out from the create path so the reconciler can compute the
+// same object on every pass and compare it against what is live — see
+// builderSpecHash and ensureBuilder.
+func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
 	name := fmt.Sprintf("%v-%v", env.Name, env.ResourceVersion)
 	sel := r.getLabels(env.Name, ns, env.ResourceVersion)
 	var replicas int32 = 1
@@ -532,12 +592,47 @@ func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env
 		return nil, err
 	}
 
-	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Create(ctx, deployment, metav1.CreateOptions{})
+	// Stamp a hash of the desired pod template so a later reconcile can tell
+	// "this Deployment is what we would create today" from "this Deployment is
+	// stale". Comparing the live PodSpec directly cannot work: the apiserver
+	// defaults dozens of fields on write, so a live-vs-desired comparison is
+	// never equal and would rewrite the Deployment on every pass forever.
+	// Hashing OUR desired object and comparing that to the value we ourselves
+	// stamped sidesteps defaulting entirely.
+	hash, err := builderSpecHash(&deployment.Spec.Template)
 	if err != nil {
 		return nil, err
 	}
+	if deployment.Annotations == nil {
+		deployment.Annotations = map[string]string{}
+	}
+	deployment.Annotations[builderSpecHashAnnotation] = hash
 
-	r.logger.Info("creating builder deployment", "deployment", name)
+	return deployment, nil
+}
 
+// builderSpecHash fingerprints the desired builder pod template. It is stamped
+// on the Deployment (never on the template itself, which would make the hash
+// cover its own value).
+func builderSpecHash(tmpl *apiv1.PodTemplateSpec) (string, error) {
+	b, err := json.Marshal(tmpl)
+	if err != nil {
+		return "", fmt.Errorf("error hashing builder pod template: %w", err)
+	}
+	sum := sha256.Sum256(b)
+	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// createBuilderDeployment creates the builder Deployment for the current
+// Environment generation.
+func (r *EnvironmentReconciler) createBuilderDeployment(ctx context.Context, env *fv1.Environment, ns string) (*appsv1.Deployment, error) {
+	deployment, err := r.genBuilderDeployment(env, ns)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := r.kubernetesClient.AppsV1().Deployments(ns).Create(ctx, deployment, metav1.CreateOptions{}); err != nil {
+		return nil, err
+	}
+	r.logger.Info("creating builder deployment", "deployment", deployment.Name)
 	return deployment, nil
 }
