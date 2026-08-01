@@ -92,3 +92,45 @@ func TestUpdateRepointsPackage(t *testing.T) {
 	assert.Equal(t, "200", got.Spec.Package.PackageRef.ResourceVersion,
 		"the stamp must carry the new package's ResourceVersion, or nothing recycles the pods")
 }
+
+// TestUpdateLeavesStampAloneWhenPackageUntouched is the other half of the
+// contract, and the direction that is expensive to get wrong.
+//
+// An update that names no package flag (`--versioning auto`, a label edit)
+// must NOT refresh PackageRef.ResourceVersion. The package's live
+// ResourceVersion drifts ahead of the function's stamp on every controller
+// STATUS write — buildermgr records a content hash there — so copying it
+// unconditionally turns an unrelated update into a FunctionSpec change and
+// mints an RFC-0025 version for content that did not move.
+func TestUpdateLeavesStampAloneWhenPackageUntouched(t *testing.T) {
+	// The package has been written since the function was stamped: status
+	// writes carried it from 100 to 140.
+	pkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "pkg-a", Namespace: "default", ResourceVersion: "140"},
+		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+	}
+	fn := &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Spec: fv1.FunctionSpec{
+			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
+			Package: fv1.FunctionPackageRef{
+				PackageRef: fv1.PackageRef{Name: "pkg-a", Namespace: "default", ResourceVersion: "100"},
+			},
+		},
+	}
+
+	fc := fissionfake.NewSimpleClientset(fn, pkg) //nolint:staticcheck
+	cmd.ResetClientsetForTest()
+	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
+	t.Cleanup(cmd.ResetClientsetForTest)
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.FnName, "hello")
+	in.Set(flagkey.FnVersioning, "manual")
+	require.NoError(t, Update(in))
+
+	got, err := fc.CoreV1().Functions("default").Get(t.Context(), "hello", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "100", got.Spec.Package.PackageRef.ResourceVersion,
+		"an update that touches no package must leave the stamp alone, or it mints a version for nothing")
+}

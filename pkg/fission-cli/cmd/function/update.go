@@ -242,15 +242,31 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// TODO : One corner case where user just updates the pkg reference with fnUpdate, but internally this new pkg reference
 	// references a diff env than the spec
 
-	// Stamp unconditionally. This must NOT be guarded on the package having
-	// changed during this command: `fn update --pkg <other-package>` re-points
-	// the function at a package this command did not touch, so the package's
-	// ResourceVersion is unchanged while the reference must still move — and
-	// skipping it there leaves the function serving the old package forever.
-	function.Spec.Package.PackageRef = fv1.PackageRef{
-		Namespace:       newPkgMeta.Namespace,
-		Name:            newPkgMeta.Name,
-		ResourceVersion: newPkgMeta.ResourceVersion,
+	// Two distinct situations hide behind "update the package reference", and
+	// conflating them breaks one or the other:
+	//
+	//   - RE-POINTING at a different package (`--pkg <other>`). The reference
+	//     must move even though this command never wrote that package, so
+	//     UpdatePackage hands back its no-op result — the very ObjectMeta it
+	//     was given. Guarding on ResourceVersion here would leave the function
+	//     serving its old package forever.
+	//
+	//   - REFRESHING the stamp on the SAME package. Here the ResourceVersion
+	//     is the whole payload: bumping it is what recycles pods. But it is
+	//     only ours to bump when THIS command actually wrote the package.
+	//     Copying whatever ResourceVersion the package happens to carry also
+	//     picks up controller STATUS writes — a FunctionSpec change with no
+	//     content behind it, which mints an RFC-0025 version for an update
+	//     that changed nothing about the code. A Git-applied content change
+	//     needs no help from here: buildermgr re-stamps for it (RFC-0029 §3).
+	ref := function.Spec.Package.PackageRef
+	repointing := ref.Name != newPkgMeta.Name || ref.Namespace != newPkgMeta.Namespace
+	if repointing || pkg.ResourceVersion != newPkgMeta.ResourceVersion {
+		function.Spec.Package.PackageRef = fv1.PackageRef{
+			Namespace:       newPkgMeta.Namespace,
+			Name:            newPkgMeta.Name,
+			ResourceVersion: newPkgMeta.ResourceVersion,
+		}
 	}
 
 	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
