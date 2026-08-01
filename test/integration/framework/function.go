@@ -111,6 +111,16 @@ type FunctionOptions struct {
 	// function pods (CLI: `--configmap` / `--secret`, both repeatable).
 	ConfigMaps []string
 	Secrets    []string
+
+	// EnvVars are per-function environment variables as "KEY=VALUE"
+	// (CLI: `--env-var`, repeatable). RFC-0030.
+	EnvVars []string
+	// EnvFromSecrets / EnvFromConfigMaps project a same-namespace object into
+	// the function's environment: "name" for the whole object, "name/key" for
+	// one key, "name/key:ENV" to rename it (CLI: `--env-from-secret` /
+	// `--env-from-configmap`, both repeatable). RFC-0030.
+	EnvFromSecrets    []string
+	EnvFromConfigMaps []string
 	// State, when true, opts the function into the RFC-0023 keyed-state API
 	// (CLI: `--state`), with the optional knobs below.
 	State bool
@@ -261,6 +271,15 @@ func (ns *TestNamespace) CreateFunction(t *testing.T, ctx context.Context, opts 
 	}
 	for _, s := range opts.Secrets {
 		args = append(args, "--secret", s)
+	}
+	for _, e := range opts.EnvVars {
+		args = append(args, "--env-var", e)
+	}
+	for _, e := range opts.EnvFromSecrets {
+		args = append(args, "--env-from-secret", e)
+	}
+	for _, e := range opts.EnvFromConfigMaps {
+		args = append(args, "--env-from-configmap", e)
 	}
 	if opts.Versioning != "" {
 		args = append(args, "--versioning", opts.Versioning)
