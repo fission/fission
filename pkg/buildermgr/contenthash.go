@@ -45,10 +45,20 @@ func PackageContentHash(spec fv1.PackageSpec) string {
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
 
-// hashArchive folds one archive into h. Every field is length-prefixed so that
-// concatenation can never be ambiguous — without it, an image reference of
-// "a" + digest "bc" would hash identically to "ab" + "c", and two genuinely
-// different packages would look unchanged.
+// hashArchive folds one archive into h, keyed on CONTENT IDENTITY rather than
+// storage location.
+//
+// The distinction is load-bearing for URL archives: `fission fn update`
+// re-uploads the source to a NEW storagesvc URL even when the code is
+// byte-identical, so hashing the URL reports a content change on an update
+// that changed nothing — which re-queues a build, whose re-stamp mints a
+// spurious RFC-0025 version. The checksum is the content identity, so it wins
+// whenever it is present; the URL is folded in only as a fallback for archives
+// that carry no checksum, where a location change is the best signal available.
+//
+// Every field is length-prefixed so concatenation can never be ambiguous —
+// without it, an image reference of "a" + digest "bc" would hash identically
+// to "ab" + "c", and two genuinely different packages would look unchanged.
 func hashArchive(h io.Writer, label string, a fv1.Archive) {
 	write(h, label)
 	write(h, string(a.Type))
@@ -57,9 +67,14 @@ func hashArchive(h io.Writer, label string, a fv1.Archive) {
 		write(h, a.OCI.Image)
 		write(h, a.OCI.Digest)
 	}
-	write(h, a.URL)
-	write(h, string(a.Checksum.Type))
-	write(h, a.Checksum.Sum)
+	if a.Checksum.Sum != "" {
+		write(h, "checksum")
+		write(h, string(a.Checksum.Type))
+		write(h, a.Checksum.Sum)
+	} else {
+		write(h, "url")
+		write(h, a.URL)
+	}
 	if len(a.Literal) > 0 {
 		write(h, "literal")
 		writeBytes(h, a.Literal)

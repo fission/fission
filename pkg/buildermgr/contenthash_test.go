@@ -51,8 +51,7 @@ func TestPackageContentHash(t *testing.T) {
 		cases := map[string]fv1.PackageSpec{
 			"digest":   oci("registry/app:v1", "sha256:"+repeat("b", 64)),
 			"image":    oci("registry/app:v2", "sha256:"+repeat("a", 64)),
-			"url":      url("http://storage/a", "abc"),
-			"checksum": url("http://storage/a", "def"),
+			"checksum": url("http://storage/a", "abc"),
 			"literal": {Deployment: fv1.Archive{
 				Type: fv1.ArchiveTypeLiteral, Literal: []byte("code")}},
 			"source added": {
@@ -68,6 +67,30 @@ func TestPackageContentHash(t *testing.T) {
 			}
 			seen[name] = h
 		}
+	})
+
+	t.Run("re-upload of identical content to a new URL is not a change", func(t *testing.T) {
+		t.Parallel()
+		// `fission fn update` re-uploads the source archive to a fresh
+		// storagesvc URL even when the code is byte-identical. Hashing the URL
+		// would report a content change, re-queue a build, and the build's
+		// re-stamp would mint a spurious RFC-0025 version on an update the
+		// classifier deliberately treats as not runtime-affecting.
+		before := url("http://storage/v1/archive?id=aaa", "sha256:same")
+		after := url("http://storage/v1/archive?id=bbb", "sha256:same")
+		assert.Equal(t, PackageContentHash(before), PackageContentHash(after))
+
+		// A genuinely different payload still changes the hash, even at the
+		// same URL.
+		changed := url("http://storage/v1/archive?id=aaa", "sha256:different")
+		assert.NotEqual(t, PackageContentHash(before), PackageContentHash(changed))
+	})
+
+	t.Run("url is the fallback when no checksum is recorded", func(t *testing.T) {
+		t.Parallel()
+		a := fv1.PackageSpec{Deployment: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/a"}}
+		b := fv1.PackageSpec{Deployment: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/b"}}
+		assert.NotEqual(t, PackageContentHash(a), PackageContentHash(b))
 	})
 
 	t.Run("stable across delivery-only metadata", func(t *testing.T) {
