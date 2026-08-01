@@ -466,6 +466,38 @@ func TestReconcileContentChange(t *testing.T) {
 			"recording the moved-on spec would mark the package converged on content it never built")
 	})
 
+	// Recording what was built (above) keeps the package from reading as
+	// converged, but nothing would ever look again: the mid-build spec event
+	// was dropped by the predicate, and the completion status write carries an
+	// identical spec on both sides so it does not enqueue either. The build
+	// path has to requeue itself, or the package sits correct-but-stale.
+	t.Run("a mid-flight content change leaves the package requeued, not stranded", func(t *testing.T) {
+		t.Parallel()
+		built := ociPkg("p", digestA, "")
+		moved := ociPkg("p", digestB, "")
+		moved.ResourceVersion = built.ResourceVersion
+		fc := newFissionFake(moved)
+
+		updated, err := updatePackage(t.Context(), loggerfactory.GetLogger(), fc, built, fv1.BuildStatusSucceeded, "", nil)
+		require.NoError(t, err)
+		require.NotNil(t, updated)
+
+		// This is the condition build() requeues on. It must be true here:
+		// the recorded hash is the built content, the spec has moved past it.
+		assert.NotEqual(t, PackageContentHash(updated.Spec), updated.Status.ContentHash,
+			"a package whose spec moved during the build must remain detectably unconverged")
+
+		// And it must be FALSE in the ordinary case, or every successful build
+		// would requeue forever.
+		quiet := ociPkg("q", digestA, "")
+		fcq := newFissionFake(quiet)
+		updatedQ, err := updatePackage(t.Context(), loggerfactory.GetLogger(), fcq, quiet, fv1.BuildStatusSucceeded, "", nil)
+		require.NoError(t, err)
+		require.NotNil(t, updatedQ)
+		assert.Equal(t, PackageContentHash(updatedQ.Spec), updatedQ.Status.ContentHash,
+			"an undisturbed build must converge, not requeue")
+	})
+
 	t.Run("source content change re-queues a build", func(t *testing.T) {
 		t.Parallel()
 		pkg := sourcePkg("s", fv1.BuildStatusSucceeded)

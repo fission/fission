@@ -297,10 +297,11 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	// Discard the return: updatePackage returns a nil package on failure, and the
-	// error branch below still needs the live pkg for markBuildFailed /
-	// markFunctionsForPackage (both dereference pkg.Name/Namespace).
-	if _, err = updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp); err != nil {
+	// updated is the live object after the status write, so its Spec reflects
+	// any edit that landed WHILE this build ran. Its status carries the hash of
+	// what was actually built.
+	updated, err := updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp)
+	if err != nil {
 		logger.Error(err, "error updating package info")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)
 		markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, false)
@@ -311,6 +312,18 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	// so its Ready/PackageReady conditions track package readiness.
 	markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, true)
 	logger.Info("completed package build request")
+
+	// A content edit that landed mid-build was dropped by the trigger predicate
+	// (nothing may enqueue a second build while one is in flight), and the
+	// status-only write we just made does not enqueue either — the spec is
+	// identical on both sides of it. Nothing else would ever notice, so the
+	// package would sit correct-but-stale: hash says A, spec says B, no event
+	// coming. Requeue ourselves instead of loosening the predicate, which would
+	// re-admit the double-build this suppression exists to prevent.
+	if updated != nil && PackageContentHash(updated.Spec) != updated.Status.ContentHash {
+		logger.Info("package content changed while the build was in flight, requeuing to converge")
+		return ctrl.Result{Requeue: true}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
