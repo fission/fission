@@ -201,8 +201,20 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/
 		Resources: resources,
 	}
+	// RFC-0030 §4 files mode. Poolmgr and newdeploy get this from the fetcher;
+	// the container executor has none, so the same layout is produced with
+	// native projected volumes. Built from the validated reference rather than
+	// taken from pod-spec input, and applied BEFORE MergePodSpec so a
+	// user-supplied podSpec cannot redirect a platform-constructed mount.
+	mpVolumes, mpMounts, err := util.MountPathVolumes(fn)
+	if err != nil {
+		return nil, err
+	}
+	container.VolumeMounts = append(container.VolumeMounts, mpMounts...)
+
 	podSpec, err := util.MergePodSpec(&apiv1.PodSpec{
 		Containers:                    []apiv1.Container{*container},
+		Volumes:                       mpVolumes,
 		TerminationGracePeriodSeconds: &gracePeriodSeconds,
 	}, fn.Spec.PodSpec)
 	if err != nil {
