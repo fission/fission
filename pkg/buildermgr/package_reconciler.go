@@ -135,9 +135,11 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 	seeding := pkg.Status.ContentHash == ""
 
 	if !seeding && !pkg.Spec.Source.IsEmpty() {
-		// Source changed: re-enter the build queue. The build path records the
-		// hash on success, so a failed build retries on the next change rather
-		// than being marked converged.
+		// Source changed: re-enter the build queue. updatePackage records the
+		// hash on every status write it makes — including this pending one —
+		// so a build that then fails is NOT left looking unconverged and
+		// re-queued in a loop; the user's next source edit is what re-triggers
+		// it.
 		logger.Info("package source content changed, re-queuing build")
 		if _, err := updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusPending, "", nil); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error re-queuing build after content change: %w", err)
@@ -391,8 +393,12 @@ func (r *PackageReconciler) propagateFunctionFailure(ctx context.Context, logger
 //     running/succeeded/failed/none status writes are therefore dropped — it
 //     neither re-triggers itself nor risks double-building off a stale cache
 //     read of its own status write — while a Git-applied archive or OCI digest
-//     change still gets a reconcile. Without the Generation clause the
-//     content-change path (RFC-0029 §3) would be unreachable: applying a new
+//     change still gets a reconcile. That second clause compares CONTENT
+//     HASHES, not Generation: the build writes spec.Deployment on success, so a
+//     Generation test would re-enqueue the reconciler on its own output. It is
+//     also suppressed while a build is pending or running, since a build
+//     already in flight picks up whatever the spec now says. Without it the
+//     content-change path (RFC-0029 §3) would be unreachable — applying a new
 //     digest changes the spec, not the status, so nothing would enqueue.
 //   - Delete / Generic: dropped — a deleted Package has no builder state to
 //     tear down.
