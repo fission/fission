@@ -85,9 +85,9 @@ type Params struct {
 	// scenarios fire; sized above Poolsize so the burst forces pool exhaustion
 	// and refill rather than being absorbed by warm pods.
 	BurstSize                    int                `json:"burstSize"`
-	ProvisionedWarmTarget        int                `json:"provisionedWarmTarget"`     // A's target during the burst
-	ProvisionedWarmPoolsize      int                `json:"provisionedWarmPoolsize"`   // pool size for the shared env
-	ProvisionedWarmIterations    int                `json:"provisionedWarmIterations"` // B cold-start samples per phase
+	ProvisionedWarmTarget        int                `json:"provisionedWarmTarget"`        // A's target during the burst
+	ProvisionedWarmPoolsize      int                `json:"provisionedWarmPoolsize"`      // pool size for the shared env
+	ProvisionedWarmIterations    int                `json:"provisionedWarmIterations"`    // B cold-start samples per phase
 	ProvisionedIdleFloor         int                `json:"provisionedIdleFloor"`         // provisioned target (the "floor") to keep warm
 	ProvisionedIdlePoolsize      int                `json:"provisionedIdlePoolsize"`      // pool size for the shared env; must absorb floor + overflow burst
 	ProvisionedIdleDuration      Duration           `json:"provisionedIdleDuration"`      // how long the floor sits idle before each post-idle burst
@@ -124,7 +124,7 @@ func DefaultParams() Params {
 		ProvisionedWarmPoolsize:      30,
 		ProvisionedWarmIterations:    10,
 		ProvisionedIdleFloor:         3,
-		ProvisionedIdlePoolsize:      10,
+		ProvisionedIdlePoolsize:      3,
 		ProvisionedIdleDuration:      Duration(10 * time.Minute),
 		ProvisionedIdleWithinBurst:   3,
 		ProvisionedIdleOverflowBurst: 5,

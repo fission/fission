@@ -33,7 +33,7 @@ configDepsConfigmaps: 5
 provisionedIdleFloor: 3
 # Pool size for that scenario's shared environment; bigger than floor +
 # overflow burst so pool exhaustion isn't what's being measured.
-provisionedIdlePoolsize: 10
+provisionedIdlePoolsize: 3
 # How long to let the floor sit idle before each post-idle burst.
 provisionedIdleDuration: 10m
 # Simultaneous requests for the within-floor burst; must stay <= floor so

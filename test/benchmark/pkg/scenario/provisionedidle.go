@@ -65,7 +65,7 @@ func (p *provisionedIdle) Run(ctx context.Context, sc *harness.Scope) (report.Sc
 	}
 	// Sub-scope lives for the whole scenario, not just one phase: the function
 	// and route below must survive both idle windows and all three bursts.
-	iter := sc.SubScope("provisionedBenchmark")
+	iter := sc.SubScope("pb")
 	defer iter.CleanupDetached(ctx, time.Minute)
 	fnName := iter.Name("fn")
 	if err := iter.CreateCodeFunction(ctx, harness.FunctionOptions{
@@ -75,6 +75,11 @@ func (p *provisionedIdle) Run(ctx context.Context, sc *harness.Scope) (report.Sc
 		Entrypoint:             "main",
 		ExecutorType:           fv1.ExecutorTypePoolmgr,
 		ProvisionedConcurrency: p.floor,
+		// pythonHelloSleep sleeps for a fixed duration (see assets.go) to force
+		// real concurrent pod occupancy during a burst; must stay comfortably
+		// under FunctionTimeout or the router kills the request as a timeout
+		// before the sleep completes.
+		FunctionTimeout: 90,
 	}); err != nil {
 		return res, err
 	}
@@ -87,9 +92,13 @@ func (p *provisionedIdle) Run(ctx context.Context, sc *harness.Scope) (report.Sc
 		return res, err
 	}
 
-	if err := env.WaitForRoutable(ctx, route, time.Minute); err != nil {
-		return res, err
-	}
+	// No separate WaitForRoutable warm-up: WaitForProvisionedFloor above already
+	// confirms the pods are specialized, and pythonHelloSleep's fixed per-call
+	// sleep (see assets.go) means every invocation — not just the first — takes
+	// as long as the sleep, so WaitForRoutable's hardcoded 30s per-request
+	// client timeout can never succeed here regardless of its outer budget.
+	// fireBurst's own measureFirstSuccess already tolerates the remaining
+	// route-propagation gap (discards 404s, 3-minute per-request timeout).
 	baselineSamples, failures := fireBurst(ctx, env.RouterURL()+route, p.withinBurst, 3*time.Minute)
 	if len(baselineSamples) == 0 {
 		err := fmt.Errorf("zero baseline samples were returned, pointless continuing")
