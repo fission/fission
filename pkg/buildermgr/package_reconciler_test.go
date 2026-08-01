@@ -440,6 +440,32 @@ func TestReconcileContentChange(t *testing.T) {
 		assert.Equal(t, pkg.ResourceVersion, got.Spec.Package.PackageRef.ResourceVersion)
 	})
 
+	// A spec change landing WHILE a build is in flight is dropped by the
+	// trigger predicate, so the build's own completion write is the last thing
+	// to touch status. If that write recomputed the hash from the live spec it
+	// would record content the build never saw — the package would read as
+	// converged on the new content while serving the old, and nothing would
+	// re-enqueue it. The user's change would be silently swallowed.
+	t.Run("a build completing after a mid-flight spec change records what it BUILT", func(t *testing.T) {
+		t.Parallel()
+		built := ociPkg("p", digestA, "")   // the content the build ran against
+		moved := ociPkg("p", digestB, "")   // what the spec looks like now
+		moved.ResourceVersion = built.ResourceVersion
+		fc := newFissionFake(moved)
+
+		// updatePackage is handed the pkg the build was about, while the
+		// stored object has already moved on to digestB.
+		_, err := updatePackage(t.Context(), loggerfactory.GetLogger(), fc, built, fv1.BuildStatusSucceeded, "", nil)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, PackageContentHash(built.Spec), got.Status.ContentHash,
+			"the completion write must record the content that was built")
+		assert.NotEqual(t, PackageContentHash(moved.Spec), got.Status.ContentHash,
+			"recording the moved-on spec would mark the package converged on content it never built")
+	})
+
 	t.Run("source content change re-queues a build", func(t *testing.T) {
 		t.Parallel()
 		pkg := sourcePkg("s", fv1.BuildStatusSucceeded)
