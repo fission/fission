@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,31 +47,41 @@ const keepPolicyAnnotation = "helm.sh/resource-policy"
 //
 // Idempotent by construction: already-annotated and absent Secrets are both
 // no-ops, so this runs harmlessly on every upgrade forever.
-func AdoptSecretsForKeep(ctx context.Context, client kubernetes.Interface, logger logr.Logger, namespace string, names []string) error {
+func AdoptSecretsForKeep(ctx context.Context, client kubernetes.Interface, logger logr.Logger, namespaces, names []string) error {
+	for _, namespace := range namespaces {
+		if namespace == "" {
+			continue
+		}
+		if err := adoptInNamespace(ctx, client, logger, namespace, names); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// adoptInNamespace stamps every named Secret in one namespace.
+func adoptInNamespace(ctx context.Context, client kubernetes.Interface, logger logr.Logger, namespace string, names []string) error {
 	for _, name := range names {
 		if name == "" {
 			continue
 		}
-		secret, err := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				// Nothing to adopt: a fresh install, or an install that never
-				// had this Secret. The generator creates it later.
-				logger.Info("no live secret to adopt", "secret", name, "namespace", namespace)
-				continue
-			}
-			return fmt.Errorf("read secret %s/%s for adoption: %w", namespace, name, err)
-		}
-		if secret.Annotations[keepPolicyAnnotation] == "keep" {
-			continue
-		}
-
+		// Patch unconditionally rather than reading first. The merge patch is
+		// idempotent, so a re-annotation is a no-op that does not even bump
+		// resourceVersion — and skipping the read means this identity needs NO
+		// get verb at all. That matters: these are the highest-value Secrets in
+		// the namespace (the HMAC master, the JWT signing key, the webhook TLS
+		// private key), and a grant that cannot read them is worth far more
+		// than one that can.
+		//
 		// A merge patch on the single annotation, rather than a read-modify-
-		// write Update: it cannot clobber a concurrent writer's changes to the
-		// secret's data, which for the HMAC master would be catastrophic.
+		// write Update, also means it cannot clobber a concurrent writer's
+		// changes to the secret's data — which for the HMAC master would be
+		// catastrophic.
 		patch := []byte(`{"metadata":{"annotations":{"` + keepPolicyAnnotation + `":"keep"}}}`)
 		if _, err := client.CoreV1().Secrets(namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{}); err != nil {
 			if k8serrors.IsNotFound(err) {
+				// A fresh install, or a namespace that never had this Secret.
+				logger.Info("no live secret to adopt", "secret", name, "namespace", namespace)
 				continue
 			}
 			return fmt.Errorf("annotate secret %s/%s for retention: %w", namespace, name, err)
@@ -80,14 +91,14 @@ func AdoptSecretsForKeep(ctx context.Context, client kubernetes.Interface, logge
 	return nil
 }
 
-// adoptSecretNames parses the comma-separated ADOPT_SECRETS env value, ignoring
-// empty entries so a chart that renders an empty list is a clean no-op.
+// adoptSecretNames parses the ADOPT_SECRETS env value, accepting either commas
+// or whitespace as separators. Accepting both is deliberate: the chart renders
+// the list with one separator and this parses it with another, and nothing
+// cross-checks them — getting that wrong once meant the hook requested a
+// Secret literally named "a b", which RBAC rejects, failing every install.
+// Empty entries are ignored so an empty list is a clean no-op.
 func adoptSecretNames(raw string) []string {
-	var out []string
-	for _, n := range strings.Split(raw, ",") {
-		if n = strings.TrimSpace(n); n != "" {
-			out = append(out, n)
-		}
-	}
-	return out
+	return strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || unicode.IsSpace(r)
+	})
 }

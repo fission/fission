@@ -381,3 +381,31 @@ Empty when nothing needs adopting, which makes the whole migration render away.
 {{- end -}}
 {{- join " " $names -}}
 {{- end -}}
+
+{{/*
+fission.adoptSecretNamespaces is the namespace set the retention adoption runs
+over. It mirrors internal-auth-secret.yaml's own replication set exactly: under
+STATIC tenancy the master is copied into defaultNamespace and every
+additionalFissionNamespaces, because kubelet cannot resolve a cross-namespace
+secretKeyRef. Adopting only the release namespace would leave those copies to be
+pruned — and the fetcher mounts them optional, so pods would come up unsigned
+and every storagesvc call would 401, silently.
+
+Under dynamic/cluster tenancy the tenant copies are INTENTIONALLY removed (each
+tenant gets a controller-owned derived key instead), so pinning them with a keep
+annotation would fight that design — hence the same tenancy gate.
+*/}}
+{{- define "fission.adoptSecretNamespaces" -}}
+{{- $namespaces := list .Release.Namespace -}}
+{{- if eq (include "fission.tenancyMode" .) "static" -}}
+{{-   if and .Values.defaultNamespace (ne .Values.defaultNamespace .Release.Namespace) -}}
+{{-     $namespaces = append $namespaces .Values.defaultNamespace -}}
+{{-   end -}}
+{{-   range $ns := .Values.additionalFissionNamespaces -}}
+{{-     if not (has $ns $namespaces) -}}
+{{-       $namespaces = append $namespaces $ns -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- join " " $namespaces -}}
+{{- end -}}

@@ -44,6 +44,8 @@ spec:
         {{- with include "fission.adoptSecretNames" . }}
         - name: ADOPT_SECRETS
           value: {{ . | quote }}
+        - name: ADOPT_SECRET_NAMESPACES
+          value: {{ include "fission.adoptSecretNamespaces" $ | quote }}
         {{- end }}
         {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: CRDS_MODE
