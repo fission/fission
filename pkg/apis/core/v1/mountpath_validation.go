@@ -67,8 +67,10 @@ func ObjectSubPath(mountPath, namespace, name string) (string, error) {
 // The duplicate rule is the part admission can enforce. The final path segment
 // written is the referenced object's DATA KEY, and keys are mutable after
 // admission, so a webhook cannot see them — two references sharing a directory
-// can have one object's later-added key overwrite a file the other wrote — the
-// writer truncates, it does not refuse a pre-existing file.
+// can have one object's later-added key overwrite a file the other wrote.
+// Rejecting the shared directory removes the half this layer can see; the
+// fetcher refuses to overwrite a file another object wrote in the same
+// specialization pass, which covers the keys admission cannot know about.
 //
 // Collisions are computed on the RESOLVED directory, not on MountPath alone. A
 // reference with no MountPath still occupies <namespace>/<name>, so an explicit

@@ -1007,9 +1007,9 @@ type (
 		// unaffected. No two secrets on one function may RESOLVE to the same
 		// directory (an explicit path colliding with another reference's
 		// default counts): the final segment written is the object's data
-		// key, keys are mutable after admission, and the writer truncates, so
-		// sharing a directory lets one object's later-added key overwrite the
-		// other's file. Not supported on the container executor, which has no
+		// key and keys are mutable after admission, so sharing a directory
+		// would let one object's later-added key collide with the other's
+		// file; the fetcher refuses such a write rather than truncating. Not supported on the container executor, which has no
 		// fetcher, nor on an allowedFunctionsPerContainer:infinite
 		// environment, whose pods share one secrets tree across functions.
 		// +optional

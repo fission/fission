@@ -32,13 +32,13 @@ func TestWriteSecretOrConfigMap(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	data := map[string][]byte{"a": []byte("alpha"), "b": []byte("beta")}
-	require.NoError(t, writeSecretOrConfigMap(data, dir))
+	require.NoError(t, writeSecretOrConfigMap(data, dir, map[string]string{}, "secret ns/a"))
 
 	got, err := os.ReadFile(filepath.Join(dir, "a"))
 	require.NoError(t, err)
 	assert.Equal(t, "alpha", string(got))
 
-	require.Error(t, writeSecretOrConfigMap(data, filepath.Join(dir, "does", "not", "exist")),
+	require.Error(t, writeSecretOrConfigMap(data, filepath.Join(dir, "does", "not", "exist"), map[string]string{}, "secret ns/a"),
 		"writing into a missing directory must error")
 }
 
@@ -149,4 +149,48 @@ func TestFetch(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, http.StatusInternalServerError, code)
 	})
+}
+
+// TestWriteSecretOrConfigMapRefusesCrossObjectOverwrite pins the runtime half
+// of RFC-0030 §4's shadowing rule.
+//
+// Two references can resolve to one directory in ways admission cannot see:
+// the filenames are the objects' DATA KEYS, and keys are mutable after the
+// Function was admitted. Without this refusal, whichever object is written
+// second silently wins and the function reads one object's value under the
+// other's name — wrong credentials, no error anywhere.
+func TestWriteSecretOrConfigMapRefusesCrossObjectOverwrite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	written := map[string]string{}
+
+	first := map[string][]byte{"token": []byte("from-secret-a")}
+	require.NoError(t, writeSecretOrConfigMap(first, dir, written, "secret ns/a"))
+
+	// A DIFFERENT object claiming the same key in the same directory.
+	second := map[string][]byte{"token": []byte("from-secret-b")}
+	err := writeSecretOrConfigMap(second, dir, written, "secret ns/b")
+	require.Error(t, err, "a second object must not silently truncate the first object's file")
+	assert.Contains(t, err.Error(), "secret ns/a", "the error must name the object that already owns the file")
+
+	// The original value must survive the refusal.
+	got, rerr := os.ReadFile(filepath.Join(dir, "token"))
+	require.NoError(t, rerr)
+	assert.Equal(t, "from-secret-a", string(got))
+}
+
+// The SAME object rewriting its own key is normal — a re-specialization
+// delivers fresh values to the same paths — and must not be refused.
+func TestWriteSecretOrConfigMapAllowsSameObjectRewrite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	written := map[string]string{}
+
+	require.NoError(t, writeSecretOrConfigMap(map[string][]byte{"token": []byte("v1")}, dir, written, "secret ns/a"))
+	require.NoError(t, writeSecretOrConfigMap(map[string][]byte{"token": []byte("v2")}, dir, written, "secret ns/a"),
+		"the same object must be able to rewrite its own key")
+
+	got, err := os.ReadFile(filepath.Join(dir, "token"))
+	require.NoError(t, err)
+	assert.Equal(t, "v2", string(got))
 }
