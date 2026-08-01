@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -300,9 +301,57 @@ func parseEnvFile(path string) ([]string, error) {
 // each into a host temp dir (one file per key), returning bind mounts that place
 // them at /secrets/<ns>/<name> and /configs/<ns>/<name> — the same on-disk layout
 // the in-cluster fetcher produces.
+// parseMountFlags turns repeated NAME=PATH values into name -> mountPath.
+//
+// The paths themselves are validated by fv1.ObjectSubPath at use, which is the
+// same helper admission, the fetcher, and the container executor go through —
+// so a path run-local accepts is exactly one the cluster accepts, and the two
+// layouts cannot drift.
+func parseMountFlags(values []string, flagName string) (map[string]string, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(values))
+	for _, v := range values {
+		name, path, ok := strings.Cut(v, "=")
+		if !ok || name == "" || path == "" {
+			return nil, fmt.Errorf("--%v %q must be NAME=PATH, e.g. --%v db-creds=app/creds", flagName, v, flagName)
+		}
+		if prev, dup := out[name]; dup {
+			return nil, fmt.Errorf("--%v names %q twice (%q and %q); one object cannot occupy two paths in a single run", flagName, name, prev, path)
+		}
+		out[name] = path
+	}
+	return out, nil
+}
+
 func (opts *RunSubCommand) materializeBindings(input cli.Input, namespace string) (mounts []bindMount, err error) {
 	secrets := input.StringSlice(flagkey.FnSecret)
 	cfgMaps := input.StringSlice(flagkey.FnCfgMap)
+
+	// RFC-0030 §4: --secret-mount NAME=PATH reproduces the redirected layout
+	// the in-cluster fetcher writes when spec.secrets[].mountPath is set.
+	// Without it a secret lands at the legacy <namespace>/<name>, which is what
+	// run-local did for every secret before files mode existed.
+	secretMounts, err := parseMountFlags(input.StringSlice(flagkey.FnSecretMount), flagkey.FnSecretMount)
+	if err != nil {
+		return nil, err
+	}
+	cfgMapMounts, err := parseMountFlags(input.StringSlice(flagkey.FnCfgMapMount), flagkey.FnCfgMapMount)
+	if err != nil {
+		return nil, err
+	}
+	for name := range secretMounts {
+		if !slices.Contains(secrets, name) {
+			secrets = append(secrets, name)
+		}
+	}
+	for name := range cfgMapMounts {
+		if !slices.Contains(cfgMaps, name) {
+			cfgMaps = append(cfgMaps, name)
+		}
+	}
+
 	if len(secrets) == 0 && len(cfgMaps) == 0 {
 		return nil, nil
 	}
@@ -327,7 +376,11 @@ func (opts *RunSubCommand) materializeBindings(input cli.Input, namespace string
 		if err != nil {
 			return nil, err
 		}
-		mounts = append(mounts, bindMount{HostDir: dir, ContainerDir: filepath.Join(secretsMountPath, namespace, name)})
+		sub, err := fv1.ObjectSubPath(secretMounts[name], namespace, name)
+		if err != nil {
+			return nil, fmt.Errorf("--%v %v: %w", flagkey.FnSecretMount, name, err)
+		}
+		mounts = append(mounts, bindMount{HostDir: dir, ContainerDir: filepath.Join(secretsMountPath, sub)})
 	}
 	for _, name := range cfgMaps {
 		c, err := kc.CoreV1().ConfigMaps(namespace).Get(input.Context(), name, metav1.GetOptions{})
@@ -343,7 +396,11 @@ func (opts *RunSubCommand) materializeBindings(input cli.Input, namespace string
 		if err != nil {
 			return nil, err
 		}
-		mounts = append(mounts, bindMount{HostDir: dir, ContainerDir: filepath.Join(configsMountPath, namespace, name)})
+		sub, err := fv1.ObjectSubPath(cfgMapMounts[name], namespace, name)
+		if err != nil {
+			return nil, fmt.Errorf("--%v %v: %w", flagkey.FnCfgMapMount, name, err)
+		}
+		mounts = append(mounts, bindMount{HostDir: dir, ContainerDir: filepath.Join(configsMountPath, sub)})
 	}
 	return mounts, nil
 }

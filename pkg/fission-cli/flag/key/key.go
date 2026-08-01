@@ -50,6 +50,8 @@ const (
 	FnSecret                 = "secret"
 	FnForce                  = force
 	FnCfgMap                 = "configmap"
+	FnSecretMount            = "secret-mount"
+	FnCfgMapMount            = "configmap-mount"
 	FnEnvVar                 = "env-var"
 	FnEnvFromSecret          = "env-from-secret"
 	FnEnvFromConfigMap       = "env-from-configmap"
