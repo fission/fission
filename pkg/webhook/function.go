@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -106,7 +108,7 @@ func (r *Function) Validate(new *v1.Function) error {
 	}
 
 	if hasMountPath(new.Spec) {
-		if err := r.rejectMountPathOnInfiniteEnv(new); err != nil {
+		if err := rejectMountPathOnInfiniteEnv(r.reader, r.Logger, new.Spec, new.Namespace, new.Name); err != nil {
 			return v1.AggregateValidationErrors("Function", err)
 		}
 	}
@@ -151,19 +153,23 @@ func hasMountPath(spec v1.FunctionSpec) bool {
 // Same shape as the state check above, including failing open on a lookup
 // miss: this is early UX feedback, and the fetcher's refusal to overwrite a
 // file it did not write in the same specialization pass is the guarantee.
-func (r *Function) rejectMountPathOnInfiniteEnv(fn *v1.Function) error {
-	if r.reader == nil {
+// rejectMountPathOnInfiniteEnv is shared by the Function and FunctionVersion
+// webhooks. A published version carries its own Snapshot of the spec and is
+// what specialization actually reads on the alias/version-pinned path, so
+// checking only the live Function would leave that path unguarded.
+func rejectMountPathOnInfiniteEnv(reader client.Reader, logger logr.Logger, spec v1.FunctionSpec, objNamespace, objName string) error {
+	if reader == nil {
 		return nil
 	}
-	envNS := fn.Spec.Environment.Namespace
+	envNS := spec.Environment.Namespace
 	if envNS == "" {
-		envNS = fn.Namespace
+		envNS = objNamespace
 	}
 	var env v1.Environment
-	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: fn.Spec.Environment.Name, Namespace: envNS}, &env); err != nil {
+	if err := reader.Get(context.Background(), types.NamespacedName{Name: spec.Environment.Name, Namespace: envNS}, &env); err != nil {
 		if !apierrors.IsNotFound(err) {
-			r.Logger.V(1).Info("could not read environment to validate mountPath; deferring to specialize-time enforcement",
-				"function", fn.Name, "environment", fn.Spec.Environment.Name, "error", err)
+			logger.V(1).Info("could not read environment to validate mountPath; deferring to specialize-time enforcement",
+				"object", objName, "environment", spec.Environment.Name, "error", err)
 		}
 		return nil
 	}

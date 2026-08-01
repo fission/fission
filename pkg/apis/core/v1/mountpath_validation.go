@@ -42,17 +42,40 @@ func CleanMountPath(mountPath string) (string, error) {
 	return cleaned, nil
 }
 
+// ObjectSubPath is the directory one referenced object's keys are written to,
+// relative to the shared /secrets or /configs root: MountPath when set, the
+// historical <namespace>/<name> otherwise.
+//
+// Exported so the fetcher derives exactly the directory admission validated.
+// Two implementations of "where does this go" would drift, and the drift would
+// surface only as files written somewhere nobody looks.
+func ObjectSubPath(mountPath, namespace, name string) (string, error) {
+	cleaned, err := CleanMountPath(mountPath)
+	if err != nil {
+		return "", err
+	}
+	if cleaned != "" {
+		return cleaned, nil
+	}
+	return path.Join(namespace, name), nil
+}
+
 // validateMountPaths applies the RFC-0030 §4 rules to a function's file
 // projections: each MountPath must be relative and confined, and no two
-// references may target the same directory.
+// references of the same kind may resolve to the same directory.
 //
-// The duplicate rule is the part admission can actually enforce. The final path
-// segment written is the referenced object's DATA KEY, and keys are mutable
-// after admission, so a webhook cannot see them — two references sharing a
-// directory can therefore have one object's later-added key silently overwrite
-// a file the other wrote. Rejecting the shared directory removes the only half
-// of that this layer can see; the fetcher declines to overwrite a file it did
-// not write in the same specialization pass, which covers the rest.
+// The duplicate rule is the part admission can enforce. The final path segment
+// written is the referenced object's DATA KEY, and keys are mutable after
+// admission, so a webhook cannot see them — two references sharing a directory
+// can have one object's later-added key overwrite a file the other wrote — the
+// writer truncates, it does not refuse a pre-existing file.
+//
+// Collisions are computed on the RESOLVED directory, not on MountPath alone. A
+// reference with no MountPath still occupies <namespace>/<name>, so an explicit
+// MountPath of "default/creds" collides with a reference to secret "creds" in
+// namespace "default" even though only one of the two sets the field. Checking
+// explicit values against each other would miss exactly that case while
+// claiming the directory is unshared.
 func (spec FunctionSpec) validateMountPaths() error {
 	var errs error
 
@@ -62,37 +85,31 @@ func (spec FunctionSpec) validateMountPaths() error {
 	seenConfig := map[string]string{}
 
 	for _, s := range spec.Secrets {
-		cleaned, err := CleanMountPath(s.MountPath)
+		dir, err := ObjectSubPath(s.MountPath, s.Namespace, s.Name)
 		if err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath, err.Error()))
 			continue
 		}
-		if cleaned == "" {
-			continue
-		}
-		if prev, dup := seenSecret[cleaned]; dup {
+		if prev, dup := seenSecret[dir]; dup {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath,
-				fmt.Sprintf("mountPath is already used by secret %q; two secrets writing to one directory can overwrite each other's keys", prev)))
+				fmt.Sprintf("resolves to %q, already used by secret %q; two secrets writing to one directory can overwrite each other's keys", dir, prev)))
 			continue
 		}
-		seenSecret[cleaned] = s.Name
+		seenSecret[dir] = s.Name
 	}
 
 	for _, c := range spec.ConfigMaps {
-		cleaned, err := CleanMountPath(c.MountPath)
+		dir, err := ObjectSubPath(c.MountPath, c.Namespace, c.Name)
 		if err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath, err.Error()))
 			continue
 		}
-		if cleaned == "" {
-			continue
-		}
-		if prev, dup := seenConfig[cleaned]; dup {
+		if prev, dup := seenConfig[dir]; dup {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath,
-				fmt.Sprintf("mountPath is already used by configmap %q; two configmaps writing to one directory can overwrite each other's keys", prev)))
+				fmt.Sprintf("resolves to %q, already used by configmap %q; two configmaps writing to one directory can overwrite each other's keys", dir, prev)))
 			continue
 		}
-		seenConfig[cleaned] = c.Name
+		seenConfig[dir] = c.Name
 	}
 
 	return errs

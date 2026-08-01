@@ -20,6 +20,7 @@ import (
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/utils/loggerfactory"
 )
 
 // versionSample64 is a syntactically-valid 64-hex-char digest suffix, used
@@ -295,4 +296,63 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 			t.Fatalf("live owning Function must not escape the guard")
 		}
 	})
+}
+
+// TestFunctionVersionWebhook_MountPathOnInfiniteEnv closes the gap the Function
+// webhook alone leaves open.
+//
+// A published version carries its own Snapshot, and pkg/versioning's
+// VersionedFunction swaps that Snapshot in wholesale — so the alias- and
+// version-pinned execution paths never consult the live Function spec. Guarding
+// only the Function webhook would let a version publish with a MountPath and
+// keep specializing onto shared infinite-env pods unchecked.
+func TestFunctionVersionWebhook_MountPathOnInfiniteEnv(t *testing.T) {
+	t.Parallel()
+
+	// Built per subtest: the fake client builder stamps a ResourceVersion on
+	// the object it is handed, so sharing one instance across parallel
+	// subtests is a data race.
+	envWith := func(policy v1.AllowedFunctionsPerContainer) func() *v1.Environment {
+		return func() *v1.Environment {
+			return &v1.Environment{
+				ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
+				Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
+			}
+		}
+	}
+
+	versionWith := func(mountPath string) *v1.FunctionVersion {
+		fv := makeValidFunctionVersion()
+		fv.Spec.Snapshot.Environment = v1.EnvironmentReference{Name: "env-1", Namespace: "default"}
+		fv.Spec.Snapshot.Secrets = []v1.SecretReference{{Namespace: "default", Name: "s", MountPath: mountPath}}
+		return fv
+	}
+
+	tests := []struct {
+		name      string
+		mountPath string
+		env       func() *v1.Environment
+		wantErr   bool
+	}{
+		{"mountPath snapshot on infinite env rejected", "app", envWith(v1.AllowedFunctionsPerContainerInfinite), true},
+		{"mountPath snapshot on single env allowed", "app", envWith(v1.AllowedFunctionsPerContainerSingle), false},
+		{"no mountPath on infinite env allowed", "", envWith(v1.AllowedFunctionsPerContainerInfinite), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := &FunctionVersion{}
+			r.Logger = loggerfactory.GetLogger()
+			r.reader = fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(tc.env()).Build()
+
+			err := r.Validate(versionWith(tc.mountPath))
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "infinite") {
+					t.Fatalf("expected infinite-env rejection, got: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

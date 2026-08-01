@@ -9910,10 +9910,14 @@ spec:
                         not materializable there, and the container executor applies the
                         same constraint for cross-executor consistency. Empty keeps today's
                         <namespace>/<name> layout, so functions that do not set it are
-                        unaffected. No two secrets on one function may target the same
-                        path: the final segment written is the object's data key, and keys
-                        are mutable after admission, so sharing a directory lets one
-                        object's later-added key overwrite the other's file.
+                        unaffected. No two secrets on one function may RESOLVE to the same
+                        directory (an explicit path colliding with another reference's
+                        default counts): the final segment written is the object's data
+                        key, keys are mutable after admission, and the writer truncates, so
+                        sharing a directory lets one object's later-added key overwrite the
+                        other's file. Not supported on the container executor, which has no
+                        fetcher, nor on an allowedFunctionsPerContainer:infinite
+                        environment, whose pods share one secrets tree across functions.
                       type: string
                     name:
                       maxLength: 63

@@ -424,6 +424,26 @@ func (spec FunctionSpec) validateEnvForAdmission() error {
 
 	errs = errors.Join(errs, spec.validateMountPaths())
 
+	// The redirect is performed by the fetcher, which the container executor
+	// does not run — it projects references as envFrom only. Accepting a
+	// MountPath there would pass admission and then do nothing at runtime,
+	// which is the failure this RFC exists to remove, not one to add. Lift
+	// this when the container executor grows the native-volume-mount variant.
+	if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer {
+		for _, s := range spec.Secrets {
+			if s.MountPath != "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath,
+					"mountPath is not supported on the container executor, which has no fetcher to write the files; use the poolmgr or newdeploy executor"))
+			}
+		}
+		for _, c := range spec.ConfigMaps {
+			if c.MountPath != "" {
+				errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath,
+					"mountPath is not supported on the container executor, which has no fetcher to write the files; use the poolmgr or newdeploy executor"))
+			}
+		}
+	}
+
 	if len(spec.Env) == 0 && len(spec.EnvFrom) == 0 {
 		return errs
 	}

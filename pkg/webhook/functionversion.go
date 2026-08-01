@@ -55,6 +55,15 @@ func (r *FunctionVersion) Validate(new *v1.FunctionVersion) error {
 	if err := new.Validate(); err != nil {
 		return v1.AggregateValidationErrors("FunctionVersion", err)
 	}
+	// A version's Snapshot is what specialization reads on the alias- or
+	// version-pinned path (pkg/versioning.VersionedFunction swaps it in
+	// wholesale), so the infinite-env rule has to be enforced here too —
+	// checking only the live Function leaves that path unguarded.
+	if hasMountPath(new.Spec.Snapshot) {
+		if err := rejectMountPathOnInfiniteEnv(r.reader, r.Logger, new.Spec.Snapshot, new.Namespace, new.Name); err != nil {
+			return v1.AggregateValidationErrors("FunctionVersion", err)
+		}
+	}
 	return nil
 }
 

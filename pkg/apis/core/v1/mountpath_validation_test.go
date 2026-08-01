@@ -148,3 +148,47 @@ func TestValidateMountPaths(t *testing.T) {
 		assert.Error(t, spec.validateMountPaths())
 	})
 }
+
+// TestValidateMountPathsImplicitCollision is the case explicit-vs-explicit
+// comparison misses: a reference with no MountPath still occupies
+// <namespace>/<name>, so another reference naming that exact path shares the
+// directory while only one of the two sets the field.
+func TestValidateMountPathsImplicitCollision(t *testing.T) {
+	t.Parallel()
+
+	t.Run("explicit path colliding with another reference's default", func(t *testing.T) {
+		t.Parallel()
+		spec := FunctionSpec{
+			Secrets: []SecretReference{
+				{Namespace: "default", Name: "creds"},
+				{Namespace: "default", Name: "other", MountPath: "default/creds"},
+			},
+		}
+		err := spec.validateMountPaths()
+		require.Error(t, err, "an explicit mountPath equal to another reference's default directory is a collision")
+		assert.Contains(t, err.Error(), "default/creds")
+	})
+
+	t.Run("configmaps too", func(t *testing.T) {
+		t.Parallel()
+		spec := FunctionSpec{
+			ConfigMaps: []ConfigMapReference{
+				{Namespace: "ns", Name: "cfg"},
+				{Namespace: "ns", Name: "other", MountPath: "ns/cfg"},
+			},
+		}
+		assert.Error(t, spec.validateMountPaths())
+	})
+
+	t.Run("two defaults still never collide", func(t *testing.T) {
+		t.Parallel()
+		spec := FunctionSpec{
+			Secrets: []SecretReference{
+				{Namespace: "default", Name: "a"},
+				{Namespace: "default", Name: "b"},
+			},
+		}
+		assert.NoError(t, spec.validateMountPaths(),
+			"distinct objects have distinct default directories by construction")
+	})
+}
