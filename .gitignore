@@ -51,6 +51,13 @@ output.sarif
 *.sarif
 /fission-bundle
 
+# Stray binaries from `go build ./cmd/<name>` with no -o: Go writes the binary
+# into the working directory, which is the repo root. Each is ~90MB.
+/preupgradechecks
+/fetcher
+/builder
+/reporter
+
 # Stray archive-download artifacts from e2e CLI test runs (UUID-named files
 # written to the test's working directory by `fission archive download`).
 test/e2e/cli/????????-????-????-????-????????????
