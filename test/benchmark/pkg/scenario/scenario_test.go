@@ -141,11 +141,29 @@ func TestWarmPathPerExecutor(t *testing.T) {
 // TestProvisionedIdleScenarioRegistered pins that the RFC-0026 phase4
 // idle-warm guardrail (provisioned floor pods must stay warm after sitting
 // idle) is built and is deliberately OFF the smoke subset — the default 10m
-// idle window is far too slow for the per-PR smoke run.
+// idle window is far too slow for the per-PR smoke run. It also checks that
+// custom Params reach the built scenario's fields, guarding the BuildAll
+// wiring line specifically.
 func TestProvisionedIdleScenarioRegistered(t *testing.T) {
 	t.Parallel()
 	all := BuildAll(DefaultParams())
 	assert.Contains(t, Names(all), "provisioned-idle-warm")
 	assert.NotContains(t, Names(Select(all, nil, []string{"smoke"})), "provisioned-idle-warm",
 		"provisioned-idle-warm must stay out of the fast per-PR smoke subset")
+
+	built := Select(BuildAll(Params{
+		ProvisionedIdleFloor:         2,
+		ProvisionedIdlePoolsize:      4,
+		ProvisionedIdleDuration:      Duration(30 * time.Second),
+		ProvisionedIdleWithinBurst:   2,
+		ProvisionedIdleOverflowBurst: 6,
+	}), []string{"provisioned-idle-warm"}, nil)
+	require.Len(t, built, 1)
+	pi, ok := built[0].(*provisionedIdle)
+	require.True(t, ok)
+	assert.Equal(t, 2, pi.floor)
+	assert.Equal(t, 4, pi.poolsize)
+	assert.Equal(t, 30*time.Second, pi.idleDuration)
+	assert.Equal(t, 2, pi.withinBurst)
+	assert.Equal(t, 6, pi.overflowBurst)
 }
