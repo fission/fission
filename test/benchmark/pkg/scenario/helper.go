@@ -7,6 +7,7 @@ package scenario
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/fission/fission/test/benchmark/pkg/harness"
@@ -34,4 +35,27 @@ func measureColdStart(ctx context.Context, sc *harness.Scope, envName, label str
 		return 0, false
 	}
 	return measureFirstSuccess(ctx, env.RouterURL()+route, 3*time.Minute)
+}
+
+// fireBurst spins up n go routines each calling measureFirstSuccess at around the same time
+// and appending the results and returning samples along with failures.
+func fireBurst(ctx context.Context, url string, n int, timeout time.Duration) ([]time.Duration, int) {
+	wg := sync.WaitGroup{}
+	lock := sync.Mutex{}
+	failures := 0
+	samples := []time.Duration{}
+	for range n {
+		wg.Go(func() {
+			dur, ok := measureFirstSuccess(ctx, url, timeout)
+			lock.Lock()
+			if !ok {
+				failures++
+			} else {
+				samples = append(samples, dur)
+			}
+			lock.Unlock()
+		})
+	}
+	wg.Wait()
+	return samples, failures
 }

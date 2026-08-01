@@ -9,6 +9,8 @@ package scenario
 // archive size limit) so the benchmark has no runtime fixture dependency.
 const pythonHello = "def main():\n    return \"Hello, world!\\n\"\n"
 
+const pythonHelloSleep = "import time\n\ndef main():\n\ttime.sleep(0.15)\n\treturn \"Hello, world!\\n\"\n"
+
 // nodeHello is the Node.js counterpart to pythonHello: a single-file v1
 // function the runtime loads with no entrypoint. The Node server is
 // event-loop-concurrent, so unlike the Python default (single-threaded

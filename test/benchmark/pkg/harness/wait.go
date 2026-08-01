@@ -35,6 +35,21 @@ func (e *Env) WaitForPoolReady(ctx context.Context, envName string, minReady int
 	})
 }
 
+// WaitForProvisionedFloor polls unit at least minReady ProvisionedPods for the function
+// are Ready across all namespaces
+func (e *Env) WaitForProvisionedFloor(ctx context.Context, name string, minReady int, timeout time.Duration) error {
+	selector := labels.SelectorFromSet(labels.Set{
+		fv1.PROVISIONED_LABEL: fv1.PROVISIONED_VALUE,
+	}).String()
+	return Poll(ctx, timeout, 2*time.Second, func(ctx context.Context) (bool, error) {
+		pods, err := e.Clients.Kube.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			return false, err
+		}
+		return countReady(pods.Items) >= minReady, nil
+	})
+}
+
 // countReady returns how many of the pods are Running + Ready.
 func countReady(pods []apiv1.Pod) int {
 	ready := 0
