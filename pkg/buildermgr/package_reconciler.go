@@ -168,15 +168,10 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 		// package — the CLI stamped them itself. That is the CONVERGED state,
 		// so the hash is still recorded below.
 		//
-		// An earlier version skipped the write here, to avoid a status write
-		// whose ResourceVersion bump the CLI would copy into every Function on
-		// the next `fn update`. That traded one bug for a worse one: the
-		// recorded hash then lagged a revision behind the spec forever, so
-		// reverting to the previously-recorded content — incident-response
-		// rollback, the case RFC-0029 G4 exists for — compared equal and was
-		// silently swallowed. The RV-copying is fixed at its source instead
-		// (fission-cli/cmd/function/update.go now re-stamps only when the
-		// package actually changed).
+		// The hash must be recorded on EVERY reconcile, converged or not: a
+		// hash that lags a revision behind the spec makes a revert to the
+		// previously-recorded content compare equal, silently swallowing the
+		// incident-response rollback RFC-0029 G4 exists for.
 		logger.Info("package content change reconciled", "functions_restamped", stamped)
 	}
 

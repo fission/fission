@@ -1063,8 +1063,13 @@ type (
 		// +optional
 		BuildLog string `json:"buildlog,omitempty"` // output of the build (errors etc)
 
-		// ContentHash fingerprints the package's source and deployment
-		// archives (RFC-0029 §3). It is what makes a Git-applied Package
+		// ContentHash fingerprints the package's INPUT content (RFC-0029 §3):
+		// the source archive when one is present, otherwise the deployment
+		// archive. A source package's deployment is the build's own product,
+		// so folding it in would make every successful build look like a
+		// fresh change and rebuild forever.
+		//
+		// It is what makes a Git-applied Package
 		// converge without the CLI: buildermgr compares the spec's current
 		// hash against this one to decide whether the content actually
 		// changed, rather than relying on the CLI's status->pending poke.

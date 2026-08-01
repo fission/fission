@@ -142,10 +142,10 @@ func repeat(s string, n int) string {
 }
 
 // TestBuildTriggerPredicateFiresOnSpecChange pins the wiring the content-change
-// path depends on. The predicate originally enqueued ONLY on a BuildStatus
-// transition into pending, which is what the CLI's poke produces — so a
-// Git-applied archive or OCI digest change, which moves the spec and not the
-// status, enqueued nothing and left the whole feature unreachable.
+// path depends on. A Git-applied archive or OCI digest change moves the SPEC
+// and not the status, so a predicate that enqueued only on a BuildStatus
+// transition into pending — the shape the CLI's poke produces — would leave
+// the whole content-convergence feature unreachable.
 func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 	t.Parallel()
 

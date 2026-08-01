@@ -355,13 +355,10 @@ func TestReconcileContentChange(t *testing.T) {
 
 	t.Run("records the hash even when the CLI already stamped the functions", func(t *testing.T) {
 		t.Parallel()
-		// Nothing to re-stamp is the CONVERGED state, so the hash must still be
-		// recorded. An earlier version skipped this write to avoid a
-		// ResourceVersion bump the CLI would copy onto every Function — but
-		// that left the recorded hash a revision behind forever, so reverting
-		// to the previously-recorded content compared EQUAL and was silently
-		// swallowed. Incident-response rollback is exactly what RFC-0029 G4
-		// requires to work, so the RV-copying is fixed in the CLI instead.
+		// Nothing to re-stamp is the CONVERGED state, and the hash must still
+		// be recorded there. Skipping the write on this path would leave the
+		// recorded hash a revision behind the spec, which is what the revert
+		// case below detects.
 		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
 		pkg := ociPkg("p", digestB, staleHash)
 		fn := fnForPkg("f", "p", pkg.ResourceVersion, nil)
@@ -379,9 +376,11 @@ func TestReconcileContentChange(t *testing.T) {
 
 	t.Run("a revert to previously-recorded content still propagates", func(t *testing.T) {
 		t.Parallel()
-		// The rollback case: content A was recorded, the spec moved to B, and
-		// the operator reverts to A. The reconciler must re-stamp — this is the
-		// bug the skip above introduced.
+		// The rollback case RFC-0029 G4 requires: content A was recorded, the
+		// spec moved to B, and the operator reverts to A. The reconciler must
+		// re-stamp. This fails the moment any path stops recording the hash on
+		// a converged reconcile, since the recorded value then lags the spec
+		// and the revert compares equal.
 		hashA := PackageContentHash(ociPkg("p", digestA, "").Spec)
 		// Spec is back at A while the recorded hash says B.
 		pkg := ociPkg("p", digestA, PackageContentHash(ociPkg("p", digestB, "").Spec))
