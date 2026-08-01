@@ -448,8 +448,8 @@ func TestReconcileContentChange(t *testing.T) {
 	// re-enqueue it. The user's change would be silently swallowed.
 	t.Run("a build completing after a mid-flight spec change records what it BUILT", func(t *testing.T) {
 		t.Parallel()
-		built := ociPkg("p", digestA, "")   // the content the build ran against
-		moved := ociPkg("p", digestB, "")   // what the spec looks like now
+		built := ociPkg("p", digestA, "") // the content the build ran against
+		moved := ociPkg("p", digestB, "") // what the spec looks like now
 		moved.ResourceVersion = built.ResourceVersion
 		fc := newFissionFake(moved)
 
