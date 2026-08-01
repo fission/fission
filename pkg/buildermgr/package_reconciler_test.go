@@ -250,3 +250,139 @@ func TestBuilderPodReady(t *testing.T) {
 		})
 	}
 }
+
+// ociPkg builds a deploy-only OCI package — the shape that never builds, and
+// so had no propagation at all before content-keyed re-stamping.
+func ociPkg(name, digest, contentHash string) *fv1.Package {
+	p := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", ResourceVersion: "100"},
+		Spec: fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{Name: "go", Namespace: "default"},
+			Deployment: fv1.Archive{
+				Type: fv1.ArchiveTypeOCI,
+				OCI:  &fv1.OCIArchive{Image: "registry/app:v1", Digest: digest},
+			},
+		},
+	}
+	p.Status.BuildStatus = fv1.BuildStatusNone
+	p.Status.ContentHash = contentHash
+	return p
+}
+
+func fnForPkg(name, pkgName, pkgRV string, annotations map[string]string) *fv1.Function {
+	return &fv1.Function{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Annotations: annotations},
+		Spec: fv1.FunctionSpec{Package: fv1.FunctionPackageRef{
+			PackageRef: fv1.PackageRef{Name: pkgName, Namespace: "default", ResourceVersion: pkgRV},
+		}},
+	}
+}
+
+// TestReconcileContentChange covers the branch that makes a Git-applied
+// package converge without the CLI (RFC-0029 §3). The seeding case is the one
+// that protects the upgrade: an absent hash must never read as "changed".
+func TestReconcileContentChange(t *testing.T) {
+	t.Parallel()
+
+	const digestA = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const digestB = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	t.Run("unchanged content is a no-op", func(t *testing.T) {
+		t.Parallel()
+		pkg := ociPkg("p", digestA, "")
+		pkg.Status.ContentHash = PackageContentHash(pkg.Spec)
+		fn := fnForPkg("f", "p", "1", nil)
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "1", got.Spec.Package.PackageRef.ResourceVersion, "no content change must not restamp")
+	})
+
+	t.Run("absent hash seeds without acting", func(t *testing.T) {
+		t.Parallel()
+		// Every package looks like this on the first reconcile after the
+		// feature ships. Acting here would rebuild the whole cluster at once.
+		pkg := ociPkg("p", digestA, "")
+		fn := fnForPkg("f", "p", "1", nil)
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "1", got.Spec.Package.PackageRef.ResourceVersion, "seeding must not restamp")
+
+		gotPkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, PackageContentHash(pkg.Spec), gotPkg.Status.ContentHash, "seeding must record the hash")
+	})
+
+	t.Run("deploy-only content change restamps referencing functions", func(t *testing.T) {
+		t.Parallel()
+		// The digest-pinned-OCI-in-Git golden path: no build ever runs, so
+		// this is the only thing that moves the pods.
+		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
+		pkg := ociPkg("p", digestB, staleHash)
+		fn := fnForPkg("f", "p", "1", nil)
+		other := fnForPkg("other", "different-pkg", "1", nil)
+		fc := newFissionFake(pkg, fn, other)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, pkg.ResourceVersion, got.Spec.Package.PackageRef.ResourceVersion,
+			"a referencing function must be restamped onto the new package RV")
+
+		untouched, err := fc.CoreV1().Functions("default").Get(t.Context(), "other", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "1", untouched.Spec.Package.PackageRef.ResourceVersion,
+			"a function referencing a different package must not be touched")
+
+		gotPkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, PackageContentHash(pkg.Spec), gotPkg.Status.ContentHash)
+	})
+
+	t.Run("opt-out annotation is honored on the content path", func(t *testing.T) {
+		t.Parallel()
+		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
+		pkg := ociPkg("p", digestB, staleHash)
+		fn := fnForPkg("f", "p", "1", map[string]string{fv1.PackageAutoFollowDisabledAnnotation: "true"})
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, "1", got.Spec.Package.PackageRef.ResourceVersion,
+			"an opted-out function must keep its pinned package RV")
+	})
+
+	t.Run("source content change re-queues a build", func(t *testing.T) {
+		t.Parallel()
+		pkg := sourcePkg("s", fv1.BuildStatusSucceeded)
+		pkg.Status.ContentHash = "sha256:stale"
+		fc := newFissionFake(pkg)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		got, err := fc.CoreV1().Packages("default").Get(t.Context(), "s", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.EqualValues(t, fv1.BuildStatusPending, got.Status.BuildStatus,
+			"a source package whose content changed must re-enter the build queue")
+	})
+}

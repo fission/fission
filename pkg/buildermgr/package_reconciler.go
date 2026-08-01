@@ -151,7 +151,7 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error listing functions after content change: %w", err)
 		}
-		if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items); err != nil {
+		if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, true); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error re-stamping functions after content change: %w", err)
 		}
 		logger.Info("package content changed, re-stamped referencing functions")
@@ -167,21 +167,27 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 // first so it never clobbers a concurrent status write (the build path writes
 // the same subresource).
 func (r *PackageReconciler) recordContentHash(ctx context.Context, pkg *fv1.Package, hash string) error {
-	latest, err := r.fissionClient.CoreV1().Packages(pkg.Namespace).Get(ctx, pkg.Name, metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
+	packages := r.fissionClient.CoreV1().Packages(pkg.Namespace)
+	// Retry rather than drop on conflict: the competing writers here are
+	// status-only (condition writes, the CLI's build-status reset), and those
+	// change neither Generation nor BuildStatus-into-pending, so the trigger
+	// predicate drops their events. Nothing would re-reconcile us, and the
+	// hash would stay empty — which makes the NEXT content change read as a
+	// seed and be swallowed.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, gerr := packages.Get(ctx, pkg.Name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		if latest.Status.ContentHash == hash {
 			return nil
 		}
-		return fmt.Errorf("error re-reading package before recording content hash: %w", err)
-	}
-	if latest.Status.ContentHash == hash {
-		return nil
-	}
-	latest.Status.ContentHash = hash
-	if _, err := r.fissionClient.CoreV1().Packages(latest.Namespace).UpdateStatus(ctx, latest, metav1.UpdateOptions{}); err != nil {
-		if apierrors.IsConflict(err) {
-			// Another writer won; it will be re-reconciled with the newer
-			// object, so dropping this write is safe.
+		latest.Status.ContentHash = hash
+		_, uerr := packages.UpdateStatus(ctx, latest, metav1.UpdateOptions{})
+		return uerr
+	})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("error recording package content hash: %w", err)
@@ -264,7 +270,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 
 	// A package may be used by multiple functions. Point functions that still
 	// reference the old package resource version at the freshly built one.
-	if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items); err != nil {
+	if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, false); err != nil {
 		e := "error updating function package resource version"
 		logger.Error(err, e)
 		buildLogs += fmt.Sprintf("%s: %v\n", e, err)
@@ -384,10 +390,14 @@ func buildTriggerPredicate() predicate.Predicate {
 				oldPkg.Status.BuildStatus != fv1.BuildStatusPending {
 				return true
 			}
-			// A spec change is a content change candidate; the reconciler
-			// compares hashes and no-ops when the delivered bytes are the same
-			// (a metadata-only edit moves Generation but not the hash).
-			return newPkg.Generation != oldPkg.Generation
+			// A content change enqueues. Comparing hashes rather than
+			// Generation is deliberate: the build itself writes spec.Deployment
+			// on success, so a Generation test would re-enqueue the reconciler
+			// on its own output and risk re-running a finished build off a
+			// cache that has seen the spec write but not yet the status write.
+			// The hash ignores the build's output for source packages, so the
+			// reconciler cannot trigger itself.
+			return PackageContentHash(newPkg.Spec) != PackageContentHash(oldPkg.Spec)
 		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
 		GenericFunc: func(event.GenericEvent) bool { return false },
@@ -411,9 +421,15 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 			return gerr
 		}
 		// Preserve any Conditions a previous reconcile may have written.
+		// ContentHash is seeded here too: a Git-applied package lands on this
+		// branch (the /status subresource strips status on create) and the
+		// resulting status write does not re-enqueue, so without seeding here
+		// the package would carry an empty hash and swallow its FIRST content
+		// change as a seed (RFC-0029 §3).
 		fresh.Status = fv1.PackageStatus{
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 			Conditions:          fresh.Status.Conditions,
+			ContentHash:         PackageContentHash(fresh.Spec),
 		}
 		if !fresh.Spec.Deployment.IsEmpty() {
 			// if the deployment archive is not empty,
@@ -446,7 +462,11 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 // settles at BuildStatusNone and never reaches build(), so keying this on
 // build success alone left exactly the digest-pinned-OCI-in-Git golden path
 // with no propagation at all (RFC-0029 §3).
-func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg *fv1.Package, fns []fv1.Function) error {
+// honorOptOut is true only on the content-driven path: the build-success
+// re-stamp predates this feature and restamped unconditionally, so applying the
+// opt-out there would silently strand a function on pre-rebuild code while
+// still reporting PackageReady=True.
+func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg *fv1.Package, fns []fv1.Function, honorOptOut bool) error {
 	for i := range fns {
 		fn := &fns[i]
 		if fn.Spec.Package.PackageRef.Name != pkg.Name ||
@@ -458,7 +478,7 @@ func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg
 		// The supported way to pin code is an RFC-0025 FunctionVersion/alias,
 		// which is a first-class object rather than a stale stamp — the
 		// annotation exists for installs that predate it.
-		if fn.Annotations[fv1.PackageAutoFollowDisabledAnnotation] == "true" {
+		if honorOptOut && fn.Annotations[fv1.PackageAutoFollowDisabledAnnotation] == "true" {
 			continue
 		}
 		fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion

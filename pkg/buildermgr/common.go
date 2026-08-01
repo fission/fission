@@ -256,11 +256,20 @@ func updatePackage(ctx context.Context, logger logr.Logger, fissionClient versio
 		// Preserve existing Conditions across the status replacement so
 		// transitions aren't accidentally wiped when build outcome changes.
 		existingConds := fresh.Status.Conditions
+		// Record the observed content hash on every status write. Wholesale
+		// replacement previously cleared it, which left the build path never
+		// recording a hash at all — so a FAILED build then swallowed the
+		// user's fix as a seed, and the package stayed failed until a second
+		// edit. Recomputing from fresh.Spec (rather than carrying the old
+		// value forward) is what makes it correct after a build that rewrote
+		// spec.Deployment; the hash covers a source package's INPUT only, so
+		// this cannot feed back into another rebuild.
 		fresh.Status = fv1.PackageStatus{
 			BuildStatus:         status,
 			BuildLog:            buildLogs,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 			Conditions:          existingConds,
+			ContentHash:         PackageContentHash(fresh.Spec),
 		}
 		setPackageBuildCondition(&fresh.Status, status, buildLogs, fresh.Generation)
 		setPackageOCIPublishCondition(&fresh.Status, uploadResp, fresh.Generation)

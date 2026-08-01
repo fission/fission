@@ -12,29 +12,36 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
-// PackageContentHash fingerprints what a package actually delivers, so a
-// change in content can be detected without the CLI poking the build status
-// (RFC-0029 §3).
+// PackageContentHash fingerprints a package's INPUT content, so a change can
+// be detected without the CLI poking the build status (RFC-0029 §3).
 //
-// What goes in is chosen so the hash changes exactly when the delivered bytes
-// could differ, and not otherwise:
+// Input, not output, and that distinction is the whole design. A source
+// package's deployment archive is the build's own product: the builder writes
+// spec.Deployment on success. Folding that into the hash would make every
+// successful build look like a fresh content change and rebuild forever. So:
 //
-//   - the OCI image reference and digest, for RFC-0001/0012 packages;
-//   - the URL and its checksum, for archives in storagesvc;
-//   - the literal bytes themselves, for inline archives.
+//   - a package WITH a source archive hashes the source alone — the source is
+//     what the user supplies and the deployment is derived from it;
+//   - a deploy-only or OCI package hashes the deployment, because there is no
+//     build and the deployment IS the supplied content.
 //
-// What stays out matters as much. ResourceVersion is excluded because it
-// changes on every write including status updates, which would make every
-// reconcile look like a content change. ImagePullSecrets and SubPath are
-// excluded because they alter how the same content is reached, not what it is
-// — rotating a pull secret must not rebuild the world.
+// Within an archive, what goes in is chosen so the hash changes exactly when
+// the delivered bytes could differ: the OCI image reference and digest, the
+// URL and its checksum, or the literal bytes. What stays out matters as much.
+// ResourceVersion is excluded because it changes on every write including
+// status updates. ImagePullSecrets and SubPath are excluded because they alter
+// how the same content is reached, not what it is — rotating a pull secret
+// must not rebuild the world.
 //
 // The empty package hashes to a stable non-empty value, so "no content" is
 // still distinguishable from "not yet recorded" (the empty string).
 func PackageContentHash(spec fv1.PackageSpec) string {
 	h := sha256.New()
-	hashArchive(h, "source", spec.Source)
-	hashArchive(h, "deployment", spec.Deployment)
+	if !spec.Source.IsEmpty() {
+		hashArchive(h, "source", spec.Source)
+	} else {
+		hashArchive(h, "deployment", spec.Deployment)
+	}
 	return fmt.Sprintf("sha256:%x", h.Sum(nil))
 }
 

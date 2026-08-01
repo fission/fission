@@ -110,10 +110,28 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 	t.Parallel()
 
 	p := buildTriggerPredicate()
-	pkg := func(gen int64, status fv1.BuildStatus) *fv1.Package {
+	// digest builds a deploy-only OCI package; gen/status vary independently
+	// of content so each case isolates one signal.
+	digest := func(gen int64, status fv1.BuildStatus, d string) *fv1.Package {
 		return &fv1.Package{
 			ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default", Generation: gen},
-			Status:     fv1.PackageStatus{BuildStatus: status},
+			Spec: fv1.PackageSpec{Deployment: fv1.Archive{
+				Type: fv1.ArchiveTypeOCI,
+				OCI:  &fv1.OCIArchive{Image: "registry/app:v1", Digest: "sha256:" + repeat(d, 64)},
+			}},
+			Status: fv1.PackageStatus{BuildStatus: status},
+		}
+	}
+	// srcPkg is a source package whose DEPLOYMENT archive is the build's own
+	// output — changing it must not enqueue, or the reconciler triggers itself.
+	srcPkg := func(gen int64, status fv1.BuildStatus, deployURL string) *fv1.Package {
+		return &fv1.Package{
+			ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "default", Generation: gen},
+			Spec: fv1.PackageSpec{
+				Source:     fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/src"},
+				Deployment: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: deployURL},
+			},
+			Status: fv1.PackageStatus{BuildStatus: status},
 		}
 	}
 
@@ -122,13 +140,28 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 		old, new *fv1.Package
 		want     bool
 	}{
-		{"spec changed (the GitOps case)", pkg(1, fv1.BuildStatusNone), pkg(2, fv1.BuildStatusNone), true},
-		{"status poked into pending (the CLI case)", pkg(1, fv1.BuildStatusNone), pkg(1, fv1.BuildStatusPending), true},
-		{"nothing changed", pkg(1, fv1.BuildStatusSucceeded), pkg(1, fv1.BuildStatusSucceeded), false},
-		// The reconciler's own status writes must not re-trigger it, or it
-		// would loop on itself.
-		{"reconciler's own running write", pkg(1, fv1.BuildStatusPending), pkg(1, fv1.BuildStatusRunning), false},
-		{"reconciler's own succeeded write", pkg(1, fv1.BuildStatusRunning), pkg(1, fv1.BuildStatusSucceeded), false},
+		{"content changed (the GitOps digest bump)",
+			digest(1, fv1.BuildStatusNone, "a"), digest(2, fv1.BuildStatusNone, "b"), true},
+		{"status poked into pending (the CLI case)",
+			digest(1, fv1.BuildStatusNone, "a"), digest(1, fv1.BuildStatusPending, "a"), true},
+		{"nothing changed",
+			digest(1, fv1.BuildStatusSucceeded, "a"), digest(1, fv1.BuildStatusSucceeded, "a"), false},
+		// A Generation bump with identical content — a label or metadata edit —
+		// must not enqueue: comparing hashes rather than Generation is what
+		// keeps those from queuing pointless reconciles.
+		{"generation moved but content identical",
+			digest(1, fv1.BuildStatusNone, "a"), digest(2, fv1.BuildStatusNone, "a"), false},
+		// The build writes spec.Deployment on success. If that re-enqueued,
+		// the reconciler could re-run a finished build off a cache that has
+		// seen the spec write but not the status write.
+		{"build's own deployment write does not self-trigger",
+			srcPkg(1, fv1.BuildStatusRunning, "http://storage/d1"),
+			srcPkg(2, fv1.BuildStatusRunning, "http://storage/d2"), false},
+		// The reconciler's own status writes must not re-trigger it either.
+		{"reconciler's own running write",
+			digest(1, fv1.BuildStatusPending, "a"), digest(1, fv1.BuildStatusRunning, "a"), false},
+		{"reconciler's own succeeded write",
+			digest(1, fv1.BuildStatusRunning, "a"), digest(1, fv1.BuildStatusSucceeded, "a"), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
