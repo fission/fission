@@ -29,6 +29,14 @@ manifests:
         namespace: fission
         setValues:
           analytics: "false"
+          # Single replicas for local/CI clusters. The chart defaults to 2 for
+          # router and webhook (RFC-0028: a single replica makes every rollout
+          # an outage), but a kind runner has ~4 vCPU and doubling both control
+          # -plane front ends starves the builders and the executor — which
+          # surfaces as builds stuck in "running" and executor RPC deadlines
+          # across unrelated tests, not as an obvious capacity error.
+          router.replicas: "1"
+          webhook.replicas: "1"
           # RFC-0024 async invocation needs the RFC-0021 statestore; enable both
           # (embedded SQLite) so the integration suite can exercise async invoke.
           asyncInvocation.enabled: "true"

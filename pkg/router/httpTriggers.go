@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -74,6 +75,12 @@ type HTTPTriggerSet struct {
 	// gates /readyz on it so a starting/rolling pod stays out of the
 	// Service endpoints until its mux is populated.
 	ready atomic.Bool
+	// endpointsSynced reports whether the RFC-0002 endpoint index has received
+	// its informer's initial replay. nil when the slice-fed data plane is off.
+	// Readiness gates on it as well as on `ready`: a replica whose mux is built
+	// but whose index is still filling serves warm traffic through the executor
+	// fallback — correct, but a latency cliff during a rolling upgrade.
+	endpointsSynced cache.InformerSynced
 
 	// Incremental route updates (RFC-0013) are the only production path: the
 	// reconcilers feed per-event diffs into routeTable and the materializer
@@ -201,6 +208,14 @@ func (ts *HTTPTriggerSet) routerReadinessHandler(w http.ResponseWriter, r *http.
 	// mux has no user routes, so report 503 to stay out of the Service endpoints.
 	if !ts.ready.Load() {
 		http.Error(w, "router mux not yet built", http.StatusServiceUnavailable)
+		return
+	}
+	// With the slice-fed data plane on, also wait for the endpoint index to
+	// have seen its informer's initial replay: a mux-ready replica whose index
+	// is still filling would serve warm traffic through the executor fallback
+	// instead of the fast path (RFC-0028 §2).
+	if ts.endpointsSynced != nil && !ts.endpointsSynced() {
+		http.Error(w, "endpoint index not yet synced", http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusOK)

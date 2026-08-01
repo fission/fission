@@ -7,7 +7,11 @@ metadata:
     svc: webhook-service
     application: fission-webhook
 spec:
-  replicas: 1
+  replicas: {{ .Values.webhook.replicas | default 1 }}
+  {{- with .Values.webhook.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       svc: webhook-service
@@ -43,6 +47,17 @@ spec:
         ports:
           - containerPort: 8080
             name: metrics
+        # maxUnavailable: 0 is only meaningful with a readiness signal: without
+        # this the kubelet marks the pod Ready the instant the process starts,
+        # so a surge pod joins the Service before controller-runtime has bound
+        # the serving port — and every Fission CR write is fail-closed against
+        # it (RFC-0028 §2).
+        readinessProbe:
+          tcpSocket:
+            port: 9443
+          initialDelaySeconds: 2
+          periodSeconds: 2
+          failureThreshold: 15
         resources:
           {{- toYaml .Values.webhook.resources | nindent 10 }}
       volumes:

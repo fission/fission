@@ -19,12 +19,20 @@ import (
 // options). The informer's initial LIST replays every existing slice as an Add,
 // so the index is complete once the cache syncs — no executor involvement on
 // router restart.
-func RegisterInformer(ctx context.Context, mgr ctrl.Manager, ix *Index, logger logr.Logger) error {
+//
+// It returns the registration's HasSynced. The Manager's own cache sync says
+// the informer's store is populated, which is NOT the same as this handler
+// having received the replay: registration-level sync is what tells you the
+// index has actually seen every existing slice. Discarding it leaves a bounded
+// window where a Ready replica serves warm traffic from a partially-filled
+// index and falls back to the executor — correct, but a latency cliff exactly
+// during a rolling upgrade (RFC-0028 §2).
+func RegisterInformer(ctx context.Context, mgr ctrl.Manager, ix *Index, logger logr.Logger) (cache.InformerSynced, error) {
 	informer, err := mgr.GetCache().GetInformer(ctx, &discoveryv1.EndpointSlice{})
 	if err != nil {
-		return fmt.Errorf("error getting endpointslice informer: %w", err)
+		return nil, fmt.Errorf("error getting endpointslice informer: %w", err)
 	}
-	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	reg, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if es, ok := obj.(*discoveryv1.EndpointSlice); ok {
 				ix.ApplySlice(es)
@@ -53,7 +61,7 @@ func RegisterInformer(ctx context.Context, mgr ctrl.Manager, ix *Index, logger l
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("error adding endpointslice event handler: %w", err)
+		return nil, fmt.Errorf("error adding endpointslice event handler: %w", err)
 	}
-	return nil
+	return reg.HasSynced, nil
 }
