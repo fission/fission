@@ -259,6 +259,18 @@ const (
 	ConcurrencyEnforcementAnnotation = "fission.io/concurrency-enforcement"
 	ConcurrencyEnforcementStrict     = "strict"
 
+	// PackageAutoFollowDisabledAnnotation opts a Function out of following its
+	// Package's content changes (RFC-0029 §3). With content-keyed re-stamping,
+	// a Package whose archive or OCI digest changes recycles the pods of every
+	// Function referencing it — including deploy-only and OCI packages, which
+	// never build and so never propagated before. Set to "true" to keep the
+	// old manual roll timing.
+	//
+	// This is an escape hatch, not the pinning mechanism: to hold a function on
+	// known-good code, publish an RFC-0025 FunctionVersion and point an alias
+	// at it — a first-class object rather than a deliberately stale stamp.
+	PackageAutoFollowDisabledAnnotation = "fission.io/disable-package-auto-follow"
+
 	// RFC-0025 function version/alias ownership labels. VersionFunctionNameLabel
 	// and VersionFunctionUIDLabel are both stamped on every FunctionVersion by
 	// the publish engine (pkg/versioning). FunctionAlias objects get
