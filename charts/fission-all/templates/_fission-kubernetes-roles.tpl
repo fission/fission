@@ -65,6 +65,11 @@ rules:
   verbs:
   - list
   - create
+  # update: the reconciler rolls a builder Deployment whose pod template has
+  # drifted from the chart (RFC-0028 phase 3, #776). Without this verb the
+  # drift is detected and the update is denied, so the builder silently keeps
+  # running the stale image — the exact symptom the feature removes.
+  - update
   - delete
 - apiGroups:
   - apiextensions.k8s.io
