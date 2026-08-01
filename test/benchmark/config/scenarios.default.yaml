@@ -29,3 +29,16 @@ executors: [poolmgr, newdeploy]
 # which measures the per-reference specialization-time existence checks.
 configDepsSecrets: 5
 configDepsConfigmaps: 5
+# Function's provisioned target (floor) during the idle-warm scenario.
+provisionedIdleFloor: 3
+# Pool size for that scenario's shared environment; bigger than floor +
+# overflow burst so pool exhaustion isn't what's being measured.
+provisionedIdlePoolsize: 10
+# How long to let the floor sit idle before each post-idle burst.
+provisionedIdleDuration: 10m
+# Simultaneous requests for the within-floor burst; must stay <= floor so
+# it's fully absorbed by warm provisioned pods.
+provisionedIdleWithinBurst: 3
+# Simultaneous requests for the overflow burst; > floor so the excess pays
+# a real cold start.
+provisionedIdleOverflowBurst: 5

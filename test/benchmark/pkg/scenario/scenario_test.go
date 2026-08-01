@@ -137,3 +137,15 @@ func TestWarmPathPerExecutor(t *testing.T) {
 		}
 	}
 }
+
+// TestProvisionedIdleScenarioRegistered pins that the RFC-0026 phase4
+// idle-warm guardrail (provisioned floor pods must stay warm after sitting
+// idle) is built and is deliberately OFF the smoke subset — the default 10m
+// idle window is far too slow for the per-PR smoke run.
+func TestProvisionedIdleScenarioRegistered(t *testing.T) {
+	t.Parallel()
+	all := BuildAll(DefaultParams())
+	assert.Contains(t, Names(all), "provisioned-idle-warm")
+	assert.NotContains(t, Names(Select(all, nil, []string{"smoke"})), "provisioned-idle-warm",
+		"provisioned-idle-warm must stay out of the fast per-PR smoke subset")
+}

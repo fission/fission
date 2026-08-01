@@ -84,17 +84,22 @@ type Params struct {
 	// BurstSize is the number of simultaneous first-requests the cold-burst
 	// scenarios fire; sized above Poolsize so the burst forces pool exhaustion
 	// and refill rather than being absorbed by warm pods.
-	BurstSize                 int                `json:"burstSize"`
-	ProvisionedWarmTarget     int                `json:"provisionedWarmTarget"`     // A's target during the burst
-	ProvisionedWarmPoolsize   int                `json:"provisionedWarmPoolsize"`   // pool size for the shared env
-	ProvisionedWarmIterations int                `json:"provisionedWarmIterations"` // B cold-start samples per phase
-	WarmDuration              Duration           `json:"warmDuration"`
-	WarmWarmup                Duration           `json:"warmWarmup"`
-	WarmConcurrency           int                `json:"warmConcurrency"`
-	ConcurrencyLevels         []int              `json:"concurrencyLevels"`
-	RPSLevels                 []int              `json:"rpsLevels"`
-	PayloadSizes              []int              `json:"payloadSizes"` // bytes
-	Executors                 []fv1.ExecutorType `json:"executors"`
+	BurstSize                    int                `json:"burstSize"`
+	ProvisionedWarmTarget        int                `json:"provisionedWarmTarget"`     // A's target during the burst
+	ProvisionedWarmPoolsize      int                `json:"provisionedWarmPoolsize"`   // pool size for the shared env
+	ProvisionedWarmIterations    int                `json:"provisionedWarmIterations"` // B cold-start samples per phase
+	ProvisionedIdleFloor         int                `json:"provisionedIdleFloor"`         // provisioned target (the "floor") to keep warm
+	ProvisionedIdlePoolsize      int                `json:"provisionedIdlePoolsize"`      // pool size for the shared env; must absorb floor + overflow burst
+	ProvisionedIdleDuration      Duration           `json:"provisionedIdleDuration"`      // how long the floor sits idle before each post-idle burst
+	ProvisionedIdleWithinBurst   int                `json:"provisionedIdleWithinBurst"`   // concurrent requests that must stay <= floor
+	ProvisionedIdleOverflowBurst int                `json:"provisionedIdleOverflowBurst"` // concurrent requests that must exceed floor
+	WarmDuration                 Duration           `json:"warmDuration"`
+	WarmWarmup                   Duration           `json:"warmWarmup"`
+	WarmConcurrency              int                `json:"warmConcurrency"`
+	ConcurrencyLevels            []int              `json:"concurrencyLevels"`
+	RPSLevels                    []int              `json:"rpsLevels"`
+	PayloadSizes                 []int              `json:"payloadSizes"` // bytes
+	Executors                    []fv1.ExecutorType `json:"executors"`
 
 	// Number of Secrets/ConfigMaps the cold-start-poolmgr-configdeps scenario's
 	// function references, sizing the per-reference specialization-time lookups.
@@ -111,27 +116,32 @@ type Params struct {
 // DefaultParams returns the standard full-run parameters.
 func DefaultParams() Params {
 	return Params{
-		Poolsize:                  3,
-		ColdIterations:            20,
-		Repetitions:               1,
-		BurstSize:                 10,
-		ProvisionedWarmTarget:     20,
-		ProvisionedWarmPoolsize:   30,
-		ProvisionedWarmIterations: 10,
-		WarmDuration:              Duration(60 * time.Second),
-		WarmWarmup:                Duration(10 * time.Second),
-		WarmConcurrency:           50,
-		ConcurrencyLevels:         []int{10, 50, 100, 250, 500},
-		RPSLevels:                 []int{100, 250, 500, 1000},
-		PayloadSizes:              []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
-		Executors:                 []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
-		ConfigDepsSecrets:         5,
-		ConfigDepsConfigMaps:      5,
-		AutoscaleMaxScale:         5,
-		AutoscaleObserve:          Duration(3 * time.Minute),
-		IndexScaleCount:           1000,
-		RouteChurnCount:           500,
-		BuildTimeout:              Duration(5 * time.Minute),
+		Poolsize:                     3,
+		ColdIterations:               20,
+		Repetitions:                  1,
+		BurstSize:                    10,
+		ProvisionedWarmTarget:        20,
+		ProvisionedWarmPoolsize:      30,
+		ProvisionedWarmIterations:    10,
+		ProvisionedIdleFloor:         3,
+		ProvisionedIdlePoolsize:      10,
+		ProvisionedIdleDuration:      Duration(10 * time.Minute),
+		ProvisionedIdleWithinBurst:   3,
+		ProvisionedIdleOverflowBurst: 5,
+		WarmDuration:                 Duration(60 * time.Second),
+		WarmWarmup:                   Duration(10 * time.Second),
+		WarmConcurrency:              50,
+		ConcurrencyLevels:            []int{10, 50, 100, 250, 500},
+		RPSLevels:                    []int{100, 250, 500, 1000},
+		PayloadSizes:                 []int{1 << 10, 10 << 10, 100 << 10, 1 << 20},
+		Executors:                    []fv1.ExecutorType{fv1.ExecutorTypePoolmgr, fv1.ExecutorTypeNewdeploy},
+		ConfigDepsSecrets:            5,
+		ConfigDepsConfigMaps:         5,
+		AutoscaleMaxScale:            5,
+		AutoscaleObserve:             Duration(3 * time.Minute),
+		IndexScaleCount:              1000,
+		RouteChurnCount:              500,
+		BuildTimeout:                 Duration(5 * time.Minute),
 	}
 }
 
@@ -154,6 +164,21 @@ func (p Params) normalize() Params {
 	}
 	if p.ProvisionedWarmPoolsize == 0 {
 		p.ProvisionedWarmPoolsize = d.ProvisionedWarmPoolsize
+	}
+	if p.ProvisionedIdleFloor == 0 {
+		p.ProvisionedIdleFloor = d.ProvisionedIdleFloor
+	}
+	if p.ProvisionedIdlePoolsize == 0 {
+		p.ProvisionedIdlePoolsize = d.ProvisionedIdlePoolsize
+	}
+	if p.ProvisionedIdleDuration == 0 {
+		p.ProvisionedIdleDuration = d.ProvisionedIdleDuration
+	}
+	if p.ProvisionedIdleWithinBurst == 0 {
+		p.ProvisionedIdleWithinBurst = d.ProvisionedIdleWithinBurst
+	}
+	if p.ProvisionedIdleOverflowBurst == 0 {
+		p.ProvisionedIdleOverflowBurst = d.ProvisionedIdleOverflowBurst
 	}
 	if p.ProvisionedWarmIterations == 0 {
 		p.ProvisionedWarmIterations = d.ProvisionedWarmIterations
@@ -226,6 +251,7 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &asyncInvoke{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &eventingTopic{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &provisionedWarm{burstTarget: p.ProvisionedWarmTarget, poolsize: p.ProvisionedWarmPoolsize, iterations: p.ProvisionedWarmIterations})
+	out = append(out, &provisionedIdle{floor: p.ProvisionedIdleFloor, poolsize: p.ProvisionedIdlePoolsize, withinBurst: p.ProvisionedIdleWithinBurst, overflowBurst: p.ProvisionedIdleOverflowBurst, idleDuration: p.ProvisionedIdleDuration.D()})
 	return out
 }
 

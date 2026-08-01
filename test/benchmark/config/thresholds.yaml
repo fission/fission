@@ -39,3 +39,13 @@ scenarios:
       # missing-invariants plan, Stage 3 decisions 4/5.
       contended_ratio: { max: 2.0 }
       failures: { max: 3 }
+  provisioned-idle-warm:
+    metrics:
+      # RFC-0026 phase4: within-floor requests must stay warm after sitting
+      # idle for the configured window (default 10m) — same burst measured
+      # pre/post-idle, gated at 1.5x per the phase4 idle-warm-bench plan.
+      within_floor_ratio: { max: 1.5 }
+      within_floor_failures: { max: 1 }
+      baseline_failures: { max: 1 }
+      # overflow_burst_* intentionally ungated: beyond-floor requests are
+      # expected to pay a real cold start, not proof of warmth.
