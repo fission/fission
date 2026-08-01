@@ -473,7 +473,13 @@ func podSelectorSvcLabels(doc map[string]any) []string {
 		rule, _ := r.(map[string]any)
 		froms, _ := rule["from"].([]any)
 		for _, f := range froms {
-			if sel, ok := f.(map[string]any)["podSelector"].(map[string]any); ok {
+			fm, ok := f.(map[string]any)
+			if !ok {
+				// A non-map `from` entry is malformed chart output; skip it so
+				// the caller reports a missing selector rather than panicking.
+				continue
+			}
+			if sel, ok := fm["podSelector"].(map[string]any); ok {
 				add(sel)
 			}
 		}

@@ -84,7 +84,9 @@ func TestSpecApplyIsIdempotent(t *testing.T) {
 		t.Cleanup(func() {
 			dctx, dcancel := context.WithTimeout(context.Background(), time.Minute)
 			defer dcancel()
-			ns.WithCWD(t, workdir, func() { _ = ns.CLI(t, dctx, "spec", "destroy") })
+			// Best-effort: the test may have failed before anything was applied,
+			// and a destroy that finds nothing must not mask the real failure.
+			ns.WithCWD(t, workdir, func() { _, _ = ns.CLICaptureStdoutWithEnvBestEffort(t, dctx, nil, "spec", "destroy") })
 		})
 	})
 
