@@ -10015,9 +10015,11 @@ spec:
                             default counts): the final segment written is the object's data
                             key and keys are mutable after admission, so sharing a directory
                             would let one object's later-added key collide with the other's
-                            file; the fetcher refuses such a write rather than truncating. Not supported on the container executor, which has no
-                            fetcher, nor on an allowedFunctionsPerContainer:infinite
-                            environment, whose pods share one secrets tree across functions.
+                            file; the fetcher refuses such a write rather than truncating.
+                            Honoured on every executor: poolmgr and newdeploy via the fetcher,
+                            the container executor via a native projected volume. Not supported
+                            on an allowedFunctionsPerContainer:infinite environment, whose pods
+                            share one secrets tree across functions.
                           type: string
                         name:
                           maxLength: 63

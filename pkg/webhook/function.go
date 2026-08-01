@@ -59,18 +59,32 @@ func (r *Function) Warnings(new *v1.Function) admission.Warnings {
 	return nil
 }
 
-func (r *Function) Validate(new *v1.Function) error {
-	for _, cnfMap := range new.Spec.ConfigMaps {
-		if cnfMap.Namespace != new.Namespace {
-			err := fmt.Errorf("configMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, new.Namespace)
-			return v1.AggregateValidationErrors("Function", err)
+// validateSameNamespaceRefs rejects a spec whose Secret/ConfigMap references
+// point outside objNamespace.
+//
+// Shared by the Function and FunctionVersion webhooks. It cannot live on
+// FunctionSpec.Validate because the spec does not know which namespace it will
+// live in — but that also meant a hand-authored FunctionVersion, whose
+// Snapshot is validated only through FunctionSpec.Validate, could carry a
+// cross-namespace reference the Function webhook would have rejected. The
+// fetcher would then read it wherever RBAC allowed.
+func validateSameNamespaceRefs(spec v1.FunctionSpec, objNamespace string) error {
+	for _, cnfMap := range spec.ConfigMaps {
+		if cnfMap.Namespace != objNamespace {
+			return fmt.Errorf("configMap's [%s] and function's Namespace [%s] are different. ConfigMap needs to be present in the same namespace as function", cnfMap.Namespace, objNamespace)
 		}
 	}
-	for _, secret := range new.Spec.Secrets {
-		if secret.Namespace != new.Namespace {
-			err := fmt.Errorf("secret  [%s] and function's Namespace [%s] are different. Secret needs to be present in the same namespace as function", secret.Namespace, new.Namespace)
-			return v1.AggregateValidationErrors("Function", err)
+	for _, secret := range spec.Secrets {
+		if secret.Namespace != objNamespace {
+			return fmt.Errorf("secret  [%s] and function's Namespace [%s] are different. Secret needs to be present in the same namespace as function", secret.Namespace, objNamespace)
 		}
+	}
+	return nil
+}
+
+func (r *Function) Validate(new *v1.Function) error {
+	if err := validateSameNamespaceRefs(new.Spec, new.Namespace); err != nil {
+		return v1.AggregateValidationErrors("Function", err)
 	}
 	// Cross-namespace EnvironmentRef closes GHSA-cvw6-gfvv-953q. An empty
 	// namespace remains accepted — the Fission CLI populates it with the

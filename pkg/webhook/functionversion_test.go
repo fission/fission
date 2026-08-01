@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -355,4 +358,38 @@ func TestFunctionVersionWebhook_MountPathOnInfiniteEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFunctionVersionWebhook_CrossNamespaceRefs pins the gap that
+// FunctionSpec.Validate structurally cannot cover: a spec does not know which
+// namespace it will live in, so the same-namespace rule lives in the webhooks.
+// Guarding only the Function webhook let a hand-authored FunctionVersion carry
+// a cross-namespace Secret/ConfigMap reference, which the fetcher would read
+// wherever RBAC allowed.
+func TestFunctionVersionWebhook_CrossNamespaceRefs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a cross-namespace secret in the snapshot is rejected", func(t *testing.T) {
+		t.Parallel()
+		fv := makeValidFunctionVersion()
+		fv.Spec.Snapshot.Secrets = []v1.SecretReference{{Namespace: "other-ns", Name: "s"}}
+		err := (&FunctionVersion{}).Validate(fv)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "same namespace")
+	})
+
+	t.Run("a cross-namespace configmap in the snapshot is rejected", func(t *testing.T) {
+		t.Parallel()
+		fv := makeValidFunctionVersion()
+		fv.Spec.Snapshot.ConfigMaps = []v1.ConfigMapReference{{Namespace: "other-ns", Name: "c"}}
+		assert.Error(t, (&FunctionVersion{}).Validate(fv))
+	})
+
+	t.Run("same-namespace references are accepted", func(t *testing.T) {
+		t.Parallel()
+		fv := makeValidFunctionVersion()
+		fv.Spec.Snapshot.Secrets = []v1.SecretReference{{Namespace: fv.Namespace, Name: "s"}}
+		fv.Spec.Snapshot.ConfigMaps = []v1.ConfigMapReference{{Namespace: fv.Namespace, Name: "c"}}
+		assert.NoError(t, (&FunctionVersion{}).Validate(fv))
+	})
 }

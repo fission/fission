@@ -527,7 +527,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			}
 			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, subPath)
 			if err != nil {
-				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
+				logger.Error(err, "failed to resolve secret directory", "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, secret)
 			}
 
@@ -578,7 +578,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			}
 			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, subPath)
 			if err != nil {
-				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
+				logger.Error(err, "failed to resolve configmap directory", "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err,
 					config)
 			}
