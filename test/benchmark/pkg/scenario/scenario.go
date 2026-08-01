@@ -106,6 +106,15 @@ type Params struct {
 	IndexScaleCount   int      `json:"indexScaleCount"`
 	RouteChurnCount   int      `json:"routeChurnCount"`
 	BuildTimeout      Duration `json:"buildTimeout"`
+
+	// UpgradeCmd is the shell command upgrade-under-load executes mid-load
+	// (helm upgrade …). The scenario is built ONLY when this is non-empty, so
+	// a regular benchmark run can never upgrade the cluster it is measuring.
+	UpgradeCmd      string   `json:"upgradeCmd"`
+	UpgradeBaseline Duration `json:"upgradeBaseline"` // pre-upgrade load window
+	UpgradeSettle   Duration `json:"upgradeSettle"`   // post-rollout load window
+	UpgradeRPS      int      `json:"upgradeRPS"`      // per-target request rate
+	UpgradeTimeout  Duration `json:"upgradeTimeout"`  // upgrade cmd + rollout budget
 }
 
 // DefaultParams returns the standard full-run parameters.
@@ -132,6 +141,10 @@ func DefaultParams() Params {
 		IndexScaleCount:           1000,
 		RouteChurnCount:           500,
 		BuildTimeout:              Duration(5 * time.Minute),
+		UpgradeBaseline:           Duration(30 * time.Second),
+		UpgradeSettle:             Duration(2 * time.Minute),
+		UpgradeRPS:                20,
+		UpgradeTimeout:            Duration(10 * time.Minute),
 	}
 }
 
@@ -200,6 +213,18 @@ func (p Params) normalize() Params {
 	if p.BuildTimeout == 0 {
 		p.BuildTimeout = d.BuildTimeout
 	}
+	if p.UpgradeBaseline == 0 {
+		p.UpgradeBaseline = d.UpgradeBaseline
+	}
+	if p.UpgradeSettle == 0 {
+		p.UpgradeSettle = d.UpgradeSettle
+	}
+	if p.UpgradeRPS == 0 {
+		p.UpgradeRPS = d.UpgradeRPS
+	}
+	if p.UpgradeTimeout == 0 {
+		p.UpgradeTimeout = d.UpgradeTimeout
+	}
 	return p
 }
 
@@ -226,6 +251,16 @@ func BuildAll(p Params) []Scenario {
 	out = append(out, &asyncInvoke{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &eventingTopic{duration: p.WarmDuration.D(), warmup: p.WarmWarmup.D(), concurrency: p.WarmConcurrency, poolsize: p.Poolsize})
 	out = append(out, &provisionedWarm{burstTarget: p.ProvisionedWarmTarget, poolsize: p.ProvisionedWarmPoolsize, iterations: p.ProvisionedWarmIterations})
+	if p.UpgradeCmd != "" {
+		out = append(out, &upgradeUnderLoad{
+			cmd:      p.UpgradeCmd,
+			baseline: p.UpgradeBaseline.D(),
+			settle:   p.UpgradeSettle.D(),
+			rps:      p.UpgradeRPS,
+			poolsize: p.Poolsize,
+			timeout:  p.UpgradeTimeout.D(),
+		})
+	}
 	return out
 }
 
@@ -424,6 +459,13 @@ const (
 // pool). methods controls the route's allowed HTTP methods. The returned
 // fnName feeds per-function PromQL (e.g. the cold-start counter delta).
 func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.ExecutorType, runtime warmRuntime, poolsize, requestsPerPod int, methods []string) (route, fnName string, err error) {
+	return provisionWarmFunctionNamed(ctx, sc, "", executor, runtime, poolsize, requestsPerPod, methods)
+}
+
+// provisionWarmFunctionNamed is provisionWarmFunction with a name prefix, for
+// scenarios that provision more than one function in the same scope (scope
+// names are label+run scoped, so two unprefixed calls collide on "env"/"fn").
+func provisionWarmFunctionNamed(ctx context.Context, sc *harness.Scope, prefix string, executor fv1.ExecutorType, runtime warmRuntime, poolsize, requestsPerPod int, methods []string) (route, fnName string, err error) {
 	env := sc.Env()
 	image, code, entrypoint := env.Images.Python, pythonHello, "main"
 	if runtime == runtimeNode {
@@ -433,7 +475,7 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.
 	if image == "" {
 		return "", "", skip("runtime image unset (PYTHON_RUNTIME_IMAGE / NODE_RUNTIME_IMAGE)")
 	}
-	envName := sc.Name("env")
+	envName := sc.Name(prefix + "env")
 	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: image, Version: 1, Poolsize: poolsize}); err != nil {
 		return "", "", err
 	}
@@ -441,7 +483,7 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.
 	if executor != fv1.ExecutorTypePoolmgr {
 		minScale = 1
 	}
-	fnName = sc.Name("fn")
+	fnName = sc.Name(prefix + "fn")
 	route = "/" + fnName
 	if err = sc.CreateCodeFunction(ctx, harness.FunctionOptions{
 		Name: fnName, Env: envName, Code: []byte(code), Entrypoint: entrypoint,
@@ -449,7 +491,7 @@ func provisionWarmFunction(ctx context.Context, sc *harness.Scope, executor fv1.
 	}); err != nil {
 		return "", "", err
 	}
-	if err = sc.CreateRoute(ctx, harness.RouteOptions{Function: fnName, URL: route, Methods: methods}); err != nil {
+	if err = sc.CreateRoute(ctx, harness.RouteOptions{Name: sc.Name(prefix + "route"), Function: fnName, URL: route, Methods: methods}); err != nil {
 		return "", "", err
 	}
 	if err = env.WaitForRoutable(ctx, route, 3*time.Minute); err != nil {

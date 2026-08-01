@@ -26,6 +26,7 @@ func runCmd() *cobra.Command {
 		duration, warmup                            time.Duration
 		concurrency, coldIterations, poolsize       int
 		repetitions                                 int
+		upgradeCmd                                  string
 	)
 
 	cmd := &cobra.Command{
@@ -57,6 +58,9 @@ func runCmd() *cobra.Command {
 			}
 			if repetitions > 0 {
 				params.Repetitions = repetitions
+			}
+			if upgradeCmd != "" {
+				params.UpgradeCmd = upgradeCmd
 			}
 
 			selected := scenario.Select(scenario.BuildAll(params), splitCSV(scenariosCSV), splitCSV(tagsCSV))
@@ -125,5 +129,6 @@ func runCmd() *cobra.Command {
 	f.IntVar(&coldIterations, "cold-iterations", 0, "cold-start iterations (overrides config)")
 	f.IntVar(&repetitions, "repetitions", 0, "re-run each scenario N times and report per-metric medians (overrides config)")
 	f.IntVar(&poolsize, "poolsize", 0, "environment pool size (overrides config)")
+	f.StringVar(&upgradeCmd, "upgrade-cmd", "", "shell command upgrade-under-load executes mid-load (the scenario exists only when set)")
 	return cmd
 }

@@ -7,8 +7,7 @@ Pick the one matching the layer you're touching.
 |---|---|---|
 | `test/integration/` | Go + `testify`, build tag `//go:build integration` | End-to-end Fission behavior against a real Kind cluster (router, executor, buildermgr, storagesvc, CRDs). |
 | `test/e2e/` | Go + envtest (in-process kube-apiserver) | Controller-level reconcile loops that don't need a real cluster. |
-| `test/upgrade_test/` | Bash + helm | Upgrade-from-stable smoke run via `.github/workflows/upgrade_test.yaml`. |
-| `test/benchmark/` | Go | E2E performance benchmarking suite (RFC-0020): the `fission-benchmark` CLI + engine. See `test/benchmark/README.md`. |
+| `test/benchmark/` | Go | E2E performance benchmarking suite (RFC-0020): the `fission-benchmark` CLI + engine, including the `upgrade-under-load` scenario behind `.github/workflows/upgrade_test.yaml`. See `test/benchmark/README.md`. |
 
 ## Integration tests (`test/integration/`)
 
@@ -67,8 +66,10 @@ make test-run    # also covers everything under pkg/
 
 Uses `setup-envtest` from kubebuilder; `hack/runtests.sh` fetches the right binaries.
 
-## Upgrade tests (`test/upgrade_test/`)
+## Upgrade tests (`upgrade-under-load` benchmark scenario)
 
-Driven by `.github/workflows/upgrade_test.yaml` on push/PR with path filters.
-Installs a stable release, builds the candidate images locally, helm-upgrades, then exercises a small set of fission objects against the upgraded cluster.
-Not typically run locally.
+Driven by `.github/workflows/upgrade_test.yaml` on push/PR with path filters (RFC-0028 phase 1).
+The workflow installs the latest published release, builds HEAD images into Kind, and runs the `upgrade-under-load` scenario from `test/benchmark`: fixtures are seeded, constant-rate load runs against the router through the whole `helm upgrade`, and every request outcome is classified (ok / transport failure / RFC-0015 platform-attributed / unattributed error), alongside specialized warm-pod UID survival and async queue durability.
+The scenario only exists when `--upgrade-cmd` is passed, so a regular benchmark run can never upgrade the cluster it is measuring.
+Run it locally against a disposable cluster with `fission-benchmark run --scenarios upgrade-under-load --upgrade-cmd "helm upgrade …"`.
+The error-budget evaluation in the workflow is non-gating while the RFC-0028 rollout-posture phases land.

@@ -1,5 +1,17 @@
 name: Fission CI upgrade
 
+# RFC-0028 phase 1: upgrade-under-load. Installs the latest published release,
+# seeds fixtures, drives constant-rate load against the router via NodePort
+# (port-forward would reconnect during the roll and pollute the transport-
+# failure signal), runs `helm upgrade` to HEAD mid-load, and classifies every
+# request outcome (ok / transport failure / platform-attributed / unattributed
+# error) plus warm-pod UID survival and async queue durability.
+#
+# The error-budget evaluation step is NON-GATING (continue-on-error) while the
+# rollout-posture work (RFC-0028 phases 2-3) drives the numbers to zero; the
+# scenario itself fails the job only on infrastructure errors (fixtures,
+# upgrade command, rollout timeout).
+
 on:
   push:
     branches:
@@ -25,6 +37,15 @@ env:
   HELM_VERSION: v4.2.2
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
+  FISSION_NAMESPACE: fission
+  # Images built from HEAD are tagged with a tag that never exists upstream,
+  # so pullPolicy=IfNotPresent can only resolve them from the kind image
+  # store — never by silently pulling a stale published image from GHCR.
+  HEAD_TAG: upgrade-test
+  # Must match the chart's routerPort default (charts/fission-all/values.yaml),
+  # which becomes the Service nodePort under routerServiceType=NodePort.
+  ROUTER_NODEPORT: 31314
+  HELM_VARS_HEAD: routerServiceType=NodePort,repository=ghcr.io,image=fission/fission-bundle,pullPolicy=IfNotPresent,imageTag=upgrade-test,fetcher.image=fission/fetcher,fetcher.imageTag=upgrade-test,postInstallReportImage=fission/reporter,preUpgradeChecks.image=fission/pre-upgrade-checks,preUpgradeChecks.imageTag=upgrade-test,analytics=false
 
 permissions:
   contents: read
@@ -75,54 +96,105 @@ jobs:
           install-only: true
           version: "~> v2"
 
-      - name: Setup kubectl & fetch node information
+      - name: Setup kubectl
         run: |
           kubectl cluster-info --context kind-${{ env.KIND_CLUSTER_NAME }}
-          kubectl get nodes
-          kubectl get storageclasses.storage.k8s.io
           kubectl config use-context kind-${{ env.KIND_CLUSTER_NAME }}
           kubectl config set-context --current --namespace=default
-          kubectl config view
+          kubectl get nodes
 
-      - name: Dump system info
+      - name: Install latest published fission release
         run: |
-          source ./test/upgrade_test/fission_objects.sh dump_system_info
+          helm repo add fission-charts https://fission.github.io/fission-charts/
+          helm repo update
+          # appVersion already carries the v prefix (hack/generate-helm-manifest.sh
+          # stamps the git tag verbatim), e.g. "appVersion: v1.27.0".
+          LATEST_TAG=$(helm show chart fission-charts/fission-all | awk '/^appVersion:/{print $2}')
+          echo "Installing latest published release $LATEST_TAG"
+          echo "LATEST_TAG=$LATEST_TAG" >> "$GITHUB_ENV"
+          kubectl create ns ${{ env.FISSION_NAMESPACE }}
+          kubectl create -k "github.com/fission/fission/crds/v1?ref=$LATEST_TAG"
+          helm install --wait --timeout 10m --namespace ${{ env.FISSION_NAMESPACE }} fission \
+            fission-charts/fission-all --set routerServiceType=NodePort,analytics=false
 
-      - name: Install and configure previous stable fission
+      - name: Build HEAD images and load into kind
         run: |
-          source ./test/upgrade_test/fission_objects.sh install_stable_release \
-          && create_fission_objects \
-          && test_fission_objects
+          make skaffold-prebuild
+          # builder images come from Environment CRDs and the reporter is
+          # disabled by analytics=false, so only the images the upgraded chart
+          # actually schedules are built.
+          for img in fission-bundle fetcher pre-upgrade-checks; do
+            docker buildx build -t "ghcr.io/fission/${img}:${{ env.HEAD_TAG }}" \
+              "dist/${img}_linux_amd64_v1" --platform linux/amd64
+            kind load docker-image "ghcr.io/fission/${img}:${{ env.HEAD_TAG }}" --name ${{ env.KIND_CLUSTER_NAME }}
+          done
+          helm dependency update charts/fission-all
 
-      - name: Upgrade fission to latest
+      - name: Run upgrade-under-load
+        timeout-minutes: 30
+        env:
+          NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env
         run: |
-          source ./test/upgrade_test/fission_objects.sh build_docker_images \
-          && kind_image_load \
-          && install_current_release \
-          && install_fission_cli
+          NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+          echo "Router via NodePort: http://$NODE_IP:${{ env.ROUTER_NODEPORT }}"
+          # Server-side apply, not replace/client-side apply: HEAD introduces CRDs
+          # absent on the N-1 release (replace cannot create), four CRD YAMLs
+          # exceed the 262KB client-side-apply annotation limit, and the
+          # kubectl-create-owned managedFields of the originals require
+          # --force-conflicts on first SSA adoption (the RFC-0029 §1 flow).
+          UPGRADE_CMD="kubectl apply --server-side --force-conflicts -k $GITHUB_WORKSPACE/crds/v1 && helm upgrade --namespace ${{ env.FISSION_NAMESPACE }} --set ${{ env.HELM_VARS_HEAD }} fission $GITHUB_WORKSPACE/charts/fission-all"
+          cd test/benchmark
+          go build -o fission-benchmark ./cmd/fission-benchmark
+          ./fission-benchmark run \
+            --scenarios upgrade-under-load \
+            --upgrade-cmd "$UPGRADE_CMD" \
+            --router-url "http://$NODE_IP:${{ env.ROUTER_NODEPORT }}" \
+            --namespace default --fission-namespace ${{ env.FISSION_NAMESPACE }} \
+            --fission-version "${{ env.LATEST_TAG }}->HEAD" \
+            --git-sha "${{ github.sha }}" \
+            --out "$GITHUB_WORKSPACE/upgrade-results.json"
+          # The benchmark CLI's failure budget records scenario errors in the
+          # results instead of failing the process; an infra error or a skip
+          # here means the leg measured nothing and must fail loudly.
+          problem=$(jq -r '.scenarios[] | select(.error or .skipped) | .error // .skipReason' "$GITHUB_WORKSPACE/upgrade-results.json")
+          if [ -n "$problem" ]; then
+            echo "upgrade-under-load did not complete: $problem"
+            exit 1
+          fi
 
-      - name: Test previously created fission objects with new release
-        timeout-minutes: 10
+      - name: Evaluate error budget (non-gating)
+        continue-on-error: true
         run: |
-          source ./test/upgrade_test/fission_objects.sh test_fission_objects
+          jq '.scenarios[] | select(.name=="upgrade-under-load")' upgrade-results.json | tee upgrade-summary.json
+          # Published error budget, phase 1: zero platform-attributed failures,
+          # zero transport-level failures, zero unattributed errors, warm pods
+          # survive. Non-gating until RFC-0028 phases 2-3 land the rollout
+          # posture that makes it reliably true; flip by removing
+          # continue-on-error above.
+          fail=0
+          for metric in poolmgr_transport_failures poolmgr_platform_attributed poolmgr_unattributed_errors \
+                        newdeploy_transport_failures newdeploy_platform_attributed newdeploy_unattributed_errors; do
+            v=$(jq -r --arg m "$metric" '.metrics[] | select(.name==$m) | .value' upgrade-summary.json)
+            echo "$metric = $v"
+            [ "${v%.*}" != "0" ] && fail=1
+          done
+          survival=$(jq -r '.metrics[] | select(.name=="warm_pod_survival") | .value' upgrade-summary.json)
+          echo "warm_pod_survival = $survival"
+          [ "${survival%.*}" != "1" ] && fail=1
+          exit $fail
 
-      - name: Collect Fission Dump
+      - name: Upload upgrade results
         if: ${{ always() }}
-        run: |
-          command -v fission && fission support dump
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-results-${{ github.run_id }}-${{ matrix.kindversion }}
+          path: upgrade-results.json
+          retention-days: 14
 
       - name: Kind export logs
         if: ${{ always() }}
         run: |
           kind export logs --name ${{ env.KIND_CLUSTER_NAME }} kind-logs
-
-      - name: Archive fission dump
-        if: ${{ failure() || cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: fission-dump-${{ github.run_id }}-${{ matrix.kindversion }}
-          path: fission-dump/*.zip
-          retention-days: 5
 
       - name: Archive kind logs
         if: ${{ always() }}
