@@ -56,9 +56,17 @@ func TestCanaryAliasPromotion(t *testing.T) {
 	image := f.Images().RequireNode(t)
 	acquireHeavySlot(t)
 	af := newAliasFixture(t, f, "canaryaliasp", "canary")
+	// v2's body must genuinely differ from v1's: publish only mints a new
+	// version when the live spec actually changed (see the same note on
+	// TestAliasKeyedStateContinuity). Passing byte-identical code left the
+	// package spec untouched — generation stayed 1 — and the only thing that
+	// moved was the PackageRef.ResourceVersion the CLI copied from unrelated
+	// controller STATUS writes, so this minted v2 by accident rather than
+	// because anything changed. Both bodies still contain "hello", which is
+	// what the readiness probe below matches on.
 	af.publishTwoVersions(t, ctx, image,
 		framework.FunctionOptions{Code: writeNodeReturning(t, "v1", "hello, world!\n")},
-		"--code", writeNodeReturning(t, "v2", "hello, world!\n"))
+		"--code", writeNodeReturning(t, "v2", "hello, world v2!\n"))
 
 	// Start-state precondition (canaryConfigMgr.validateAliasRollout): the
 	// alias must already point at OldFunction (v1) before the CanaryConfig is

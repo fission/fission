@@ -980,10 +980,17 @@ spec:
                       EnvFrom projects whole same-namespace Secrets/ConfigMaps into the
                       function's environment, with an optional prefix; later sources win
                       over earlier ones (Kubernetes semantics), and function Env literals
-                      win over all EnvFrom keys. Reserved platform names expanded from a
-                      referenced object are dropped at injection time (data keys are
-                      mutable after admission, so a webhook cannot see them). Additive
-                      and backward compatible.
+                      win over all EnvFrom keys.
+
+                      Two phase-1 limits, both inherent to native (kubelet) injection:
+                      the kubelet expands envFrom BEFORE container env, so a name the
+                      environment podspec sets as a literal still beats an EnvFrom-supplied
+                      key of the same name; and reserved platform names appearing as data
+                      keys of a referenced object are not filtered (they are unknowable at
+                      admission and mutable afterwards) — they are only shadowed by the
+                      platform vars actually present on the container. Key-level filtering
+                      and full precedence arrive with the poolmgr phase, which resolves
+                      values itself. Additive and backward compatible.
                     items:
                       description: EnvFromSource represents the source of a set of
                         ConfigMaps or Secrets

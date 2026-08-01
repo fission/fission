@@ -100,10 +100,117 @@ func (r *PackageReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		// Create) — re-drive it, the build is idempotent.
 		return r.build(ctx, pkg)
 	default:
-		// none / succeeded / failed are terminal until the package is
-		// re-triggered (BuildStatus -> pending).
+		// none / succeeded / failed are terminal for the BUILD, but not for
+		// content: a Git-applied Package whose archive or OCI digest changed
+		// must converge without the CLI's status->pending poke (RFC-0029 §3).
+		return r.reconcileContentChange(ctx, pkg)
+	}
+}
+
+// reconcileContentChange converges a package whose build status is terminal but
+// whose content may have moved underneath it — the GitOps case, where nothing
+// pokes the status.
+//
+// Two shapes, one hash:
+//
+//   - a SOURCE package re-enters the build queue (status -> pending), which is
+//     what the CLI's poke used to do by hand;
+//   - a DEPLOY-ONLY or OCI package never builds at all, so there is nothing to
+//     re-enter; its referencing Functions are re-stamped directly. That is the
+//     digest-pinned-OCI-in-Git path this RFC blesses, and before this it had no
+//     propagation whatsoever.
+//
+// The seeding rule is what keeps an upgrade safe: a package with no recorded
+// hash — which is every package on the first reconcile after this ships — has
+// its hash written WITHOUT rebuilding or re-stamping. An absent hash must never
+// read as "changed", or adopting this feature would rebuild the entire cluster
+// at once.
+func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1.Package) (ctrl.Result, error) {
+	current := PackageContentHash(pkg.Spec)
+	if pkg.Status.ContentHash == current {
 		return ctrl.Result{}, nil
 	}
+
+	logger := r.logger.WithValues("package", pkg.Name, "namespace", pkg.Namespace)
+	seeding := pkg.Status.ContentHash == ""
+	if seeding {
+		// Recorded without propagating. Logged because it is the one path that
+		// deliberately swallows a content change, and status is user-writable —
+		// an empty ContentHash written by hand suppresses exactly one
+		// propagation, and without this line it would do so silently.
+		logger.Info("seeding package content hash without propagating (first observation of this package)")
+	}
+
+	if !seeding && !pkg.Spec.Source.IsEmpty() {
+		// Source changed: re-enter the build queue. updatePackage records the
+		// hash on every status write it makes — including this pending one —
+		// so a build that then fails is NOT left looking unconverged and
+		// re-queued in a loop; the user's next source edit is what re-triggers
+		// it.
+		logger.Info("package source content changed, re-queuing build")
+		if _, err := updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusPending, "", nil); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error re-queuing build after content change: %w", err)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if !seeding {
+		// Deploy-only / OCI: nothing to build, so propagate directly.
+		fnList, err := r.fissionClient.CoreV1().Functions(pkg.Namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error listing functions after content change: %w", err)
+		}
+		stamped, err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, true)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error re-stamping functions after content change: %w", err)
+		}
+		// stamped == 0 means every referencing Function already points at this
+		// package — the CLI stamped them itself. That is the CONVERGED state,
+		// so the hash is still recorded below.
+		//
+		// The hash must be recorded on EVERY reconcile, converged or not: a
+		// hash that lags a revision behind the spec makes a revert to the
+		// previously-recorded content compare equal, silently swallowing the
+		// incident-response rollback RFC-0029 G4 exists for.
+		logger.Info("package content change reconciled", "functions_restamped", stamped)
+	}
+
+	if err := r.recordContentHash(ctx, pkg, current); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+// recordContentHash writes the observed hash to status, re-reading the package
+// first so it never clobbers a concurrent status write (the build path writes
+// the same subresource).
+func (r *PackageReconciler) recordContentHash(ctx context.Context, pkg *fv1.Package, hash string) error {
+	packages := r.fissionClient.CoreV1().Packages(pkg.Namespace)
+	// Retry rather than drop on conflict: the competing writers here are
+	// status-only (condition writes, the CLI's build-status reset), and those
+	// change neither Generation nor BuildStatus-into-pending, so the trigger
+	// predicate drops their events. Nothing would re-reconcile us, and the
+	// hash would stay empty — which makes the NEXT content change read as a
+	// seed and be swallowed.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, gerr := packages.Get(ctx, pkg.Name, metav1.GetOptions{})
+		if gerr != nil {
+			return gerr
+		}
+		if latest.Status.ContentHash == hash {
+			return nil
+		}
+		latest.Status.ContentHash = hash
+		_, uerr := packages.UpdateStatus(ctx, latest, metav1.UpdateOptions{})
+		return uerr
+	})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error recording package content hash: %w", err)
+	}
+	return nil
 }
 
 // build drives a source package through the environment's builder into a
@@ -181,27 +288,20 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 
 	// A package may be used by multiple functions. Point functions that still
 	// reference the old package resource version at the freshly built one.
-	for i := range fnList.Items {
-		fn := &fnList.Items[i]
-		if fn.Spec.Package.PackageRef.Name == pkg.Name &&
-			fn.Spec.Package.PackageRef.Namespace == pkg.Namespace &&
-			fn.Spec.Package.PackageRef.ResourceVersion != pkg.ResourceVersion {
-			fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion
-			if _, err := r.fissionClient.CoreV1().Functions(fn.Namespace).Update(ctx, fn, metav1.UpdateOptions{}); err != nil {
-				e := "error updating function package resource version"
-				logger.Error(err, e)
-				buildLogs += fmt.Sprintf("%s: %v\n", e, err)
-				r.markBuildFailed(ctx, logger, pkg, buildLogs)
-				markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, false)
-				return ctrl.Result{}, nil
-			}
-		}
+	if _, err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, false); err != nil {
+		e := "error updating function package resource version"
+		logger.Error(err, e)
+		buildLogs += fmt.Sprintf("%s: %v\n", e, err)
+		r.markBuildFailed(ctx, logger, pkg, buildLogs)
+		markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, false)
+		return ctrl.Result{}, nil
 	}
 
-	// Discard the return: updatePackage returns a nil package on failure, and the
-	// error branch below still needs the live pkg for markBuildFailed /
-	// markFunctionsForPackage (both dereference pkg.Name/Namespace).
-	if _, err = updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp); err != nil {
+	// updated is the live object after the status write, so its Spec reflects
+	// any edit that landed WHILE this build ran. Its status carries the hash of
+	// what was actually built.
+	updated, err := updatePackage(ctx, logger, r.fissionClient, pkg, fv1.BuildStatusSucceeded, buildLogs, uploadResp)
+	if err != nil {
 		logger.Error(err, "error updating package info")
 		r.markBuildFailed(ctx, logger, pkg, buildLogs)
 		markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, false)
@@ -212,6 +312,18 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	// so its Ready/PackageReady conditions track package readiness.
 	markFunctionsForPackage(ctx, logger, r.fissionClient, fnList.Items, pkg, true)
 	logger.Info("completed package build request")
+
+	// A content edit that landed mid-build was dropped by the trigger predicate
+	// (nothing may enqueue a second build while one is in flight), and the
+	// status-only write we just made does not enqueue either — the spec is
+	// identical on both sides of it. Nothing else would ever notice, so the
+	// package would sit correct-but-stale: hash says A, spec says B, no event
+	// coming. Requeue ourselves instead of loosening the predicate, which would
+	// re-admit the double-build this suppression exists to prevent.
+	if updated != nil && PackageContentHash(updated.Spec) != updated.Status.ContentHash {
+		logger.Info("package content changed while the build was in flight, requeuing to converge")
+		return ctrl.Result{Requeue: true}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -286,10 +398,18 @@ func (r *PackageReconciler) propagateFunctionFailure(ctx context.Context, logger
 //   - Create: always enqueue — to set the initial status or build a freshly
 //     applied pending package. This also fires for every existing Package when
 //     the controller starts and re-lists, so an interrupted build resumes.
-//   - Update: enqueue only when BuildStatus transitions INTO pending. The
-//     reconciler's own running/succeeded/failed/none writes are therefore
-//     dropped, so it neither re-triggers itself nor risks double-building off a
-//     stale cache read of its own status write.
+//   - Update: enqueue when BuildStatus transitions INTO pending, OR when the
+//     SPEC changed (Generation moved). The reconciler's own
+//     running/succeeded/failed/none status writes are therefore dropped — it
+//     neither re-triggers itself nor risks double-building off a stale cache
+//     read of its own status write — while a Git-applied archive or OCI digest
+//     change still gets a reconcile. That second clause compares CONTENT
+//     HASHES, not Generation: the build writes spec.Deployment on success, so a
+//     Generation test would re-enqueue the reconciler on its own output. It is
+//     also suppressed while a build is pending or running, since a build
+//     already in flight picks up whatever the spec now says. Without it the
+//     content-change path (RFC-0029 §3) would be unreachable — applying a new
+//     digest changes the spec, not the status, so nothing would enqueue.
 //   - Delete / Generic: dropped — a deleted Package has no builder state to
 //     tear down.
 func buildTriggerPredicate() predicate.Predicate {
@@ -301,8 +421,27 @@ func buildTriggerPredicate() predicate.Predicate {
 			if !ok1 || !ok2 {
 				return false
 			}
-			return newPkg.Status.BuildStatus == fv1.BuildStatusPending &&
-				oldPkg.Status.BuildStatus != fv1.BuildStatusPending
+			if newPkg.Status.BuildStatus == fv1.BuildStatusPending &&
+				oldPkg.Status.BuildStatus != fv1.BuildStatusPending {
+				return true
+			}
+			// A build already requested or in flight will pick up whatever the
+			// spec now says, so a content change must NOT enqueue on top of it.
+			// Without this guard the two signals — the status poke and the
+			// content change — race: the second reconcile lands while the
+			// status is still pending/running, re-enters build(), and the
+			// package is built (and its functions re-stamped, and an RFC-0025
+			// version minted) twice for one change.
+			if newPkg.Status.BuildStatus == fv1.BuildStatusPending ||
+				newPkg.Status.BuildStatus == fv1.BuildStatusRunning {
+				return false
+			}
+			// Otherwise a content change enqueues. Comparing hashes rather than
+			// Generation is deliberate: the build itself writes spec.Deployment
+			// on success, so a Generation test would re-enqueue the reconciler
+			// on its own output. The hash ignores the build's output for source
+			// packages, so the reconciler cannot trigger itself.
+			return PackageContentHash(newPkg.Spec) != PackageContentHash(oldPkg.Spec)
 		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },
 		GenericFunc: func(event.GenericEvent) bool { return false },
@@ -326,9 +465,15 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 			return gerr
 		}
 		// Preserve any Conditions a previous reconcile may have written.
+		// ContentHash is seeded here too: a Git-applied package lands on this
+		// branch (the /status subresource strips status on create) and the
+		// resulting status write does not re-enqueue, so without seeding here
+		// the package would carry an empty hash and swallow its FIRST content
+		// change as a seed (RFC-0029 §3).
 		fresh.Status = fv1.PackageStatus{
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},
 			Conditions:          fresh.Status.Conditions,
+			ContentHash:         PackageContentHash(fresh.Spec),
 		}
 		if !fresh.Spec.Deployment.IsEmpty() {
 			// if the deployment archive is not empty,
@@ -351,4 +496,41 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 		return nil, err
 	}
 	return out, nil
+}
+
+// restampReferencingFunctions points every Function that references pkg at its
+// current ResourceVersion, which is what makes the executor recycle their pods
+// onto the new content.
+//
+// Extracted so the no-build path can share it: a deploy-only or OCI package
+// settles at BuildStatusNone and never reaches build(), so keying this on
+// build success alone left exactly the digest-pinned-OCI-in-Git golden path
+// with no propagation at all (RFC-0029 §3).
+// honorOptOut is true only on the content-driven path: the build-success
+// re-stamp predates this feature and restamped unconditionally, so applying the
+// opt-out there would silently strand a function on pre-rebuild code while
+// still reporting PackageReady=True.
+func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg *fv1.Package, fns []fv1.Function, honorOptOut bool) (int, error) {
+	stamped := 0
+	for i := range fns {
+		fn := &fns[i]
+		if fn.Spec.Package.PackageRef.Name != pkg.Name ||
+			fn.Spec.Package.PackageRef.Namespace != pkg.Namespace ||
+			fn.Spec.Package.PackageRef.ResourceVersion == pkg.ResourceVersion {
+			continue
+		}
+		// Opt-out for anyone who relies on rolling their functions by hand.
+		// The supported way to pin code is an RFC-0025 FunctionVersion/alias,
+		// which is a first-class object rather than a stale stamp — the
+		// annotation exists for installs that predate it.
+		if honorOptOut && fn.Annotations[fv1.PackageAutoFollowDisabledAnnotation] == "true" {
+			continue
+		}
+		fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion
+		if _, err := r.fissionClient.CoreV1().Functions(fn.Namespace).Update(ctx, fn, metav1.UpdateOptions{}); err != nil {
+			return stamped, err
+		}
+		stamped++
+	}
+	return stamped, nil
 }
