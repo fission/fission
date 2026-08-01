@@ -111,8 +111,8 @@ func CheckVersionSkew(clientVersion, serverVersion string) (SkewVerdict, string)
 		return SkewSame, ""
 	case skew <= SupportedMinorSkew:
 		return SkewSupported, fmt.Sprintf(
-			"client %s and server %s differ by one minor version; both are inside the supported window",
-			clientVersion, serverVersion)
+			"client %s and server %s differ by %d minor version(s); both are inside the supported window of %d",
+			clientVersion, serverVersion, skew, SupportedMinorSkew)
 	default:
 		return SkewUnsupported, fmt.Sprintf(
 			"client %s and server %s are %d minor versions apart; only %d is supported (see RELEASES.md). Upgrade the CLI or the cluster before relying on this client",

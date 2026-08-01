@@ -431,7 +431,6 @@ func TestEnvironmentReconcileDoesNotRollWhenPodSpecPatched(t *testing.T) {
 		NodeSelector: map[string]string{"disktype": "ssd"},
 	}
 	r := newTestEnvironmentReconciler(t, nil, env)
-	ns := r.nsResolver.GetBuilderNS(env.Namespace)
 
 	_, err := r.Reconcile(t.Context(), envReq(env))
 	require.NoError(t, err)
@@ -453,7 +452,6 @@ func TestEnvironmentReconcileDoesNotRollWhenPodSpecPatched(t *testing.T) {
 
 	assert.Zero(t, updates,
 		"a builder whose environment sets Builder.PodSpec must not be rolled by repeated reconciles")
-	_ = ns
 }
 
 // TestBuilderSpecHashIsStableAcrossCalls isolates the same invariant without a
