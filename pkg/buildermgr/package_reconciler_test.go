@@ -418,6 +418,28 @@ func TestReconcileContentChange(t *testing.T) {
 			"an opted-out function must keep its pinned package RV")
 	})
 
+	// The two call sites pass honorOptOut deliberately differently: the
+	// content path respects the annotation (above), the BUILD path ignores it.
+	// A build only runs because the user asked for one, and a function left on
+	// a package whose bytes were just replaced would serve code that no longer
+	// exists anywhere. Pinned here so a future "why two call sites" cleanup
+	// cannot flatten the bool and silently strand functions on stale code.
+	t.Run("opt-out annotation is ignored on the build path", func(t *testing.T) {
+		t.Parallel()
+		pkg := ociPkg("p", digestB, "")
+		fn := fnForPkg("f", "p", "1", map[string]string{fv1.PackageAutoFollowDisabledAnnotation: "true"})
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		stamped, err := r.restampReferencingFunctions(t.Context(), pkg, []fv1.Function{*fn}, false)
+		require.NoError(t, err)
+		assert.Equal(t, 1, stamped, "the build path must re-stamp even an opted-out function")
+
+		got, err := fc.CoreV1().Functions("default").Get(t.Context(), "f", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, pkg.ResourceVersion, got.Spec.Package.PackageRef.ResourceVersion)
+	})
+
 	t.Run("source content change re-queues a build", func(t *testing.T) {
 		t.Parallel()
 		pkg := sourcePkg("s", fv1.BuildStatusSucceeded)

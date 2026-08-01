@@ -194,9 +194,21 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 		// The build writes spec.Deployment on success. If that re-enqueued,
 		// the reconciler could re-run a finished build off a cache that has
 		// seen the spec write but not the status write.
-		{"build's own deployment write does not self-trigger",
+		//
+		// Both statuses Running, so this is stopped by the in-flight-build
+		// guard BEFORE the hash comparison — it pins that guard, not the
+		// hashing rule.
+		{"build's own deployment write does not self-trigger (in-flight guard)",
 			srcPkg(1, fv1.BuildStatusRunning, "http://storage/d1"),
 			srcPkg(2, fv1.BuildStatusRunning, "http://storage/d2"), false},
+		// The shape build() actually produces on success: status leaves
+		// Running (so the guard above does NOT apply) while spec.Deployment
+		// carries the freshly-built archive. Only the input-only hashing rule
+		// stops this one, which is why it has to be tested separately — a
+		// hash that folded in the deployment would rebuild forever here.
+		{"build's succeeded write does not self-trigger (hashing rule)",
+			srcPkg(1, fv1.BuildStatusRunning, "http://storage/d1"),
+			srcPkg(2, fv1.BuildStatusSucceeded, "http://storage/d2"), false},
 		// A build already requested or in flight will pick up the new spec,
 		// so a content change on top of it must not enqueue a second build —
 		// two builds means two re-stamps and two RFC-0025 versions for one
