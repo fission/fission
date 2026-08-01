@@ -1356,6 +1356,26 @@ authentication:
   ##
   jwtIssuer: fission
 
+
+## nameFormat selects how generated resource names are built (RFC-0029 §2).
+##
+##   legacy   (default) — today's names, byte-for-byte. An upgrade must never
+##                        rename existing resources: for most kinds a rename is
+##                        a delete-and-create, which a minor release may not do
+##                        silently.
+##   standard          — release-qualified names with room to stay distinct
+##                        (43 characters, leaving room for the suffixes the
+##                        chart appends inside the 63-char Job-name limit).
+##                        The legacy form truncates to 24 characters, so any two
+##                        release names sharing a 24-character prefix collide
+##                        and the second install silently reuses the first's
+##                        object names.
+##
+## Switching an existing install is a migration, not a flag flip: the old
+## objects are not renamed in place. Plan it like one.
+##
+nameFormat: legacy
+
 ## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
 ## distributed tracing data across function calls.
 ##
