@@ -39,13 +39,9 @@ func main() {
 	// rendering a Secret prunes the live one, which for the internal-auth
 	// master wedges every control-plane pod (see adoptsecrets.go).
 	if names := adoptSecretNames(os.Getenv("ADOPT_SECRETS")); len(names) > 0 {
-		// The internal-auth master is replicated into every Fission namespace
-		// under static tenancy (kubelet cannot resolve a cross-namespace
-		// secretKeyRef), so adopting only the release namespace would leave the
-		// copies in defaultNamespace/additionalFissionNamespaces to be pruned —
-		// where the fetcher mounts them with optional: true, so pods come up
-		// unsigned and every storagesvc call 401s. Silent, unlike the loud
-		// CreateContainerConfigError the control-plane copy would give.
+		// A namespace SET, not just the release namespace — the master is
+		// replicated under static tenancy and the copies prune too. See
+		// AdoptSecretsForKeep for why missing them fails silently.
 		namespaces := adoptSecretNames(os.Getenv("ADOPT_SECRET_NAMESPACES"))
 		if len(namespaces) == 0 {
 			logger.Error(nil, "ADOPT_SECRETS set but ADOPT_SECRET_NAMESPACES is empty; cannot adopt")

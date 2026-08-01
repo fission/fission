@@ -26,11 +26,10 @@ func TestAdoptSecretNames(t *testing.T) {
 		" a , b ": {"a", "b"},
 		"a,,b,":   {"a", "b"},
 		// The SPACE-separated form is what the chart actually renders
-		// (`join " "`). The first version of this parser split on commas only,
-		// so it returned the single bogus name "a b" — which RBAC rejects,
-		// failing every default install. The original tests missed it because
-		// they only ever fed comma-separated input, i.e. they tested what the
-		// parser was written for rather than what the chart produces.
+		// (`join " "`), so these rows are the ones that pin the parser to its
+		// real input. A comma-only parser returns the single bogus name
+		// "a b" here, which RBAC rejects and which fails every default
+		// install — and comma-separated rows alone would never catch it.
 		"fission-internal-auth fission-webhook-certs": {"fission-internal-auth", "fission-webhook-certs"},
 		"fission-internal-auth router":                {"fission-internal-auth", "router"},
 		"fission-internal-auth,router":                {"fission-internal-auth", "router"},
@@ -99,10 +98,9 @@ func TestAdoptSecretsForKeep(t *testing.T) {
 
 	t.Run("adopts the same names across every replicated namespace", func(t *testing.T) {
 		t.Parallel()
-		// The internal-auth master is copied into defaultNamespace under static
-		// tenancy; adopting only the release namespace would leave that copy to
-		// be pruned, and the fetcher mounts it optional — so pods come up
-		// unsigned and every storagesvc call 401s, silently.
+		// Replicated copies must be adopted too, not just the release
+		// namespace's — see AdoptSecretsForKeep for the silent failure that
+		// missing them causes.
 		client := fake.NewClientset(
 			secret("fission-internal-auth", nil),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "fission-internal-auth", Namespace: "default"}},

@@ -45,6 +45,14 @@ const keepPolicyAnnotation = "helm.sh/resource-policy"
 // stamping here is a valid one-release migration — no intermediate release
 // that users must pass through.
 //
+// Why it takes a namespace SET rather than just the release namespace: under
+// static tenancy the internal-auth master is replicated into defaultNamespace
+// and every additionalFissionNamespaces, because kubelet cannot resolve a
+// cross-namespace secretKeyRef. Those copies prune on the same upgrade, and
+// they fail differently from the control-plane one — the fetcher mounts them
+// with optional: true, so function pods come up UNSIGNED and every storagesvc
+// call 401s, with no CreateContainerConfigError to point at the cause.
+//
 // Idempotent by construction: already-annotated and absent Secrets are both
 // no-ops, so this runs harmlessly on every upgrade forever.
 func AdoptSecretsForKeep(ctx context.Context, client kubernetes.Interface, logger logr.Logger, namespaces, names []string) error {
@@ -93,10 +101,10 @@ func adoptInNamespace(ctx context.Context, client kubernetes.Interface, logger l
 
 // adoptSecretNames parses the ADOPT_SECRETS env value, accepting either commas
 // or whitespace as separators. Accepting both is deliberate: the chart renders
-// the list with one separator and this parses it with another, and nothing
-// cross-checks them — getting that wrong once meant the hook requested a
-// Secret literally named "a b", which RBAC rejects, failing every install.
-// Empty entries are ignored so an empty list is a clean no-op.
+// this list (today via `join " "`) and nothing cross-checks the two ends, so a
+// separator mismatch would silently yield one bogus name like "a b" — which
+// RBAC rejects, failing every install. Empty entries are ignored so an empty
+// list is a clean no-op.
 func adoptSecretNames(raw string) []string {
 	return strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || unicode.IsSpace(r)

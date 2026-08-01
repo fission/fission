@@ -1578,8 +1578,7 @@ networkPolicy:
 ##
 ## Disabled here means the cluster falls back to NetworkPolicy + namespace
 ## isolation only, matching pre-1.(N+1) behaviour.
-## NOTE ON SECRET RETENTION (from the version that introduced the pre-upgrade
-## retention adoption): the chart-generated Secrets below —
+## NOTE ON SECRET RETENTION: the chart-generated Secrets below —
 ## `fission-internal-auth`, `router` (when authentication is enabled), and
 ## `fission-webhook-certs` (when cert-manager is not managing it) — are
 ## annotated `helm.sh/resource-policy: keep` by the pre-upgrade hook, so they

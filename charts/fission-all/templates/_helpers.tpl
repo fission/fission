@@ -387,9 +387,9 @@ fission.adoptSecretNamespaces is the namespace set the retention adoption runs
 over. It mirrors internal-auth-secret.yaml's own replication set exactly: under
 STATIC tenancy the master is copied into defaultNamespace and every
 additionalFissionNamespaces, because kubelet cannot resolve a cross-namespace
-secretKeyRef. Adopting only the release namespace would leave those copies to be
-pruned — and the fetcher mounts them optional, so pods would come up unsigned
-and every storagesvc call would 401, silently.
+secretKeyRef. Leaving those copies out means they prune on upgrade and function
+pods come up unsigned — a silent failure, described in full on
+AdoptSecretsForKeep in cmd/preupgradechecks/adoptsecrets.go.
 
 Under dynamic/cluster tenancy the tenant copies are INTENTIONALLY removed (each
 tenant gets a controller-owned derived key instead), so pinning them with a keep
