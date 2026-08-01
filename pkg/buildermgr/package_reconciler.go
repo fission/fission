@@ -151,10 +151,29 @@ func (r *PackageReconciler) reconcileContentChange(ctx context.Context, pkg *fv1
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error listing functions after content change: %w", err)
 		}
-		if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, true); err != nil {
+		stamped, err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, true)
+		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error re-stamping functions after content change: %w", err)
 		}
-		logger.Info("package content changed, re-stamped referencing functions")
+		if stamped == 0 {
+			// Every referencing Function already points at this package —
+			// the CLI stamped them itself, which is what `fission fn update`
+			// does right after writing the package.
+			//
+			// Recording the hash here would be an unnecessary STATUS write,
+			// and a status write bumps the Package's ResourceVersion, which
+			// the CLI then copies into every Function's PackageRef on the
+			// NEXT `fn update` (fission-cli/cmd/function/update.go). That is a
+			// FunctionSpec change, so it mints an RFC-0025 version for an
+			// update the classifier deliberately treats as non-affecting.
+			//
+			// Skipping the write is safe: the next reconcile re-derives the
+			// same hash, finds the functions still current, and does nothing
+			// again — idempotent, and it costs no writes. A genuine Git-driven
+			// change leaves functions stale, so that path still acts.
+			return ctrl.Result{}, nil
+		}
+		logger.Info("package content changed, re-stamped referencing functions", "functions", stamped)
 	}
 
 	if err := r.recordContentHash(ctx, pkg, current); err != nil {
@@ -270,7 +289,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 
 	// A package may be used by multiple functions. Point functions that still
 	// reference the old package resource version at the freshly built one.
-	if err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, false); err != nil {
+	if _, err := r.restampReferencingFunctions(ctx, pkg, fnList.Items, false); err != nil {
 		e := "error updating function package resource version"
 		logger.Error(err, e)
 		buildLogs += fmt.Sprintf("%s: %v\n", e, err)
@@ -475,7 +494,8 @@ func setInitialBuildStatus(ctx context.Context, fissionClient versioned.Interfac
 // re-stamp predates this feature and restamped unconditionally, so applying the
 // opt-out there would silently strand a function on pre-rebuild code while
 // still reporting PackageReady=True.
-func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg *fv1.Package, fns []fv1.Function, honorOptOut bool) error {
+func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg *fv1.Package, fns []fv1.Function, honorOptOut bool) (int, error) {
+	stamped := 0
 	for i := range fns {
 		fn := &fns[i]
 		if fn.Spec.Package.PackageRef.Name != pkg.Name ||
@@ -492,8 +512,9 @@ func (r *PackageReconciler) restampReferencingFunctions(ctx context.Context, pkg
 		}
 		fn.Spec.Package.PackageRef.ResourceVersion = pkg.ResourceVersion
 		if _, err := r.fissionClient.CoreV1().Functions(fn.Namespace).Update(ctx, fn, metav1.UpdateOptions{}); err != nil {
-			return err
+			return stamped, err
 		}
+		stamped++
 	}
-	return nil
+	return stamped, nil
 }

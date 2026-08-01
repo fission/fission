@@ -353,6 +353,32 @@ func TestReconcileContentChange(t *testing.T) {
 		assert.Equal(t, PackageContentHash(pkg.Spec), gotPkg.Status.ContentHash)
 	})
 
+	t.Run("no status write when the CLI already stamped the functions", func(t *testing.T) {
+		t.Parallel()
+		// This is the regression that broke RFC-0025 auto-publish in CI.
+		// `fission fn update` writes the Package and THEN stamps referencing
+		// Functions itself, so by the time this reconciles there is nothing to
+		// do. Recording the hash anyway is a STATUS write, and a status write
+		// bumps the Package's ResourceVersion — which the CLI copies into
+		// every Function's PackageRef on the NEXT `fn update`, minting a
+		// version for an update the classifier treats as non-affecting.
+		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
+		pkg := ociPkg("p", digestB, staleHash)
+		// The function already points at this package's current RV, exactly as
+		// the CLI leaves it.
+		fn := fnForPkg("f", "p", pkg.ResourceVersion, nil)
+		fc := newFissionFake(pkg, fn)
+		r := newTestPackageReconciler(t, fc, pkg)
+
+		_, err := r.reconcileContentChange(t.Context(), pkg)
+		require.NoError(t, err)
+
+		gotPkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "p", metav1.GetOptions{})
+		require.NoError(t, err)
+		assert.Equal(t, staleHash, gotPkg.Status.ContentHash,
+			"with nothing to re-stamp, the reconciler must not write status at all")
+	})
+
 	t.Run("opt-out annotation is honored on the content path", func(t *testing.T) {
 		t.Parallel()
 		staleHash := PackageContentHash(ociPkg("p", digestA, "").Spec)
