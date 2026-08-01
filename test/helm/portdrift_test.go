@@ -453,3 +453,118 @@ func TestStateSvcChart(t *testing.T) {
 		assert.Nil(t, find(docs, "Deployment", svcinfo.SvcStateSvc))
 	})
 }
+
+// TestInternalAuthExistingSecret pins RFC-0029's `internalAuth.existingSecret`
+// contract, whose failure mode is silent.
+//
+// Every consumer must resolve ONE name. The secretKeyRef is mounted optional so
+// rotation can drop a key without forcing an empty render — which also means a
+// pod whose reference points at a Secret that does not exist starts happily
+// with the env var absent, and then 401s on every archive fetch and builder
+// upload with nothing naming the Secret as the cause.
+//
+// The Go side resolves the same name from FISSION_INTERNAL_AUTH_SECRET_NAME
+// (fv1.InternalAuthSecretName), so the chart must set it to whatever it wired
+// into the secretKeyRefs.
+func TestInternalAuthExistingSecret(t *testing.T) {
+	const defaultName = "fission-internal-auth"
+
+	t.Run("default: the chart renders the master and points at it", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countByKindName(docs, "Secret", defaultName),
+			"with no existingSecret the chart must generate the master itself")
+		for _, name := range internalAuthEnvNames(docs) {
+			assert.Equal(t, defaultName, name)
+		}
+	})
+
+	t.Run("existingSecret: the chart renders no master and points at theirs", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.existingSecret=my-master")
+		assert.Zero(t, countByKindName(docs, "Secret", defaultName),
+			"the chart must not generate a master when the operator supplies one")
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names, "no internal-auth secretKeyRef was rendered")
+		for _, name := range names {
+			assert.Equal(t, "my-master", name,
+				"every consumer must read the operator's Secret, not the chart's default")
+		}
+	})
+
+	// The env var is what the Go side reads. If it disagrees with the
+	// secretKeyRefs above, the two halves resolve different Secrets.
+	t.Run("the name env var matches the secretKeyRefs", func(t *testing.T) {
+		for _, tc := range []struct{ arg, want string }{
+			{"", defaultName},
+			{"my-master", "my-master"},
+		} {
+			var docs []map[string]any
+			if tc.arg == "" {
+				docs = render(t)
+			} else {
+				docs = render(t, "--set", "internalAuth.existingSecret="+tc.arg)
+			}
+			vals := envValues(docs, "FISSION_INTERNAL_AUTH_SECRET_NAME")
+			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (existingSecret=%q)", tc.arg)
+			for _, v := range vals {
+				assert.Equal(t, tc.want, v)
+			}
+		}
+	})
+}
+
+// internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
+// secretKeyRef points at, across every rendered pod template.
+func internalAuthEnvNames(docs []map[string]any) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		name, _ := e["name"].(string)
+		if name != "FISSION_INTERNAL_AUTH_SECRET" {
+			return
+		}
+		vf, _ := e["valueFrom"].(map[string]any)
+		skr, _ := vf["secretKeyRef"].(map[string]any)
+		if n, ok := skr["name"].(string); ok {
+			out = append(out, n)
+		}
+	})
+	return out
+}
+
+// envValues collects the literal values of a named env var across every
+// rendered pod template.
+func envValues(docs []map[string]any, envName string) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		if name, _ := e["name"].(string); name == envName {
+			if v, ok := e["value"].(string); ok {
+				out = append(out, v)
+			}
+		}
+	})
+	return out
+}
+
+// forEachContainerEnv walks every env entry of every container in every
+// rendered pod template.
+func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
+	for _, doc := range docs {
+		spec, _ := doc["spec"].(map[string]any)
+		tmpl, ok := spec["template"].(map[string]any)
+		if !ok {
+			continue
+		}
+		podSpec, _ := tmpl["spec"].(map[string]any)
+		for _, key := range []string{"containers", "initContainers"} {
+			cs, _ := podSpec[key].([]any)
+			for _, c := range cs {
+				cm, _ := c.(map[string]any)
+				envs, _ := cm["env"].([]any)
+				for _, e := range envs {
+					if em, ok := e.(map[string]any); ok {
+						fn(em)
+					}
+				}
+			}
+		}
+	}
+}

@@ -1608,4 +1608,27 @@ internalAuth:
   enabled: true
   # secret: "" — auto-generated on first install; preserved on upgrade.
   # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
+  ## existingSecret names a Secret you create yourself, holding key `secret`
+  ## (and optionally `oldSecret`). When set the chart renders NO master Secret
+  ## and every component reads yours instead.
+  ##
+  ## Recommended for GitOps renderers (Argo CD, Flux). Those run `helm
+  ## template`, where the chart's `lookup`-based preservation of a generated
+  ## value cannot work — so a generated master would be re-minted on every
+  ## sync, breaking every pod signed with the previous one.
+  ##
+  ## YOU MUST CREATE IT IN EVERY NAMESPACE FISSION RUNS PODS IN — the release
+  ## namespace plus defaultNamespace plus each additionalFissionNamespaces.
+  ## kubelet cannot resolve a cross-namespace secretKeyRef, so a single copy in
+  ## the release namespace leaves builder and function pods without the key:
+  ## the mount is optional, so those pods START and then 401 on every archive
+  ## fetch and builder upload. (Under dynamic/cluster tenancy only the release
+  ## namespace is needed; tenant namespaces get controller-owned derived keys.)
+  ##
+  ## Switching an existing install to this is safe: the pre-upgrade retention
+  ## hook stamps helm.sh/resource-policy=keep on the chart-generated Secret
+  ## before Helm computes its deletion set, so the value it stops rendering is
+  ## not pruned.
+  ##
+  existingSecret: ""
 
