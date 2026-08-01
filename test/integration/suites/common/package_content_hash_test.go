@@ -89,8 +89,15 @@ func TestPackageContentHashRestampsWithoutCLI(t *testing.T) {
 		if !assert.NoError(c, err) {
 			return
 		}
-		pkg.Spec.Deployment.Literal = []byte(helloPySource("content-v2"))
-		pkg.Spec.Deployment.Checksum = fv1.Checksum{}
+		// Replace the archive wholesale rather than assigning Literal over
+		// whatever the CLI uploaded. At most one of literal/url/oci may be
+		// set, so leaving a URL behind would have the webhook reject this
+		// update — which today only stays hidden because a `--code` archive
+		// this small is inlined as a literal.
+		pkg.Spec.Deployment = fv1.Archive{
+			Type:    fv1.ArchiveTypeLiteral,
+			Literal: []byte(helloPySource("content-v2")),
+		}
 		_, err = fc.Packages(ns.Name).Update(ctx, pkg, metav1.UpdateOptions{})
 		assert.NoError(c, err)
 	}, time.Minute, 2*time.Second)
