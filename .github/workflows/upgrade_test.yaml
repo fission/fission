@@ -117,6 +117,35 @@ jobs:
           helm install --wait --timeout 10m --namespace ${{ env.FISSION_NAMESPACE }} fission \
             fission-charts/fission-all --set routerServiceType=NodePort,analytics=false
 
+      # Record which Secrets the HEAD chart will ask the pre-upgrade hook to
+      # adopt AND that the PUBLISHED release actually created. Both filters
+      # matter: the adopt list is values-dependent (the `router` Secret is only
+      # adopted when authentication is enabled, which it is not here), and a
+      # Secret that is new in HEAD does not exist when the hook runs, so it is
+      # legitimately un-annotated afterwards. Deriving the list from the chart
+      # rather than hardcoding it keeps this from drifting out of sync.
+      - name: Record pre-upgrade secret inventory
+        run: |
+          set -euo pipefail
+          adopt=$(helm template fission "$GITHUB_WORKSPACE/charts/fission-all" \
+            --namespace ${{ env.FISSION_NAMESPACE }} --set ${{ env.HELM_VARS_HEAD }} \
+            | awk '/name: ADOPT_SECRETS$/{getline; sub(/^[[:space:]]*value:[[:space:]]*/,""); gsub(/"/,""); print; exit}')
+          echo "HEAD chart adopt list: '${adopt}'"
+          if [ -z "$adopt" ]; then
+            echo "chart rendered no ADOPT_SECRETS; the migration hook would be a no-op"
+            exit 1
+          fi
+          : > "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
+          for secret in $adopt; do
+            if kubectl get secret "$secret" -n ${{ env.FISSION_NAMESPACE }} >/dev/null 2>&1; then
+              echo "$secret" >> "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
+            else
+              echo "note: $secret is new in HEAD (absent in ${{ env.LATEST_TAG }}); not asserted"
+            fi
+          done
+          echo "adoption candidates present before upgrade:"
+          cat "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
+
       - name: Build HEAD images and load into kind
         run: |
           make skaffold-prebuild
@@ -161,6 +190,35 @@ jobs:
             echo "upgrade-under-load did not complete: $problem"
             exit 1
           fi
+
+      # The pre-upgrade hook stamps helm.sh/resource-policy=keep onto the
+      # chart-generated Secrets so a later release can stop rendering them
+      # without Helm pruning the live objects. Nothing else in this workflow
+      # would notice if the hook silently did nothing: the Secrets are still
+      # rendered today, so a missing annotation costs nothing until the
+      # release that removes them — at which point the internal-auth master
+      # is pruned and every control-plane pod wedges in
+      # CreateContainerConfigError. Assert it here, on a real upgrade from
+      # the last published release, which is the only place the hook runs.
+      - name: Verify the pre-upgrade hook adopted the generated Secrets
+        run: |
+          set -euo pipefail
+          if [ ! -s "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt" ]; then
+            echo "no adoption candidates existed before the upgrade; nothing was exercised"
+            exit 1
+          fi
+          rc=0
+          while read -r secret; do
+            got=$(kubectl get secret "$secret" -n ${{ env.FISSION_NAMESPACE }} \
+              -o jsonpath='{.metadata.annotations.helm\.sh/resource-policy}' 2>/dev/null || true)
+            if [ "$got" = "keep" ]; then
+              echo "ok: $secret is annotated for retention"
+            else
+              echo "FAIL: $secret has resource-policy='${got:-<unset>}', expected 'keep'"
+              rc=1
+            fi
+          done < "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
+          exit $rc
 
       - name: Evaluate error budget (non-gating)
         continue-on-error: true
