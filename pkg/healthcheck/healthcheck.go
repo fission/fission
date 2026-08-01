@@ -117,11 +117,23 @@ func (hc *HealthChecker) CheckFissionVersion(ctx context.Context, input cli.Inpu
 	console.Verbose(2, "clientVersion: %s", clientVersion)
 	console.Verbose(2, "serverVersion: %s", serverVersion)
 
-	if clientVersion != serverVersion {
-		return fmt.Errorf("client version %s does not match with server version %s", clientVersion, serverVersion)
+	// Judged against the support window in RELEASES.md rather than by string
+	// equality. Exact equality failed on any patch difference — which the
+	// policy explicitly permits — and on the ordinary state of a staged
+	// rollout, where the CLI and the cluster are upgraded at different moments.
+	verdict, detail := CheckVersionSkew(clientVersion, serverVersion)
+	switch verdict {
+	case SkewSame:
+		return nil
+	case SkewSupported, SkewUnknown:
+		// Reported, not failed: both are states a healthy cluster is legitimately
+		// in, and turning them into an error is what made this check something
+		// users learned to ignore.
+		console.Warn(detail)
+		return nil
+	default:
+		return fmt.Errorf("unsupported version skew: %s", detail)
 	}
-
-	return nil
 }
 
 func NewCategory(id CategoryID, checkers []Checker, enabled bool) *Category {
