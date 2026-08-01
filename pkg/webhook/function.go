@@ -105,11 +105,70 @@ func (r *Function) Validate(new *v1.Function) error {
 		}
 	}
 
+	if hasMountPath(new.Spec) {
+		if err := r.rejectMountPathOnInfiniteEnv(new); err != nil {
+			return v1.AggregateValidationErrors("Function", err)
+		}
+	}
+
 	// Field rules (executor enums, scale bounds, reference-name DNS, etc.) are
 	// enforced by the API server via CEL; the webhook runs only the non-CEL
 	// checks (pod-spec security) plus the cross-namespace checks above.
 	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("Function", err)
+	}
+	return nil
+}
+
+// hasMountPath reports whether any file projection on the spec redirects its
+// output, i.e. whether the infinite-env rule below applies at all.
+func hasMountPath(spec v1.FunctionSpec) bool {
+	for _, s := range spec.Secrets {
+		if s.MountPath != "" {
+			return true
+		}
+	}
+	for _, c := range spec.ConfigMaps {
+		if c.MountPath != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// rejectMountPathOnInfiniteEnv refuses a redirected file projection on an
+// environment whose pods serve many functions from one shared mount
+// (RFC-0030 §4).
+//
+// Without a redirect each object lands under its own <namespace>/<name>
+// directory, so two functions sharing a pod cannot collide by construction.
+// MountPath removes that: two functions on the same pod pointing at one path
+// write into the same directory, and whichever specializes second overwrites
+// the first's files. The per-function duplicate rule in validateMountPaths
+// cannot see this, because the colliding references live on DIFFERENT
+// Functions.
+//
+// Same shape as the state check above, including failing open on a lookup
+// miss: this is early UX feedback, and the fetcher's refusal to overwrite a
+// file it did not write in the same specialization pass is the guarantee.
+func (r *Function) rejectMountPathOnInfiniteEnv(fn *v1.Function) error {
+	if r.reader == nil {
+		return nil
+	}
+	envNS := fn.Spec.Environment.Namespace
+	if envNS == "" {
+		envNS = fn.Namespace
+	}
+	var env v1.Environment
+	if err := r.reader.Get(context.Background(), types.NamespacedName{Name: fn.Spec.Environment.Name, Namespace: envNS}, &env); err != nil {
+		if !apierrors.IsNotFound(err) {
+			r.Logger.V(1).Info("could not read environment to validate mountPath; deferring to specialize-time enforcement",
+				"function", fn.Name, "environment", fn.Spec.Environment.Name, "error", err)
+		}
+		return nil
+	}
+	if env.Spec.AllowedFunctionsPerContainer == v1.AllowedFunctionsPerContainerInfinite {
+		return fmt.Errorf("mountPath is incompatible with environment %q (allowedFunctionsPerContainer: infinite): its pods serve multiple functions from one shared secrets/configs tree, so a redirected path from one function can overwrite another's files", env.Name)
 	}
 	return nil
 }
