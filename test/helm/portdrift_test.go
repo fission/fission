@@ -473,7 +473,10 @@ func TestInternalAuthExistingSecret(t *testing.T) {
 		docs := render(t)
 		assert.Positive(t, countByKindName(docs, "Secret", defaultName),
 			"with no existingSecret the chart must generate the master itself")
-		for _, name := range internalAuthEnvNames(docs) {
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names,
+			"no internal-auth secretKeyRef was rendered; the loop below would assert nothing")
+		for _, name := range names {
 			assert.Equal(t, defaultName, name)
 		}
 	})

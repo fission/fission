@@ -142,7 +142,8 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 	if kubeClient == nil {
 		return nil, nil
 	}
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, fv1.InternalAuthSecretName(), metav1.GetOptions{})
+	secretName := fv1.InternalAuthSecretName()
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, nil
@@ -152,7 +153,7 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 	value, ok := secret.Data[internalAuthSecretKey]
 	if !ok || len(value) == 0 {
 		return nil, fmt.Errorf("secret %s/%s exists but has no %q key with a non-empty value; either the chart's internalAuth materialisation has been overridden or the Secret was hand-authored",
-			namespace, fv1.InternalAuthSecretName(), internalAuthSecretKey)
+			namespace, secretName, internalAuthSecretKey)
 	}
 	return value, nil
 }
