@@ -126,8 +126,11 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 		require.Error(t, fn.ValidateForAdmission(), "poolmgr gate must be rejected at admission")
 
 		fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = ExecutorTypeNewdeploy
+		fn.Spec.Secrets = []SecretReference{{Namespace: "default", Name: "s", MountPath: "/etc/app"}}
+		require.Error(t, fn.ValidateForAdmission(), "an absolute mountPath must be rejected at admission")
+
 		fn.Spec.Secrets = []SecretReference{{Namespace: "default", Name: "s", MountPath: "app"}}
-		require.Error(t, fn.ValidateForAdmission(), "mountPath gate must be rejected at admission")
+		require.NoError(t, fn.ValidateForAdmission(), "a relative mountPath is supported now that files mode has landed")
 
 		fn.Spec.Secrets = nil
 		require.NoError(t, fn.ValidateForAdmission(), "a valid newdeploy function must pass")
@@ -168,12 +171,18 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 		assert.Error(t, s.Validate())
 	})
 
-	t.Run("mountPath rejected until files mode", func(t *testing.T) {
+	// Files mode has landed, so a relative mountPath is accepted and only the
+	// unmaterialisable shapes are refused. Full rules: TestValidateMountPaths.
+	t.Run("mountPath must be relative and confined", func(t *testing.T) {
 		t.Parallel()
 		s := newdeploySpec()
 		s.Env = nil
 		s.Secrets = []SecretReference{{Namespace: "ns", Name: "s", MountPath: "app/creds"}}
-		assert.Error(t, s.Validate())
+		assert.NoError(t, s.Validate(), "a relative mountPath is the supported shape")
+
+		s.Secrets[0].MountPath = "/etc/app"
+		assert.Error(t, s.Validate(), "an absolute mountPath is not materialisable under the shared root")
+
 		s.Secrets[0].MountPath = ""
 		assert.NoError(t, s.Validate())
 	})

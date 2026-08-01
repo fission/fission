@@ -1003,9 +1003,11 @@ type (
 		// volume set frozen at pool creation, so an arbitrary absolute path is
 		// not materializable there, and the container executor applies the
 		// same constraint for cross-executor consistency. Empty keeps today's
-		// layout. The runtime redirect ships in a later RFC-0030 phase; until
-		// then admission rejects a non-empty value rather than silently
-		// ignoring it.
+		// <namespace>/<name> layout, so functions that do not set it are
+		// unaffected. No two secrets on one function may target the same
+		// path: the final segment written is the object's data key, and keys
+		// are mutable after admission, so sharing a directory lets one
+		// object's later-added key overwrite the other's file.
 		// +optional
 		MountPath string `json:"mountPath,omitempty"`
 	}
@@ -1018,8 +1020,7 @@ type (
 		Name string `json:"name"`
 		// MountPath redirects this configmap's file projection from the
 		// default /configs/<namespace>/<name>; relative to the /configs root.
-		// See SecretReference.MountPath for the constraint rationale and the
-		// phase gating.
+		// See SecretReference.MountPath for the constraint rationale.
 		// +optional
 		MountPath string `json:"mountPath,omitempty"`
 	}

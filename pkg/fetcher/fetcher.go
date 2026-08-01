@@ -203,6 +203,26 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 	return nil
 }
 
+// objectSubPath is where one Secret's or ConfigMap's keys are written, relative
+// to the shared /secrets or /configs root.
+//
+// MountPath redirects it (RFC-0030 §4); empty keeps the historical
+// <namespace>/<name> layout, so functions that never set it see byte-identical
+// behaviour. The value is re-validated here rather than trusted from the
+// specialize payload: admission is the friendly half, but the fetcher writes
+// files and must not depend on having been called through a validated path.
+// RootJoin still confines the result regardless.
+func objectSubPath(mountPath, namespace, name string) (string, error) {
+	cleaned, err := fv1.CleanMountPath(mountPath)
+	if err != nil {
+		return "", err
+	}
+	if cleaned != "" {
+		return cleaned, nil
+	}
+	return filepath.Join(namespace, name), nil
+}
+
 func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 	// Open the os.Root once and write every key through it: os.Root confines
 	// each write to dirPath (the keys are Secret/ConfigMap data keys), and
@@ -486,7 +506,12 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, filepath.Join(secret.Namespace, secret.Name))
+			subPath, err := objectSubPath(secret.MountPath, secret.Namespace, secret.Name)
+			if err != nil {
+				logger.Error(err, "invalid mountPath for secret", "secret_name", secret.Name, "secret_namespace", secret.Namespace)
+				return http.StatusBadRequest, err
+			}
+			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, subPath)
 			if err != nil {
 				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, secret)
@@ -532,7 +557,12 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, filepath.Join(config.Namespace, config.Name))
+			subPath, err := objectSubPath(config.MountPath, config.Namespace, config.Name)
+			if err != nil {
+				logger.Error(err, "invalid mountPath for configmap", "config_map_name", config.Name, "config_map_namespace", config.Namespace)
+				return http.StatusBadRequest, err
+			}
+			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, subPath)
 			if err != nil {
 				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err,
