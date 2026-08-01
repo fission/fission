@@ -390,13 +390,22 @@ func buildTriggerPredicate() predicate.Predicate {
 				oldPkg.Status.BuildStatus != fv1.BuildStatusPending {
 				return true
 			}
-			// A content change enqueues. Comparing hashes rather than
+			// A build already requested or in flight will pick up whatever the
+			// spec now says, so a content change must NOT enqueue on top of it.
+			// Without this guard the two signals — the status poke and the
+			// content change — race: the second reconcile lands while the
+			// status is still pending/running, re-enters build(), and the
+			// package is built (and its functions re-stamped, and an RFC-0025
+			// version minted) twice for one change.
+			if newPkg.Status.BuildStatus == fv1.BuildStatusPending ||
+				newPkg.Status.BuildStatus == fv1.BuildStatusRunning {
+				return false
+			}
+			// Otherwise a content change enqueues. Comparing hashes rather than
 			// Generation is deliberate: the build itself writes spec.Deployment
 			// on success, so a Generation test would re-enqueue the reconciler
-			// on its own output and risk re-running a finished build off a
-			// cache that has seen the spec write but not yet the status write.
-			// The hash ignores the build's output for source packages, so the
-			// reconciler cannot trigger itself.
+			// on its own output. The hash ignores the build's output for source
+			// packages, so the reconciler cannot trigger itself.
 			return PackageContentHash(newPkg.Spec) != PackageContentHash(oldPkg.Spec)
 		},
 		DeleteFunc:  func(event.DeleteEvent) bool { return false },

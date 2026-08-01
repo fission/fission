@@ -157,6 +157,14 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 		{"build's own deployment write does not self-trigger",
 			srcPkg(1, fv1.BuildStatusRunning, "http://storage/d1"),
 			srcPkg(2, fv1.BuildStatusRunning, "http://storage/d2"), false},
+		// A build already requested or in flight will pick up the new spec,
+		// so a content change on top of it must not enqueue a second build —
+		// two builds means two re-stamps and two RFC-0025 versions for one
+		// user-visible change.
+		{"content changed while a build is pending",
+			digest(1, fv1.BuildStatusPending, "a"), digest(2, fv1.BuildStatusPending, "b"), false},
+		{"content changed while a build is running",
+			digest(1, fv1.BuildStatusRunning, "a"), digest(2, fv1.BuildStatusRunning, "b"), false},
 		// The reconciler's own status writes must not re-trigger it either.
 		{"reconciler's own running write",
 			digest(1, fv1.BuildStatusPending, "a"), digest(1, fv1.BuildStatusRunning, "a"), false},
