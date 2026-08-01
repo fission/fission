@@ -571,3 +571,94 @@ func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
 		}
 	}
 }
+
+// TestInternalAuthAutoGenerate pins RFC-0029 §10's generation path, including
+// the tenancy rule that decides where the master may land.
+func TestInternalAuthAutoGenerate(t *testing.T) {
+	const master = "fission-internal-auth"
+
+	countMasterSecrets := func(docs []map[string]any) int {
+		n := 0
+		for _, d := range docs {
+			kind, _ := d["kind"].(string)
+			meta, _ := d["metadata"].(map[string]any)
+			name, _ := meta["name"].(string)
+			if kind == "Secret" && name == master {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("off by default: the template still renders the master", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countMasterSecrets(docs),
+			"autoGenerate defaults off, so existing installs must be untouched")
+		assert.Zero(t, countByKindName(docs, "Role", "fission-preupgrade-authgen"),
+			"no generation means no read grant")
+	})
+
+	t.Run("on: the template stops rendering and the hook is wired", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		assert.Zero(t, countMasterSecrets(docs),
+			"generation moves in-cluster, so the template must render no master — "+
+				"the retention hook is what stops Helm pruning the live one")
+		vals := envValues(docs, "GENERATE_AUTH_SECRET")
+		require.NotEmpty(t, vals, "the hook must be told which Secret to provision")
+		for _, v := range vals {
+			assert.Equal(t, master, v)
+		}
+	})
+
+	// The rule the whole design turns on: under dynamic/cluster tenancy the
+	// master must NOT reach tenant namespaces — they get controller-owned
+	// derived keys, and a master there would defeat the isolation end state.
+	t.Run("static tenancy fans out; dynamic does not", func(t *testing.T) {
+		static := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		staticNS := envValues(static, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, staticNS)
+		assert.Contains(t, staticNS[0], "fission-fn",
+			"static tenancy replicates the master: kubelet cannot resolve a cross-namespace secretKeyRef")
+
+		dynamic := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "tenancy.mode=dynamic",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		dynNS := envValues(dynamic, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, dynNS)
+		assert.NotContains(t, dynNS[0], "fission-fn",
+			"under dynamic tenancy the master must stay in the release namespace: "+
+				"tenant namespaces get controller-owned derived keys and must never hold the master")
+	})
+
+	// The read grant is the one concession this design makes; it must not widen
+	// beyond the single object that needs it.
+	t.Run("the generation grant is fenced to the master alone", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		var checked int
+		for _, d := range docs {
+			kind, _ := d["kind"].(string)
+			meta, _ := d["metadata"].(map[string]any)
+			name, _ := meta["name"].(string)
+			if kind != "Role" || name != "fission-preupgrade-authgen" {
+				continue
+			}
+			checked++
+			rules, _ := d["rules"].([]any)
+			for _, r := range rules {
+				rule, _ := r.(map[string]any)
+				names, _ := rule["resourceNames"].([]any)
+				require.Len(t, names, 1, "the grant must name exactly one Secret")
+				assert.Equal(t, master, names[0])
+				verbs, _ := rule["verbs"].([]any)
+				for _, v := range verbs {
+					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
+					assert.NotEqual(t, "delete", v)
+				}
+			}
+		}
+		require.Positive(t, checked, "no generation Role was rendered; the guard is inert")
+	})
+}

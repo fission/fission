@@ -1608,6 +1608,24 @@ internalAuth:
   enabled: true
   # secret: "" — auto-generated on first install; preserved on upgrade.
   # oldSecret: "" — set during rotation; accepted by the verifier alongside `secret`.
+  ## autoGenerate moves master generation OUT of the chart template and into
+  ## the pre-install/pre-upgrade hook, which creates it only if absent.
+  ##
+  ## Why: the template preserves a generated value across upgrades with
+  ## `lookup`, and `lookup` returns EMPTY under `helm template`. A GitOps
+  ## renderer therefore re-mints the master on every sync, breaking every pod
+  ## signed with the previous one. An in-cluster create-if-absent survives any
+  ## renderer. Prefer existingSecret if you would rather own the value.
+  ##
+  ## Default false, so existing installs are untouched.
+  ##
+  ## The hook writes the master into the same namespaces the template would
+  ## have: under static tenancy the release namespace plus defaultNamespace
+  ## plus each additionalFissionNamespaces; under dynamic/cluster tenancy the
+  ## release namespace ONLY, since tenant namespaces get controller-owned
+  ## derived keys and the master must never land there.
+  ##
+  autoGenerate: false
   ## existingSecret names a Secret you create yourself, holding key `secret`
   ## (and optionally `oldSecret`). When set the chart renders NO master Secret
   ## and every component reads yours instead.
