@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	fissionv1 "github.com/fission/fission/pkg/generated/clientset/versioned/typed/core/v1"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -72,15 +73,7 @@ func TestPackageContentHashRestampsWithoutCLI(t *testing.T) {
 	pkgName := fn.Spec.Package.PackageRef.Name
 	stampBefore := fn.Spec.Package.PackageRef.ResourceVersion
 
-	// The controller must have recorded a hash for the package as it stands —
-	// otherwise the first content change would be swallowed as a seed.
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		pkg, err := fc.Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.NotEmpty(c, pkg.Status.ContentHash, "package must carry a recorded content hash before a change")
-	}, 2*time.Minute, 2*time.Second)
+	requireContentHashRecorded(t, ctx, fc, ns.Name, pkgName)
 
 	// Change the delivered content the way a GitOps controller would: edit the
 	// Package spec directly, with no CLI and no Function edit.
@@ -148,13 +141,7 @@ func TestPackageContentHashUnchangedIsNoOp(t *testing.T) {
 	require.NoError(t, err)
 	pkgName := fn.Spec.Package.PackageRef.Name
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		pkg, err := fc.Packages(ns.Name).Get(ctx, pkgName, metav1.GetOptions{})
-		if !assert.NoError(c, err) {
-			return
-		}
-		assert.NotEmpty(c, pkg.Status.ContentHash)
-	}, 2*time.Minute, 2*time.Second)
+	requireContentHashRecorded(t, ctx, fc, ns.Name, pkgName)
 
 	fn, err = fc.Functions(ns.Name).Get(ctx, fnName, metav1.GetOptions{})
 	require.NoError(t, err)
@@ -191,4 +178,102 @@ func TestPackageContentHashUnchangedIsNoOp(t *testing.T) {
 
 	assert.Contains(t, f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("noop-v1")), "noop-v1",
 		"the function must still be serving after repeated no-op re-applies")
+}
+
+// TestPackageContentHashOCIDigestInGit is RFC-0029 §3's headline scenario and
+// the one the design comments keep naming: a digest-pinned OCI package edited
+// in Git. It is also the shape with no propagation before this feature —
+// an OCI package settles at BuildStatusNone, so the build-success re-stamp
+// that recycles pods never runs for it.
+//
+// The other content-hash tests use `--code`, which the CLI inlines as a
+// literal archive. That exercises the hashing rule but never the OCI fields,
+// so the Image/Digest half of hashArchive had no end-to-end coverage.
+//
+// The revert stage covers G4: rolling back to previously-recorded content must
+// propagate. It fails if any path stops recording the hash on a converged
+// reconcile, because the recorded value then lags the spec and the revert
+// compares equal.
+func TestPackageContentHashOCIDigestInGit(t *testing.T) {
+	t.Parallel()
+	skipOnImageVolumeLeg(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	runtime := f.Images().RequirePython(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "py-ocihash-" + ns.ID
+	pkgName := "oci-hash-pkg-" + ns.ID
+	fnName := "fn-ocihash-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{
+		Name: envName, Image: runtime,
+		MinCPU: 40, MaxCPU: 80, MinMemory: 64, MaxMemory: 128,
+	})
+
+	repo := "fission-test/hello-ocihash-" + ns.ID
+	refV1, digestV1 := framework.PushCodeImage(t, hostAddr, inclusterAddr, repo, "v1", pyHello("oci-content-v1"))
+	refV2, digestV2 := framework.PushCodeImage(t, hostAddr, inclusterAddr, repo, "v2", pyHello("oci-content-v2"))
+	require.NotEqual(t, digestV1, digestV2, "the two images must differ, or this proves nothing")
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{Name: pkgName, Env: envName, OCI: refV1})
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName, Pkg: pkgName, Entrypoint: "hello.main",
+		ExecutorType: "newdeploy", MinScale: 1, MaxScale: 1,
+	})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("oci-content-v1"))
+
+	fc := f.FissionClient().CoreV1()
+	requireContentHashRecorded(t, ctx, fc, ns.Name, pkgName)
+
+	// Repoint at v2 the way a GitOps controller would: edit the OCI reference
+	// on the Package spec directly. No `package update`, no `fn update`.
+	repointOCI(t, ctx, fc, ns.Name, pkgName, refV2, digestV2)
+	f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("oci-content-v2"))
+
+	// Revert to the previously-recorded content (G4). This is the incident-
+	// response rollback, and it must converge just like a forward change.
+	requireContentHashRecorded(t, ctx, fc, ns.Name, pkgName)
+	repointOCI(t, ctx, fc, ns.Name, pkgName, refV1, digestV1)
+	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("oci-content-v1"))
+	assert.Contains(t, body, "oci-content-v1",
+		"reverting to previously-recorded content must propagate, not compare equal and be swallowed")
+}
+
+// requireContentHashRecorded waits until the reconciler has observed the
+// package as it currently stands. Without it a content edit could land while
+// the hash is still empty and be absorbed as the seed.
+func requireContentHashRecorded(t *testing.T, ctx context.Context, fc fissionv1.CoreV1Interface, namespace, pkgName string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		pkg, err := fc.Packages(namespace).Get(ctx, pkgName, metav1.GetOptions{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.NotEmpty(c, pkg.Status.ContentHash, "package must carry a recorded content hash before a change")
+	}, 2*time.Minute, 2*time.Second)
+}
+
+// repointOCI rewrites the package's OCI image reference and digest in place,
+// retrying on the conflict a concurrent status write can cause.
+func repointOCI(t *testing.T, ctx context.Context, fc fissionv1.CoreV1Interface, namespace, pkgName, ref, digest string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		pkg, err := fc.Packages(namespace).Get(ctx, pkgName, metav1.GetOptions{})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, pkg.Spec.Deployment.OCI, "package must carry an OCI deployment archive") {
+			return
+		}
+		pkg.Spec.Deployment.OCI.Image = ref
+		pkg.Spec.Deployment.OCI.Digest = digest
+		_, err = fc.Packages(namespace).Update(ctx, pkg, metav1.UpdateOptions{})
+		assert.NoError(c, err)
+	}, time.Minute, 2*time.Second)
 }
