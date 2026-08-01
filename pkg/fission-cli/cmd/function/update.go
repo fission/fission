@@ -242,18 +242,15 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// TODO : One corner case where user just updates the pkg reference with fnUpdate, but internally this new pkg reference
 	// references a diff env than the spec
 
-	// Re-stamp this function only when the package actually changed — the same
-	// condition already guarding the sibling functions above. Copying the
-	// package's ResourceVersion unconditionally also propagates bumps that came
-	// from a controller STATUS write, which is a FunctionSpec change with no
-	// content behind it: it recycles pods and mints an RFC-0025 version for an
-	// update that changed nothing about the code.
-	if pkg.ResourceVersion != newPkgMeta.ResourceVersion {
-		function.Spec.Package.PackageRef = fv1.PackageRef{
-			Namespace:       newPkgMeta.Namespace,
-			Name:            newPkgMeta.Name,
-			ResourceVersion: newPkgMeta.ResourceVersion,
-		}
+	// Stamp unconditionally. This must NOT be guarded on the package having
+	// changed during this command: `fn update --pkg <other-package>` re-points
+	// the function at a package this command did not touch, so the package's
+	// ResourceVersion is unchanged while the reference must still move — and
+	// skipping it there leaves the function serving the old package forever.
+	function.Spec.Package.PackageRef = fv1.PackageRef{
+		Namespace:       newPkgMeta.Namespace,
+		Name:            newPkgMeta.Name,
+		ResourceVersion: newPkgMeta.ResourceVersion,
 	}
 
 	if function.Spec.Environment.Name != pkg.Spec.Environment.Name {
