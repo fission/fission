@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -233,6 +235,11 @@ func (r *EnvironmentReconciler) reconcileBuilderDeployment(ctx context.Context, 
 	updated := live.DeepCopy()
 	updated.Spec = desired.Spec
 	updated.Labels = desired.Labels
+	// Selector is immutable on a Deployment: sending a different one makes the
+	// apiserver reject the whole update. It is derived from the same
+	// name/namespace/RV as the live object's, so it cannot legitimately differ
+	// — keep the live value rather than betting the update on that staying true.
+	updated.Spec.Selector = live.Spec.Selector
 	if updated.Annotations == nil {
 		updated.Annotations = map[string]string{}
 	}
@@ -614,13 +621,51 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 // builderSpecHash fingerprints the desired builder pod template. It is stamped
 // on the Deployment (never on the template itself, which would make the hash
 // cover its own value).
+//
+// The template is CANONICALISED first, and that is not cosmetic. MergePodSpec
+// round-trips containers through a map[string]*Container and emits them in map
+// iteration order, which Go randomises per range — so two calls with identical
+// inputs produce slices in different orders, within a single process. Hashing
+// that directly gives a different answer nearly every call, and the reconciler
+// would see permanent drift and roll the builder on every reconcile forever:
+// the exact churn this feature exists to prevent, arriving from the other side.
+// Any environment setting Builder.PodSpec would hit it, since the merge runs
+// whether or not the patch names a container.
+//
+// Sorting by name is safe because container order carries no meaning here: the
+// entrypoint is chosen by name, and init containers are appended by the same
+// merge rather than ordered by the user.
 func builderSpecHash(tmpl *apiv1.PodTemplateSpec) (string, error) {
-	b, err := json.Marshal(tmpl)
+	canonical := tmpl.DeepCopy()
+	sortByName(canonical.Spec.Containers)
+	sortByName(canonical.Spec.InitContainers)
+	slices.SortFunc(canonical.Spec.Volumes, func(a, b apiv1.Volume) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	b, err := json.Marshal(canonical)
 	if err != nil {
 		return "", fmt.Errorf("error hashing builder pod template: %w", err)
 	}
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf("sha256:%x", sum), nil
+}
+
+// sortByName orders containers by name and, within each, its env vars and
+// volume mounts — every slice on the path that is assembled from a map or from
+// os.Environ(), whose order is not guaranteed stable across calls or restarts.
+func sortByName(containers []apiv1.Container) {
+	slices.SortFunc(containers, func(a, b apiv1.Container) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	for i := range containers {
+		slices.SortFunc(containers[i].Env, func(a, b apiv1.EnvVar) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+		slices.SortFunc(containers[i].VolumeMounts, func(a, b apiv1.VolumeMount) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+	}
 }
 
 // createBuilderDeployment creates the builder Deployment for the current

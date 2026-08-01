@@ -412,3 +412,70 @@ func TestEnvironmentReconcileDoesNotRollAnUndriftedBuilder(t *testing.T) {
 	assert.Zero(t, updates,
 		"repeated reconciles of an unchanged environment must not write the Deployment at all")
 }
+
+// TestEnvironmentReconcileDoesNotRollWhenPodSpecPatched is the case the drift
+// check exists for, and the one that breaks a naive hash.
+//
+// env.Spec.Builder.PodSpec routes the pod template through MergePodSpec, whose
+// mergeContainerList round-trips containers through a Go map and emits them in
+// map-iteration order — randomized per range, even inside one process. Hashing
+// that order directly yields a different hash on every call, so the reconciler
+// would "detect drift" forever and roll the builder on every single reconcile:
+// the exact churn this feature exists to prevent, arriving from the other side.
+func TestEnvironmentReconcileDoesNotRollWhenPodSpecPatched(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "7"
+	// Container-free on purpose: mergeContainerList runs regardless of whether
+	// the patch names any container, so an unrelated patch is enough.
+	env.Spec.Builder.PodSpec = &apiv1.PodSpec{
+		NodeSelector: map[string]string{"disktype": "ssd"},
+	}
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	_, err := r.Reconcile(t.Context(), envReq(env))
+	require.NoError(t, err)
+
+	var updates int
+	fakeCS, ok := r.kubernetesClient.(*k8sfake.Clientset)
+	require.True(t, ok)
+	fakeCS.PrependReactor("update", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+		updates++
+		return false, nil, nil
+	})
+
+	// Several passes: one map iteration can coincidentally match, a run of them
+	// will not.
+	for range 8 {
+		_, err = r.Reconcile(t.Context(), envReq(env))
+		require.NoError(t, err)
+	}
+
+	assert.Zero(t, updates,
+		"a builder whose environment sets Builder.PodSpec must not be rolled by repeated reconciles")
+	_ = ns
+}
+
+// TestBuilderSpecHashIsStableAcrossCalls isolates the same invariant without a
+// reconcile, so a failure points at the hash rather than at the controller.
+func TestBuilderSpecHashIsStableAcrossCalls(t *testing.T) {
+	env := newTestBuilderEnv()
+	env.ResourceVersion = "7"
+	env.Spec.Builder.PodSpec = &apiv1.PodSpec{
+		NodeSelector: map[string]string{"disktype": "ssd"},
+	}
+	r := newTestEnvironmentReconciler(t, nil, env)
+	ns := r.nsResolver.GetBuilderNS(env.Namespace)
+
+	first, err := r.genBuilderDeployment(env, ns)
+	require.NoError(t, err)
+	want := first.Annotations[builderSpecHashAnnotation]
+	require.NotEmpty(t, want)
+
+	for i := range 20 {
+		again, err := r.genBuilderDeployment(env, ns)
+		require.NoError(t, err)
+		require.Equalf(t, want, again.Annotations[builderSpecHashAnnotation],
+			"hash must not depend on map iteration order (differed on call %d)", i+2)
+	}
+}
