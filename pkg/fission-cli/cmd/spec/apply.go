@@ -475,6 +475,30 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	// no-op/created packages, and the dryRunResourceVersion sentinel for packages
 	// that would be updated — so a would-be package update correctly cascades into
 	// a would-be update of the functions that reference it, matching a real apply.
+	// Packages this apply actually wrote. Copying a package's CURRENT
+	// ResourceVersion into every referencing function is only correct for
+	// these: a package's ResourceVersion also drifts on controller STATUS
+	// writes (buildermgr records a content hash), so stamping unconditionally
+	// re-stamps functions whose package nobody touched — which bumps their
+	// generation, recycles their pods and mints an RFC-0025 version. A GitOps
+	// controller reapplies on every sync, so that is continuous churn, not a
+	// one-off. See TestSpecApplyIsIdempotent.
+	written := make(map[string]bool, len(ras.Created)+len(ras.Updated))
+	for _, m := range ras.Created {
+		written[k8sCache.MetaObjectToName(m).String()] = true
+	}
+	for _, m := range ras.Updated {
+		written[k8sCache.MetaObjectToName(m).String()] = true
+	}
+
+	// Stamps the live functions already carry, so an untouched package leaves
+	// its referencing functions byte-identical instead of empty (which would
+	// itself read as a change and force an update).
+	liveStamps, err := liveFunctionStamps(input.Context(), fclient)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	for i, f := range fr.Functions {
 		if f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType == fv1.ExecutorTypeContainer {
 			continue
@@ -492,7 +516,23 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 			return nil, nil, fmt.Errorf("function %v/%v references package %v/%v, which doesn't exist in the specs",
 				f.Namespace, f.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
-		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
+
+		fnKey := k8sCache.MetaObjectToName(&metav1.ObjectMeta{Namespace: f.Namespace, Name: f.Name}).String()
+		switch stamp, isLive := liveStamps[fnKey]; {
+		case written[k]:
+			// This apply created or updated the package: propagate the new
+			// ResourceVersion so the change reaches running pods.
+			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
+		case isLive:
+			// Package untouched and the function already exists: keep the
+			// stamp it has, so an unchanged reapply is a genuine no-op.
+			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = stamp
+		default:
+			// A new function against a pre-existing package still needs a
+			// stamp, and the package's current ResourceVersion is the only
+			// one there is.
+			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
+		}
 	}
 
 	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
@@ -782,6 +822,26 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 			return packages(ns).Delete(ctx, name, metav1.DeleteOptions{})
 		},
 	}, delete, specAllowConflicts, dryRun)
+}
+
+// liveFunctionStamps returns each existing function's current
+// PackageRef.ResourceVersion, keyed by namespace/name.
+//
+// Needed because a function in a spec FILE carries no ResourceVersion — that
+// field is a runtime stamp, not something a user writes. So "leave it alone"
+// cannot mean "leave it empty": an empty stamp differs from what is live and
+// would force the very update this is avoiding.
+func liveFunctionStamps(ctx context.Context, fclient cmd.Client) (map[string]string, error) {
+	list, err := fclient.FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list functions to preserve package stamps: %w", err)
+	}
+	out := make(map[string]string, len(list.Items))
+	for i := range list.Items {
+		fn := &list.Items[i]
+		out[k8sCache.MetaObjectToName(&fn.ObjectMeta).String()] = fn.Spec.Package.PackageRef.ResourceVersion
+	}
+	return out, nil
 }
 
 func applyFunctions(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
