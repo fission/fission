@@ -293,23 +293,45 @@ func TestWebhookEnvReaderRBACScopesByTenancy(t *testing.T) {
 	})
 }
 
-// npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
-// given svc label via a podSelector.
-func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
+// selectorSvcLabel returns a podSelector's `svc:` matchLabel ("" when absent).
+func selectorSvcLabel(sel map[string]any) string {
+	ml, _ := sel["matchLabels"].(map[string]any)
+	s, _ := ml["svc"].(string)
+	return s
+}
+
+// ingressSvcLabels collects every `svc:` value a NetworkPolicy's ingress
+// allowlists ADMIT.
+//
+// Deliberately excludes spec.podSelector. That is the workload the policy
+// PROTECTS, not one it admits, and folding it in would make npAllowsFromSvc
+// report every policy as admitting its own target — the router policy targets
+// `svc: router`, so the async-allowlist guard below (which asserts the router
+// is NOT admitted by default) would go permanently true and stop guarding.
+func ingressSvcLabels(doc map[string]any) []string {
+	var out []string
 	spec, _ := doc["spec"].(map[string]any)
 	ingress, _ := spec["ingress"].([]any)
 	for _, r := range ingress {
 		rule, _ := r.(map[string]any)
 		froms, _ := rule["from"].([]any)
 		for _, f := range froms {
-			sel, _ := f.(map[string]any)["podSelector"].(map[string]any)
-			ml, _ := sel["matchLabels"].(map[string]any)
-			if ml["svc"] == svcLabel {
-				return true
+			// A non-map `from` entry is malformed chart output; skip it so the
+			// caller reports a missing selector rather than panicking.
+			fm, _ := f.(map[string]any)
+			sel, _ := fm["podSelector"].(map[string]any)
+			if v := selectorSvcLabel(sel); v != "" {
+				out = append(out, v)
 			}
 		}
 	}
-	return false
+	return out
+}
+
+// npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
+// given svc label via a podSelector.
+func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
+	return slices.Contains(ingressSvcLabels(doc), svcLabel)
 }
 
 // TestWorkflowChart is the drift check for the RFC-0022 workflow head: port
@@ -500,6 +522,16 @@ func TestStateSvcChart(t *testing.T) {
 	})
 }
 
+// stringsOf converts a decoded YAML string list to []string.
+func stringsOf(vals []any) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		s, _ := v.(string)
+		out = append(out, s)
+	}
+	return out
+}
+
 // verbsFor returns the verbs a rendered Role/ClusterRole grants for a resource
 // in an API group, merged across every rule that mentions it.
 func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
@@ -508,66 +540,32 @@ func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
 	for _, r := range rules {
 		rule, _ := r.(map[string]any)
 		groups, _ := rule["apiGroups"].([]any)
-		hasGroup := false
-		for _, g := range groups {
-			if s, _ := g.(string); s == apiGroup {
-				hasGroup = true
-			}
-		}
-		if !hasGroup {
-			continue
-		}
 		resources, _ := rule["resources"].([]any)
-		hasResource := false
-		for _, res := range resources {
-			if s, _ := res.(string); s == resource {
-				hasResource = true
-			}
-		}
-		if !hasResource {
+		if !slices.Contains(stringsOf(groups), apiGroup) ||
+			!slices.Contains(stringsOf(resources), resource) {
 			continue
 		}
 		verbs, _ := rule["verbs"].([]any)
-		for _, v := range verbs {
-			if s, _ := v.(string); s != "" {
-				out[s] = true
+		for _, v := range stringsOf(verbs) {
+			if v != "" {
+				out[v] = true
 			}
 		}
 	}
 	return out
 }
 
-// podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references,
-// from both its own podSelector and every ingress `from` podSelector.
+// podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references —
+// the workload it TARGETS plus everything its ingress allowlists admit. Both
+// must name a workload that actually renders, which is what this feeds.
 func podSelectorSvcLabels(doc map[string]any) []string {
 	var out []string
-	add := func(sel map[string]any) {
-		ml, _ := sel["matchLabels"].(map[string]any)
-		if v, ok := ml["svc"].(string); ok && v != "" {
-			out = append(out, v)
-		}
-	}
 	spec, _ := doc["spec"].(map[string]any)
-	if sel, ok := spec["podSelector"].(map[string]any); ok {
-		add(sel)
+	sel, _ := spec["podSelector"].(map[string]any)
+	if v := selectorSvcLabel(sel); v != "" {
+		out = append(out, v)
 	}
-	ingress, _ := spec["ingress"].([]any)
-	for _, r := range ingress {
-		rule, _ := r.(map[string]any)
-		froms, _ := rule["from"].([]any)
-		for _, f := range froms {
-			fm, ok := f.(map[string]any)
-			if !ok {
-				// A non-map `from` entry is malformed chart output; skip it so
-				// the caller reports a missing selector rather than panicking.
-				continue
-			}
-			if sel, ok := fm["podSelector"].(map[string]any); ok {
-				add(sel)
-			}
-		}
-	}
-	return out
+	return append(out, ingressSvcLabels(doc)...)
 }
 
 // TestBuildermgrCanRollBuilderDeployments guards an RBAC gap that fails CLOSED
@@ -636,12 +634,7 @@ func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
 
 	// Every `svc:` label carried by a rendered pod template.
 	known := map[string]bool{}
-	for _, doc := range docs {
-		spec, _ := doc["spec"].(map[string]any)
-		tmpl, ok := spec["template"].(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, tmpl := range podTemplates(docs) {
 		meta, _ := tmpl["metadata"].(map[string]any)
 		labels, _ := meta["labels"].(map[string]any)
 		if v, ok := labels["svc"].(string); ok && v != "" {
@@ -810,18 +803,15 @@ func TestInternalAuthExistingSecret(t *testing.T) {
 	// The env var is what the Go side reads. If it disagrees with the
 	// secretKeyRefs above, the two halves resolve different Secrets.
 	t.Run("the name env var matches the secretKeyRefs", func(t *testing.T) {
-		for _, tc := range []struct{ arg, want string }{
-			{"", defaultName},
-			{"my-master", "my-master"},
+		for _, tc := range []struct {
+			args []string
+			want string
+		}{
+			{nil, defaultName},
+			{[]string{"--set", "internalAuth.existingSecret=my-master"}, "my-master"},
 		} {
-			var docs []map[string]any
-			if tc.arg == "" {
-				docs = render(t)
-			} else {
-				docs = render(t, "--set", "internalAuth.existingSecret="+tc.arg)
-			}
-			vals := envValues(docs, "FISSION_INTERNAL_AUTH_SECRET_NAME")
-			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (existingSecret=%q)", tc.arg)
+			vals := envValues(render(t, tc.args...), "FISSION_INTERNAL_AUTH_SECRET_NAME")
+			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (%v)", tc.args)
 			for _, v := range vals {
 				assert.Equal(t, tc.want, v)
 			}
@@ -861,15 +851,23 @@ func envValues(docs []map[string]any, envName string) []string {
 	return out
 }
 
+// podTemplates returns every rendered pod template (Deployments, Jobs, ...).
+// Docs without one are skipped, which is most of a render.
+func podTemplates(docs []map[string]any) []map[string]any {
+	var out []map[string]any
+	for _, doc := range docs {
+		spec, _ := doc["spec"].(map[string]any)
+		if tmpl, ok := spec["template"].(map[string]any); ok {
+			out = append(out, tmpl)
+		}
+	}
+	return out
+}
+
 // forEachContainerEnv walks every env entry of every container in every
 // rendered pod template.
 func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
-	for _, doc := range docs {
-		spec, _ := doc["spec"].(map[string]any)
-		tmpl, ok := spec["template"].(map[string]any)
-		if !ok {
-			continue
-		}
+	for _, tmpl := range podTemplates(docs) {
 		podSpec, _ := tmpl["spec"].(map[string]any)
 		for _, key := range []string{"containers", "initContainers"} {
 			cs, _ := podSpec[key].([]any)
@@ -1001,21 +999,21 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 			for _, r := range rules {
 				rule, _ := r.(map[string]any)
 				names, _ := rule["resourceNames"].([]any)
-				verbs, _ := rule["verbs"].([]any)
+				rawVerbs, _ := rule["verbs"].([]any)
+				verbs := stringsOf(rawVerbs)
 				for _, v := range verbs {
 					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
 					assert.NotEqual(t, "delete", v)
 				}
-				switch {
-				case slices.Contains(verbsOf(verbs), "create"):
+				if slices.Contains(verbs, "create") {
 					sawCreate++
 					assert.Empty(t, names,
 						"create must NOT carry resourceNames: the name is in the POST body, "+
 							"not the path, so a fenced rule never matches and generation fails Forbidden")
-					assert.Equal(t, []string{"create"}, verbsOf(verbs),
+					assert.Equal(t, []string{"create"}, verbs,
 						"the unfenced rule must carry create and nothing else — "+
 							"any read/write verb here would apply to every Secret in the namespace")
-				default:
+				} else {
 					sawGet++
 					require.Len(t, names, 1, "the read grant must name exactly one Secret")
 					assert.Equal(t, master, names[0])
@@ -1026,14 +1024,4 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 		assert.Positive(t, sawGet, "generation needs a name-scoped get to tell provisioned from absent")
 		assert.Positive(t, sawCreate, "generation needs a create it can actually use")
 	})
-}
-
-// verbsOf converts a decoded YAML verb list to strings.
-func verbsOf(verbs []any) []string {
-	out := make([]string, 0, len(verbs))
-	for _, v := range verbs {
-		s, _ := v.(string)
-		out = append(out, s)
-	}
-	return out
 }
