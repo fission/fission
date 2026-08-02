@@ -55,6 +55,23 @@ func (r *FunctionVersion) Validate(new *v1.FunctionVersion) error {
 	if err := new.Validate(); err != nil {
 		return v1.AggregateValidationErrors("FunctionVersion", err)
 	}
+	// The Snapshot goes through FunctionSpec.Validate, which cannot check
+	// namespace equality (a spec does not know where it will live). Without
+	// this, a hand-authored FunctionVersion could carry a cross-namespace
+	// Secret/ConfigMap reference that the Function webhook would have rejected,
+	// and the fetcher would read it wherever RBAC allowed.
+	if err := validateSameNamespaceRefs(new.Spec.Snapshot, new.Namespace); err != nil {
+		return v1.AggregateValidationErrors("FunctionVersion", err)
+	}
+	// A version's Snapshot is what specialization reads on the alias- or
+	// version-pinned path (pkg/versioning.VersionedFunction swaps it in
+	// wholesale), so the infinite-env rule has to be enforced here too —
+	// checking only the live Function leaves that path unguarded.
+	if hasMountPath(new.Spec.Snapshot) {
+		if err := rejectMountPathOnInfiniteEnv(r.reader, r.Logger, new.Spec.Snapshot, new.Namespace, new.Name); err != nil {
+			return v1.AggregateValidationErrors("FunctionVersion", err)
+		}
+	}
 	return nil
 }
 

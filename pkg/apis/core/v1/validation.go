@@ -416,24 +416,14 @@ func (spec FunctionSpec) validateForAdmission() error {
 	return errs
 }
 
-// validateEnvForAdmission holds the RFC-0030 phase-1 rules: the env source
-// narrowing and reserved-name denylist, plus the two "not implemented yet"
-// gates that must reject rather than silently ignore.
+// validateEnvForAdmission holds the RFC-0030 admission rules: the env source
+// narrowing, the reserved-name denylist, the file-projection path rules, and
+// the remaining "not implemented yet" gate, which must reject rather than
+// silently ignore.
 func (spec FunctionSpec) validateEnvForAdmission() error {
 	var errs error
 
-	// The runtime redirect ships with RFC-0030's files-mode phase; until then
-	// a set MountPath must be rejected, never silently ignored.
-	for _, s := range spec.Secrets {
-		if s.MountPath != "" {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "SecretReference.MountPath", s.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
-		}
-	}
-	for _, c := range spec.ConfigMaps {
-		if c.MountPath != "" {
-			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "ConfigMapReference.MountPath", c.MountPath, "mountPath is not supported yet (lands with RFC-0030 files mode)"))
-		}
-	}
+	errs = errors.Join(errs, spec.validateMountPaths())
 
 	if len(spec.Env) == 0 && len(spec.EnvFrom) == 0 {
 		return errs

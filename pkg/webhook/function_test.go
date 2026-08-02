@@ -306,3 +306,77 @@ func TestFunctionWebhook_Validate_StateOnInfiniteEnv(t *testing.T) {
 		})
 	}
 }
+
+// TestFunctionWebhook_Validate_MountPathOnInfiniteEnv mirrors the state check
+// for RFC-0030 §4's file projections.
+//
+// Without a redirect, each referenced object lands under its own
+// <namespace>/<name> directory, so two functions sharing an infinite-env pod
+// cannot collide. MountPath removes that separation: both write into the same
+// directory and whichever specializes second overwrites the first's files. The
+// per-function duplicate rule cannot see it, because the colliding references
+// live on different Functions.
+func TestFunctionWebhook_Validate_MountPathOnInfiniteEnv(t *testing.T) {
+	t.Parallel()
+
+	// Built per subtest, not shared: the fake client builder mutates the object
+	// it is handed (it stamps a ResourceVersion), so a single instance reused by
+	// two parallel subtests is a data race — caught by -race.
+	envWith := func(policy v1.AllowedFunctionsPerContainer) func() *v1.Environment {
+		return func() *v1.Environment {
+			return &v1.Environment{
+				ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
+				Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
+			}
+		}
+	}
+	envInfinite := envWith(v1.AllowedFunctionsPerContainerInfinite)
+	envSingle := envWith(v1.AllowedFunctionsPerContainerSingle)
+	mountFn := func() *v1.Function {
+		fn := makeValidFunction("default", "default", "default")
+		fn.Spec.Secrets = []v1.SecretReference{{Namespace: "default", Name: "s", MountPath: "app"}}
+		return fn
+	}
+	// A reference with no MountPath keeps the per-object layout, so the rule
+	// must not fire for it even on an infinite env.
+	plainFn := func() *v1.Function {
+		fn := makeValidFunction("default", "default", "default")
+		fn.Spec.Secrets = []v1.SecretReference{{Namespace: "default", Name: "s"}}
+		return fn
+	}
+
+	tests := []struct {
+		name    string
+		fn      func() *v1.Function
+		env     func() *v1.Environment
+		reader  bool
+		wantErr bool
+	}{
+		{"mountPath on infinite env rejected", mountFn, envInfinite, true, true},
+		{"mountPath on single env allowed", mountFn, envSingle, true, false},
+		{"no mountPath on infinite env allowed", plainFn, envInfinite, true, false},
+		{"env not found: fail open", mountFn, nil, true, false},
+		{"no reader: fail open", mountFn, nil, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			b := fake.NewClientBuilder().WithScheme(scheme.Scheme)
+			if tc.env != nil {
+				b = b.WithObjects(tc.env())
+			}
+			r := &Function{}
+			if tc.reader {
+				r.reader = b.Build()
+			}
+			err := r.Validate(tc.fn())
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "infinite") {
+					t.Fatalf("expected infinite-env rejection, got: %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/correlation"
 )
@@ -560,4 +562,68 @@ func TestRunLocalContainerExecutorSkipsSpecialize(t *testing.T) {
 	// Function-metadata headers are still attached for parity with the cluster.
 	assert.Equal(t, "cfn", f.invokeHeaders.Get("X-Fission-Function-Name"))
 	assert.True(t, f.stopped)
+}
+
+// TestParseMountFlags pins the --secret-mount / --configmap-mount format.
+//
+// RFC-0030 §4 chose a separate flag over extending --secret NAME:PATH because
+// ':' already means "rename to" in --env-from (secret/key:ALIAS); one CLI
+// giving one separator two meanings is a trap.
+func TestParseMountFlags(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no values yields no map", func(t *testing.T) {
+		t.Parallel()
+		got, err := parseMountFlags(nil, "secret-mount")
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("NAME=PATH pairs parse", func(t *testing.T) {
+		t.Parallel()
+		got, err := parseMountFlags([]string{"db-creds=app/creds", "tls=certs"}, "secret-mount")
+		require.NoError(t, err)
+		assert.Equal(t, map[string]string{"db-creds": "app/creds", "tls": "certs"}, got)
+	})
+
+	t.Run("a missing separator is rejected with the expected form", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseMountFlags([]string{"db-creds"}, "secret-mount")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "NAME=PATH")
+	})
+
+	for _, bad := range []string{"=app/creds", "db-creds=", ""} {
+		t.Run("rejects "+strconv.Quote(bad), func(t *testing.T) {
+			t.Parallel()
+			_, err := parseMountFlags([]string{bad}, "secret-mount")
+			assert.Error(t, err)
+		})
+	}
+
+	// One object cannot be in two places in a single run, and silently keeping
+	// the last would surprise.
+	t.Run("the same name twice is rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := parseMountFlags([]string{"db=a", "db=b"}, "secret-mount")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "twice")
+	})
+}
+
+// TestParseMountFlagsPathsMatchClusterRules pins that a path run-local accepts
+// is one the cluster accepts: both go through fv1.ObjectSubPath, so an
+// absolute or escaping path is refused in the same terms here as at admission.
+func TestParseMountFlagsPathsMatchClusterRules(t *testing.T) {
+	t.Parallel()
+	for _, bad := range []string{"/etc/app", "../outside", ".."} {
+		t.Run(bad, func(t *testing.T) {
+			t.Parallel()
+			_, err := fv1.ObjectSubPath(bad, "default", "s")
+			assert.Errorf(t, err, "run-local must refuse %q for the same reason the cluster does", bad)
+		})
+	}
+	sub, err := fv1.ObjectSubPath("app/creds", "default", "s")
+	require.NoError(t, err)
+	assert.Equal(t, "app/creds", sub)
 }

@@ -99,28 +99,33 @@ var (
 	FnBuildCmd              = Flag{Type: String, Name: flagkey.FnBuildCmd, Usage: "Package build command for builder to run with"}
 	FnSecret                = Flag{Type: StringSlice, Name: flagkey.FnSecret, Usage: "Function access to secret, should be present in the same namespace as the function. You can provide multiple secrets using multiple --secrets flags. In the case of fn update the secrets will be replaced by the provided list of secrets."}
 	FnCfgMap                = Flag{Type: StringSlice, Name: flagkey.FnCfgMap, Usage: "Function access to configmap, should be present in the same namespace as the function. You can provide multiple configmaps using multiple --configmap flags. In case of fn update the configmaps will be replaced by the provided list of configmaps."}
-	FnEnvVar                = Flag{Type: StringSlice, Name: flagkey.FnEnvVar, Short: "e", Usage: "Per-function environment variable as KEY=VALUE; repeatable. On fn update the provided list replaces the function's env vars. (--env keeps meaning the Environment name.)"}
-	FnEnvFromSecret         = Flag{Type: StringSlice, Name: flagkey.FnEnvFromSecret, Usage: "Project a same-namespace Secret into the function's environment: 'name' for the whole object, 'name/key' for one key (variable named after the key), 'name/key:ENV' to rename it; repeatable. On fn update the provided list replaces the previous one."}
-	FnEnvFromConfigMap      = Flag{Type: StringSlice, Name: flagkey.FnEnvFromConfigMap, Usage: "Project a same-namespace ConfigMap into the function's environment: 'name' for the whole object, 'name/key' for one key (variable named after the key), 'name/key:ENV' to rename it; repeatable. On fn update the provided list replaces the previous one."}
-	FnExecutorType          = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
-	FnExecutionTimeout      = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
-	FnLogPod                = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
-	FnLogFollow             = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
-	FnLogDetail             = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
-	FnLogDBType             = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default) or loki", DefaultValue: "kubernetes"}
-	FnLogReverseQuery       = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as loki"}
-	FnLogCount              = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
-	FnLogRequestID          = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
-	FnLogTraceID            = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
-	FnLogLevel              = Flag{Type: String, Name: flagkey.FnLogLevel, Usage: "Filter logs by level, e.g. error (loki dbtype)"}
-	NamespacePod            = Flag{Type: String, Name: flagkey.NamespacePod, Usage: "Namespace in which function's pod are created. If not specified, function's namespace is used. Note: version <1.18 used fission-function as pod's default ns."}
-	FnTestBody              = Flag{Type: String, Name: flagkey.FnTestBody, Short: "b", Usage: "Request body"}
-	FnTestTimeout           = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
-	FnTestHeader            = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
-	FnTestQuery             = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
-	FnTestAsync             = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "Invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
-	FnTestAlias             = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
-	FnTestVersion           = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
+	// RFC-0030 §4 files mode. A separate flag rather than extending --secret:
+	// ':' already means "rename to" in --env-from (secret/key:ALIAS), so
+	// overloading it across flags in one CLI would be a trap.
+	FnSecretMount      = Flag{Type: StringSlice, Name: flagkey.FnSecretMount, Usage: "Mount a secret at a path relative to /secrets, matching the function's spec.secrets[].mountPath in-cluster. Format NAME=PATH, e.g. --secret-mount db-creds=app/creds. Repeatable. Without this a secret lands at the default /secrets/<namespace>/<name>."}
+	FnCfgMapMount      = Flag{Type: StringSlice, Name: flagkey.FnCfgMapMount, Usage: "Mount a configmap at a path relative to /configs, matching the function's spec.configmaps[].mountPath in-cluster. Format NAME=PATH, e.g. --configmap-mount app-config=app/conf. Repeatable. Without this a configmap lands at the default /configs/<namespace>/<name>."}
+	FnEnvVar           = Flag{Type: StringSlice, Name: flagkey.FnEnvVar, Short: "e", Usage: "Per-function environment variable as KEY=VALUE; repeatable. On fn update the provided list replaces the function's env vars. (--env keeps meaning the Environment name.)"}
+	FnEnvFromSecret    = Flag{Type: StringSlice, Name: flagkey.FnEnvFromSecret, Usage: "Project a same-namespace Secret into the function's environment: 'name' for the whole object, 'name/key' for one key (variable named after the key), 'name/key:ENV' to rename it; repeatable. On fn update the provided list replaces the previous one."}
+	FnEnvFromConfigMap = Flag{Type: StringSlice, Name: flagkey.FnEnvFromConfigMap, Usage: "Project a same-namespace ConfigMap into the function's environment: 'name' for the whole object, 'name/key' for one key (variable named after the key), 'name/key:ENV' to rename it; repeatable. On fn update the provided list replaces the previous one."}
+	FnExecutorType     = Flag{Type: String, Name: flagkey.FnExecutorType, Usage: "Executor type for execution; one of 'poolmgr', 'newdeploy'", DefaultValue: string(fv1.ExecutorTypePoolmgr)}
+	FnExecutionTimeout = Flag{Type: Int, Name: flagkey.FnExecutionTimeout, Aliases: []string{"ft"}, Usage: "Maximum time for a request to wait for the response from the function", DefaultValue: 60}
+	FnLogPod           = Flag{Type: String, Name: flagkey.FnLogPod, Usage: "Function pod name (use the latest pod name if unspecified)"}
+	FnLogFollow        = Flag{Type: Bool, Name: flagkey.FnLogFollow, Short: "f", Usage: "Specify if the logs should be streamed"}
+	FnLogDetail        = Flag{Type: Bool, Name: flagkey.FnLogDetail, Short: "d", Usage: "Display detailed information"}
+	FnLogDBType        = Flag{Type: String, Name: flagkey.FnLogDBType, Usage: "Log database type: kubernetes (default) or loki", DefaultValue: "kubernetes"}
+	FnLogReverseQuery  = Flag{Type: Bool, Name: flagkey.FnLogReverseQuery, Short: "r", Usage: "Specify the log reverse query base on time, it will be invalid if the 'follow' flag is specified. valid for dbtype as loki"}
+	FnLogCount         = Flag{Type: Int, Name: flagkey.FnLogCount, Usage: "Get N most recent log records", DefaultValue: 20}
+	FnLogRequestID     = Flag{Type: String, Name: flagkey.FnLogRequestID, Usage: "Filter logs to a single invocation by its X-Fission-Request-ID (loki dbtype)"}
+	FnLogTraceID       = Flag{Type: String, Name: flagkey.FnLogTraceID, Usage: "Filter logs by trace id (loki dbtype)"}
+	FnLogLevel         = Flag{Type: String, Name: flagkey.FnLogLevel, Usage: "Filter logs by level, e.g. error (loki dbtype)"}
+	NamespacePod       = Flag{Type: String, Name: flagkey.NamespacePod, Usage: "Namespace in which function's pod are created. If not specified, function's namespace is used. Note: version <1.18 used fission-function as pod's default ns."}
+	FnTestBody         = Flag{Type: String, Name: flagkey.FnTestBody, Short: "b", Usage: "Request body"}
+	FnTestTimeout      = Flag{Type: Duration, Name: flagkey.FnTestTimeout, Short: "t", Usage: "Length of time to wait for the response. If set to zero or negative number, no timeout is set", DefaultValue: 60 * time.Second}
+	FnTestHeader       = Flag{Type: StringSlice, Name: flagkey.FnTestHeader, Short: "H", Usage: "Request headers"}
+	FnTestQuery        = Flag{Type: StringSlice, Name: flagkey.FnTestQuery, Short: "q", Usage: "Request query parameters: -q key1=value1 -q key2=value2"}
+	FnTestAsync        = Flag{Type: Bool, Name: flagkey.FnTestAsync, Usage: "Invoke asynchronously (X-Fission-Invoke-Mode: async); prints the invocation id instead of waiting for the response. Set FISSION_INTERNAL_AUTH_SECRET when authentication is enabled."}
+	FnTestAlias        = Flag{Type: String, Name: flagkey.FnTestAlias, Usage: "Test a specific alias (e.g. prod) instead of the live function; mutually exclusive with --version"}
+	FnTestVersion      = Flag{Type: String, Name: flagkey.FnTestVersion, Usage: "Test a specific pinned FunctionVersion instead of the live function; mutually exclusive with --alias"}
 	// RFC-0025 `fission fn pods --alias`/`--version`: filter the pod list to
 	// one alias's resolved target or a pinned FunctionVersion. The flag names
 	// (flagkey.FnTestAlias/FnTestVersion, "alias"/"version") are reused from

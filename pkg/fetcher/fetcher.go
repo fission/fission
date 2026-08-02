@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -203,7 +204,20 @@ func verifyChecksum(fileChecksum, checksum *fv1.Checksum) error {
 	return nil
 }
 
-func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
+// writeSecretOrConfigMap writes one object's data keys into dirPath.
+//
+// written records every path this specialization pass has already created, and
+// a second object claiming one of them is REFUSED rather than allowed to
+// truncate it. That is the runtime half of RFC-0030 §4's shadowing rule: two
+// references may share a directory in ways admission cannot see, because the
+// filenames are the objects' DATA KEYS and keys are mutable after the Function
+// was admitted. Without this, whichever object is written second silently wins
+// and the function reads one object's value under the other's name.
+//
+// Refusing is the safe direction. A collision means the delivered file set is
+// ambiguous, and failing specialization surfaces that as a visible error
+// instead of credentials that are quietly wrong.
+func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string, written map[string]string, objectID string) error {
 	// Open the os.Root once and write every key through it: os.Root confines
 	// each write to dirPath (the keys are Secret/ConfigMap data keys), and
 	// reusing one root avoids an openat per key.
@@ -212,10 +226,25 @@ func writeSecretOrConfigMap(dataMap map[string][]byte, dirPath string) error {
 		return fmt.Errorf("failed to open directory %s: %w", dirPath, err)
 	}
 	defer root.Close()
-	for key, val := range dataMap {
-		if err := root.WriteFile(key, val, 0750); err != nil {
+
+	// Sort so a collision is reported deterministically rather than depending
+	// on map iteration order.
+	keys := make([]string, 0, len(dataMap))
+	for key := range dataMap {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		full := filepath.Join(dirPath, key)
+		if owner, taken := written[full]; taken && owner != objectID {
+			return fmt.Errorf("refusing to overwrite %s: already written by %s in this specialization pass; "+
+				"two references resolve to the same directory and share the data key %q", full, owner, key)
+		}
+		if err := root.WriteFile(key, dataMap[key], 0750); err != nil {
 			return fmt.Errorf("failed to write file %s in %s: %w", key, dirPath, err)
 		}
+		written[full] = objectID
 	}
 	return nil
 }
@@ -466,6 +495,11 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 // FetchSecretsAndCfgMaps fetches secrets and configmaps specified by user
 // It returns the HTTP code and error if any
 func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference) (int, error) {
+	// Files written during THIS pass, so a second object cannot silently
+	// truncate a file the first one wrote. Scoped per call: a later
+	// specialization legitimately rewrites the same paths with fresh values.
+	writtenFiles := map[string]string{}
+
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 
 	if len(secrets) > 0 {
@@ -486,9 +520,14 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, filepath.Join(secret.Namespace, secret.Name))
+			subPath, err := fv1.ObjectSubPath(secret.MountPath, secret.Namespace, secret.Name)
 			if err != nil {
-				logger.Error(err, "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
+				logger.Error(err, "invalid mountPath for secret", "secret_name", secret.Name, "secret_namespace", secret.Namespace)
+				return http.StatusBadRequest, err
+			}
+			secretDir, err := utils.RootJoin(fetcher.sharedSecretPath, subPath)
+			if err != nil {
+				logger.Error(err, "failed to resolve secret directory", "directory", secretDir, "secret_name", secret.Name, "secret_namespace", secret.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err, secret)
 			}
 
@@ -500,7 +539,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 					"secret_namespace", secret.Namespace)
 				return http.StatusInternalServerError, fmt.Errorf("%s: %s: %w", e, secretDir, err)
 			}
-			err = writeSecretOrConfigMap(data.Data, secretDir)
+			err = writeSecretOrConfigMap(data.Data, secretDir, writtenFiles, fmt.Sprintf("secret %s/%s", secret.Namespace, secret.Name))
 			if err != nil {
 				logger.Error(err, "failed to write secret to file location", "location", secretDir,
 					"secret_name", secret.Name,
@@ -532,9 +571,14 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 				return httpCode, errors.New(e)
 			}
 
-			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, filepath.Join(config.Namespace, config.Name))
+			subPath, err := fv1.ObjectSubPath(config.MountPath, config.Namespace, config.Name)
 			if err != nil {
-				logger.Error(err, "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
+				logger.Error(err, "invalid mountPath for configmap", "config_map_name", config.Name, "config_map_namespace", config.Namespace)
+				return http.StatusBadRequest, err
+			}
+			configDir, err := utils.RootJoin(fetcher.sharedConfigPath, subPath)
+			if err != nil {
+				logger.Error(err, "failed to resolve configmap directory", "directory", configDir, "config_map_name", config.Name, "config_map_namespace", config.Namespace)
 				return http.StatusBadRequest, fmt.Errorf("%w, request: %v", err,
 					config)
 			}
@@ -551,7 +595,7 @@ func (fetcher *Fetcher) FetchSecretsAndCfgMaps(ctx context.Context, secrets []fv
 			for key, val := range data.Data {
 				configMap[key] = []byte(val)
 			}
-			err = writeSecretOrConfigMap(configMap, configDir)
+			err = writeSecretOrConfigMap(configMap, configDir, writtenFiles, fmt.Sprintf("configmap %s/%s", config.Namespace, config.Name))
 			if err != nil {
 				logger.Error(err, "failed to write configmap to file location", "location", configDir,
 					"config_map_name", config.Name,
