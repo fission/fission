@@ -689,7 +689,7 @@ func TestNameFormat(t *testing.T) {
 		leg := jobNamesFor(t, distinguishing, "legacy")
 		require.NotEqual(t, std, leg, "fixture precondition: the release name must distinguish the two formats")
 
-		implicit := jobNamesForDefault(t, distinguishing)
+		implicit := jobNamesFrom(renderAs(t, distinguishing))
 		assert.Equal(t, std, implicit, "the chart default must be standard")
 		assert.NotEqual(t, leg, implicit, "the chart default must no longer be legacy")
 	})
@@ -739,12 +739,6 @@ func TestNameFormat(t *testing.T) {
 		require.Error(t, err, "a typo must fail the render, not fall back to legacy silently")
 		assert.Contains(t, err.Error(), "nameFormat must be")
 	})
-}
-
-// jobNamesForDefault renders with no nameFormat set at all.
-func jobNamesForDefault(t *testing.T, release string) []string {
-	t.Helper()
-	return jobNamesFrom(renderAs(t, release))
 }
 
 // jobNamesFor renders with a given release name and nameFormat, returning the
@@ -897,22 +891,9 @@ func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
 func TestInternalAuthAutoGenerate(t *testing.T) {
 	const master = "fission-internal-auth"
 
-	countMasterSecrets := func(docs []map[string]any) int {
-		n := 0
-		for _, d := range docs {
-			kind, _ := d["kind"].(string)
-			meta, _ := d["metadata"].(map[string]any)
-			name, _ := meta["name"].(string)
-			if kind == "Secret" && name == master {
-				n++
-			}
-		}
-		return n
-	}
-
 	t.Run("off by default: the template still renders the master", func(t *testing.T) {
 		docs := render(t)
-		assert.Positive(t, countMasterSecrets(docs),
+		assert.Positive(t, countByKindName(docs, "Secret", master),
 			"autoGenerate defaults off, so existing installs must be untouched")
 		assert.Zero(t, countByKindName(docs, "Role", "fission-preupgrade-authgen"),
 			"no generation means no read grant")
@@ -920,7 +901,7 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 
 	t.Run("on: the template stops rendering and the hook is wired", func(t *testing.T) {
 		docs := render(t, "--set", "internalAuth.autoGenerate=true")
-		assert.Zero(t, countMasterSecrets(docs),
+		assert.Zero(t, countByKindName(docs, "Secret", master),
 			"generation moves in-cluster, so the template must render no master — "+
 				"the retention hook is what stops Helm pruning the live one")
 		vals := envValues(docs, "GENERATE_AUTH_SECRET")
@@ -951,6 +932,24 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 		assert.NotContains(t, dynNS[0], "fission-fn",
 			"under dynamic tenancy the master must stay in the release namespace: "+
 				"tenant namespaces get controller-owned derived keys and must never hold the master")
+	})
+
+	// autoGenerate moves provisioning into the hook Job, so the template stops
+	// rendering the Secret. If the Job is also switched off, NOTHING provisions
+	// the master and every control-plane pod wedges on a required secretKeyRef
+	// — a whole install that comes up dead from two values that each look
+	// reasonable alone. The chart must refuse to render, exactly as it already
+	// does for crds.mode=hook with the same Job disabled.
+	t.Run("autoGenerate without the hook Job refuses to render", func(t *testing.T) {
+		_, err := renderErr(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "preUpgradeChecks.enabled=false",
+			// Otherwise the pre-existing crds.mode guard fires first and we
+			// would be asserting the wrong refusal.
+			"--set", "crds.mode=none")
+		require.Error(t, err, "autoGenerate with preUpgradeChecks disabled provisions no master at all")
+		assert.Contains(t, err.Error(), "preUpgradeChecks.enabled must be true",
+			"the failure must name the value the operator has to change")
 	})
 
 	// The read grant is the one concession this design makes; it must not widen

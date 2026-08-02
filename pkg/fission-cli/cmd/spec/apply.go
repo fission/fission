@@ -517,22 +517,29 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 				f.Namespace, f.Name, f.Spec.Package.PackageRef.Namespace, f.Spec.Package.PackageRef.Name)
 		}
 
-		fnKey := k8sCache.MetaObjectToName(&metav1.ObjectMeta{Namespace: f.Namespace, Name: f.Name}).String()
-		switch stamp, isLive := liveStamps[fnKey]; {
-		case written[k]:
-			// This apply created or updated the package: propagate the new
-			// ResourceVersion so the change reaches running pods.
-			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
-		case isLive:
-			// Package untouched and the function already exists: keep the
-			// stamp it has, so an unchanged reapply is a genuine no-op.
-			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = stamp
-		default:
-			// A new function against a pre-existing package still needs a
-			// stamp, and the package's current ResourceVersion is the only
-			// one there is.
-			fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = m.ResourceVersion
+		// Default to the package's current ResourceVersion. That is right when
+		// this apply wrote the package (the change must reach running pods),
+		// and it is the only stamp available for a function that is new, or
+		// that this spec repoints at a different package.
+		rv := m.ResourceVersion
+
+		// The one case that must NOT take the current version: the package was
+		// untouched by this apply and the live function already references that
+		// same package. Re-stamping there would rewrite an unchanged function
+		// on every apply, minting spurious RFC-0025 versions.
+		//
+		// "Same package" is load-bearing. A spec that repoints a function from
+		// pkgA to an untouched pkgB must not inherit pkgA's stamp: the
+		// reference would name pkgB with pkgA's ResourceVersion, the next apply
+		// would preserve that same wrong value, and nothing converges —
+		// package restamping only fires when pkgB itself is written.
+		fnKey := k8sCache.MetaObjectToName(&f.ObjectMeta).String()
+		if live, isLive := liveStamps[fnKey]; !written[k] && isLive &&
+			live.Name == f.Spec.Package.PackageRef.Name &&
+			live.Namespace == f.Spec.Package.PackageRef.Namespace {
+			rv = live.ResourceVersion
 		}
+		fr.Functions[i].Spec.Package.PackageRef.ResourceVersion = rv
 	}
 
 	_, ras, err = applyFunctions(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
@@ -831,15 +838,19 @@ func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources
 // field is a runtime stamp, not something a user writes. So "leave it alone"
 // cannot mean "leave it empty": an empty stamp differs from what is live and
 // would force the very update this is avoiding.
-func liveFunctionStamps(ctx context.Context, fclient cmd.Client) (map[string]string, error) {
+// The whole PackageRef is returned, not just the stamp: a stamp is only worth
+// preserving when the live function still points at the SAME package the spec
+// now names. Keying on the function alone would carry the old package's
+// ResourceVersion onto a repointed reference.
+func liveFunctionStamps(ctx context.Context, fclient cmd.Client) (map[string]fv1.PackageRef, error) {
 	list, err := fclient.FissionClientSet.CoreV1().Functions(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list functions to preserve package stamps: %w", err)
 	}
-	out := make(map[string]string, len(list.Items))
+	out := make(map[string]fv1.PackageRef, len(list.Items))
 	for i := range list.Items {
 		fn := &list.Items[i]
-		out[k8sCache.MetaObjectToName(&fn.ObjectMeta).String()] = fn.Spec.Package.PackageRef.ResourceVersion
+		out[k8sCache.MetaObjectToName(&fn.ObjectMeta).String()] = fn.Spec.Package.PackageRef
 	}
 	return out, nil
 }

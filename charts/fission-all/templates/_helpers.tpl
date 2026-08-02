@@ -200,12 +200,6 @@ it). Disabled by default → behaviour is unchanged for single-replica installs.
 {{- end }}
 
 {{/*
-internalAuth.envs renders the two env entries that wire the HMAC shared
-secret into a Fission control-plane container. See the design at docs/internal-auth/00-design.md. The OLD
-secret is mounted with optional: true so rotation can drop it without
-forcing the chart to render an empty key.
-*/}}
-{{/*
 fission.internalAuthSecretName is the Secret holding the internal-auth HMAC
 master: the operator's pre-created one when internalAuth.existingSecret is set,
 otherwise the chart-generated "fission-internal-auth".
@@ -220,6 +214,32 @@ builder upload 401s with nothing naming the Secret as the cause.
 {{- default "fission-internal-auth" .Values.internalAuth.existingSecret -}}
 {{- end -}}
 
+{{/*
+fission.internalAuthGenerateInCluster is non-empty when the pre-upgrade hook,
+not the template, mints the master.
+
+Exactly one of them may provision it, and this is the ONLY place that decides
+which. Three templates gate on this answer — the Secret itself, the hook's
+GENERATE_AUTH_SECRET env, and the hook's RBAC — and open-coding the condition
+in each is how they drift apart. Both drift directions fail silently: both
+provisioning means two masters race and half the derived keys are wrong;
+neither means no master at all and every internal call is unsigned.
+
+The whitespace trimming is load-bearing. A stray newline would make the
+`include` non-empty, so the helper would read as true in every case.
+*/}}
+{{- define "fission.internalAuthGenerateInCluster" -}}
+{{- if and .Values.internalAuth.enabled .Values.internalAuth.autoGenerate (not .Values.internalAuth.existingSecret) (not .Values.internalAuth.secret) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+internalAuth.envs renders the two env entries that wire the HMAC shared
+secret into a Fission control-plane container. See the design at docs/internal-auth/00-design.md. The OLD
+secret is mounted with optional: true so rotation can drop it without
+forcing the chart to render an empty key.
+*/}}
 {{- define "internalAuth.envs" }}
 {{- if .Values.internalAuth.enabled }}
 - name: FISSION_INTERNAL_AUTH_SECRET

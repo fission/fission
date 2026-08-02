@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -21,9 +22,15 @@ const (
 	// authSecretKey is the data key holding the HMAC master.
 	authSecretKey = "secret"
 	// authMasterBytes is the generated master's length before base64. 32 bytes
-	// matches what the chart's randAlphaNum 32 produced, and exceeds the
-	// minimum the signer enforces.
+	// matches what the chart's randAlphaNum 32 produced. Note the signer
+	// itself enforces no minimum — it only rejects a zero-length master
+	// (pkg/auth/hmac/keys.go) — so this length is the guarantee, not a floor
+	// something downstream would catch.
 	authMasterBytes = 32
+
+	// provisionAttempts bounds the adopt-the-winner retry; a third round means
+	// two runs each won a different namespace, which no value can reconcile.
+	provisionAttempts = 3
 )
 
 // GenerateAuthSecret creates the internal-auth master where it is missing,
@@ -55,35 +62,64 @@ func GenerateAuthSecret(ctx context.Context, client kubernetes.Interface, logger
 		return nil
 	}
 
-	// Reuse an existing value if there is one. Reading the master is what the
-	// `get` grant on this single name is for: without it a second run could not
-	// tell "already provisioned" from "absent" and would mint a new master,
-	// which is strictly worse than the read.
-	master, found, err := existingMaster(ctx, client, namespaces, secretName)
-	if err != nil {
-		return err
-	}
-	if !found {
-		master, err = newMaster()
+	// Retry, because a create that loses to a concurrent hook Job does not mean
+	// this run's master is the right one — it means someone else's is. Re-read
+	// and adopt the winner rather than carrying our own value into the
+	// remaining namespaces, which is how the set would diverge permanently.
+	for attempt := range provisionAttempts {
+		// Reuse an existing value if there is one. Reading the master is what
+		// the `get` grant on this single name is for: without it a second run
+		// could not tell "already provisioned" from "absent" and would mint a
+		// new master, which is strictly worse than the read.
+		master, found, err := existingMaster(ctx, client, namespaces, secretName)
 		if err != nil {
 			return err
 		}
-		logger.Info("generating internal-auth master", "secret", secretName)
-	}
+		if !found {
+			master, err = newMaster()
+			if err != nil {
+				return err
+			}
+			logger.Info("generating internal-auth master", "secret", secretName)
+		}
 
+		lost, err := writeMaster(ctx, client, logger, namespaces, secretName, master)
+		if err != nil {
+			return err
+		}
+		if !lost {
+			return nil
+		}
+		logger.Info("lost a create to a concurrent run; re-reading the winning master",
+			"secret", secretName, "attempt", attempt+1)
+	}
+	// Two runs each won a different namespace. There is no value that makes the
+	// set consistent, and guessing would leave half the derived keys wrong with
+	// no error anywhere, so stop and say so.
+	return fmt.Errorf("internal-auth master %q still disagrees across namespaces after %d attempts; "+
+		"delete the inconsistent copies and re-run", secretName, provisionAttempts)
+}
+
+// writeMaster provisions master into every namespace, reporting whether any
+// namespace already held a DIFFERENT one (in which case the caller must adopt
+// the winner and try again).
+func writeMaster(ctx context.Context, client kubernetes.Interface, logger logr.Logger, namespaces []string, secretName string, master []byte) (bool, error) {
 	for _, ns := range namespaces {
 		if ns == "" {
 			continue
 		}
-		created, err := createIfAbsent(ctx, client, ns, secretName, master)
+		created, agreed, err := createIfAbsent(ctx, client, ns, secretName, master)
 		if err != nil {
-			return err
+			return false, err
+		}
+		if !agreed {
+			return true, nil
 		}
 		if created {
 			logger.Info("created internal-auth master", "secret", secretName, "namespace", ns)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // existingMaster returns the first master value already present in the set.
@@ -115,23 +151,33 @@ func newMaster() ([]byte, error) {
 	}
 	// base64 so the value is safe in an env var and in `kubectl get -o yaml`
 	// round-trips, matching the shape the chart produced.
-	out := make([]byte, base64.RawStdEncoding.EncodedLen(len(raw)))
-	base64.RawStdEncoding.Encode(out, raw)
-	return out, nil
+	return []byte(base64.RawStdEncoding.EncodeToString(raw)), nil
 }
 
-// createIfAbsent creates the Secret and reports whether it did. An
-// AlreadyExists from a concurrent starter is success, not an error: two hook
-// Jobs racing must converge, not fail the install.
-func createIfAbsent(ctx context.Context, client kubernetes.Interface, namespace, name string, master []byte) (bool, error) {
-	_, err := client.CoreV1().Secrets(namespace).Create(ctx, &apiv1.Secret{
+// createIfAbsent creates the Secret, reporting whether it created one and
+// whether the live object agrees with master.
+//
+// An AlreadyExists is not success on its own. The Secret that beat us may hold
+// a different master (a concurrent hook Job that minted its own) or no usable
+// key at all (an aborted rotation, or an ExternalSecret placeholder that
+// existingMaster deliberately skipped). Returning "fine" for either is what
+// lets the namespaces diverge, and the symptom is 401s from pods signing with
+// a key the control plane does not verify — with nothing naming the cause.
+func createIfAbsent(ctx context.Context, client kubernetes.Interface, namespace, name string, master []byte) (created, agreed bool, err error) {
+	_, err = client.CoreV1().Secrets(namespace).Create(ctx, &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 			Labels: map[string]string{
-				// Marks the object as Helm-managed so a later
-				// internalAuth.secret rotation can adopt it rather than
-				// failing on an unowned object.
+				// NOT sufficient to make this Helm-adoptable, and deliberately
+				// not claiming to be. Helm's ownership check wants this label
+				// AND the meta.helm.sh/release-{name,namespace} annotations;
+				// the hook does not know the release, so it cannot set them.
+				// The label is here for selectors and parity with the chart's
+				// other objects only. Consequence: switching an autoGenerate
+				// install to a templated internalAuth.secret makes Helm refuse
+				// to adopt this Secret ("invalid ownership metadata") — see
+				// values.yaml, which documents deleting it first.
 				"app.kubernetes.io/managed-by": "Helm",
 				"application":                  "fission-internal-auth",
 			},
@@ -141,10 +187,25 @@ func createIfAbsent(ctx context.Context, client kubernetes.Interface, namespace,
 	}, metav1.CreateOptions{})
 	switch {
 	case err == nil:
-		return true, nil
+		return true, true, nil
 	case k8serrors.IsAlreadyExists(err):
-		return false, nil
+		live, getErr := client.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return false, false, fmt.Errorf("read existing %s/%s: %w", namespace, name, getErr)
+		}
+		switch v := live.Data[authSecretKey]; {
+		case len(v) == 0:
+			// Unrecoverable here: this identity may create the Secret but not
+			// patch it, and overwriting a master is the one thing this hook
+			// must never do. Surface it instead of provisioning around it.
+			return false, false, fmt.Errorf("%s/%s exists but carries no %q value; "+
+				"delete it or populate the key, then re-run", namespace, name, authSecretKey)
+		case !bytes.Equal(v, master):
+			return false, false, nil
+		default:
+			return false, true, nil
+		}
 	default:
-		return false, fmt.Errorf("create %s/%s: %w", namespace, name, err)
+		return false, false, fmt.Errorf("create %s/%s: %w", namespace, name, err)
 	}
 }

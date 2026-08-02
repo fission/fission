@@ -30,11 +30,8 @@ const (
 	// supported path for GitOps renderers, where the chart's lookup-based
 	// preservation of a generated value cannot work.
 	//
-	// Read it through InternalAuthSecretName rather than using this constant
-	// directly. Two components resolve this name independently — the fetcher
-	// pod-spec builder and the storagesvc client — and if they disagree the
-	// failure is a 401 on every archive fetch and builder upload, with nothing
-	// pointing at the name as the cause.
+	// Read it through InternalAuthSecretName, not this constant directly — see
+	// that function's doc for why two components must agree on the name.
 	DefaultInternalAuthSecret = "fission-internal-auth"
 
 	// InternalAuthSecretNameEnv overrides DefaultInternalAuthSecret. The chart

@@ -82,7 +82,7 @@ the master is replicated into — under dynamic/cluster tenancy the release
 namespace alone, because tenant namespaces receive controller-owned derived keys
 and the master must never land there.
 */}}
-{{- if and .Values.preUpgradeChecks.enabled .Values.internalAuth.enabled .Values.internalAuth.autoGenerate (not .Values.internalAuth.existingSecret) (not .Values.internalAuth.secret) }}
+{{- if and .Values.preUpgradeChecks.enabled (include "fission.internalAuthGenerateInCluster" .) }}
 {{- range $ns := splitList " " (include "fission.adoptSecretNamespaces" $) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
