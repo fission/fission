@@ -41,6 +41,13 @@ spec:
         imagePullPolicy: {{ .Values.pullPolicy }}
         command: [ "/pre-upgrade-checks" ]
         env:
+        {{- with include "fission.adoptSecretNames" . }}
+        - name: ADOPT_SECRETS
+          value: {{ . | quote }}
+        - name: ADOPT_SECRET_NAMESPACES
+          value: {{ include "fission.adoptSecretNamespaces" $ | quote }}
+        {{- end }}
+        {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: CRDS_MODE
           value: {{ include "fission.crdsMode" . | quote }}
         - name: CRDS_FORCE_CONFLICTS

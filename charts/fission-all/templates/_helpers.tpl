@@ -7,12 +7,62 @@ Expand the name of the chart.
 {{- end -}}
 
 {{/*
+fission.nameFormat selects how generated resource names are built, and is
+validated here so a typo fails the render rather than silently falling back to
+legacy behaviour.
+
+  standard (default) — release-qualified names with room to stay distinct.
+  legacy             — the pre-1.(N+1) names, kept as an escape hatch.
+
+RFC-0029 phase 2; `standard` became the default in 1.(N+1), closing #2906.
+
+Flipping the default is safe because `fullname` has exactly four consumers and
+all of them are hook JOBS — no Deployment, Service, Secret, ConfigMap,
+ServiceAccount, Role or CRD name is derived from it. Two of those Jobs already
+carry a `randNumeric 3` suffix, so their names change on every render anyway,
+and the analytics Jobs carry `hook-delete-policy: hook-succeeded`, so a
+successful run leaves nothing behind under the old name.
+
+The one residue: a hook Job that FAILED and was never cleaned up stays under
+its old name after the flip. It is inert — an orphaned completed/failed Job —
+but it will not be reaped by `before-hook-creation`, which matches on name.
+Delete it by hand if you see one.
+
+#2835 (two installs sharing a cluster) additionally needs the instance-class
+filter and does NOT close on this: every fixed-name resource (router, executor,
+the ClusterRoles) still collides.
+*/}}
+{{- define "fission.nameFormat" -}}
+{{- $v := default "standard" .Values.nameFormat -}}
+{{- if not (has $v (list "legacy" "standard")) -}}
+{{- fail (printf "nameFormat must be \"legacy\" or \"standard\", got %q" $v) -}}
+{{- end -}}
+{{- $v -}}
+{{- end -}}
+
+{{/*
 Create a default fully qualified app name.
-We truncate at 24 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+
+The legacy form truncates at 24 characters. That is NOT a Kubernetes limit —
+names allow 253, and DNS labels 63 — it is historical, and it is what makes two
+releases collide: any two release names sharing a 24-character prefix produce
+the same fullname, so a second install silently reuses the first's object names.
+
+The standard form keeps 43. That budget is derived, not chosen: the longest
+suffix any consumer appends is `-<chart version>-post-install` (20 characters
+at a 6-character version), and Job names must stay within 63 because the Job
+controller stamps the name into the `job-name` LABEL, where 63 is a hard limit.
+43 + 20 = 63. Raising it silently produces Jobs the apiserver rejects — which
+is exactly what the chart test caught while this was being written.
 */}}
 {{- define "fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 24 | trimSuffix "-" -}}
+{{- $full := printf "%s-%s" .Release.Name $name -}}
+{{- if eq (include "fission.nameFormat" .) "standard" -}}
+{{- $full | trunc 43 | trimSuffix "-" -}}
+{{- else -}}
+{{- $full | trunc 24 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 
 
@@ -356,4 +406,56 @@ a forbidden error on the upgrade that introduces its schema change.
 */}}
 {{- define "fission.crdNames" -}}
 canaryconfigs.fission.io environments.fission.io fissiontenants.fission.io functionaliases.fission.io functions.fission.io functionversions.fission.io httptriggers.fission.io kuberneteswatchtriggers.fission.io messagequeuetriggers.fission.io packages.fission.io timetriggers.fission.io workflowruns.fission.io workflows.fission.io
+{{- end -}}
+
+{{/*
+fission.adoptSecretNames is the space-separated list of chart-generated Secrets
+the pre-upgrade hook stamps helm.sh/resource-policy=keep onto, so that moving
+their generation out of the templating layer does not prune the live object on
+the next upgrade (RFC-0029 §3; mechanism verified on Helm v4.2.3).
+
+Only Secrets the chart itself may have created belong here — never one supplied
+via an existingSecret value, which the operator owns and Helm never manages.
+Empty when nothing needs adopting, which makes the whole migration render away.
+*/}}
+{{- define "fission.adoptSecretNames" -}}
+{{- $names := list -}}
+{{- if and .Values.internalAuth.enabled (not .Values.internalAuth.existingSecret) -}}
+{{- $names = append $names "fission-internal-auth" -}}
+{{- end -}}
+{{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
+{{- $names = append $names "router" -}}
+{{- end -}}
+{{- if not .Values.webhook.certManager.enabled -}}
+{{- $names = append $names "fission-webhook-certs" -}}
+{{- end -}}
+{{- join " " $names -}}
+{{- end -}}
+
+{{/*
+fission.adoptSecretNamespaces is the namespace set the retention adoption runs
+over. It mirrors internal-auth-secret.yaml's own replication set exactly: under
+STATIC tenancy the master is copied into defaultNamespace and every
+additionalFissionNamespaces, because kubelet cannot resolve a cross-namespace
+secretKeyRef. Leaving those copies out means they prune on upgrade and function
+pods come up unsigned — a silent failure, described in full on
+AdoptSecretsForKeep in cmd/preupgradechecks/adoptsecrets.go.
+
+Under dynamic/cluster tenancy the tenant copies are INTENTIONALLY removed (each
+tenant gets a controller-owned derived key instead), so pinning them with a keep
+annotation would fight that design — hence the same tenancy gate.
+*/}}
+{{- define "fission.adoptSecretNamespaces" -}}
+{{- $namespaces := list .Release.Namespace -}}
+{{- if eq (include "fission.tenancyMode" .) "static" -}}
+{{-   if and .Values.defaultNamespace (ne .Values.defaultNamespace .Release.Namespace) -}}
+{{-     $namespaces = append $namespaces .Values.defaultNamespace -}}
+{{-   end -}}
+{{-   range $ns := .Values.additionalFissionNamespaces -}}
+{{-     if not (has $ns $namespaces) -}}
+{{-       $namespaces = append $namespaces $ns -}}
+{{-     end -}}
+{{-   end -}}
+{{- end -}}
+{{- join " " $namespaces -}}
 {{- end -}}

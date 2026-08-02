@@ -22,10 +22,12 @@ TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
 # re-verify the jar is genuine tla2tools (manifest Main-class tlc2.TLC, Microsoft
 # vendor) and bump this pin. The pin stays so an UNEXPECTED artifact still fails
 # loudly rather than silently running arbitrary downloaded code.
-# Last bumped 2026-07-19 for the upstream rebuild dated 2026-07-18 (verified:
-# manifest Main-class tlc2.TLC, tlc2/TLC.class present, from the official
-# tlaplus/tlaplus v1.8.0 release).
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-cc4803dce2a8ffaf0f5920a9dc39df4b5ee34ab4cb53fb58ac557277a7e516b3}"
+# Last bumped 2026-08-02 for the upstream rebuild dated 2026-07-31. Verified
+# before bumping, per the note above: manifest Main-class tlc2.TLC,
+# Implementation-Vendor "Microsoft Corp.", Implementation-Version "2.0
+# 2026-07-31", tlc2/TLC.class present, downloaded from the official
+# tlaplus/tlaplus v1.8.0 release URL.
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-e22f8ffb4bacdea0a871f444dd94fe5fb0d8013b3388ae39e82e26f852c735d5}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"

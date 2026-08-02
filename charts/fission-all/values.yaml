@@ -1356,6 +1356,26 @@ authentication:
   ##
   jwtIssuer: fission
 
+
+## nameFormat selects how generated resource names are built (RFC-0029 §2).
+##
+##   standard (default) — release-qualified names with room to stay distinct.
+##   legacy             — the pre-1.(N+1) names, kept as an escape hatch if you
+##                        need an upgrade to change nothing at all.
+##
+## standard keeps 43 characters, leaving room for the suffixes the chart
+## appends inside the 63-char Job-name limit. The legacy form truncated to 24,
+## so any two release names sharing a 24-character prefix collided and the
+## second install silently reused the first's object names.
+##
+## The flip is low-impact because `fullname` has exactly four consumers and all
+## are hook Jobs — no Deployment, Service, Secret or RBAC name derives from it.
+## Two already carry a random suffix, and the analytics Jobs delete themselves
+## on success. A hook Job that FAILED and was never cleaned up will linger under
+## its old name; it is inert, but delete it by hand if you see one.
+##
+nameFormat: standard
+
 ## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
 ## distributed tracing data across function calls.
 ##
@@ -1578,6 +1598,32 @@ networkPolicy:
 ##
 ## Disabled here means the cluster falls back to NetworkPolicy + namespace
 ## isolation only, matching pre-1.(N+1) behaviour.
+## NOTE ON SECRET RETENTION: the chart-generated Secrets below —
+## `fission-internal-auth`, `router` (when authentication is enabled), and
+## `fission-webhook-certs` (when cert-manager is not managing it) — are
+## annotated `helm.sh/resource-policy: keep` by the pre-upgrade hook, so they
+## are NOT removed by `helm uninstall`. That is deliberate: it is what lets
+## their generation move out of the templating layer without an upgrade pruning
+## the live value and wedging the control plane.
+##
+## Two consequences worth knowing:
+##   * After `helm uninstall`, live key material remains — and NOT only in the
+##     release namespace. Under static tenancy `fission-internal-auth` is
+##     replicated into `defaultNamespace` and every entry of
+##     `additionalFissionNamespaces` (kubelet cannot resolve a cross-namespace
+##     secretKeyRef), and those copies are annotated for retention too. Deleting
+##     it in the release namespace alone leaves usable key material behind.
+##     When decommissioning, remove it from every namespace it was replicated
+##     into:
+##       kubectl delete secret router fission-webhook-certs -n <release-ns>
+##       for ns in <release-ns> <defaultNamespace> <additionalFissionNamespaces...>; do
+##         kubectl delete secret fission-internal-auth -n "$ns" --ignore-not-found
+##       done
+##   * `helm uninstall && helm install` no longer rotates this material — the
+##     reinstall finds the surviving Secrets and reuses them. To rotate after a
+##     suspected compromise, delete the Secrets explicitly (above) or set the
+##     value inputs to new material.
+##
 internalAuth:
   enabled: true
   # secret: "" — auto-generated on first install; preserved on upgrade.
