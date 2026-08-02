@@ -46,6 +46,16 @@ The statestore schema follows **expand/contract**, and the reason is the skew ru
 
 These are enforced, not just documented: `pkg/statestore/sqlstore` fails the build on destructive DDL, on a version gap or reorder, and on any change to an already-pinned migration's statements.
 
+## Notable default changes
+
+Behaviour changes that arrive by a changed default, rather than by a new flag, are listed here so an upgrade holds no surprises.
+
+- **`nameFormat` defaults to `standard`.**
+The generated names of the chart's hook Jobs are now release-qualified instead of truncated to 24 characters, so two releases whose names share a 24-character prefix no longer collide.
+Only hook Jobs are affected — no Deployment, Service, Secret, ConfigMap, ServiceAccount, Role or CRD name derives from this.
+Set `nameFormat: legacy` to keep the previous names.
+A hook Job that failed and was never cleaned up will linger under its old name after the upgrade; it is inert, but can be deleted by hand.
+
 ## Deprecation policy
 
 - Flags, CRD fields, chart values, and CLI commands are deprecated with **notice in one full minor release before removal**.

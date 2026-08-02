@@ -510,15 +510,29 @@ func TestNameFormat(t *testing.T) {
 	// limit — it is what makes two releases collide.
 	const legacyTrunc = 24
 
-	// Compares generated NAMES, not the whole manifest: the chart mints a random
-	// master secret on every render, so a byte-for-byte stream comparison would
-	// differ for reasons unrelated to naming.
-	t.Run("legacy is the default, and default names are unchanged", func(t *testing.T) {
-		explicit := jobNamesFor(t, "fission", "legacy")
-		require.NotEmpty(t, explicit)
-		implicit := jobNamesForDefault(t, "fission")
-		assert.Equal(t, explicit, implicit,
-			"the default must be legacy: an upgrade that renamed resources would be a delete-and-create, not a cosmetic change")
+	// The release name matters: with a short one ("fission") both formats
+	// produce the SAME names, so a default-check using it passes whichever
+	// format is the default and pins nothing. Use one long enough to
+	// distinguish them.
+	const distinguishing = "fission-platform-team-alpha"
+
+	t.Run("standard is the default", func(t *testing.T) {
+		std := jobNamesFor(t, distinguishing, "standard")
+		leg := jobNamesFor(t, distinguishing, "legacy")
+		require.NotEqual(t, std, leg, "fixture precondition: the release name must distinguish the two formats")
+
+		implicit := jobNamesForDefault(t, distinguishing)
+		assert.Equal(t, std, implicit, "the chart default must be standard")
+		assert.NotEqual(t, leg, implicit, "the chart default must no longer be legacy")
+	})
+
+	t.Run("legacy remains available as an escape hatch", func(t *testing.T) {
+		leg := jobNamesFor(t, distinguishing, "legacy")
+		require.NotEmpty(t, leg)
+		for _, n := range leg {
+			assert.LessOrEqual(t, len(strings.SplitN(n, "-1.", 2)[0]), legacyTrunc,
+				"legacy must still truncate to 24, so an operator can pin the old names")
+		}
 	})
 
 	// Two release names sharing a 24-char prefix collide under legacy. That is
