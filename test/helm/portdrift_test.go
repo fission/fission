@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -770,5 +771,245 @@ func jobNamesFrom(docs []map[string]any) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// TestInternalAuthExistingSecret pins RFC-0029's `internalAuth.existingSecret`
+// contract, whose failure mode is silent.
+//
+// Every consumer must resolve ONE name. The secretKeyRef is mounted optional so
+// rotation can drop a key without forcing an empty render — which also means a
+// pod whose reference points at a Secret that does not exist starts happily
+// with the env var absent, and then 401s on every archive fetch and builder
+// upload with nothing naming the Secret as the cause.
+//
+// The Go side resolves the same name from FISSION_INTERNAL_AUTH_SECRET_NAME
+// (fv1.InternalAuthSecretName), so the chart must set it to whatever it wired
+// into the secretKeyRefs.
+func TestInternalAuthExistingSecret(t *testing.T) {
+	const defaultName = "fission-internal-auth"
+
+	t.Run("default: the chart renders the master and points at it", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countByKindName(docs, "Secret", defaultName),
+			"with no existingSecret the chart must generate the master itself")
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names,
+			"no internal-auth secretKeyRef was rendered; the loop below would assert nothing")
+		for _, name := range names {
+			assert.Equal(t, defaultName, name)
+		}
+	})
+
+	t.Run("existingSecret: the chart renders no master and points at theirs", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.existingSecret=my-master")
+		assert.Zero(t, countByKindName(docs, "Secret", defaultName),
+			"the chart must not generate a master when the operator supplies one")
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names, "no internal-auth secretKeyRef was rendered")
+		for _, name := range names {
+			assert.Equal(t, "my-master", name,
+				"every consumer must read the operator's Secret, not the chart's default")
+		}
+	})
+
+	// The env var is what the Go side reads. If it disagrees with the
+	// secretKeyRefs above, the two halves resolve different Secrets.
+	t.Run("the name env var matches the secretKeyRefs", func(t *testing.T) {
+		for _, tc := range []struct{ arg, want string }{
+			{"", defaultName},
+			{"my-master", "my-master"},
+		} {
+			var docs []map[string]any
+			if tc.arg == "" {
+				docs = render(t)
+			} else {
+				docs = render(t, "--set", "internalAuth.existingSecret="+tc.arg)
+			}
+			vals := envValues(docs, "FISSION_INTERNAL_AUTH_SECRET_NAME")
+			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (existingSecret=%q)", tc.arg)
+			for _, v := range vals {
+				assert.Equal(t, tc.want, v)
+			}
+		}
+	})
+}
+
+// internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
+// secretKeyRef points at, across every rendered pod template.
+func internalAuthEnvNames(docs []map[string]any) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		name, _ := e["name"].(string)
+		if name != "FISSION_INTERNAL_AUTH_SECRET" {
+			return
+		}
+		vf, _ := e["valueFrom"].(map[string]any)
+		skr, _ := vf["secretKeyRef"].(map[string]any)
+		if n, ok := skr["name"].(string); ok {
+			out = append(out, n)
+		}
+	})
+	return out
+}
+
+// envValues collects the literal values of a named env var across every
+// rendered pod template.
+func envValues(docs []map[string]any, envName string) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		if name, _ := e["name"].(string); name == envName {
+			if v, ok := e["value"].(string); ok {
+				out = append(out, v)
+			}
+		}
+	})
+	return out
+}
+
+// forEachContainerEnv walks every env entry of every container in every
+// rendered pod template.
+func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
+	for _, doc := range docs {
+		spec, _ := doc["spec"].(map[string]any)
+		tmpl, ok := spec["template"].(map[string]any)
+		if !ok {
+			continue
+		}
+		podSpec, _ := tmpl["spec"].(map[string]any)
+		for _, key := range []string{"containers", "initContainers"} {
+			cs, _ := podSpec[key].([]any)
+			for _, c := range cs {
+				cm, _ := c.(map[string]any)
+				envs, _ := cm["env"].([]any)
+				for _, e := range envs {
+					if em, ok := e.(map[string]any); ok {
+						fn(em)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestInternalAuthAutoGenerate pins RFC-0029 §10's generation path, including
+// the tenancy rule that decides where the master may land.
+func TestInternalAuthAutoGenerate(t *testing.T) {
+	const master = "fission-internal-auth"
+
+	countMasterSecrets := func(docs []map[string]any) int {
+		n := 0
+		for _, d := range docs {
+			kind, _ := d["kind"].(string)
+			meta, _ := d["metadata"].(map[string]any)
+			name, _ := meta["name"].(string)
+			if kind == "Secret" && name == master {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("off by default: the template still renders the master", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countMasterSecrets(docs),
+			"autoGenerate defaults off, so existing installs must be untouched")
+		assert.Zero(t, countByKindName(docs, "Role", "fission-preupgrade-authgen"),
+			"no generation means no read grant")
+	})
+
+	t.Run("on: the template stops rendering and the hook is wired", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		assert.Zero(t, countMasterSecrets(docs),
+			"generation moves in-cluster, so the template must render no master — "+
+				"the retention hook is what stops Helm pruning the live one")
+		vals := envValues(docs, "GENERATE_AUTH_SECRET")
+		require.NotEmpty(t, vals, "the hook must be told which Secret to provision")
+		for _, v := range vals {
+			assert.Equal(t, master, v)
+		}
+	})
+
+	// The rule the whole design turns on: under dynamic/cluster tenancy the
+	// master must NOT reach tenant namespaces — they get controller-owned
+	// derived keys, and a master there would defeat the isolation end state.
+	t.Run("static tenancy fans out; dynamic does not", func(t *testing.T) {
+		static := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		staticNS := envValues(static, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, staticNS)
+		assert.Contains(t, staticNS[0], "fission-fn",
+			"static tenancy replicates the master: kubelet cannot resolve a cross-namespace secretKeyRef")
+
+		dynamic := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "tenancy.mode=dynamic",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		dynNS := envValues(dynamic, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, dynNS)
+		assert.NotContains(t, dynNS[0], "fission-fn",
+			"under dynamic tenancy the master must stay in the release namespace: "+
+				"tenant namespaces get controller-owned derived keys and must never hold the master")
+	})
+
+	// The read grant is the one concession this design makes; it must not widen
+	// beyond the single object that needs it.
+	//
+	// The split between the two rules is load-bearing, not cosmetic. RBAC
+	// matches resourceNames against the name in the REQUEST PATH, and a POST
+	// carries the object name in the body instead — so a create rule fenced by
+	// resourceNames matches nothing and the hook fails Forbidden. Fencing
+	// create looks safer and is actually inert, which is precisely the kind of
+	// mistake that survives review, so pin both halves.
+	t.Run("the generation grant is fenced to the master alone", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		var checked, sawGet, sawCreate int
+		for _, d := range docs {
+			kind, _ := d["kind"].(string)
+			meta, _ := d["metadata"].(map[string]any)
+			name, _ := meta["name"].(string)
+			if kind != "Role" || name != "fission-preupgrade-authgen" {
+				continue
+			}
+			checked++
+			rules, _ := d["rules"].([]any)
+			for _, r := range rules {
+				rule, _ := r.(map[string]any)
+				names, _ := rule["resourceNames"].([]any)
+				verbs, _ := rule["verbs"].([]any)
+				for _, v := range verbs {
+					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
+					assert.NotEqual(t, "delete", v)
+				}
+				switch {
+				case slices.Contains(verbsOf(verbs), "create"):
+					sawCreate++
+					assert.Empty(t, names,
+						"create must NOT carry resourceNames: the name is in the POST body, "+
+							"not the path, so a fenced rule never matches and generation fails Forbidden")
+					assert.Equal(t, []string{"create"}, verbsOf(verbs),
+						"the unfenced rule must carry create and nothing else — "+
+							"any read/write verb here would apply to every Secret in the namespace")
+				default:
+					sawGet++
+					require.Len(t, names, 1, "the read grant must name exactly one Secret")
+					assert.Equal(t, master, names[0])
+				}
+			}
+		}
+		require.Positive(t, checked, "no generation Role was rendered; the guard is inert")
+		assert.Positive(t, sawGet, "generation needs a name-scoped get to tell provisioned from absent")
+		assert.Positive(t, sawCreate, "generation needs a create it can actually use")
+	})
+}
+
+// verbsOf converts a decoded YAML verb list to strings.
+func verbsOf(verbs []any) []string {
+	out := make([]string, 0, len(verbs))
+	for _, v := range verbs {
+		s, _ := v.(string)
+		out = append(out, s)
+	}
 	return out
 }

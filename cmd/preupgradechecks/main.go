@@ -53,6 +53,27 @@ func main() {
 		}
 	}
 
+	// Generate the internal-auth master in-cluster when the chart asks for it
+	// (internalAuth.autoGenerate). Generating here rather than in the template
+	// is what makes the value survive a GitOps renderer: `lookup` returns empty
+	// under `helm template`, so a templated value is re-minted on every sync.
+	//
+	// GENERATE_AUTH_SECRET_NAMESPACES is computed by the chart, not derived
+	// here, because the set is tenancy-dependent — release namespace only under
+	// dynamic/cluster tenancy, plus the replicated namespaces under static.
+	// See GenerateAuthSecret.
+	if name := os.Getenv("GENERATE_AUTH_SECRET"); name != "" {
+		namespaces := adoptSecretNames(os.Getenv("GENERATE_AUTH_SECRET_NAMESPACES"))
+		if len(namespaces) == 0 {
+			logger.Error(nil, "GENERATE_AUTH_SECRET set but GENERATE_AUTH_SECRET_NAMESPACES is empty; refusing to guess which namespaces need the master")
+			os.Exit(1)
+		}
+		if err := GenerateAuthSecret(ctx, preupgradeClient.k8sClient, logger, namespaces, name); err != nil {
+			logger.Error(err, "failed to provision the internal-auth master; control-plane pods would start unsigned")
+			os.Exit(1)
+		}
+	}
+
 	if mode := os.Getenv("CRDS_MODE"); mode == crdsModeHook {
 		// Adoption of hand-applied CRDs needs --force-conflicts: they carry
 		// managedFields owned by kubectl-create as an Update operation.

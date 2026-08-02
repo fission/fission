@@ -205,19 +205,38 @@ secret into a Fission control-plane container. See the design at docs/internal-a
 secret is mounted with optional: true so rotation can drop it without
 forcing the chart to render an empty key.
 */}}
+{{/*
+fission.internalAuthSecretName is the Secret holding the internal-auth HMAC
+master: the operator's pre-created one when internalAuth.existingSecret is set,
+otherwise the chart-generated "fission-internal-auth".
+
+Every consumer must go through this. The Go side resolves the same name from
+FISSION_INTERNAL_AUTH_SECRET_NAME (fv1.InternalAuthSecretName), and a
+disagreement between the two does not fail loudly — the secretKeyRef is
+optional, so pods start with the env var absent and every archive fetch and
+builder upload 401s with nothing naming the Secret as the cause.
+*/}}
+{{- define "fission.internalAuthSecretName" -}}
+{{- default "fission-internal-auth" .Values.internalAuth.existingSecret -}}
+{{- end -}}
+
 {{- define "internalAuth.envs" }}
 {{- if .Values.internalAuth.enabled }}
 - name: FISSION_INTERNAL_AUTH_SECRET
   valueFrom:
     secretKeyRef:
-      name: fission-internal-auth
+      name: {{ include "fission.internalAuthSecretName" . }}
       key: secret
 - name: FISSION_INTERNAL_AUTH_SECRET_OLD
   valueFrom:
     secretKeyRef:
-      name: fission-internal-auth
+      name: {{ include "fission.internalAuthSecretName" . }}
       key: oldSecret
       optional: true
+# The Go side (fetcher pod-spec builder, storagesvc client) resolves the same
+# name from this env var; see fv1.InternalAuthSecretName.
+- name: FISSION_INTERNAL_AUTH_SECRET_NAME
+  value: {{ include "fission.internalAuthSecretName" . | quote }}
 {{- end }}
 {{- end }}
 
@@ -421,7 +440,7 @@ Empty when nothing needs adopting, which makes the whole migration render away.
 {{- define "fission.adoptSecretNames" -}}
 {{- $names := list -}}
 {{- if and .Values.internalAuth.enabled (not .Values.internalAuth.existingSecret) -}}
-{{- $names = append $names "fission-internal-auth" -}}
+{{- $names = append $names (include "fission.internalAuthSecretName" .) -}}
 {{- end -}}
 {{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
 {{- $names = append $names "router" -}}

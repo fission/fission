@@ -45,7 +45,7 @@ type Config struct {
 }
 
 // internalAuthEnvVars returns the env-var entries that mount the
-// HMAC-shared-secret values from the chart-installed Secret/fission-internal-auth
+// HMAC-shared-secret values from the internal-auth master Secret
 // onto the fetcher sidecar container. Every key is marked optional so a
 // pod still admits when the chart's internalAuth is disabled.
 //
@@ -70,7 +70,9 @@ type Config struct {
 // The storage key stays optional even then: storagesvc dual-accepts a
 // master-derived signature, so an unprovisioned fetcher degrades gracefully.
 func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
-	const chartSecret = "fission-internal-auth"
+	// Not necessarily chart-generated: internalAuth.existingSecret points this
+	// at an operator-supplied Secret instead.
+	masterSecret := fv1.InternalAuthSecretName()
 	keysSecret := fv1.TenantAuthKeysSecret
 
 	// Require the fetcher key only where it is guaranteed to be provisioned (a
@@ -80,8 +82,8 @@ func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
 	fetcherKeyRequired := utils.PerNamespaceKeyRequired(namespace)
 
 	return []apiv1.EnvVar{
-		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", chartSecret, "secret", true),
-		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", chartSecret, "oldSecret", true),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET", masterSecret, "secret", true),
+		secretKeyEnv("FISSION_INTERNAL_AUTH_SECRET_OLD", masterSecret, "oldSecret", true),
 		secretKeyEnv("FISSION_FETCHER_KEY", keysSecret, fv1.TenantAuthFetcherKey, !fetcherKeyRequired),
 		secretKeyEnv("FISSION_FETCHER_KEY_OLD", keysSecret, "fetcherKeyOld", true),
 		secretKeyEnv("FISSION_STORAGE_KEY", keysSecret, fv1.TenantAuthStorageKey, true),

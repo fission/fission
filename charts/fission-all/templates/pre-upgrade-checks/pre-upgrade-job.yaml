@@ -47,6 +47,12 @@ spec:
         - name: ADOPT_SECRET_NAMESPACES
           value: {{ include "fission.adoptSecretNamespaces" $ | quote }}
         {{- end }}
+{{- if and .Values.internalAuth.enabled .Values.internalAuth.autoGenerate (not .Values.internalAuth.existingSecret) (not .Values.internalAuth.secret) }}
+        - name: GENERATE_AUTH_SECRET
+          value: {{ include "fission.internalAuthSecretName" . | quote }}
+        - name: GENERATE_AUTH_SECRET_NAMESPACES
+          value: {{ include "fission.adoptSecretNamespaces" . | quote }}
+{{- end }}
         {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: CRDS_MODE
           value: {{ include "fission.crdsMode" . | quote }}

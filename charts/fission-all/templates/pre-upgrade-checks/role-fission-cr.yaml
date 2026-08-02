@@ -64,3 +64,83 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
 {{- end }}
+
+{{- /*
+Generation grant (see cmd/preupgradechecks/generateauth.go), SEPARATE from the
+adoption grant above on purpose.
+
+Adoption is patch-only and deliberately cannot read: a grant that cannot read
+the HMAC master, the JWT signing key or the webhook TLS key is worth far more
+than one that can. Generation genuinely needs `get` — it must tell "already
+provisioned" from "absent", and without that a re-run would mint a new master
+and rotate every derived key with no dual-accept window. Widening the adoption
+Role would have handed that read over all three Secrets; a separate Role fenced
+to the master ALONE confines it to the one object that needs it.
+
+Rendered only when the chart is actually generating, and only in the namespaces
+the master is replicated into — under dynamic/cluster tenancy the release
+namespace alone, because tenant namespaces receive controller-owned derived keys
+and the master must never land there.
+*/}}
+{{- if and .Values.preUpgradeChecks.enabled .Values.internalAuth.enabled .Values.internalAuth.autoGenerate (not .Values.internalAuth.existingSecret) (not .Values.internalAuth.secret) }}
+{{- range $ns := splitList " " (include "fission.adoptSecretNamespaces" $) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: "{{ $.Release.Name }}-preupgrade-authgen"
+  namespace: {{ $ns }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
+    helm.sh/hook-weight: "-2"
+rules:
+# get IS name-scoped: a GET carries the name in the request path, so the
+# authorizer matches it against resourceNames and this read reaches the
+# master and nothing else.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get"]
+  resourceNames:
+  - {{ include "fission.internalAuthSecretName" $ }}
+# create CANNOT be name-scoped, and pairing it with resourceNames does not
+# tighten the grant — it voids it. A POST carries the object name in the
+# BODY, not the path, so the authorizer sees an empty name, a
+# resourceNames-fenced rule never matches, and generation fails Forbidden.
+# The grant would be inert and the feature dead on arrival.
+#
+# This is the exact inverse of the CRD ClusterRole next door, which DOES
+# keep its resourceNames scope on create: server-side apply PATCHes a
+# named path, so the create authorization it additionally needs is
+# evaluated against that name. createIfAbsent uses a plain Create, not an
+# apply, deliberately — apply would take ownership of .data and rotate the
+# master, which is the one thing this hook must never do.
+#
+# So the residual grant is "create A Secret in this one namespace". It
+# cannot read, patch or delete any existing Secret, and create fails
+# AlreadyExists rather than overwriting the master. That is the floor RBAC
+# allows here, and it is bounded by the hook ServiceAccount being deleted
+# with the hook.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: "{{ $.Release.Name }}-preupgrade-authgen"
+  namespace: {{ $ns }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
+    helm.sh/hook-weight: "-2"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: "{{ $.Release.Name }}-preupgrade-authgen"
+subjects:
+- kind: ServiceAccount
+  name: fission-preupgrade
+  namespace: {{ $.Release.Namespace }}
+{{- end }}
+{{- end }}
