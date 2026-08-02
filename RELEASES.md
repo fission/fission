@@ -34,6 +34,9 @@ A release is tagged only when all of the following are green, mechanically and a
 
 - Within one minor, control-plane components tolerate mixed versions while a rolling upgrade is in flight: wire formats and RPC surfaces are additive-only within a minor.
 - Formal N/N−1 skew and rollback contracts (including `helm rollback` guarantees) are being specified in RFC-0028 and will be added here as they become tested guarantees rather than intentions.
+- **Skip-level upgrades (N−2 → N) are exercised in CI but not promised.**
+  Clusters routinely defer upgrading until something forces it, so the jump from an out-of-window line is the common real-world case; CI runs it on every change so we learn whether it works rather than hearing it from an issue.
+  The supported path remains one minor at a time.
 
 ## State schema (statestore)
 

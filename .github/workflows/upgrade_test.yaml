@@ -63,6 +63,12 @@ jobs:
       matrix:
         kindversion: ["v1.32.11"]
         os: [ubuntu-24.04]
+        # RFC-0028 phase 5. "latest" is the N-1 -> N path RELEASES.md supports;
+        # "skip-level" is N-2 -> N, which the support window does NOT promise but
+        # real clusters attempt constantly, because upgrading is deferred until
+        # something forces it. Testing it is how we learn whether it works
+        # rather than finding out from an issue.
+        upgradeFrom: [latest, skip-level]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -110,12 +116,37 @@ jobs:
           # appVersion already carries the v prefix (hack/generate-helm-manifest.sh
           # stamps the git tag verbatim), e.g. "appVersion: v1.27.0".
           LATEST_TAG=$(helm show chart fission-charts/fission-all | awk '/^appVersion:/{print $2}')
-          echo "Installing latest published release $LATEST_TAG"
-          echo "LATEST_TAG=$LATEST_TAG" >> "$GITHUB_ENV"
+
+          # Distinct appVersions, newest first. A chart may publish several
+          # revisions per appVersion, so dedupe before counting back.
+          mapfile -t VERSIONS < <(helm search repo fission-charts/fission-all --versions -o json \
+            | python3 -c 'import sys,json;seen=[];[seen.append(r["app_version"]) for r in json.load(sys.stdin) if r.get("app_version") and r["app_version"] not in seen];print("\n".join(seen))')
+
+          case "${{ matrix.upgradeFrom }}" in
+            latest)
+              FROM_TAG="$LATEST_TAG"
+              ;;
+            skip-level)
+              # N-2. Outside the supported window on purpose: this leg exists to
+              # find out whether the skip works, not to assert a promise.
+              if [ "${#VERSIONS[@]}" -lt 3 ]; then
+                echo "fewer than three published appVersions (${VERSIONS[*]}); nothing to skip from"
+                echo "SKIP_LEG=1" >> "$GITHUB_ENV"
+                exit 0
+              fi
+              FROM_TAG="${VERSIONS[2]}"
+              ;;
+          esac
+
+          CHART_VER=$(helm search repo fission-charts/fission-all --versions -o json \
+            | python3 -c "import sys,json;print(next(r['version'] for r in json.load(sys.stdin) if r['app_version']=='$FROM_TAG'))")
+
+          echo "Installing $FROM_TAG (chart $CHART_VER) as the upgrade source [${{ matrix.upgradeFrom }}]"
+          echo "LATEST_TAG=$FROM_TAG" >> "$GITHUB_ENV"
           kubectl create ns ${{ env.FISSION_NAMESPACE }}
-          kubectl create -k "github.com/fission/fission/crds/v1?ref=$LATEST_TAG"
+          kubectl create -k "github.com/fission/fission/crds/v1?ref=$FROM_TAG"
           helm install --wait --timeout 10m --namespace ${{ env.FISSION_NAMESPACE }} fission \
-            fission-charts/fission-all --set routerServiceType=NodePort,analytics=false
+            fission-charts/fission-all --version "$CHART_VER" --set routerServiceType=NodePort,analytics=false
 
       # Record which Secrets the HEAD chart will ask the pre-upgrade hook to
       # adopt AND that the PUBLISHED release actually created. Both filters
@@ -125,6 +156,7 @@ jobs:
       # legitimately un-annotated afterwards. Deriving the list from the chart
       # rather than hardcoding it keeps this from drifting out of sync.
       - name: Record pre-upgrade secret inventory
+        if: ${{ env.SKIP_LEG != '1' }}
         run: |
           set -euo pipefail
           adopt=$(helm template fission "$GITHUB_WORKSPACE/charts/fission-all" \
@@ -147,6 +179,7 @@ jobs:
           cat "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
 
       - name: Build HEAD images and load into kind
+        if: ${{ env.SKIP_LEG != '1' }}
         run: |
           make skaffold-prebuild
           # builder images come from Environment CRDs and the reporter is
@@ -160,6 +193,7 @@ jobs:
           helm dependency update charts/fission-all
 
       - name: Run upgrade-under-load
+        if: ${{ env.SKIP_LEG != '1' }}
         timeout-minutes: 30
         env:
           NODE_RUNTIME_IMAGE: ghcr.io/fission/node-env
@@ -179,7 +213,7 @@ jobs:
             --upgrade-cmd "$UPGRADE_CMD" \
             --router-url "http://$NODE_IP:${{ env.ROUTER_NODEPORT }}" \
             --namespace default --fission-namespace ${{ env.FISSION_NAMESPACE }} \
-            --fission-version "${{ env.LATEST_TAG }}->HEAD" \
+            --fission-version "${{ env.LATEST_TAG }}->HEAD (${{ matrix.upgradeFrom }})" \
             --git-sha "${{ github.sha }}" \
             --out "$GITHUB_WORKSPACE/upgrade-results.json"
           # The benchmark CLI's failure budget records scenario errors in the
@@ -201,6 +235,7 @@ jobs:
       # CreateContainerConfigError. Assert it here, on a real upgrade from
       # the last published release, which is the only place the hook runs.
       - name: Verify the pre-upgrade hook adopted the generated Secrets
+        if: ${{ env.SKIP_LEG != '1' }}
         run: |
           set -euo pipefail
           if [ ! -s "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt" ]; then
@@ -221,6 +256,7 @@ jobs:
           exit $rc
 
       - name: Evaluate error budget (non-gating)
+        if: ${{ env.SKIP_LEG != '1' }}
         continue-on-error: true
         run: |
           jq '.scenarios[] | select(.name=="upgrade-under-load")' upgrade-results.json | tee upgrade-summary.json
@@ -245,7 +281,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: upgrade-results-${{ github.run_id }}-${{ matrix.kindversion }}
+          name: upgrade-results-${{ github.run_id }}-${{ matrix.kindversion }}-${{ matrix.upgradeFrom }}
           path: upgrade-results.json
           retention-days: 14
 
@@ -258,6 +294,6 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}
+          name: kind-logs-${{ github.run_id }}-${{ matrix.kindversion }}-${{ matrix.upgradeFrom }}
           path: kind-logs/*
           retention-days: 5
