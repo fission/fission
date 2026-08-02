@@ -1356,6 +1356,26 @@ authentication:
   ##
   jwtIssuer: fission
 
+
+## nameFormat selects how generated resource names are built (RFC-0029 §2).
+##
+##   standard (default) — release-qualified names with room to stay distinct.
+##   legacy             — the pre-1.(N+1) names, kept as an escape hatch if you
+##                        need an upgrade to change nothing at all.
+##
+## standard keeps 43 characters, leaving room for the suffixes the chart
+## appends inside the 63-char Job-name limit. The legacy form truncated to 24,
+## so any two release names sharing a 24-character prefix collided and the
+## second install silently reused the first's object names.
+##
+## The flip is low-impact because `fullname` has exactly four consumers and all
+## are hook Jobs — no Deployment, Service, Secret or RBAC name derives from it.
+## Two already carry a random suffix, and the analytics Jobs delete themselves
+## on success. A hook Job that FAILED and was never cleaned up will linger under
+## its old name; it is inert, but delete it by hand if you see one.
+##
+nameFormat: standard
+
 ## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
 ## distributed tracing data across function calls.
 ##

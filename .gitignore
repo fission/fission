@@ -57,7 +57,10 @@ test/e2e/cli/????????-????-????-????-????????????
 # Added by code-review-graph
 .code-review-graph/
 notes
-examples
+# Anchored to the repo root. Unanchored, this pattern matched EVERY directory
+# named "examples" at any depth, which silently swallowed committed example
+# trees — RFC-0029's examples/gitops/ and docs/examples/ among them.
+/examples
 .nvim.json
 .github/code-review-graph.instruction.md
 .claude/skills

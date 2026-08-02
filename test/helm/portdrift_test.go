@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -23,6 +24,50 @@ import (
 
 	"github.com/fission/fission/pkg/svcinfo"
 )
+
+// helmTemplate runs `helm template` with an explicit release name and returns
+// raw stdout, or the error with stderr attached.
+func helmTemplate(t *testing.T, release string, extraArgs ...string) (string, error) {
+	t.Helper()
+	helm, err := exec.LookPath("helm")
+	if err != nil {
+		t.Skip("helm not installed; skipping chart drift check")
+	}
+	_, filename, _, _ := runtime.Caller(0) //nolint
+	chart := filepath.Join(filepath.Dir(filename), "..", "..", "charts", "fission-all")
+	args := append([]string{"template", release, chart, "--namespace", "fission"}, extraArgs...)
+	cmd := exec.CommandContext(t.Context(), helm, args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", err, stderr.String())
+	}
+	return string(out), nil
+}
+
+// renderAs renders under a specific release name and returns parsed docs.
+func renderAs(t *testing.T, release string, extraArgs ...string) []map[string]any {
+	t.Helper()
+	out, err := helmTemplate(t, release, extraArgs...)
+	require.NoError(t, err)
+	var docs []map[string]any
+	for doc := range strings.SplitSeq(out, "\n---") {
+		var m map[string]any
+		if yaml.Unmarshal([]byte(doc), &m) != nil || m == nil {
+			continue
+		}
+		docs = append(docs, m)
+	}
+	require.NotEmpty(t, docs)
+	return docs
+}
+
+// renderErr returns the render error, for cases that must FAIL to render.
+func renderErr(t *testing.T, extraArgs ...string) (string, error) {
+	t.Helper()
+	return helmTemplate(t, "fission", extraArgs...)
+}
 
 // render runs `helm template` on the chart with the given extra args and
 // returns the manifest stream split into unstructured docs.
@@ -661,4 +706,111 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 		}
 		require.Positive(t, checked, "no generation Role was rendered; the guard is inert")
 	})
+}
+
+// TestNameFormat pins RFC-0029 phase 2's naming.
+//
+// `standard` is the default (#2906). The escape hatch matters as much as the
+// default: an operator who needs an upgrade to change nothing at all must still
+// be able to pin `legacy`, because for most Kubernetes kinds a rename is a
+// delete-and-create rather than a cosmetic change.
+func TestNameFormat(t *testing.T) {
+	// The legacy form truncates to 24 characters, which is not a Kubernetes
+	// limit — it is what makes two releases collide.
+	const legacyTrunc = 24
+
+	// The release name matters: with a short one ("fission") both formats
+	// produce the SAME names, so a default-check using it passes whichever
+	// format is the default and pins nothing. Use one long enough to
+	// distinguish them.
+	const distinguishing = "fission-platform-team-alpha"
+
+	t.Run("standard is the default", func(t *testing.T) {
+		std := jobNamesFor(t, distinguishing, "standard")
+		leg := jobNamesFor(t, distinguishing, "legacy")
+		require.NotEqual(t, std, leg, "fixture precondition: the release name must distinguish the two formats")
+
+		implicit := jobNamesForDefault(t, distinguishing)
+		assert.Equal(t, std, implicit, "the chart default must be standard")
+		assert.NotEqual(t, leg, implicit, "the chart default must no longer be legacy")
+	})
+
+	t.Run("legacy remains available as an escape hatch", func(t *testing.T) {
+		leg := jobNamesFor(t, distinguishing, "legacy")
+		require.NotEmpty(t, leg)
+		for _, n := range leg {
+			assert.LessOrEqual(t, len(strings.SplitN(n, "-1.", 2)[0]), legacyTrunc,
+				"legacy must still truncate to 24, so an operator can pin the old names")
+		}
+	})
+
+	// Two release names sharing a 24-char prefix collide under legacy. That is
+	// the bug; this asserts it is real rather than theoretical, so the value of
+	// `standard` is measurable.
+	t.Run("legacy collides for long release names; standard does not", func(t *testing.T) {
+		a := "fission-platform-team-alpha-one"
+		b := "fission-platform-team-alpha-two"
+		require.Equal(t, a[:legacyTrunc], b[:legacyTrunc],
+			"fixture precondition: the two release names must share a 24-char prefix")
+
+		legacyA := jobNamesFor(t, a, "legacy")
+		legacyB := jobNamesFor(t, b, "legacy")
+		require.NotEmpty(t, legacyA)
+		assert.Equal(t, legacyA, legacyB,
+			"legacy truncation makes two distinct releases produce identical names — the collision this phase exists to fix")
+
+		stdA := jobNamesFor(t, a, "standard")
+		stdB := jobNamesFor(t, b, "standard")
+		require.NotEmpty(t, stdA)
+		assert.NotEqual(t, stdA, stdB,
+			"standard must keep distinct releases distinct")
+	})
+
+	// Names still have to be legal: the suffixes callers append must fit inside
+	// the DNS-label budget.
+	t.Run("standard names stay within the DNS-label budget", func(t *testing.T) {
+		long := "fission-a-very-long-release-name-for-a-shared-cluster"
+		for _, n := range jobNamesFor(t, long, "standard") {
+			assert.LessOrEqualf(t, len(n), 63, "generated name %q exceeds the 63-char DNS label limit", n)
+		}
+	})
+
+	t.Run("an unknown value fails the render", func(t *testing.T) {
+		_, err := renderErr(t, "--set", "nameFormat=bogus")
+		require.Error(t, err, "a typo must fail the render, not fall back to legacy silently")
+		assert.Contains(t, err.Error(), "nameFormat must be")
+	})
+}
+
+// jobNamesForDefault renders with no nameFormat set at all.
+func jobNamesForDefault(t *testing.T, release string) []string {
+	t.Helper()
+	return jobNamesFrom(renderAs(t, release))
+}
+
+// jobNamesFor renders with a given release name and nameFormat, returning the
+// generated Job names (the fullname helper's only consumers today).
+func jobNamesFor(t *testing.T, release, format string) []string {
+	t.Helper()
+	return jobNamesFrom(renderAs(t, release, "--set", "nameFormat="+format))
+}
+
+// jobNamesFrom extracts generated Job names, dropping the random suffix so the
+// stable prefix can be compared.
+func jobNamesFrom(docs []map[string]any) []string {
+	var out []string
+	for _, d := range docs {
+		if kind, _ := d["kind"].(string); kind != "Job" {
+			continue
+		}
+		meta, _ := d["metadata"].(map[string]any)
+		if name, ok := meta["name"].(string); ok {
+			if i := strings.LastIndex(name, "-"); i > 0 {
+				name = name[:i]
+			}
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

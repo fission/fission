@@ -7,12 +7,62 @@ Expand the name of the chart.
 {{- end -}}
 
 {{/*
+fission.nameFormat selects how generated resource names are built, and is
+validated here so a typo fails the render rather than silently falling back to
+legacy behaviour.
+
+  standard (default) — release-qualified names with room to stay distinct.
+  legacy             — the pre-1.(N+1) names, kept as an escape hatch.
+
+RFC-0029 phase 2; `standard` became the default in 1.(N+1), closing #2906.
+
+Flipping the default is safe because `fullname` has exactly four consumers and
+all of them are hook JOBS — no Deployment, Service, Secret, ConfigMap,
+ServiceAccount, Role or CRD name is derived from it. Two of those Jobs already
+carry a `randNumeric 3` suffix, so their names change on every render anyway,
+and the analytics Jobs carry `hook-delete-policy: hook-succeeded`, so a
+successful run leaves nothing behind under the old name.
+
+The one residue: a hook Job that FAILED and was never cleaned up stays under
+its old name after the flip. It is inert — an orphaned completed/failed Job —
+but it will not be reaped by `before-hook-creation`, which matches on name.
+Delete it by hand if you see one.
+
+#2835 (two installs sharing a cluster) additionally needs the instance-class
+filter and does NOT close on this: every fixed-name resource (router, executor,
+the ClusterRoles) still collides.
+*/}}
+{{- define "fission.nameFormat" -}}
+{{- $v := default "standard" .Values.nameFormat -}}
+{{- if not (has $v (list "legacy" "standard")) -}}
+{{- fail (printf "nameFormat must be \"legacy\" or \"standard\", got %q" $v) -}}
+{{- end -}}
+{{- $v -}}
+{{- end -}}
+
+{{/*
 Create a default fully qualified app name.
-We truncate at 24 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+
+The legacy form truncates at 24 characters. That is NOT a Kubernetes limit —
+names allow 253, and DNS labels 63 — it is historical, and it is what makes two
+releases collide: any two release names sharing a 24-character prefix produce
+the same fullname, so a second install silently reuses the first's object names.
+
+The standard form keeps 43. That budget is derived, not chosen: the longest
+suffix any consumer appends is `-<chart version>-post-install` (20 characters
+at a 6-character version), and Job names must stay within 63 because the Job
+controller stamps the name into the `job-name` LABEL, where 63 is a hard limit.
+43 + 20 = 63. Raising it silently produces Jobs the apiserver rejects — which
+is exactly what the chart test caught while this was being written.
 */}}
 {{- define "fullname" -}}
 {{- $name := default .Chart.Name .Values.nameOverride -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 24 | trimSuffix "-" -}}
+{{- $full := printf "%s-%s" .Release.Name $name -}}
+{{- if eq (include "fission.nameFormat" .) "standard" -}}
+{{- $full | trunc 43 | trimSuffix "-" -}}
+{{- else -}}
+{{- $full | trunc 24 | trimSuffix "-" -}}
+{{- end -}}
 {{- end -}}
 
 
