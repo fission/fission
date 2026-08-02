@@ -284,6 +284,11 @@ jobs:
           name: upgrade-results-${{ github.run_id }}-${{ matrix.kindversion }}-${{ matrix.upgradeFrom }}
           path: upgrade-results.json
           retention-days: 14
+          # A skipped leg (SKIP_LEG=1: fewer than three published appVersions,
+          # so there is no N-2 to skip-level from) never writes the file, and
+          # this step still runs under always(). Default `warn` would print a
+          # red herring on every such run; the leg is meant to skip cleanly.
+          if-no-files-found: ignore
 
       - name: Kind export logs
         if: ${{ always() }}
