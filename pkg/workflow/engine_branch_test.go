@@ -60,10 +60,13 @@ func TestEngineParallelJoin(t *testing.T) {
 	assert.Contains(t, out[0].(map[string]any)["fn"], "fn-x")
 	assert.Contains(t, out[1].(map[string]any)["fn"], "fn-y")
 
-	assertInvariants(t, h.log(t), 1)
-	assertRegionInvariants(t, h.log(t), 2)
-	assert.Equal(t, 1, h.calls["fn-x"])
-	assert.Equal(t, 1, h.calls["fn-y"])
+	log := h.log(t)
+	assertInvariants(t, log, 1)
+	assertRegionInvariants(t, log, 2)
+	assert.Equal(t, 1, attempts(log, "x"), "one attempt per branch state")
+	assert.Equal(t, 1, attempts(log, "y"), "one attempt per branch state")
+	assert.GreaterOrEqual(t, h.callCount("fn-x"), 1, "at-least-once execution")
+	assert.GreaterOrEqual(t, h.callCount("fn-y"), 1, "at-least-once execution")
 }
 
 func TestEngineParallelFailFast(t *testing.T) {

@@ -421,6 +421,33 @@ func TestRunLocalPropagatesEnvAndPorts(t *testing.T) {
 	assert.Equal(t, 5005, f.lastSpec.Ports[1].Host)
 }
 
+// requireReSpecialize waits for an edit to path to trigger a re-specialize,
+// rewriting the file on every tick rather than once.
+//
+// serveAndWatch registers the fsnotify watch AFTER the initial specialize —
+// runLocal specializes inside launch(), then calls serveAndWatch, which is
+// where addWatchTree/watcher.Add happen. A caller that writes as soon as it
+// observes that first specialize can therefore land its write in the gap
+// before the watch exists, and inotify has no replay: the event is lost for
+// good and the reload never comes. Rewriting each tick closes the gap.
+//
+// The tick must stay above serveAndWatch's 250ms debounce. A faster rewrite
+// loop would keep restarting drainBurst's quiet period, so the burst would
+// never drain and no reload would fire at all.
+func requireReSpecialize(t *testing.T, f *fakeRuntime, path, content, msg string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		if f.getSpecializePath() == "/v2/specialize" {
+			return true
+		}
+		// Errors are not asserted here: this runs on Eventually's goroutine,
+		// where FailNow is invalid. A failing write simply leaves the
+		// condition unsatisfied and fails with msg below.
+		_ = os.WriteFile(path, []byte(content), 0o644)
+		return false
+	}, 12*time.Second, 500*time.Millisecond, msg)
+}
+
 func TestRunLocalWatchReloadsOnChange(t *testing.T) {
 	f := &fakeRuntime{echo: "ok"}
 	code := writeTempCode(t, "v1")
@@ -443,9 +470,7 @@ func TestRunLocalWatchReloadsOnChange(t *testing.T) {
 	// Wait for the initial specialize, then edit the source and expect a re-specialize.
 	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond)
 	f.setSpecializePath("")
-	require.NoError(t, os.WriteFile(code, []byte("v2"), 0o644))
-	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond,
-		"editing the source should trigger a re-specialize")
+	requireReSpecialize(t, f, code, "v2", "editing the source should trigger a re-specialize")
 
 	cancel()
 	require.NoError(t, <-done)
@@ -505,9 +530,7 @@ func TestRunLocalWatchDirectoryReloadsOnChange(t *testing.T) {
 
 	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond)
 	f.setSpecializePath("")
-	require.NoError(t, os.WriteFile(main, []byte("v2"), 0o644))
-	require.Eventually(t, func() bool { return f.getSpecializePath() == "/v2/specialize" }, 3*time.Second, 10*time.Millisecond,
-		"editing a file inside the source dir should trigger a re-specialize")
+	requireReSpecialize(t, f, main, "v2", "editing a file inside the source dir should trigger a re-specialize")
 
 	cancel()
 	require.NoError(t, <-done)

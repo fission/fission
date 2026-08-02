@@ -148,6 +148,37 @@ func (h *harness) log(t *testing.T) []Event {
 	return out
 }
 
+// callCount reads the harness invocation counter under the lock. The
+// counter is written from the httptest handler goroutine, and a duplicate
+// delivery can still be in flight when the run reaches terminal, so an
+// unsynchronised read here is a real race, not a formality.
+func (h *harness) callCount(name string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.calls[name]
+}
+
+// attempts counts the attempts the LOG records for a state.
+//
+// Assert retry policy here rather than on the harness call counter. The
+// engine guarantees exactly one EvStepScheduled and one result per attempt
+// (W1/W2) — it does not guarantee exactly one HTTP delivery per attempt.
+// execute() sets X-Fission-Workflow-{Run,Attempt} precisely because
+// delivery is at-least-once and functions are expected to dedup on that
+// pair: a redelivered attempt re-runs the side effect, and its result then
+// loses the append guard, leaving the log correct and the call counter
+// high. Asserting an exact call count therefore tests a property the
+// design deliberately does not offer, and fails under CI contention.
+func attempts(log []Event, state string) int {
+	n := 0
+	for _, e := range log {
+		if e.Type == EvStepScheduled && e.State == state {
+			n++
+		}
+	}
+	return n
+}
+
 // assertInvariants re-verifies W1-W6 over the final log.
 func assertInvariants(t *testing.T, log []Event, maxAttempts int) {
 	t.Helper()
@@ -185,8 +216,12 @@ func TestEngineLinearPipeline(t *testing.T) {
 
 	assert.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
 	assert.JSONEq(t, `{"fn":"fn-b","call":1}`, string(s.Output))
-	assertInvariants(t, h.log(t), 1)
-	assert.Equal(t, map[string]int{"fn-a": 1, "fn-b": 1}, h.calls)
+	log := h.log(t)
+	assertInvariants(t, log, 1)
+	assert.Equal(t, 1, attempts(log, "a"), "one attempt per state")
+	assert.Equal(t, 1, attempts(log, "b"), "one attempt per state")
+	assert.GreaterOrEqual(t, h.callCount("fn-a"), 1, "at-least-once execution")
+	assert.GreaterOrEqual(t, h.callCount("fn-b"), 1, "at-least-once execution")
 }
 
 func TestEngineRetryThenCatch(t *testing.T) {
@@ -208,9 +243,12 @@ func TestEngineRetryThenCatch(t *testing.T) {
 	s := h.drive(t, h.engine, 10*time.Second)
 
 	assert.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal, "catch routed to b, which succeeded")
-	assertInvariants(t, h.log(t), 2)
-	assert.Equal(t, 2, h.calls["fn-a"], "retried to budget")
-	assert.Equal(t, 1, h.calls["fn-b"])
+	log := h.log(t)
+	assertInvariants(t, log, 2)
+	assert.Equal(t, 2, attempts(log, "a"), "retried to budget")
+	assert.Equal(t, 1, attempts(log, "b"), "the catch target runs once")
+	assert.GreaterOrEqual(t, h.callCount("fn-a"), 2, "at-least-once per attempt")
+	assert.GreaterOrEqual(t, h.callCount("fn-b"), 1, "at-least-once execution")
 }
 
 // TestEngineCatchResultPathKeepsDocument pins the catch resultPath contract:
@@ -265,8 +303,9 @@ func TestEnginePermanentErrorFailsRun(t *testing.T) {
 
 	assert.Equal(t, fv1.WorkflowRunFailed, s.Terminal)
 	assert.Equal(t, fv1.WorkflowErrPermanentError, s.ErrorType)
-	assert.Equal(t, 1, h.calls["fn-a"], "4xx never retries")
-	assertInvariants(t, h.log(t), 1)
+	log := h.log(t)
+	assert.Equal(t, 1, attempts(log, "a"), "4xx never retries")
+	assertInvariants(t, log, 1)
 }
 
 func TestEngineCancellation(t *testing.T) {
@@ -322,7 +361,7 @@ func TestEngineCrashPointResume(t *testing.T) {
 
 			assert.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
 			assertInvariants(t, h.log(t), 2)
-			assert.GreaterOrEqual(t, h.calls["fn-a"], 1, "at-least-once execution")
+			assert.GreaterOrEqual(t, h.callCount("fn-a"), 1, "at-least-once execution")
 		})
 	}
 }
