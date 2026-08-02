@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -680,9 +681,16 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 
 	// The read grant is the one concession this design makes; it must not widen
 	// beyond the single object that needs it.
+	//
+	// The split between the two rules is load-bearing, not cosmetic. RBAC
+	// matches resourceNames against the name in the REQUEST PATH, and a POST
+	// carries the object name in the body instead — so a create rule fenced by
+	// resourceNames matches nothing and the hook fails Forbidden. Fencing
+	// create looks safer and is actually inert, which is precisely the kind of
+	// mistake that survives review, so pin both halves.
 	t.Run("the generation grant is fenced to the master alone", func(t *testing.T) {
 		docs := render(t, "--set", "internalAuth.autoGenerate=true")
-		var checked int
+		var checked, sawGet, sawCreate int
 		for _, d := range docs {
 			kind, _ := d["kind"].(string)
 			meta, _ := d["metadata"].(map[string]any)
@@ -695,17 +703,41 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 			for _, r := range rules {
 				rule, _ := r.(map[string]any)
 				names, _ := rule["resourceNames"].([]any)
-				require.Len(t, names, 1, "the grant must name exactly one Secret")
-				assert.Equal(t, master, names[0])
 				verbs, _ := rule["verbs"].([]any)
 				for _, v := range verbs {
 					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
 					assert.NotEqual(t, "delete", v)
 				}
+				switch {
+				case slices.Contains(verbsOf(verbs), "create"):
+					sawCreate++
+					assert.Empty(t, names,
+						"create must NOT carry resourceNames: the name is in the POST body, "+
+							"not the path, so a fenced rule never matches and generation fails Forbidden")
+					assert.Equal(t, []string{"create"}, verbsOf(verbs),
+						"the unfenced rule must carry create and nothing else — "+
+							"any read/write verb here would apply to every Secret in the namespace")
+				default:
+					sawGet++
+					require.Len(t, names, 1, "the read grant must name exactly one Secret")
+					assert.Equal(t, master, names[0])
+				}
 			}
 		}
 		require.Positive(t, checked, "no generation Role was rendered; the guard is inert")
+		assert.Positive(t, sawGet, "generation needs a name-scoped get to tell provisioned from absent")
+		assert.Positive(t, sawCreate, "generation needs a create it can actually use")
 	})
+}
+
+// verbsOf converts a decoded YAML verb list to strings.
+func verbsOf(verbs []any) []string {
+	out := make([]string, 0, len(verbs))
+	for _, v := range verbs {
+		s, _ := v.(string)
+		out = append(out, s)
+	}
+	return out
 }
 
 // TestNameFormat pins RFC-0029 phase 2's naming.

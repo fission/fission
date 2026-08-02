@@ -95,11 +95,35 @@ metadata:
     helm.sh/hook-delete-policy: hook-succeeded,hook-failed,before-hook-creation
     helm.sh/hook-weight: "-2"
 rules:
+# get IS name-scoped: a GET carries the name in the request path, so the
+# authorizer matches it against resourceNames and this read reaches the
+# master and nothing else.
 - apiGroups: [""]
   resources: ["secrets"]
-  verbs: ["get", "create"]
+  verbs: ["get"]
   resourceNames:
   - {{ include "fission.internalAuthSecretName" $ }}
+# create CANNOT be name-scoped, and pairing it with resourceNames does not
+# tighten the grant — it voids it. A POST carries the object name in the
+# BODY, not the path, so the authorizer sees an empty name, a
+# resourceNames-fenced rule never matches, and generation fails Forbidden.
+# The grant would be inert and the feature dead on arrival.
+#
+# This is the exact inverse of the CRD ClusterRole next door, which DOES
+# keep its resourceNames scope on create: server-side apply PATCHes a
+# named path, so the create authorization it additionally needs is
+# evaluated against that name. createIfAbsent uses a plain Create, not an
+# apply, deliberately — apply would take ownership of .data and rotate the
+# master, which is the one thing this hook must never do.
+#
+# So the residual grant is "create A Secret in this one namespace". It
+# cannot read, patch or delete any existing Secret, and create fails
+# AlreadyExists rather than overwriting the master. That is the floor RBAC
+# allows here, and it is bounded by the hook ServiceAccount being deleted
+# with the hook.
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
