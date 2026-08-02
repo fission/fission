@@ -11,18 +11,29 @@ fission.nameFormat selects how generated resource names are built, and is
 validated here so a typo fails the render rather than silently falling back to
 legacy behaviour.
 
-  legacy   (default) — today's names, byte-for-byte. Existing installs must not
-                       be renamed by an upgrade: a rename is a delete-and-create
-                       for most resources, which is not something a minor
-                       release may do silently.
-  standard          — release-qualified names with room to stay distinct.
+  standard (default) — release-qualified names with room to stay distinct.
+  legacy             — the pre-1.(N+1) names, kept as an escape hatch.
 
-RFC-0029 phase 2. #2906 closes when `standard` becomes the default, which is a
-separate, announced change; #2835 (two installs sharing a cluster) additionally
-needs the instance-class filter and does NOT close on this.
+RFC-0029 phase 2; `standard` became the default in 1.(N+1), closing #2906.
+
+Flipping the default is safe because `fullname` has exactly four consumers and
+all of them are hook JOBS — no Deployment, Service, Secret, ConfigMap,
+ServiceAccount, Role or CRD name is derived from it. Two of those Jobs already
+carry a `randNumeric 3` suffix, so their names change on every render anyway,
+and the analytics Jobs carry `hook-delete-policy: hook-succeeded`, so a
+successful run leaves nothing behind under the old name.
+
+The one residue: a hook Job that FAILED and was never cleaned up stays under
+its old name after the flip. It is inert — an orphaned completed/failed Job —
+but it will not be reaped by `before-hook-creation`, which matches on name.
+Delete it by hand if you see one.
+
+#2835 (two installs sharing a cluster) additionally needs the instance-class
+filter and does NOT close on this: every fixed-name resource (router, executor,
+the ClusterRoles) still collides.
 */}}
 {{- define "fission.nameFormat" -}}
-{{- $v := default "legacy" .Values.nameFormat -}}
+{{- $v := default "standard" .Values.nameFormat -}}
 {{- if not (has $v (list "legacy" "standard")) -}}
 {{- fail (printf "nameFormat must be \"legacy\" or \"standard\", got %q" $v) -}}
 {{- end -}}
