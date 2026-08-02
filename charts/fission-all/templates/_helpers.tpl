@@ -459,8 +459,25 @@ Empty when nothing needs adopting, which makes the whole migration render away.
 */}}
 {{- define "fission.adoptSecretNames" -}}
 {{- $names := list -}}
-{{- if and .Values.internalAuth.enabled (not .Values.internalAuth.existingSecret) -}}
-{{- $names = append $names (include "fission.internalAuthSecretName" .) -}}
+{{- /*
+The CHART-GENERATED name, unconditionally — deliberately not the resolved one.
+
+Retention has to cover the object Helm previously managed, and setting
+existingSecret is exactly what removes that object from the rendered manifest.
+The obvious-looking `(not .Values.internalAuth.existingSecret)` guard here
+destroys the master in the most natural adoption there is: an operator with a
+chart-generated master who sets `existingSecret: fission-internal-auth` to take
+ownership of it. The template stops rendering it, nothing stamps keep, and Helm
+prunes a Secret that is still in use — every control-plane pod wedges on next
+restart and function pods run unsigned.
+
+Stamping keep on a Secret Helm no longer manages is harmless, and so is naming
+one that does not exist (the hook logs "no live secret to adopt" and moves on),
+so the unconditional form is strictly safer. An operator-supplied Secret under a
+DIFFERENT name is never added: Helm never managed it, so it was never at risk.
+*/}}
+{{- if .Values.internalAuth.enabled -}}
+{{- $names = append $names "fission-internal-auth" -}}
 {{- end -}}
 {{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
 {{- $names = append $names "router" -}}

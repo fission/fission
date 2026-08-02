@@ -934,6 +934,31 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 				"tenant namespaces get controller-owned derived keys and must never hold the master")
 	})
 
+	// The retention set must cover the Secret Helm PREVIOUSLY managed, and
+	// setting existingSecret is precisely what drops that object from the
+	// rendered manifest. Scoping retention to "we are not using an existing
+	// secret" destroys the master in the most natural adoption there is:
+	// point existingSecret at the chart-generated Secret to take ownership of
+	// it, and Helm prunes a Secret that is still in use.
+	t.Run("retention still covers the master when existingSecret adopts it", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			args []string
+		}{
+			{"default", nil},
+			{"adopting the chart-generated secret", []string{"--set", "internalAuth.existingSecret=" + master}},
+			{"an operator-owned secret under another name", []string{"--set", "internalAuth.existingSecret=my-own"}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				vals := envValues(render(t, tc.args...), "ADOPT_SECRETS")
+				require.NotEmpty(t, vals, "the retention hook must render")
+				assert.Containsf(t, vals[0], master,
+					"the chart-generated master must stay in the retention set (%s), "+
+						"or Helm prunes it the moment the template stops rendering it", tc.name)
+			})
+		}
+	})
+
 	// autoGenerate moves provisioning into the hook Job, so the template stops
 	// rendering the Secret. If the Job is also switched off, NOTHING provisions
 	// the master and every control-plane pod wedges on a required secretKeyRef
