@@ -35,6 +35,17 @@ A release is tagged only when all of the following are green, mechanically and a
 - Within one minor, control-plane components tolerate mixed versions while a rolling upgrade is in flight: wire formats and RPC surfaces are additive-only within a minor.
 - Formal N/N−1 skew and rollback contracts (including `helm rollback` guarantees) are being specified in RFC-0028 and will be added here as they become tested guarantees rather than intentions.
 
+## State schema (statestore)
+
+The statestore schema follows **expand/contract**, and the reason is the skew rule above: during a rolling upgrade a control-plane component at N−1 keeps reading a schema an N component has already migrated.
+
+- Schema change is **additive only** within a release: new tables and new nullable (or defaulted) columns.
+- Removal, renames, and in-place type changes happen **a release later**, once no supported line still reads the old shape.
+- A migration that has shipped is **never edited** — append a new one.
+  A cluster that already applied it will never re-run it, so an edit reaches only fresh installs and the two schemas diverge permanently, with nothing reporting the difference.
+
+These are enforced, not just documented: `pkg/statestore/sqlstore` fails the build on destructive DDL, on a version gap or reorder, and on any change to an already-pinned migration's statements.
+
 ## Deprecation policy
 
 - Flags, CRD fields, chart values, and CLI commands are deprecated with **notice in one full minor release before removal**.
