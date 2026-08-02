@@ -125,6 +125,16 @@ func writeMaster(ctx context.Context, client kubernetes.Interface, logger logr.L
 // existingMaster returns the first master value already present in the set.
 // Namespaces are checked in order, so the release namespace (first) wins if
 // copies ever disagree.
+//
+// A Secret that exists but carries no usable key is rejected HERE, before the
+// caller writes anything. That placement is the point: this scan holds `get` on
+// every namespace and runs entirely ahead of the first create, so refusing here
+// leaves the cluster untouched. Refusing later — at the create that trips over
+// it — would already have written a freshly minted master into the namespaces
+// ahead of it, and this identity has neither `patch` nor `delete` on the
+// master, so it could never take that back. The operator would then be holding
+// one namespace it must populate by hand and another the hook now insists is
+// authoritative, which is a worse place to stand than where they started.
 func existingMaster(ctx context.Context, client kubernetes.Interface, namespaces []string, secretName string) ([]byte, bool, error) {
 	for _, ns := range namespaces {
 		if ns == "" {
@@ -137,9 +147,13 @@ func existingMaster(ctx context.Context, client kubernetes.Interface, namespaces
 			}
 			return nil, false, fmt.Errorf("read %s/%s: %w", ns, secretName, err)
 		}
-		if v, ok := s.Data[authSecretKey]; ok && len(v) > 0 {
-			return v, true, nil
+		v, ok := s.Data[authSecretKey]
+		if !ok || len(v) == 0 {
+			return nil, false, fmt.Errorf("%s/%s exists but carries no %q value; "+
+				"populate the key, delete the Secret, or point internalAuth.existingSecret "+
+				"at the Secret you manage, then re-run", ns, secretName, authSecretKey)
 		}
+		return v, true, nil
 	}
 	return nil, false, nil
 }
@@ -195,11 +209,14 @@ func createIfAbsent(ctx context.Context, client kubernetes.Interface, namespace,
 		}
 		switch v := live.Data[authSecretKey]; {
 		case len(v) == 0:
-			// Unrecoverable here: this identity may create the Secret but not
-			// patch it, and overwriting a master is the one thing this hook
-			// must never do. Surface it instead of provisioning around it.
-			return false, false, fmt.Errorf("%s/%s exists but carries no %q value; "+
-				"delete it or populate the key, then re-run", namespace, name, authSecretKey)
+			// existingMaster already rejects a keyless Secret before any write,
+			// so reaching this means one appeared BETWEEN that scan and this
+			// create. Rare, and unlike the scan it cannot be atomic — earlier
+			// namespaces are already written. Still refuse: provisioning
+			// around it would leave this namespace keyless for good while the
+			// hook exits 0.
+			return false, false, fmt.Errorf("%s/%s was created without a %q value while this run was in flight; "+
+				"populate the key or delete the Secret, then re-run", namespace, name, authSecretKey)
 		case !bytes.Equal(v, master):
 			return false, false, nil
 		default:

@@ -219,6 +219,31 @@ func TestGenerateAuthSecretConvergence(t *testing.T) {
 	// so without this guard the run would provision every OTHER namespace and
 	// leave this one keyless — control-plane pods there stay wedged while the
 	// hook exits 0.
+	// Failing is not enough — it must fail having written NOTHING. The hook
+	// holds neither patch nor delete on the master, so a partial write is one
+	// it can never take back: the operator is left with a fresh master in one
+	// namespace and a keyless Secret in another, and the next run reports an
+	// irreconcilable split forever.
+	t.Run("a keyless Secret aborts before anything is written", func(t *testing.T) {
+		t.Parallel()
+		cs := fake.NewClientset()
+		_, err := cs.CoreV1().Secrets("default").Create(t.Context(), &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: "default"},
+			Data:       map[string][]byte{},
+		}, metav1.CreateOptions{})
+		require.NoError(t, err)
+
+		// "fission" is scanned FIRST and is absent, so the pre-fix ordering
+		// minted a master and created it here before ever reaching "default".
+		err = GenerateAuthSecret(t.Context(), cs, logger,
+			[]string{"fission", "default"}, testAuthSecret)
+		require.Error(t, err)
+
+		_, getErr := cs.CoreV1().Secrets("fission").Get(t.Context(), testAuthSecret, metav1.GetOptions{})
+		assert.True(t, k8serrors.IsNotFound(getErr),
+			"the run must abort before writing any namespace; found a master in %q that the hook can never remove", "fission")
+	})
+
 	t.Run("a keyless existing Secret fails loudly instead of being provisioned around", func(t *testing.T) {
 		t.Parallel()
 		for name, data := range map[string]map[string][]byte{

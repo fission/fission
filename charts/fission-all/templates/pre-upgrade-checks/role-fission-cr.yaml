@@ -11,13 +11,22 @@ annotates chart-generated Secrets with helm.sh/resource-policy=keep before Helm
 computes its deletion set, so a template can stop rendering them without the
 live object being pruned.
 
-PATCH ONLY, fenced by resourceNames to exactly the Secrets the chart generates.
+PATCH ONLY, fenced by resourceNames to the exact Secret NAMES the chart uses.
 resourceNames does restrict get and patch (both name the object in the request
 path), and deliberately no `get`: the merge patch is idempotent, so the hook
 never needs to read, and these are the highest-value Secrets in the namespace —
 a grant that cannot read the HMAC master, the JWT signing key or the webhook TLS
 key is worth far more than one that can. No list (which would let this identity
 enumerate every Secret), no create, no delete.
+
+"NAMES the chart uses", not "Secrets the chart generates" — the distinction is
+real. fission.adoptSecretNames names the internal-auth Secret unconditionally,
+because retention has to cover whatever Helm could prune, so with
+`internalAuth.existingSecret: fission-internal-auth` this grants patch on an
+object the OPERATOR owns. That is intended: it is the only way to stop Helm
+deleting it. Note the grant is `patch`, which is full .data mutation even
+though the hook writes one annotation — accepted knowingly, and bounded by the
+ServiceAccount being torn down with the hook.
 
 Rendered once per namespace the master is replicated into, and only when the
 Job that uses it actually renders — a standing Secret grant bound to a
@@ -116,11 +125,29 @@ rules:
 # apply, deliberately — apply would take ownership of .data and rotate the
 # master, which is the one thing this hook must never do.
 #
-# So the residual grant is "create A Secret in this one namespace". It
-# cannot read, patch or delete any existing Secret, and create fails
-# AlreadyExists rather than overwriting the master. That is the floor RBAC
-# allows here, and it is bounded by the hook ServiceAccount being deleted
-# with the hook.
+# So the residual grant is "create A Secret in this namespace". It cannot
+# patch or delete an existing one, and create fails AlreadyExists rather than
+# overwriting the master.
+#
+# Do NOT read that as harmless, and note it is the floor plain RBAC reaches,
+# not the floor the cluster can enforce. Two things sharpen it:
+#
+#   - It composes with the fenced `get` above. On a fresh install an actor
+#     with execution in the hook pod can create <master-name> as a
+#     kubernetes.io/service-account-token Secret annotated for any
+#     ServiceAccount in the namespace, let the token controller populate it,
+#     then read the token back through that `get`. Neither verb is a
+#     token-read primitive alone; together they are.
+#   - Under static tenancy this Role renders into defaultNamespace and every
+#     additionalFissionNamespaces too, where user workloads and function-pod
+#     ServiceAccounts live — not just the release namespace.
+#
+# It is bounded by needing control of the hook ServiceAccount already, and by
+# that ServiceAccount being torn down with the hook. The real fix is a
+# ValidatingAdmissionPolicy pinning CREATE secrets by this SA to
+# name == <master> && type == Opaque — the chart already ships exactly that
+# pattern in validatingadmissionpolicy.yaml for the CRD grant. Tracked as
+# follow-up work; until it lands, this comment is the honest description.
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["create"]

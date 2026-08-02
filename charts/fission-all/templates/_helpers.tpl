@@ -453,8 +453,21 @@ the pre-upgrade hook stamps helm.sh/resource-policy=keep onto, so that moving
 their generation out of the templating layer does not prune the live object on
 the next upgrade (RFC-0029 §3; mechanism verified on Helm v4.2.3).
 
-Only Secrets the chart itself may have created belong here — never one supplied
-via an existingSecret value, which the operator owns and Helm never manages.
+What belongs here is decided by ONE question: could Helm prune this object?
+Not "who owns it" — that reading is what the internalAuth entry below had to
+stop using, and the two entries genuinely differ:
+
+  - internal-auth-secret.yaml and webhook-server/cert.yaml carry NO
+    helm.sh/hook annotation, so they are ordinary release-manifest resources
+    and Helm prunes them the moment a template stops rendering them. They need
+    retention whether or not an existingSecret is set.
+  - router/secret.yaml IS a hook resource ("helm.sh/hook": pre-install,
+    pre-upgrade), so it lives outside Helm's deletion set and is never pruned.
+    Its existingSecret guard below is therefore correct and must stay.
+
+That asymmetry looks like an oversight and is not. Do not "fix" it by making
+the two branches match.
+
 Empty when nothing needs adopting, which makes the whole migration render away.
 */}}
 {{- define "fission.adoptSecretNames" -}}
@@ -471,14 +484,26 @@ ownership of it. The template stops rendering it, nothing stamps keep, and Helm
 prunes a Secret that is still in use — every control-plane pod wedges on next
 restart and function pods run unsigned.
 
-Stamping keep on a Secret Helm no longer manages is harmless, and so is naming
-one that does not exist (the hook logs "no live secret to adopt" and moves on),
-so the unconditional form is strictly safer. An operator-supplied Secret under a
-DIFFERENT name is never added: Helm never managed it, so it was never at risk.
+Naming a Secret that does not exist is free (the hook logs "no live secret to
+adopt" and moves on), and an operator-supplied Secret under a DIFFERENT name is
+still never added — Helm never managed it, so it was never at risk.
+
+The unconditional form does have a cost, and it is retention, not exposure: on
+a migration to `existingSecret: <another-name>`, the old chart-generated master
+is stamped keep in every namespace it was replicated into and then survives
+`helm uninstall`, where Helm would previously have pruned it. Live HMAC key
+material outliving the release is the lesser failure — the alternative deletes
+a master that is still in use — but it is why values.yaml carries the "NOTE ON
+SECRET RETENTION" block describing the manual per-namespace cleanup.
 */}}
 {{- if .Values.internalAuth.enabled -}}
 {{- $names = append $names "fission-internal-auth" -}}
 {{- end -}}
+{{- /*
+Guarded, unlike internalAuth above, and deliberately so: router/secret.yaml is
+a HOOK resource, so it is outside Helm's deletion set and cannot be pruned. See
+the header — the test is prunability, not ownership.
+*/}}
 {{- if and .Values.authentication.enabled (not .Values.authentication.existingSecret) -}}
 {{- $names = append $names "router" -}}
 {{- end -}}
