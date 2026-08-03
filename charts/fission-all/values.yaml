@@ -557,7 +557,7 @@ router:
     ## However, the drawback is it takes longer to switch to newly created function pods
     ## if using newdeploy as executor type for function. If you want to preserve the
     ## performance while keeping the short switching time to new function, you can create
-    ## an environment with short grace period by setting flag "--graceperiod" (default 360s),
+    ## an environment with short grace period by setting flag "--graceperiod" (default 90s),
     ## so that kubernetes will be able to reap old function pod quickly.
     ##
     ## For details, see https://github.com/fission/fission/issues/723

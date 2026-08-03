@@ -215,6 +215,7 @@ jobs:
             --namespace default --fission-namespace ${{ env.FISSION_NAMESPACE }} \
             --fission-version "${{ env.LATEST_TAG }}->HEAD (${{ matrix.upgradeFrom }})" \
             --git-sha "${{ github.sha }}" \
+            --artifact-dir "$GITHUB_WORKSPACE/upgrade-artifacts" \
             --out "$GITHUB_WORKSPACE/upgrade-results.json"
           # The benchmark CLI's failure budget records scenario errors in the
           # results instead of failing the process; an infra error or a skip
@@ -224,6 +225,15 @@ jobs:
             echo "upgrade-under-load did not complete: $problem"
             exit 1
           fi
+
+      # Cluster events are the cheapest failure-window correlator and expire
+      # from etcd long before anyone downloads an artifact — capture them now.
+      - name: Dump cluster events
+        if: ${{ always() && env.SKIP_LEG != '1' }}
+        run: |
+          mkdir -p upgrade-artifacts
+          kubectl get events -A --sort-by=.lastTimestamp > upgrade-artifacts/kube-events.txt || true
+          tail -n 60 upgrade-artifacts/kube-events.txt || true
 
       # The pre-upgrade hook stamps helm.sh/resource-policy=keep onto the
       # chart-generated Secrets so a later release can stop rendering them
@@ -282,7 +292,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: upgrade-results-${{ github.run_id }}-${{ matrix.kindversion }}-${{ matrix.upgradeFrom }}
-          path: upgrade-results.json
+          path: |
+            upgrade-results.json
+            upgrade-artifacts/**
           retention-days: 14
           # A skipped leg (SKIP_LEG=1: fewer than three published appVersions,
           # so there is no N-2 to skip-level from) never writes the file, and

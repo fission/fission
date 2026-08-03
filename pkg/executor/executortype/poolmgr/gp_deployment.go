@@ -70,10 +70,12 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	deployLabels := gp.getEnvironmentPoolLabels(env)
 	// Use long terminationGracePeriodSeconds for connection draining in case that
 	// pod still runs user functions.
-	gracePeriodSeconds := int64(6 * 60)
-	if env.Spec.TerminationGracePeriod >= 0 {
-		gracePeriodSeconds = env.Spec.TerminationGracePeriod
-	}
+	// The env value is authoritative: CRD validation floors it at 0 and the
+	// CRD default fills an omitted field with 90, so there is no in-code
+	// fallback — the previous 360s one was dead (the >= 0 guard is a
+	// tautology for a floored int64) and misled readers into believing a
+	// six-minute default existed.
+	gracePeriodSeconds := env.Spec.TerminationGracePeriod
 
 	podAnnotations := env.Annotations
 	if podAnnotations == nil {

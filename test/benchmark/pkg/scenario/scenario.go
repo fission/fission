@@ -476,7 +476,14 @@ func provisionWarmFunctionNamed(ctx context.Context, sc *harness.Scope, prefix s
 		return "", "", skip("runtime image unset (PYTHON_RUNTIME_IMAGE / NODE_RUNTIME_IMAGE)")
 	}
 	envName := sc.Name(prefix + "env")
-	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: image, Version: 1, Poolsize: poolsize}); err != nil {
+	// GracePeriod is load-bearing and NOT redundant with the CRD default:
+	// the upgrade scenario provisions fixtures on the N-1 control plane,
+	// whose CRD predates the terminationGracePeriod default — an Environment
+	// created there without the field gets 0, pods are SIGKILLed the instant
+	// a roll or reap deletes them, and every in-flight request on them dies
+	// as a connection reset. 90s mirrors the chart's router posture (75s
+	// drain + margin) and covers the 60s default function timeout.
+	if err = sc.CreateEnv(ctx, harness.EnvOptions{Name: envName, Image: image, Version: 1, Poolsize: poolsize, GracePeriod: 90}); err != nil {
 		return "", "", err
 	}
 	minScale := 0

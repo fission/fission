@@ -1889,8 +1889,28 @@ type (
 		Poolsize int `json:"poolsize,omitempty"`
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
-		// (Optional) defaults to 360 seconds
+		// A terminating function pod keeps serving for the WHOLE grace window
+		// (the preStop hook sleeps through it, then the kubelet kills the pod),
+		// so this value is exactly how long every teardown — idle reap, env
+		// update roll, upgrade, node drain — takes per pod. 90s covers endpoint
+		// propagation (seconds) plus the 60s default function timeout with
+		// margin, mirroring the router's own 75s-drain/90s-grace posture; set
+		// it per environment for functions with longer request timeouts.
+		//
+		// The CRD default below is what makes the documented default true for
+		// API-created Environments: the field is an int64, so before it existed
+		// an Environment created without the field got 0 — instant SIGKILL,
+		// every in-flight request on the pod dying as a connection reset.
+		//
+		// Consequence of defaulting a non-pointer field with omitempty: an
+		// explicit 0 survives ONLY via raw YAML/JSON. Every typed Go client
+		// (the CLI included) marshals 0 as absent, which the apiserver then
+		// serves as 90. Restoring 0 as a first-class typed-client value means
+		// migrating this field to *int64; until then, "instant kill" is a
+		// raw-manifest-only setting.
+		// (Optional) defaults to 90 seconds
 		// +optional
+		// +kubebuilder:default=90
 		// +kubebuilder:validation:Minimum=0
 		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
 
