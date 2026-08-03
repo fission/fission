@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -292,23 +293,45 @@ func TestWebhookEnvReaderRBACScopesByTenancy(t *testing.T) {
 	})
 }
 
-// npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
-// given svc label via a podSelector.
-func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
+// selectorSvcLabel returns a podSelector's `svc:` matchLabel ("" when absent).
+func selectorSvcLabel(sel map[string]any) string {
+	ml, _ := sel["matchLabels"].(map[string]any)
+	s, _ := ml["svc"].(string)
+	return s
+}
+
+// ingressSvcLabels collects every `svc:` value a NetworkPolicy's ingress
+// allowlists ADMIT.
+//
+// Deliberately excludes spec.podSelector. That is the workload the policy
+// PROTECTS, not one it admits, and folding it in would make npAllowsFromSvc
+// report every policy as admitting its own target — the router policy targets
+// `svc: router`, so the async-allowlist guard below (which asserts the router
+// is NOT admitted by default) would go permanently true and stop guarding.
+func ingressSvcLabels(doc map[string]any) []string {
+	var out []string
 	spec, _ := doc["spec"].(map[string]any)
 	ingress, _ := spec["ingress"].([]any)
 	for _, r := range ingress {
 		rule, _ := r.(map[string]any)
 		froms, _ := rule["from"].([]any)
 		for _, f := range froms {
-			sel, _ := f.(map[string]any)["podSelector"].(map[string]any)
-			ml, _ := sel["matchLabels"].(map[string]any)
-			if ml["svc"] == svcLabel {
-				return true
+			// A non-map `from` entry is malformed chart output; skip it so the
+			// caller reports a missing selector rather than panicking.
+			fm, _ := f.(map[string]any)
+			sel, _ := fm["podSelector"].(map[string]any)
+			if v := selectorSvcLabel(sel); v != "" {
+				out = append(out, v)
 			}
 		}
 	}
-	return false
+	return out
+}
+
+// npAllowsFromSvc reports whether any ingress rule's `from` allowlist admits the
+// given svc label via a podSelector.
+func npAllowsFromSvc(doc map[string]any, svcLabel string) bool {
+	return slices.Contains(ingressSvcLabels(doc), svcLabel)
 }
 
 // TestWorkflowChart is the drift check for the RFC-0022 workflow head: port
@@ -499,6 +522,16 @@ func TestStateSvcChart(t *testing.T) {
 	})
 }
 
+// stringsOf converts a decoded YAML string list to []string.
+func stringsOf(vals []any) []string {
+	out := make([]string, 0, len(vals))
+	for _, v := range vals {
+		s, _ := v.(string)
+		out = append(out, s)
+	}
+	return out
+}
+
 // verbsFor returns the verbs a rendered Role/ClusterRole grants for a resource
 // in an API group, merged across every rule that mentions it.
 func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
@@ -507,33 +540,32 @@ func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
 	for _, r := range rules {
 		rule, _ := r.(map[string]any)
 		groups, _ := rule["apiGroups"].([]any)
-		hasGroup := false
-		for _, g := range groups {
-			if s, _ := g.(string); s == apiGroup {
-				hasGroup = true
-			}
-		}
-		if !hasGroup {
-			continue
-		}
 		resources, _ := rule["resources"].([]any)
-		hasResource := false
-		for _, res := range resources {
-			if s, _ := res.(string); s == resource {
-				hasResource = true
-			}
-		}
-		if !hasResource {
+		if !slices.Contains(stringsOf(groups), apiGroup) ||
+			!slices.Contains(stringsOf(resources), resource) {
 			continue
 		}
 		verbs, _ := rule["verbs"].([]any)
-		for _, v := range verbs {
-			if s, _ := v.(string); s != "" {
-				out[s] = true
+		for _, v := range stringsOf(verbs) {
+			if v != "" {
+				out[v] = true
 			}
 		}
 	}
 	return out
+}
+
+// podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references —
+// the workload it TARGETS plus everything its ingress allowlists admit. Both
+// must name a workload that actually renders, which is what this feeds.
+func podSelectorSvcLabels(doc map[string]any) []string {
+	var out []string
+	spec, _ := doc["spec"].(map[string]any)
+	sel, _ := spec["podSelector"].(map[string]any)
+	if v := selectorSvcLabel(sel); v != "" {
+		out = append(out, v)
+	}
+	return append(out, ingressSvcLabels(doc)...)
 }
 
 // TestBuildermgrCanRollBuilderDeployments guards an RBAC gap that fails CLOSED
@@ -572,6 +604,62 @@ func TestBuildermgrCanRollBuilderDeployments(t *testing.T) {
 	require.True(t, found, "no buildermgr Role/ClusterRole granting apps/deployments was rendered")
 }
 
+// TestNetworkPolicySvcLabelsResolveToRealWorkloads is the fixed-name inventory
+// guard for RFC-0029 phase 2 (naming / multi-instance).
+//
+// NetworkPolicies address workloads by a bare `svc:` pod label, which is a
+// STRING that no template or Go constant forces to agree with the pod labels
+// the Deployments actually carry. That makes a rename — exactly what phase 2
+// does — able to orphan an allowlist entry, and the failure is silent: traffic
+// is dropped, not rejected, and surfaces far away as `dial tcp <ip>:8889: i/o
+// timeout` in an unrelated test.
+//
+// Asserting every referenced label is carried by some rendered pod template
+// turns that into a build-time failure.
+func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
+	// Every optional component is enabled on purpose. The allowlist legitimately
+	// names workloads that only render behind a flag, so a default render would
+	// report them as orphaned — the check is only meaningful when the workloads
+	// it references actually exist.
+	docs := render(t,
+		"--set", "networkPolicy.enabled=true",
+		"--set", "mcp.enabled=true", "--set", "mcp.allowInsecure=true",
+		"--set", "canaryDeployment.enabled=true",
+		"--set", "workflows.enabled=true",
+		// workflows depends on the statestore; the chart refuses to render
+		// otherwise (statestore/validate.yaml).
+		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+		"--set", "functionState.enabled=true",
+	)
+
+	// Every `svc:` label carried by a rendered pod template.
+	known := map[string]bool{}
+	for _, tmpl := range podTemplates(docs) {
+		meta, _ := tmpl["metadata"].(map[string]any)
+		labels, _ := meta["labels"].(map[string]any)
+		if v, ok := labels["svc"].(string); ok && v != "" {
+			known[v] = true
+		}
+	}
+	require.NotEmpty(t, known, "no pod template carried an svc label; the selector convention changed")
+
+	var checked int
+	for _, doc := range docs {
+		if kind, _ := doc["kind"].(string); kind != "NetworkPolicy" {
+			continue
+		}
+		meta, _ := doc["metadata"].(map[string]any)
+		npName, _ := meta["name"].(string)
+		for _, label := range podSelectorSvcLabels(doc) {
+			checked++
+			assert.Truef(t, known[label],
+				"NetworkPolicy %q references svc=%q, which no rendered pod template carries; "+
+					"the policy would silently drop that traffic", npName, label)
+		}
+	}
+	require.Positive(t, checked, "no NetworkPolicy svc selectors were checked; the guard is inert")
+}
+
 // TestNameFormat pins RFC-0029 phase 2's naming groundwork.
 //
 // The property that matters most is that `legacy` is the default and changes
@@ -594,7 +682,7 @@ func TestNameFormat(t *testing.T) {
 		leg := jobNamesFor(t, distinguishing, "legacy")
 		require.NotEqual(t, std, leg, "fixture precondition: the release name must distinguish the two formats")
 
-		implicit := jobNamesForDefault(t, distinguishing)
+		implicit := jobNamesFrom(renderAs(t, distinguishing))
 		assert.Equal(t, std, implicit, "the chart default must be standard")
 		assert.NotEqual(t, leg, implicit, "the chart default must no longer be legacy")
 	})
@@ -646,12 +734,6 @@ func TestNameFormat(t *testing.T) {
 	})
 }
 
-// jobNamesForDefault renders with no nameFormat set at all.
-func jobNamesForDefault(t *testing.T, release string) []string {
-	t.Helper()
-	return jobNamesFrom(renderAs(t, release))
-}
-
 // jobNamesFor renders with a given release name and nameFormat, returning the
 // generated Job names (the fullname helper's only consumers today).
 func jobNamesFor(t *testing.T, release, format string) []string {
@@ -677,4 +759,269 @@ func jobNamesFrom(docs []map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// TestInternalAuthExistingSecret pins RFC-0029's `internalAuth.existingSecret`
+// contract, whose failure mode is silent.
+//
+// Every consumer must resolve ONE name. The secretKeyRef is mounted optional so
+// rotation can drop a key without forcing an empty render — which also means a
+// pod whose reference points at a Secret that does not exist starts happily
+// with the env var absent, and then 401s on every archive fetch and builder
+// upload with nothing naming the Secret as the cause.
+//
+// The Go side resolves the same name from FISSION_INTERNAL_AUTH_SECRET_NAME
+// (fv1.InternalAuthSecretName), so the chart must set it to whatever it wired
+// into the secretKeyRefs.
+func TestInternalAuthExistingSecret(t *testing.T) {
+	const defaultName = "fission-internal-auth"
+
+	t.Run("default: the chart renders the master and points at it", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countByKindName(docs, "Secret", defaultName),
+			"with no existingSecret the chart must generate the master itself")
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names,
+			"no internal-auth secretKeyRef was rendered; the loop below would assert nothing")
+		for _, name := range names {
+			assert.Equal(t, defaultName, name)
+		}
+	})
+
+	t.Run("existingSecret: the chart renders no master and points at theirs", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.existingSecret=my-master")
+		assert.Zero(t, countByKindName(docs, "Secret", defaultName),
+			"the chart must not generate a master when the operator supplies one")
+		names := internalAuthEnvNames(docs)
+		require.NotEmpty(t, names, "no internal-auth secretKeyRef was rendered")
+		for _, name := range names {
+			assert.Equal(t, "my-master", name,
+				"every consumer must read the operator's Secret, not the chart's default")
+		}
+	})
+
+	// The env var is what the Go side reads. If it disagrees with the
+	// secretKeyRefs above, the two halves resolve different Secrets.
+	t.Run("the name env var matches the secretKeyRefs", func(t *testing.T) {
+		for _, tc := range []struct {
+			args []string
+			want string
+		}{
+			{nil, defaultName},
+			{[]string{"--set", "internalAuth.existingSecret=my-master"}, "my-master"},
+		} {
+			vals := envValues(render(t, tc.args...), "FISSION_INTERNAL_AUTH_SECRET_NAME")
+			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (%v)", tc.args)
+			for _, v := range vals {
+				assert.Equal(t, tc.want, v)
+			}
+		}
+	})
+}
+
+// internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
+// secretKeyRef points at, across every rendered pod template.
+func internalAuthEnvNames(docs []map[string]any) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		name, _ := e["name"].(string)
+		if name != "FISSION_INTERNAL_AUTH_SECRET" {
+			return
+		}
+		vf, _ := e["valueFrom"].(map[string]any)
+		skr, _ := vf["secretKeyRef"].(map[string]any)
+		if n, ok := skr["name"].(string); ok {
+			out = append(out, n)
+		}
+	})
+	return out
+}
+
+// envValues collects the literal values of a named env var across every
+// rendered pod template.
+func envValues(docs []map[string]any, envName string) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		if name, _ := e["name"].(string); name == envName {
+			if v, ok := e["value"].(string); ok {
+				out = append(out, v)
+			}
+		}
+	})
+	return out
+}
+
+// podTemplates returns every rendered pod template (Deployments, Jobs, ...).
+// Docs without one are skipped, which is most of a render.
+func podTemplates(docs []map[string]any) []map[string]any {
+	var out []map[string]any
+	for _, doc := range docs {
+		spec, _ := doc["spec"].(map[string]any)
+		if tmpl, ok := spec["template"].(map[string]any); ok {
+			out = append(out, tmpl)
+		}
+	}
+	return out
+}
+
+// forEachContainerEnv walks every env entry of every container in every
+// rendered pod template.
+func forEachContainerEnv(docs []map[string]any, fn func(map[string]any)) {
+	for _, tmpl := range podTemplates(docs) {
+		podSpec, _ := tmpl["spec"].(map[string]any)
+		for _, key := range []string{"containers", "initContainers"} {
+			cs, _ := podSpec[key].([]any)
+			for _, c := range cs {
+				cm, _ := c.(map[string]any)
+				envs, _ := cm["env"].([]any)
+				for _, e := range envs {
+					if em, ok := e.(map[string]any); ok {
+						fn(em)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestInternalAuthAutoGenerate pins RFC-0029 §10's generation path, including
+// the tenancy rule that decides where the master may land.
+func TestInternalAuthAutoGenerate(t *testing.T) {
+	const master = "fission-internal-auth"
+
+	t.Run("off by default: the template still renders the master", func(t *testing.T) {
+		docs := render(t)
+		assert.Positive(t, countByKindName(docs, "Secret", master),
+			"autoGenerate defaults off, so existing installs must be untouched")
+		assert.Zero(t, countByKindName(docs, "Role", "fission-preupgrade-authgen"),
+			"no generation means no read grant")
+	})
+
+	t.Run("on: the template stops rendering and the hook is wired", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		assert.Zero(t, countByKindName(docs, "Secret", master),
+			"generation moves in-cluster, so the template must render no master — "+
+				"the retention hook is what stops Helm pruning the live one")
+		vals := envValues(docs, "GENERATE_AUTH_SECRET")
+		require.NotEmpty(t, vals, "the hook must be told which Secret to provision")
+		for _, v := range vals {
+			assert.Equal(t, master, v)
+		}
+	})
+
+	// The rule the whole design turns on: under dynamic/cluster tenancy the
+	// master must NOT reach tenant namespaces — they get controller-owned
+	// derived keys, and a master there would defeat the isolation end state.
+	t.Run("static tenancy fans out; dynamic does not", func(t *testing.T) {
+		static := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		staticNS := envValues(static, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, staticNS)
+		assert.Contains(t, staticNS[0], "fission-fn",
+			"static tenancy replicates the master: kubelet cannot resolve a cross-namespace secretKeyRef")
+
+		dynamic := render(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "tenancy.mode=dynamic",
+			"--set", "additionalFissionNamespaces={fission-fn}")
+		dynNS := envValues(dynamic, "GENERATE_AUTH_SECRET_NAMESPACES")
+		require.NotEmpty(t, dynNS)
+		assert.NotContains(t, dynNS[0], "fission-fn",
+			"under dynamic tenancy the master must stay in the release namespace: "+
+				"tenant namespaces get controller-owned derived keys and must never hold the master")
+	})
+
+	// The retention set must cover the Secret Helm PREVIOUSLY managed, and
+	// setting existingSecret is precisely what drops that object from the
+	// rendered manifest. Scoping retention to "we are not using an existing
+	// secret" destroys the master in the most natural adoption there is:
+	// point existingSecret at the chart-generated Secret to take ownership of
+	// it, and Helm prunes a Secret that is still in use.
+	t.Run("retention still covers the master when existingSecret adopts it", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			args []string
+		}{
+			{"default", nil},
+			{"adopting the chart-generated secret", []string{"--set", "internalAuth.existingSecret=" + master}},
+			{"an operator-owned secret under another name", []string{"--set", "internalAuth.existingSecret=my-own"}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				vals := envValues(render(t, tc.args...), "ADOPT_SECRETS")
+				require.NotEmpty(t, vals, "the retention hook must render")
+				assert.Containsf(t, vals[0], master,
+					"the chart-generated master must stay in the retention set (%s), "+
+						"or Helm prunes it the moment the template stops rendering it", tc.name)
+			})
+		}
+	})
+
+	// autoGenerate moves provisioning into the hook Job, so the template stops
+	// rendering the Secret. If the Job is also switched off, NOTHING provisions
+	// the master and every control-plane pod wedges on a required secretKeyRef
+	// — a whole install that comes up dead from two values that each look
+	// reasonable alone. The chart must refuse to render, exactly as it already
+	// does for crds.mode=hook with the same Job disabled.
+	t.Run("autoGenerate without the hook Job refuses to render", func(t *testing.T) {
+		_, err := renderErr(t,
+			"--set", "internalAuth.autoGenerate=true",
+			"--set", "preUpgradeChecks.enabled=false",
+			// Otherwise the pre-existing crds.mode guard fires first and we
+			// would be asserting the wrong refusal.
+			"--set", "crds.mode=none")
+		require.Error(t, err, "autoGenerate with preUpgradeChecks disabled provisions no master at all")
+		assert.Contains(t, err.Error(), "preUpgradeChecks.enabled must be true",
+			"the failure must name the value the operator has to change")
+	})
+
+	// The read grant is the one concession this design makes; it must not widen
+	// beyond the single object that needs it.
+	//
+	// The split between the two rules is load-bearing, not cosmetic. RBAC
+	// matches resourceNames against the name in the REQUEST PATH, and a POST
+	// carries the object name in the body instead — so a create rule fenced by
+	// resourceNames matches nothing and the hook fails Forbidden. Fencing
+	// create looks safer and is actually inert, which is precisely the kind of
+	// mistake that survives review, so pin both halves.
+	t.Run("the generation grant is fenced to the master alone", func(t *testing.T) {
+		docs := render(t, "--set", "internalAuth.autoGenerate=true")
+		var checked, sawGet, sawCreate int
+		for _, d := range docs {
+			kind, _ := d["kind"].(string)
+			meta, _ := d["metadata"].(map[string]any)
+			name, _ := meta["name"].(string)
+			if kind != "Role" || name != "fission-preupgrade-authgen" {
+				continue
+			}
+			checked++
+			rules, _ := d["rules"].([]any)
+			for _, r := range rules {
+				rule, _ := r.(map[string]any)
+				names, _ := rule["resourceNames"].([]any)
+				rawVerbs, _ := rule["verbs"].([]any)
+				verbs := stringsOf(rawVerbs)
+				for _, v := range verbs {
+					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
+					assert.NotEqual(t, "delete", v)
+				}
+				if slices.Contains(verbs, "create") {
+					sawCreate++
+					assert.Empty(t, names,
+						"create must NOT carry resourceNames: the name is in the POST body, "+
+							"not the path, so a fenced rule never matches and generation fails Forbidden")
+					assert.Equal(t, []string{"create"}, verbs,
+						"the unfenced rule must carry create and nothing else — "+
+							"any read/write verb here would apply to every Secret in the namespace")
+				} else {
+					sawGet++
+					require.Len(t, names, 1, "the read grant must name exactly one Secret")
+					assert.Equal(t, master, names[0])
+				}
+			}
+		}
+		require.Positive(t, checked, "no generation Role was rendered; the guard is inert")
+		assert.Positive(t, sawGet, "generation needs a name-scoped get to tell provisioned from absent")
+		assert.Positive(t, sawCreate, "generation needs a create it can actually use")
+	})
 }

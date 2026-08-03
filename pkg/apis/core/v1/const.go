@@ -24,6 +24,20 @@ const (
 )
 
 const (
+	// DefaultInternalAuthSecret is the chart's master-bearing Secret. It is the
+	// DEFAULT, not a fixed fact: an operator may point the chart at a
+	// pre-created Secret instead (internalAuth.existingSecret), which is the
+	// supported path for GitOps renderers, where the chart's lookup-based
+	// preservation of a generated value cannot work.
+	//
+	// Read it through InternalAuthSecretName, not this constant directly — see
+	// that function's doc for why two components must agree on the name.
+	DefaultInternalAuthSecret = "fission-internal-auth"
+
+	// InternalAuthSecretNameEnv overrides DefaultInternalAuthSecret. The chart
+	// sets it on every component that resolves the master.
+	InternalAuthSecretNameEnv = "FISSION_INTERNAL_AUTH_SECRET_NAME"
+
 	// TenantAuthKeysSecret is the controller-owned Secret (one per tenant
 	// namespace) holding that namespace's derived HMAC keys. It is deliberately
 	// a DIFFERENT name from the chart's master-bearing "fission-internal-auth":

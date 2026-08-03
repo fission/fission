@@ -6,6 +6,16 @@ schemas at all.
 {{- if and (eq (include "fission.crdsMode" .) "hook") (not .Values.preUpgradeChecks.enabled) }}
 {{- fail "crds.mode=hook delivers the CRDs through the pre-upgrade-checks Job, so preUpgradeChecks.enabled must be true (or set crds.mode=none)" }}
 {{- end }}
+{{- /*
+Same shape, same reason: internalAuth.autoGenerate moves master provisioning
+from the template into THIS Job, so the template renders no Secret. With the
+Job switched off, nothing provisions it at all and every control-plane pod
+wedges in CreateContainerConfigError on a required secretKeyRef — a whole
+install that comes up dead, from two values that each look reasonable alone.
+*/}}
+{{- if and (include "fission.internalAuthGenerateInCluster" .) (not .Values.preUpgradeChecks.enabled) }}
+{{- fail "internalAuth.autoGenerate provisions the master through the pre-upgrade-checks Job, so preUpgradeChecks.enabled must be true (or set internalAuth.secret / internalAuth.existingSecret instead)" }}
+{{- end }}
 {{- if .Values.preUpgradeChecks.enabled }}
 apiVersion: batch/v1
 kind: Job
@@ -47,6 +57,12 @@ spec:
         - name: ADOPT_SECRET_NAMESPACES
           value: {{ include "fission.adoptSecretNamespaces" $ | quote }}
         {{- end }}
+{{- if include "fission.internalAuthGenerateInCluster" . }}
+        - name: GENERATE_AUTH_SECRET
+          value: {{ include "fission.internalAuthSecretName" . | quote }}
+        - name: GENERATE_AUTH_SECRET_NAMESPACES
+          value: {{ include "fission.adoptSecretNamespaces" . | quote }}
+{{- end }}
         {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         - name: CRDS_MODE
           value: {{ include "fission.crdsMode" . | quote }}
