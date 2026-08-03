@@ -63,44 +63,49 @@ type upgradeUnderLoad struct {
 func (u *upgradeUnderLoad) Name() string   { return "upgrade-under-load" }
 func (u *upgradeUnderLoad) Tags() []string { return []string{"upgrade"} }
 
-// upgradeCounters classifies request outcomes; safe for concurrent use.
+// upgradeCounters tallies request outcomes for the error budget; safe for
+// concurrent use. It holds a bucketCounts — the same shape the recorder's
+// timeline cells use — and both consume classifyOutcome, so the numbers the
+// budget gates on and the timeline that explains them agree by construction
+// rather than by a parity test.
+//
 // closing is set immediately before the load context is cancelled at the end
 // of the settle window: requests still in flight at that moment fail with
 // context.Canceled — a shutdown artifact of the measurement, not a platform
 // failure — and must not pollute the transport-failure bucket the error
 // budget gates on.
 type upgradeCounters struct {
-	total, transport, attributed, otherErr, ok atomic.Int64
-	closing                                    atomic.Bool
+	closing atomic.Bool
+
+	mu     sync.Mutex
+	counts bucketCounts
 }
 
-// observe classifies via classifyOutcome (upgrade_record.go) — the ONE
-// classification shared with the timeline recorder, so the counters the
-// budget gates on and the timeline that explains them can never disagree.
-func (c *upgradeCounters) observe(o loadgen.Observation) {
+// observe tallies one request outcome and reports whether it counted. A false
+// return means the measurement is already closing, and the caller must not
+// record the observation anywhere else either — one closing decision owns
+// every sink.
+func (c *upgradeCounters) observe(o loadgen.Observation) bool {
 	if c.closing.Load() {
-		return
+		return false
 	}
-	c.total.Add(1)
-	switch classifyOutcome(o) {
-	case bucketTransport:
-		c.transport.Add(1)
-	case bucketOK:
-		c.ok.Add(1)
-	case bucketAttributed:
-		c.attributed.Add(1)
-	default:
-		c.otherErr.Add(1)
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.counts.add(classifyOutcome(o))
+	return true
 }
 
-func (c *upgradeCounters) add(res *report.ScenarioResult, prefix string) {
-	res.Add(prefix+"requests", "count", report.Higher, float64(c.total.Load()))
-	res.Add(prefix+"ok", "count", report.Higher, float64(c.ok.Load()))
+func (c *upgradeCounters) addTo(res *report.ScenarioResult, prefix string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// requests is derived, not separately incremented: every counted
+	// observation adds exactly 1 to exactly one bucket.
+	res.Add(prefix+"requests", "count", report.Higher, float64(c.counts.OK+c.counts.failures()))
+	res.Add(prefix+"ok", "count", report.Higher, float64(c.counts.OK))
 	// The three failure buckets the pass criteria are written against.
-	res.Add(prefix+"transport_failures", "count", report.Lower, float64(c.transport.Load()))
-	res.Add(prefix+"platform_attributed", "count", report.Lower, float64(c.attributed.Load()))
-	res.Add(prefix+"unattributed_errors", "count", report.Lower, float64(c.otherErr.Load()))
+	res.Add(prefix+"transport_failures", "count", report.Lower, float64(c.counts.Transport))
+	res.Add(prefix+"platform_attributed", "count", report.Lower, float64(c.counts.Attributed))
+	res.Add(prefix+"unattributed_errors", "count", report.Lower, float64(c.counts.Unattributed))
 }
 
 func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.ScenarioResult, error) {
@@ -168,7 +173,7 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	// to load start, so a nonzero counter is attributable to a specific
 	// window of the roll instead of being a guess.
 	rec := newUpgradeRecorder(time.Now())
-	watchPodLifecycles(loadCtx, env.Clients.Kube, env.FissionNamespace(), rec)
+	waitPodWatchers := watchPodLifecycles(loadCtx, env.Clients.Kube, env.FissionNamespace(), rec)
 	var pool, nd upgradeCounters
 	mkTarget := func(route, name string, c *upgradeCounters) *loadgen.HTTPTarget {
 		return loadgen.NewHTTPTarget(loadgen.HTTPTargetConfig{
@@ -177,9 +182,11 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 			KeepAlive:     true,
 			Timeout:       30 * time.Second,
 			ObserveHeader: correlation.HeaderComponent,
+			// One closing check, one owner: a second independent load of
+			// the flag could flip between the two sinks and leave the
+			// timeline disagreeing with the counters about the last request.
 			Observe: func(o loadgen.Observation) {
-				c.observe(o)
-				if !c.closing.Load() {
+				if c.observe(o) {
 					rec.observe(name, o)
 				}
 			},
@@ -201,13 +208,19 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 		})
 	}()
 	rec.mark("load-start")
+	// fail is the one early-exit teardown: stop the load, join the drivers,
+	// return. Five hand-copied stop/wait/return triplets is how a sixth early
+	// return forgets one.
+	fail := func(err error) (report.ScenarioResult, error) {
+		stopLoad()
+		wg.Wait()
+		return res, err
+	}
 
 	// Baseline window, then the upgrade itself, then rollout-complete, then
 	// the settle window — load runs through all of it.
 	if err := sleepCtx(ctx, u.baseline); err != nil {
-		stopLoad()
-		wg.Wait()
-		return res, err
+		return fail(err)
 	}
 	// Generations before the upgrade: the rollout wait asserts against them
 	// that the upgrade actually changed something — a silently-ignored
@@ -215,9 +228,7 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	// that never happened.
 	gensBefore, err := deploymentGenerations(ctx, env)
 	if err != nil {
-		stopLoad()
-		wg.Wait()
-		return res, fmt.Errorf("snapshot deployment generations: %w", err)
+		return fail(fmt.Errorf("snapshot deployment generations: %w", err))
 	}
 	upgradeStart := time.Now()
 	rec.mark("upgrade-cmd-start")
@@ -225,22 +236,16 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		stopLoad()
-		wg.Wait()
-		return res, fmt.Errorf("upgrade command failed: %w", err)
+		return fail(fmt.Errorf("upgrade command failed: %w", err))
 	}
 	rec.mark("upgrade-cmd-done")
 	if err := waitControlPlaneRolled(ctx, env.Clients.Kube, env.FissionNamespace(), gensBefore, u.timeout, rec.deployEvent); err != nil {
-		stopLoad()
-		wg.Wait()
-		return res, err
+		return fail(err)
 	}
 	rec.mark("rollout-converged")
 	res.Add("upgrade_duration_seconds", "s", report.Lower, time.Since(upgradeStart).Seconds())
 	if err := sleepCtx(ctx, u.settle); err != nil {
-		stopLoad()
-		wg.Wait()
-		return res, err
+		return fail(err)
 	}
 	rec.mark("settle-end")
 	// Stop counting before cancelling: requests in flight at cancel fail
@@ -250,6 +255,10 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	nd.closing.Store(true)
 	stopLoad()
 	wg.Wait()
+	// Join the pod watchers before reading the recorder: a straggler past the
+	// event cap writes the dropped map, and marshalling that map concurrently
+	// is a fatal throw. loadCtx is already cancelled by stopLoad.
+	waitPodWatchers()
 
 	// The attribution outputs: sidecar artifact (when --artifact-dir is set),
 	// phase markers in Meta, and the human timeline on the job log. All
@@ -258,8 +267,8 @@ func (u *upgradeUnderLoad) Run(ctx context.Context, sc *harness.Scope) (report.S
 	rec.logSummary(os.Stderr, []string{"poolmgr", "newdeploy"})
 	rec.metaInto(&res)
 
-	pool.add(&res, "poolmgr_")
-	nd.add(&res, "newdeploy_")
+	pool.addTo(&res, "poolmgr_")
+	nd.addTo(&res, "newdeploy_")
 	if poolResult.Total > poolResult.Errors {
 		res.Add("poolmgr_p99", "ms", report.Lower, millis(poolResult.P99))
 	}
@@ -342,19 +351,39 @@ func deploymentGenerations(ctx context.Context, env *harness.Env) (map[string]in
 // example a silently-ignored values key), and a perfect score for an upgrade
 // that never happened is the one result this scenario must never report.
 //
-// record, when non-nil, receives per-Deployment "rolled" (generation moved)
-// and "converged" (status caught up, fully available) transitions from the
-// existing poll — the rollout order and timing are what let a failure window
-// in the timeline be pinned to the component that was rolling through it.
+// record, when non-nil, receives per-Deployment transitions from the existing
+// poll: "rolled" (generation moved, once), then "converged"/"regressed" edges
+// as availability flips — the rollout order and timing are what let a failure
+// window in the timeline be pinned to the component that was rolling through
+// it. converged must NOT latch: a Deployment that converges, loses a pod, and
+// re-converges would otherwise have its failure window pinned to a control
+// plane the timeline claims was already settled — the exact misattribution
+// this exists to prevent. Deployments helm did not change never emit
+// converged/regressed at all; they were available the whole time, and folding
+// them in would dilute the rollout sequence with components that never moved.
 func waitControlPlaneRolled(ctx context.Context, kube kubernetes.Interface, fissionNS string, gensBefore map[string]int64, timeout time.Duration, record func(dep, event string)) error {
 	if record == nil {
 		record = func(string, string) {}
 	}
-	seen := map[string]bool{} // "<dep>/rolled", "<dep>/converged"
-	note := func(dep, event string) {
-		if key := dep + "/" + event; !seen[key] {
-			seen[key] = true
-			record(dep, event)
+	rolled := map[string]bool{}
+	converged := map[string]bool{}
+	noteRolled := func(dep string) {
+		if !rolled[dep] {
+			rolled[dep] = true
+			record(dep, "rolled")
+		}
+	}
+	noteAvailability := func(dep string, isConverged bool) {
+		if !rolled[dep] {
+			return
+		}
+		if isConverged != converged[dep] {
+			converged[dep] = isConverged
+			if isConverged {
+				record(dep, "converged")
+			} else {
+				record(dep, "regressed")
+			}
 		}
 	}
 	// Fast no-op detection first: helm has already applied the manifests by
@@ -387,20 +416,20 @@ func waitControlPlaneRolled(ctx context.Context, kube kubernetes.Interface, fiss
 		for i := range deps.Items {
 			d := &deps.Items[i]
 			if before, ok := gensBefore[d.Name]; !ok || d.Generation > before {
-				note(d.Name, "rolled")
+				noteRolled(d.Name)
 			}
 			replicas := int32(1)
 			if d.Spec.Replicas != nil {
 				replicas = *d.Spec.Replicas
 			}
-			if d.Status.ObservedGeneration < d.Generation ||
-				d.Status.UpdatedReplicas < replicas ||
-				d.Status.AvailableReplicas < replicas ||
-				d.Status.UnavailableReplicas > 0 {
+			depConverged := d.Status.ObservedGeneration >= d.Generation &&
+				d.Status.UpdatedReplicas >= replicas &&
+				d.Status.AvailableReplicas >= replicas &&
+				d.Status.UnavailableReplicas == 0
+			noteAvailability(d.Name, depConverged)
+			if !depConverged {
 				allConverged = false
-				continue
 			}
-			note(d.Name, "converged")
 		}
 		return allConverged, nil
 	})

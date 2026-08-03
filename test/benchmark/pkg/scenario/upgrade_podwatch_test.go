@@ -16,13 +16,14 @@ import (
 )
 
 func testPod(name string, ready bool, restarts int32, terminating bool) *apiv1.Pod {
+	readyStatus := apiv1.ConditionFalse
+	if ready {
+		readyStatus = apiv1.ConditionTrue
+	}
 	p := &apiv1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "fission"},
 		Status: apiv1.PodStatus{
-			Conditions: []apiv1.PodCondition{{
-				Type:   apiv1.PodReady,
-				Status: map[bool]apiv1.ConditionStatus{true: apiv1.ConditionTrue, false: apiv1.ConditionFalse}[ready],
-			}},
+			Conditions:        []apiv1.PodCondition{{Type: apiv1.PodReady, Status: readyStatus}},
 			ContainerStatuses: []apiv1.ContainerStatus{{RestartCount: restarts}},
 		},
 	}

@@ -1900,9 +1900,14 @@ type (
 		// The CRD default below is what makes the documented default true for
 		// API-created Environments: the field is an int64, so before it existed
 		// an Environment created without the field got 0 — instant SIGKILL,
-		// every in-flight request on the pod dying as a connection reset. The
-		// in-code fallback cannot distinguish that 0 from an explicit one, and
-		// admission-time defaulting can.
+		// every in-flight request on the pod dying as a connection reset.
+		//
+		// Consequence of defaulting a non-pointer field with omitempty: an
+		// explicit 0 survives ONLY via raw YAML/JSON. Every typed Go client
+		// (the CLI included) marshals 0 as absent, which the apiserver then
+		// serves as 90. Restoring 0 as a first-class typed-client value means
+		// migrating this field to *int64; until then, "instant kill" is a
+		// raw-manifest-only setting.
 		// (Optional) defaults to 90 seconds
 		// +optional
 		// +kubebuilder:default=90

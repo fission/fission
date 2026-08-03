@@ -121,10 +121,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		replicas = *targetReplicas
 	}
 
-	gracePeriodSeconds := int64(6 * 60)
-	if env.Spec.TerminationGracePeriod >= 0 {
-		gracePeriodSeconds = env.Spec.TerminationGracePeriod
-	}
+	// The env value is authoritative: CRD validation floors it at 0 and the
+	// CRD default fills an omitted field with 90, so there is no in-code
+	// fallback — the previous 360s one was dead (the >= 0 guard is a
+	// tautology for a floored int64) and misled readers into believing a
+	// six-minute default existed.
+	gracePeriodSeconds := env.Spec.TerminationGracePeriod
 
 	podAnnotations := env.Annotations
 	if podAnnotations == nil {

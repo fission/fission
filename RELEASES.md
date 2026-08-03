@@ -65,7 +65,11 @@ Two changes land together.
 First, the CRD now carries the default, closing a hole where an Environment created via the API (GitOps, Terraform, `kubectl apply`) without the field got **0** — pods were SIGKILLed instantly and every in-flight request on them died as a connection reset; only the CLI's client-side default masked this.
 Second, the default drops from 360 to 90: 90s covers endpoint propagation plus the 60s default function timeout with margin (mirroring the router's own 75s-drain/90s-grace posture), where 360 made every teardown linger six minutes per pod.
 Set `terminationGracePeriod` per environment if your functions serve requests longer than ~80s.
-Environments stored before this release keep their stored value (including an explicit or implicit 0) until their next update — admission-time defaulting does not rewrite existing objects.
+This is the **Environment-level** grace only; the container executor's function-level `--graceperiod` keeps its 360s default.
+How it reaches existing objects: CRD structural defaults apply when the apiserver **serves** an object, not only at write time — so an Environment stored without the field reads back as 90 the moment the upgraded CRD is applied, with no object update.
+Practically, every such environment's pods roll **once** on the first executor reconcile after this upgrade (the pod template's grace changes 0→90); that roll is the fix taking effect.
+Only an explicit `terminationGracePeriod: 0` applied as raw YAML keeps 0 — and raw YAML is now the *only* way to express 0: the Go field's `omitempty` drops a zero before the apiserver sees it, so the CLI and any typed client cannot set it (they never could — `omitempty` predates this change — but previously the served value for an absent field was 0, so it looked like it worked).
+Making 0 first-class again for typed clients requires migrating the field to a pointer; tracked as follow-up work.
 
 ## Deprecation policy
 

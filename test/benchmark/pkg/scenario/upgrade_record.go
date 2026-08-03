@@ -61,10 +61,11 @@ const (
 	// real ceiling is baseline (30s) + upgrade budget (10m) + settle (2m)
 	// ≈ 160 buckets.
 	maxTimelineBuckets = 4096
-	// maxFailureRecords bounds detailed per-failure records per target. The
-	// bucket totals keep counting past the cap, so nothing is lost from the
-	// numbers — only from the per-failure detail.
-	maxFailureRecords = 512
+	// maxFailureRecords bounds detailed per-failure records across ALL
+	// targets (sized for this scenario's two; one noisy target may consume
+	// it). The bucket totals keep counting past the cap, so nothing is lost
+	// from the numbers — only from the per-failure detail.
+	maxFailureRecords = 1024
 	// maxEventRecords bounds pod/deployment lifecycle events.
 	maxEventRecords = 4096
 	// maxErrString keeps recorded error strings shorter than a stack trace.
@@ -151,7 +152,7 @@ func (r *upgradeRecorder) observe(target string, o loadgen.Observation) {
 	bucket := classifyOutcome(o)
 	now := time.Now()
 	idx := int(now.Sub(r.t0) / timelineBucket)
-	if idx < 0 || idx > maxTimelineBuckets {
+	if idx < 0 || idx >= maxTimelineBuckets {
 		return
 	}
 
@@ -167,7 +168,7 @@ func (r *upgradeRecorder) observe(target string, o loadgen.Observation) {
 	if bucket == bucketOK {
 		return
 	}
-	if len(r.failures) >= maxFailureRecords*2 { // two targets share the slice
+	if len(r.failures) >= maxFailureRecords {
 		r.dropped[target]++
 		return
 	}
@@ -215,21 +216,52 @@ func (r *upgradeRecorder) metaInto(res *report.ScenarioResult) {
 		res.SetMeta(key, p.At.Format(time.RFC3339Nano))
 		res.SetMeta(key+"_offset_s", fmt.Sprintf("%.1f", p.OffsetS))
 	}
-	var seq []string
+	// LAST converged per Deployment: a converge->regress->re-converge cycle
+	// must report the settle time that stuck, not the first false one. Order
+	// by final convergence.
+	lastConverged := map[string]float64{}
 	for _, e := range r.events {
-		if e.Kind == "deployment" && e.Event == "converged" {
-			seq = append(seq, fmt.Sprintf("%s@%.0fs", e.Name, e.OffsetS))
+		if e.Kind != "deployment" {
+			continue
 		}
+		switch e.Event {
+		case "converged":
+			lastConverged[e.Name] = e.OffsetS
+		case "regressed":
+			delete(lastConverged, e.Name)
+		}
+	}
+	type depAt struct {
+		name string
+		at   float64
+	}
+	orderedDeps := make([]depAt, 0, len(lastConverged))
+	for name, at := range lastConverged {
+		orderedDeps = append(orderedDeps, depAt{name, at})
+	}
+	sort.Slice(orderedDeps, func(i, j int) bool { return orderedDeps[i].at < orderedDeps[j].at })
+	seq := make([]string, 0, len(orderedDeps))
+	for _, d := range orderedDeps {
+		seq = append(seq, fmt.Sprintf("%s@%.0fs", d.name, d.at))
 	}
 	if len(seq) > 0 {
 		res.SetMeta("rollout_sequence", strings.Join(seq, ","))
 	}
-	var droppedTotal int64
-	for _, n := range r.dropped {
-		droppedTotal += n
+	// Two separate drop meters, deliberately: on a red run,
+	// "failure_records_dropped" reads as "N failures were not captured", and
+	// folding lifecycle-event overflow into it would claim the opposite of
+	// the truth.
+	var failDropped int64
+	for k, n := range r.dropped {
+		if k != "events" {
+			failDropped += n
+		}
 	}
-	if droppedTotal > 0 {
-		res.SetMeta("failure_records_dropped", fmt.Sprintf("%d", droppedTotal))
+	if failDropped > 0 {
+		res.SetMeta("failure_records_dropped", fmt.Sprintf("%d", failDropped))
+	}
+	if n := r.dropped["events"]; n > 0 {
+		res.SetMeta("lifecycle_events_dropped", fmt.Sprintf("%d", n))
 	}
 }
 
@@ -263,21 +295,25 @@ func (r *upgradeRecorder) writeArtifact(dir string) {
 	if dir == "" {
 		return
 	}
+	// Marshal under the lock. The pod watchers are joined before the output
+	// block, but that join is a call-site convention two files away — and
+	// marshalling the timeline and dropped MAPS outside the lock against one
+	// straggling `rec.event` is a fatal concurrent-map throw, the one way
+	// this best-effort recorder could kill the run it exists to explain.
+	// This runs once at scenario end; contention is irrelevant.
 	r.mu.Lock()
-	out := attribution{
+	data, err := json.MarshalIndent(attribution{
 		T0: r.t0, Phases: r.phases, Events: r.events,
 		Failures: r.failures, Timeline: r.timeline, Dropped: r.dropped,
-	}
+	}, "", "  ")
 	r.mu.Unlock()
-
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "upgrade recorder: marshal attribution: %v\n", err)
+		return
+	}
 	target := filepath.Join(dir, "upgrade")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "upgrade recorder: mkdir artifact dir: %v\n", err)
-		return
-	}
-	data, err := json.MarshalIndent(out, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "upgrade recorder: marshal attribution: %v\n", err)
 		return
 	}
 	if err := os.WriteFile(filepath.Join(target, "upgrade-attribution.json"), data, 0o644); err != nil {
@@ -304,21 +340,23 @@ func (r *upgradeRecorder) logSummary(w io.Writer, targets []string) {
 		marks = append(marks, marker{p.OffsetS, fmt.Sprintf("[%s]", p.Name)})
 	}
 	for _, e := range r.events {
-		marks = append(marks, marker{e.OffsetS, fmt.Sprintf("[%s %s %s%s]", e.Kind, e.Name, e.Event, optDetail(e.Detail))})
+		text := fmt.Sprintf("[%s %s %s", e.Kind, e.Name, e.Event)
+		if e.Detail != "" {
+			text += " " + e.Detail
+		}
+		marks = append(marks, marker{e.OffsetS, text + "]"})
 	}
 	sort.Slice(marks, func(i, j int) bool { return marks[i].offsetS < marks[j].offsetS })
 
-	maxIdx := 0
+	nBuckets := 0
 	for _, tl := range r.timeline {
-		if len(tl) > maxIdx {
-			maxIdx = len(tl)
-		}
+		nBuckets = max(nBuckets, len(tl))
 	}
 
 	fmt.Fprintf(w, "=== upgrade-under-load timeline (%s buckets; ok/transport/attributed/unattributed) ===\n", timelineBucket)
 	mi := 0
-	firstFailing := -1
-	for idx := range maxIdx {
+	flaggedFirstFailure := false
+	for idx := range nBuckets {
 		lo := float64(idx) * timelineBucket.Seconds()
 		hi := lo + timelineBucket.Seconds()
 		for mi < len(marks) && marks[mi].offsetS < hi {
@@ -338,8 +376,8 @@ func (r *upgradeRecorder) logSummary(w io.Writer, targets []string) {
 				failing = true
 			}
 		}
-		if failing && firstFailing < 0 {
-			firstFailing = idx
+		if failing && !flaggedFirstFailure {
+			flaggedFirstFailure = true
 			line.WriteString("   <- first failing bucket")
 		}
 		fmt.Fprintln(w, line.String())
@@ -362,11 +400,4 @@ func (r *upgradeRecorder) logSummary(w io.Writer, targets []string) {
 	for k, n := range r.dropped {
 		fmt.Fprintf(w, "note: %d %s records dropped past the cap (totals remain complete)\n", n, k)
 	}
-}
-
-func optDetail(d string) string {
-	if d == "" {
-		return ""
-	}
-	return " " + d
 }
