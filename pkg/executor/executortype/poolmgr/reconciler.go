@@ -46,7 +46,7 @@ type poolManager interface {
 
 // rsCleaner is the subset of *GenericPoolManager the ReplicaSet reconciler drives.
 type rsCleaner interface {
-	processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet)
+	processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet) error
 }
 
 // replicaSetReconciler reaps a pool's specialized pods when its ReplicaSet scales
@@ -68,8 +68,10 @@ func (r *replicaSetReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{}, err
 	}
-	r.cleaner.processReplicaSet(ctx, rs)
-	return ctrl.Result{}, nil
+	// Errors requeue with backoff: a transient API failure inside the
+	// keep-or-clean decision must retry rather than silently drop a
+	// legitimate cleanup (or worse, a legitimate keep).
+	return ctrl.Result{}, r.cleaner.processReplicaSet(ctx, rs)
 }
 
 // poolmgrReplicaSetPredicate keeps the ReplicaSet reconciler to pool-manager

@@ -50,10 +50,14 @@ func (f *fakeFuncMgr) deleteFunctionService(_ context.Context, fn *fv1.Function)
 	return nil
 }
 
-type fakeRSCleaner struct{ processed []string }
+type fakeRSCleaner struct {
+	processed []string
+	err       error
+}
 
-func (f *fakeRSCleaner) processReplicaSet(_ context.Context, rs *appsv1.ReplicaSet) {
+func (f *fakeRSCleaner) processReplicaSet(_ context.Context, rs *appsv1.ReplicaSet) error {
 	f.processed = append(f.processed, rs.Name)
+	return f.err
 }
 
 type fakePoolMgr struct {

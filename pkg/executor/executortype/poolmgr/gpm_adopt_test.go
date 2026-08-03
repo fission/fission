@@ -169,3 +169,130 @@ func TestAdoptSpecializedPodsMissingGenerationUIDMismatch(t *testing.T) {
 	require.Empty(t, fsCache.ListByFunctionUID("fn-uid-new"),
 		"the stale pod must not be registered under the new Function's UID either")
 }
+
+// podAfterAdopt reads the pod back from the fake clientset so tests can assert
+// on the stamp (the executorInstanceId annotation) independently of the cache.
+func podAfterAdopt(t *testing.T, gpm *GenericPoolManager, ns, name string) *apiv1.Pod {
+	t.Helper()
+	pod, err := gpm.kubernetesClient.CoreV1().Pods(ns).Get(t.Context(), name, metav1.GetOptions{})
+	require.NoError(t, err)
+	return pod
+}
+
+// runAdoptGPM is runAdopt returning the manager too, for stamp assertions.
+func runAdoptGPM(t *testing.T, pod *apiv1.Pod, env fv1.Environment, fissionObjs ...runtime.Object) (*GenericPoolManager, *fscache.FunctionServiceCache) {
+	t.Helper()
+	gpm := &GenericPoolManager{
+		logger:           logr.Discard(),
+		kubernetesClient: k8sfake.NewSimpleClientset(pod),
+		fissionClient:    fissionfake.NewSimpleClientset(fissionObjs...),
+		nsResolver:       utils.DefaultNSResolver(),
+		instanceID:       "inst-1",
+		fsCache:          fscache.MakeFunctionServiceCache(logr.Discard()),
+	}
+	envMap := map[string]fv1.Environment{pod.Namespace + "/env1": env}
+	var wg sync.WaitGroup
+	gpm.adoptSpecializedPods(t.Context(), &wg, envMap)
+	wg.Wait()
+	return gpm, gpm.fsCache
+}
+
+// TestAdoptActiveNotReadyPod pins the readiness-hole fix: a pod that is merely
+// not-Ready during the adopt window (a probe blip) must still be adopted —
+// stamped AND registered. The fsCache entry is what gives the idle reaper
+// ownership, and IsValid gates every hand-out on live readiness anyway.
+// Skipping it here meant the post-adopt cleanup deleted a healthy warm pod
+// because of a 1-second probe blip.
+func TestAdoptActiveNotReadyPod(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	pod.Status.ContainerStatuses = []apiv1.ContainerStatus{{Ready: false}}
+	pod.Status.Phase = apiv1.PodRunning
+
+	gpm, fsCache := runAdoptGPM(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Equal(t, "inst-1", after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
+		"an active-but-not-ready pod must be claimed, or the post-adopt reaper kills it")
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.NoError(t, err, "the entry is what gives the idle reaper ownership of the pod")
+}
+
+// TestAdoptSkipsTerminalPod: Succeeded/Failed pods are inert; adopting them
+// would register dead addresses.
+func TestAdoptSkipsTerminalPod(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	pod.Status.Phase = apiv1.PodSucceeded
+
+	gpm, fsCache := runAdoptGPM(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL], "a terminal pod must not be claimed")
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.Error(t, err)
+}
+
+// TestAdoptHalfSpecializedPodNotStamped pins the stamp-after-checks fix: a pod
+// killed mid-specialization (no ANNOTATION_SVC_HOST yet) must be left
+// UNSTAMPED so the post-adopt cleanup recycles it. Stamping first and then
+// failing the checks minted pods that were protected from cleanup but
+// invisible to the reaper — leaked until a human noticed.
+func TestAdoptHalfSpecializedPodNotStamped(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	delete(pod.Annotations, fv1.ANNOTATION_SVC_HOST)
+
+	gpm, fsCache := runAdoptGPM(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
+		"a pod that fails adoption must stay unstamped — unstamped is what lets cleanup recycle it")
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.Error(t, err)
+}
+
+// TestAdoptSkipsStaleEnvGeneration: the env spec changed while the executor
+// was down — this pod's runtime predates it and must be recycled, not adopted.
+func TestAdoptSkipsStaleEnvGeneration(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	pod.Labels[fv1.ENVIRONMENT_GENERATION] = "2"
+
+	env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", Generation: 3}}
+	gpm, fsCache := runAdoptGPM(t, pod, env)
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
+		"a stale-runtime pod must be left for the cleanup pass")
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.Error(t, err)
+}
+
+// TestAdoptSkipsRecreatedEnv: same name, different UID — the environment was
+// deleted and recreated while the executor was down. Adopting would register a
+// pod running the OLD environment's runtime against the new CR.
+func TestAdoptSkipsRecreatedEnv(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	pod.Labels[fv1.ENVIRONMENT_UID] = "old-env-uid"
+
+	env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", UID: "new-env-uid"}}
+	gpm, fsCache := runAdoptGPM(t, pod, env)
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL])
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.Error(t, err)
+}
+
+// TestAdoptMatchingEnvGeneration: the positive control for the two guards —
+// matching UID and generation adopt exactly as before.
+func TestAdoptMatchingEnvGeneration(t *testing.T) {
+	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
+	pod.Labels[fv1.ENVIRONMENT_UID] = "env-uid-1"
+	pod.Labels[fv1.ENVIRONMENT_GENERATION] = "4"
+
+	env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", UID: "env-uid-1", Generation: 4}}
+	gpm, fsCache := runAdoptGPM(t, pod, env)
+
+	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
+	require.Equal(t, "inst-1", after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL])
+	_, err := fsCache.GetByFunction(&metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 3})
+	require.NoError(t, err)
+}

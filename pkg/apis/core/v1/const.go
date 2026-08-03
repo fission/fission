@@ -232,6 +232,18 @@ const (
 
 	// RFC-0002 EndpointSlice-native data plane labels.
 	//
+	// ENVIRONMENT_GENERATION labels a pool pod template (and hence its
+	// ReplicaSets and pods) with the Environment generation the template was
+	// generated from. processRS compares it against the live Environment to
+	// distinguish "env spec changed -> recycle specialized pods" from
+	// "executor-side template roll (fetcher image/config) -> keep them".
+	//
+	// It must NEVER be added to the pool Deployment's selector labels
+	// (getEnvironmentPoolLabels): selectors are immutable, so a
+	// generation-bearing selector would fail every env update with
+	// "field is immutable". Template labels only.
+	ENVIRONMENT_GENERATION = "fission.io/environment-generation"
+
 	// FUNCTION_GENERATION labels a specialized pool pod with the Function
 	// generation it was specialized from. The per-function Service selector
 	// includes it so stale-generation pods drop out of the EndpointSlices on a

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -106,6 +107,12 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 	}
 
 	maps.Copy(podLabels, deployLabels)
+	// Template labels ONLY — deployLabels doubles as the immutable Deployment
+	// selector, and a generation there would break every env update. The pod
+	// inherits this label through the RS, and choosePod's specialization
+	// relabel is additive, so specialized pods keep their birth generation —
+	// which is what lets processRS tell an env change from an executor roll.
+	podLabels[fv1.ENVIRONMENT_GENERATION] = strconv.FormatInt(env.Generation, 10)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,
