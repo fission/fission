@@ -59,6 +59,14 @@ Only hook Jobs are affected — no Deployment, Service, Secret, ConfigMap, Servi
 Set `nameFormat: legacy` to keep the previous names.
 A hook Job that failed and was never cleaned up will linger under its old name after the upgrade; it is inert, but can be deleted by hand.
 
+- **`Environment.terminationGracePeriod` defaults to `90` seconds — and now actually defaults.**
+A terminating function pod keeps serving for the whole grace window (the drain preStop hook sleeps through it), so this value is exactly how long every pod teardown takes: idle reap, environment update, upgrade, node drain.
+Two changes land together.
+First, the CRD now carries the default, closing a hole where an Environment created via the API (GitOps, Terraform, `kubectl apply`) without the field got **0** — pods were SIGKILLed instantly and every in-flight request on them died as a connection reset; only the CLI's client-side default masked this.
+Second, the default drops from 360 to 90: 90s covers endpoint propagation plus the 60s default function timeout with margin (mirroring the router's own 75s-drain/90s-grace posture), where 360 made every teardown linger six minutes per pod.
+Set `terminationGracePeriod` per environment if your functions serve requests longer than ~80s.
+Environments stored before this release keep their stored value (including an explicit or implicit 0) until their next update — admission-time defaulting does not rewrite existing objects.
+
 ## Deprecation policy
 
 - Flags, CRD fields, chart values, and CLI commands are deprecated with **notice in one full minor release before removal**.

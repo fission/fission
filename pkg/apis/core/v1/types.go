@@ -1889,8 +1889,23 @@ type (
 		Poolsize int `json:"poolsize,omitempty"`
 
 		// The grace time for pod to perform connection draining before termination. The unit is in seconds.
-		// (Optional) defaults to 360 seconds
+		// A terminating function pod keeps serving for the WHOLE grace window
+		// (the preStop hook sleeps through it, then the kubelet kills the pod),
+		// so this value is exactly how long every teardown — idle reap, env
+		// update roll, upgrade, node drain — takes per pod. 90s covers endpoint
+		// propagation (seconds) plus the 60s default function timeout with
+		// margin, mirroring the router's own 75s-drain/90s-grace posture; set
+		// it per environment for functions with longer request timeouts.
+		//
+		// The CRD default below is what makes the documented default true for
+		// API-created Environments: the field is an int64, so before it existed
+		// an Environment created without the field got 0 — instant SIGKILL,
+		// every in-flight request on the pod dying as a connection reset. The
+		// in-code fallback cannot distinguish that 0 from an explicit one, and
+		// admission-time defaulting can.
+		// (Optional) defaults to 90 seconds
 		// +optional
+		// +kubebuilder:default=90
 		// +kubebuilder:validation:Minimum=0
 		TerminationGracePeriod int64 `json:"terminationGracePeriod,omitempty"`
 

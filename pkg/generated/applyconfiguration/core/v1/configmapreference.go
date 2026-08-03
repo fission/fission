@@ -15,8 +15,7 @@ type ConfigMapReferenceApplyConfiguration struct {
 	Name      *string `json:"name,omitempty"`
 	// MountPath redirects this configmap's file projection from the
 	// default /configs/<namespace>/<name>; relative to the /configs root.
-	// See SecretReference.MountPath for the constraint rationale and the
-	// phase gating.
+	// See SecretReference.MountPath for the constraint rationale.
 	MountPath *string `json:"mountPath,omitempty"`
 }
 

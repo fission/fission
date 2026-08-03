@@ -19,9 +19,17 @@ type SecretReferenceApplyConfiguration struct {
 	// volume set frozen at pool creation, so an arbitrary absolute path is
 	// not materializable there, and the container executor applies the
 	// same constraint for cross-executor consistency. Empty keeps today's
-	// layout. The runtime redirect ships in a later RFC-0030 phase; until
-	// then admission rejects a non-empty value rather than silently
-	// ignoring it.
+	// <namespace>/<name> layout, so functions that do not set it are
+	// unaffected. No two secrets on one function may RESOLVE to the same
+	// directory (an explicit path colliding with another reference's
+	// default counts): the final segment written is the object's data
+	// key and keys are mutable after admission, so sharing a directory
+	// would let one object's later-added key collide with the other's
+	// file; the fetcher refuses such a write rather than truncating.
+	// Honoured on every executor: poolmgr and newdeploy via the fetcher,
+	// the container executor via a native projected volume. Not supported
+	// on an allowedFunctionsPerContainer:infinite environment, whose pods
+	// share one secrets tree across functions.
 	MountPath *string `json:"mountPath,omitempty"`
 }
 
