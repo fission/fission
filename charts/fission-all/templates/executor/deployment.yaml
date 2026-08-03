@@ -9,7 +9,17 @@ spec:
   replicas: {{ .Values.executor.replicas | default 1 }}
   {{- with .Values.executor.strategy }}
   strategy:
+    {{- if eq (.type | default "RollingUpdate") "Recreate" }}
+    {{- /* The API forbids a rollingUpdate block alongside type Recreate, and
+         helm --set MERGES into the default's rollingUpdate — so a user opting
+         out with `--set executor.strategy.type=Recreate` would otherwise
+         render an invalid Deployment (the same Forbidden error the upgrade
+         gate caught when Recreate was briefly the default). Emit only the
+         type. */}}
+    type: Recreate
+    {{- else }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
   {{- end }}
   selector:
     matchLabels:

@@ -241,11 +241,9 @@ executor:
   ## install ("spec.strategy.rollingUpdate: Forbidden"). Mutating two fields
   ## inside the type the object already has upgrades cleanly.
   ##
-  ## The cost is a bounded executor-down window per roll (pod stop + start +
-  ## cache sync + adopt/cleanup, ≲60s). During it, WARM traffic keeps
-  ## serving: poolmgr from the EndpointSlice-fed router index, newdeploy from
-  ## the router's cached Service addresses — neither needs a live executor.
-  ## Cold starts fail fast and succeed once the new executor is ready.
+  ## The cost is a bounded executor-down window per roll (≲60s). Warm traffic
+  ## keeps serving throughout — neither poolmgr nor newdeploy needs a live
+  ## executor; only cold starts wait for the new one.
   ##
   ## This default also composes with HA (replicas > 1 + leaderElection):
   ## pods roll one at a time and a dying leader releases its lease to a

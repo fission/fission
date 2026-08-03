@@ -7,7 +7,6 @@ package poolmgr
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -97,7 +96,7 @@ func (p *PoolPodController) processRS(ctx context.Context, rs *apps.ReplicaSet) 
 	// includes pod-template-hash; managed=false overrides to specialized).
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
 	if err != nil {
-		p.logger.Error(err, "Failed to parse label selector")
+		logger.Error(err, "Failed to parse label selector")
 		return nil // malformed selector cannot succeed on retry
 	}
 	rsLabelMap["managed"] = "false"
@@ -174,31 +173,36 @@ func (p *PoolPodController) shouldCleanupForRS(ctx context.Context, rs *apps.Rep
 			}
 			return false, fmt.Errorf("verify environment %s/%s uncached: %w", envNS, envName, aerr)
 		}
-		logger.V(1).Info("environment NotFound in cache but exists in API server; keeping pods, RS event will replay")
-		return false, nil
+		// Requeue via error, deliberately: the RS reconciler is registered
+		// with GenerationChangedPredicate, so a settled zero-replica RS emits
+		// no further events and returning (false, nil) here would FORGET the
+		// decision — stale-runtime pods would keep serving until the executor
+		// next restarts. The error path is the only re-visit mechanism.
+		return false, fmt.Errorf("environment %s/%s NotFound in cache but live in API server (stale cache); requeueing the decision", envNS, envName)
 	}
 	if err != nil {
 		return false, fmt.Errorf("get environment %s/%s: %w", envNS, envName, err)
 	}
-	if uid := tmpl[fv1.ENVIRONMENT_UID]; uid != "" && uid != string(env.UID) {
-		return true, nil // env deleted and recreated under the same name
-	}
-
-	genStr, ok := tmpl[fv1.ENVIRONMENT_GENERATION]
-	if !ok {
-		// Pre-label RS (born under a release without ENVIRONMENT_GENERATION):
-		// keep. This is what makes warm pods survive the very upgrade that
-		// ships this fix — the N−1-born RS carries no label, and treating
-		// that as "clean" would re-kill them one last time. The residual
-		// (env changed during that same upgrade window) is bounded by the
-		// adopt-time generation guard and the idle reaper.
+	if _, hasHash := tmpl[fv1.ENVIRONMENT_RUNTIME_HASH]; !hasHash {
+		// Pre-label RS (born under a release without the hash label). Keep by
+		// default — that is what makes warm pods survive the very upgrade
+		// that ships this fix; treating it as "clean" would re-kill them one
+		// last time. ONE sharpening: if the live pool Deployment's template
+		// already carries the label, the pool has been re-templated since,
+		// so this RS is provably a pre-hash generation whose pods run a
+		// runtime at least one revision old -> clean. During the shipping
+		// upgrade itself the live Deployment is not yet re-templated, so
+		// both sides are unlabelled and the keep still holds.
+		if _, ownerHasHash := dep.Spec.Template.Labels[fv1.ENVIRONMENT_RUNTIME_HASH]; ownerHasHash {
+			return true, nil
+		}
 		return false, nil
 	}
-	gen, perr := strconv.ParseInt(genStr, 10, 64)
-	if perr != nil {
-		return true, nil // mangled label: legacy behavior (recycle)
-	}
-	return gen != env.Generation, nil
+	// Recycle iff the template's birth runtime is no longer the live one: a
+	// same-name recreate, or an env change that touched the template inputs.
+	// Shared with the adopt pass (envLabelsMatchLiveEnv) so the two paths
+	// cannot disagree about which pods deserve to live.
+	return !envLabelsMatchLiveEnv(tmpl, env), nil
 }
 
 // cleanupSpecializedPodsForEnv enqueues an environment's specialized pods for

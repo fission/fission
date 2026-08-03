@@ -26,9 +26,6 @@ import (
 //   - adoptExistingResources — with adoption off, startup cleanup deletes
 //     every pod whose instance annotation belongs to the previous executor,
 //     which is exactly the specialized warm pods and only them.
-//
-// Rendered with a non-default release name: guards that assert defaults under
-// a name where legacy and standard formats coincide pin nothing.
 func TestExecutorRolloutPosture(t *testing.T) {
 	deployment := func(docs []map[string]any) map[string]any {
 		d := find(docs, "Deployment", "executor")
@@ -54,17 +51,41 @@ func TestExecutorRolloutPosture(t *testing.T) {
 			"adoption must default on, or every executor restart deletes the specialized warm pods")
 	})
 
-	t.Run("both remain overridable", func(t *testing.T) {
+	t.Run("overrides that DIFFER from the defaults are honored", func(t *testing.T) {
+		// A --set restating a default pins nothing. Render the documented HA
+		// posture (surge with a standby) and the adoption opt-out.
 		docs := render(t,
 			"--set", "executor.adoptExistingResources=false",
-			"--set", "executor.strategy.type=RollingUpdate",
-			"--set-string", "executor.strategy.rollingUpdate.maxUnavailable=1")
+			"--set", "executor.strategy.rollingUpdate.maxSurge=1",
+			"--set", "executor.strategy.rollingUpdate.maxUnavailable=0")
 		d := deployment(docs)
 
-		strategy, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)
-		assert.Equal(t, "RollingUpdate", strategy["type"], "the HA escape hatch must stay open")
+		ru, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)["rollingUpdate"].(map[string]any)
+		assert.EqualValues(t, 1, ru["maxSurge"], "the HA surge escape hatch must stay open")
+		assert.EqualValues(t, 0, ru["maxUnavailable"])
 
 		env := containerEnv(t, d)
 		assert.Equal(t, "false", env["ADOPT_EXISTING_RESOURCES"])
+	})
+
+	// The opt-out RELEASES.md advertises must render a VALID Deployment: the
+	// API rejects a rollingUpdate block alongside Recreate, and helm --set
+	// MERGES into the default's rollingUpdate — the template must drop the
+	// block when the type is Recreate, or the opt-out is a hard upgrade
+	// failure (the exact trap the upgrade gate caught when Recreate was
+	// briefly the default).
+	t.Run("Recreate opt-out renders a valid strategy", func(t *testing.T) {
+		d := deployment(render(t, "--set", "executor.strategy.type=Recreate"))
+		strategy, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)
+		assert.Equal(t, "Recreate", strategy["type"])
+		assert.NotContains(t, strategy, "rollingUpdate",
+			"Recreate + rollingUpdate is rejected by the API server")
+	})
+
+	// Clearing the strategy entirely must also work (k8s default applies).
+	t.Run("null strategy renders no strategy block", func(t *testing.T) {
+		d := deployment(render(t, "--set", "executor.strategy=null"))
+		_, has := d["spec"].(map[string]any)["strategy"]
+		assert.False(t, has, "a nulled strategy must fall back to the Kubernetes default")
 	})
 }

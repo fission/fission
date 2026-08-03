@@ -182,12 +182,18 @@ func (ns *TestNamespace) listPoolDeployments(ctx context.Context, envName string
 // Deployment-owned) pool pods in the function namespace — the pods whose
 // survival across an executor roll is RFC-0028's warm-pod contract. Mirrors
 // the upgrade benchmark's specializedPodUIDs selector.
-func (ns *TestNamespace) SpecializedFunctionPods(t *testing.T, ctx context.Context, fnName string) []corev1.Pod {
-	t.Helper()
+//
+// Returns the error instead of require-failing: callers poll this from
+// require.EventuallyWithT condition goroutines, where t.FailNow is invalid —
+// a transient list error there must read as "condition not yet met", not
+// derail the test goroutine.
+func (ns *TestNamespace) SpecializedFunctionPods(ctx context.Context, fnName string) ([]corev1.Pod, error) {
 	selector := fv1.FUNCTION_NAME + "=" + fnName + "," + fv1.MANAGED + "=false"
 	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{LabelSelector: selector})
-	require.NoErrorf(t, err, "list specialized pods for %q", fnName)
-	return pods.Items
+	if err != nil {
+		return nil, err
+	}
+	return pods.Items, nil
 }
 
 // UpdateEnvSpec mutates one Environment's spec through the typed client and

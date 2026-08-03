@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -27,19 +28,30 @@ import (
 //  1. An EXECUTOR-side pool-template roll (what a helm upgrade does via a new
 //     fetcher image/config) must leave the specialized pod alive, same UID,
 //     re-stamped to the new executor instance, and serving throughout.
-//  2. An ENVIRONMENT spec change must still recycle it — the discriminator
-//     keys on the environment generation, and this is the regression guard
-//     for the path that used to be processRS's only reading.
+//  2. An ENVIRONMENT change that touches the pod template must still recycle
+//     it — the discriminator keys on a hash of the template inputs, and this
+//     is the regression guard for the path that used to be processRS's only
+//     reading. (TerminationGracePeriod is a template input; poolsize is not
+//     and deliberately would NOT recycle.)
 //  3. Deleting the environment must drain the specialized pods entirely.
 //
 // Serial: it restarts the shared executor (adopt runs before readiness, so a
 // completed rollout means the adopt pass finished).
 func TestPoolWarmSurvival(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	// Budget must exceed the sum of the phase Eventually budgets (5+3+2+4+4m)
+	// plus warm-up, or a slow-but-passing run degrades into ctx-deadline
+	// errors inside the conditions instead of a clean per-phase timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
 	image := f.Images().RequireNode(t)
+
+	// Registered BEFORE the SetExecutorEnv restores (cleanups run LIFO, so it
+	// executes AFTER them): the restores fire two back-to-back un-awaited
+	// executor rollouts, and without this wait they land in whichever serial
+	// test runs next.
+	t.Cleanup(func() { f.WaitForExecutorSettled(t, 3*time.Minute) })
 
 	ns := f.NewTestNamespace(t)
 	envName := "nodejs-pws-" + ns.ID
@@ -56,7 +68,8 @@ func TestPoolWarmSurvival(t *testing.T) {
 
 	// Warm it: the first invocation specializes a pool pod.
 	f.Router(t).GetEventually(t, ctx, route, framework.BodyContains("hello"))
-	podsBefore := ns.SpecializedFunctionPods(t, ctx, fnName)
+	podsBefore, err := ns.SpecializedFunctionPods(ctx, fnName)
+	require.NoError(t, err)
 	require.NotEmpty(t, podsBefore, "warm-up must have specialized a pod")
 	uidBefore := podsBefore[0].UID
 	instBefore := podsBefore[0].Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
@@ -90,15 +103,31 @@ func TestPoolWarmSurvival(t *testing.T) {
 		return false
 	}, "pool template must carry the new fetcher config (proves the template roll fired)", 3*time.Minute)
 
-	// Survival, the headline: same UID, re-stamped to the NEW instance.
+	// Survival, the headline: the SAME pod (by UID), re-stamped to the NEW
+	// instance. Look the pod up by uidBefore rather than trusting list order:
+	// a second specialized pod (a racing router retry) must not make these
+	// assertions compare the wrong one.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		pods := ns.SpecializedFunctionPods(t, ctx, fnName)
-		if !assert.NotEmpty(c, pods, "specialized pod must still exist") {
+		pods, lerr := ns.SpecializedFunctionPods(ctx, fnName)
+		if !assert.NoError(c, lerr) {
 			return
 		}
-		assert.Equal(c, uidBefore, pods[0].UID,
-			"the specialized pod must survive the executor roll IN PLACE — a new UID means it was killed and recreated")
-		assert.NotEqual(c, instBefore, pods[0].Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
+		var survived *corev1.Pod
+		for i := range pods {
+			if pods[i].UID == uidBefore {
+				survived = &pods[i]
+				break
+			}
+		}
+		if !assert.NotNil(c, survived,
+			"the specialized pod must survive the executor roll IN PLACE — its UID vanishing means it was killed and recreated") {
+			return
+		}
+		inst := survived.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+		// Both halves, deliberately: NotEqual alone is satisfied by an EMPTY
+		// annotation — the exact never-re-stamped failure mode.
+		assert.NotEmpty(c, inst, "the surviving pod must carry an instance annotation at all")
+		assert.NotEqual(c, instBefore, inst,
 			"the surviving pod must be re-stamped by the NEW executor's adopt pass")
 	}, 2*time.Minute, 2*time.Second)
 
@@ -112,7 +141,11 @@ func TestPoolWarmSurvival(t *testing.T) {
 		env.Spec.TerminationGracePeriod++
 	})
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		for _, p := range ns.SpecializedFunctionPods(t, ctx, fnName) {
+		pods, lerr := ns.SpecializedFunctionPods(ctx, fnName)
+		if !assert.NoError(c, lerr) {
+			return
+		}
+		for _, p := range pods {
 			if p.DeletionTimestamp != nil {
 				continue // already on its way out
 			}
@@ -127,8 +160,12 @@ func TestPoolWarmSurvival(t *testing.T) {
 	require.NoError(t,
 		f.FissionClient().CoreV1().Environments(ns.Name).Delete(ctx, envName, metav1.DeleteOptions{}))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		pods, lerr := ns.SpecializedFunctionPods(ctx, fnName)
+		if !assert.NoError(c, lerr) {
+			return
+		}
 		live := 0
-		for _, p := range ns.SpecializedFunctionPods(t, ctx, fnName) {
+		for _, p := range pods {
 			if p.DeletionTimestamp == nil {
 				live++
 			}

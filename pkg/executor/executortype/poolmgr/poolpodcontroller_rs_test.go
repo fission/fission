@@ -6,7 +6,6 @@ package poolmgr
 
 import (
 	"errors"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,7 +43,24 @@ func TestProcessRSDiscriminator(t *testing.T) {
 		depUID  = "dep-uid-1"
 	)
 
-	templateLabels := func(gen string, overrides map[string]string) map[string]string {
+	// Two concrete environments whose runtime hashes differ: the "live" one
+	// and a prior revision (different runtime image). The discriminator and
+	// the tests key on envRuntimeHash of these, never on synthetic strings —
+	// so the test can only pass if the production hash function is what
+	// distinguishes them.
+	liveEnv := func() *fv1.Environment {
+		return &fv1.Environment{
+			ObjectMeta: metav1.ObjectMeta{Name: envName, Namespace: ns, UID: k8stypes.UID(envUID), Generation: 3},
+			Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
+		}
+	}
+	staleHash := envRuntimeHash(&fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: envName, Namespace: ns, UID: k8stypes.UID(envUID)},
+		Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v1"}},
+	})
+	liveHash := envRuntimeHash(liveEnv())
+
+	templateLabels := func(hash string, overrides map[string]string) map[string]string {
 		l := map[string]string{
 			fv1.EXECUTOR_TYPE:         string(fv1.ExecutorTypePoolmgr),
 			fv1.ENVIRONMENT_NAME:      envName,
@@ -53,8 +69,8 @@ func TestProcessRSDiscriminator(t *testing.T) {
 			"managed":                 "true",
 			"pod-template-hash":       "abc123",
 		}
-		if gen != "" {
-			l[fv1.ENVIRONMENT_GENERATION] = gen
+		if hash != "" {
+			l[fv1.ENVIRONMENT_RUNTIME_HASH] = hash
 		}
 		for k, v := range overrides {
 			l[k] = v
@@ -74,10 +90,12 @@ func TestProcessRSDiscriminator(t *testing.T) {
 		}
 		return d
 	}
-	liveEnv := func(gen int64) *fv1.Environment {
-		return &fv1.Environment{ObjectMeta: metav1.ObjectMeta{
-			Name: envName, Namespace: ns, UID: k8stypes.UID(envUID), Generation: gen,
-		}}
+	// liveDepHashed is the owner AFTER the pool has been re-templated under a
+	// hash-stamping release: its template carries the label.
+	liveDepHashed := func() *appsv1.Deployment {
+		d := liveDep(false)
+		d.Spec.Template.Labels = map[string]string{fv1.ENVIRONMENT_RUNTIME_HASH: liveHash}
+		return d
 	}
 
 	type tc struct {
@@ -99,80 +117,93 @@ func TestProcessRSDiscriminator(t *testing.T) {
 	cases := []tc{
 		{
 			name:     "nonzero replicas is a no-op",
-			replicas: 1, ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			replicas: 1, ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 0,
 		},
 		{
-			name:     "executor-side roll: live owner, generation matches -> KEEP",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			name:     "executor-side roll: live owner, runtime hash matches -> KEEP",
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 0,
 		},
 		{
-			name:     "environment update: generation moved -> clean",
-			ownerUID: depUID, tmplLabels: templateLabels("2", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			name:     "environment runtime changed: hash moved -> clean",
+			ownerUID: depUID, tmplLabels: templateLabels(staleHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
 			name:     "owner Deployment gone -> teardown -> clean",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			cachedEnv:    liveEnv(3),
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			cachedEnv:    liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
 			name:     "owner Deployment deleting -> teardown -> clean",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(true), cachedEnv: liveEnv(3),
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(true), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
 			name:     "owner UID mismatch (name reused by a new Deployment) -> clean",
-			ownerUID: "old-dep-uid", tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			ownerUID: "old-dep-uid", tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
 			name:      "orphan RS (no controller ref) -> legacy clean",
-			ownerless: true, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			ownerless: true, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
-			name:     "env NotFound in cache but live in API -> stale cache -> KEEP",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), uncachedEnv: liveEnv(3),
-			wantEnqueued: 0,
+			name:     "env NotFound in cache but live in API -> stale cache -> requeue via error",
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), uncachedEnv: liveEnv(),
+			// The RS reconciler filters resync events (GenerationChangedPredicate),
+			// so a (false, nil) here would FORGET the decision forever; the error
+			// is the only requeue mechanism. Nothing may be enqueued meanwhile.
+			wantEnqueued: 0, wantErr: true,
 		},
 		{
 			name:     "env gone from cache AND API -> teardown -> clean",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
 			dep:          liveDep(false),
 			wantEnqueued: 1,
 		},
 		{
 			name:     "env recreated under the same name (UID mismatch) -> clean",
-			ownerUID: depUID, tmplLabels: templateLabels("3", map[string]string{fv1.ENVIRONMENT_UID: "stale-env-uid"}),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, map[string]string{fv1.ENVIRONMENT_UID: "stale-env-uid"}),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
-			name:     "pre-label RS (no generation label) -> KEEP — survival on the shipping upgrade",
+			name:     "pre-label RS + pre-label owner -> KEEP — survival on the shipping upgrade",
 			ownerUID: depUID, tmplLabels: templateLabels("", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 0,
 		},
 		{
-			name:     "mangled generation label -> legacy clean",
-			ownerUID: depUID, tmplLabels: templateLabels("not-a-number", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3),
+			name:     "pre-label RS under a re-templated (hash-stamped) owner -> clean",
+			ownerUID: depUID, tmplLabels: templateLabels("", nil),
+			// The live pool Deployment's template already carries the label, so
+			// this RS is provably a pre-hash generation: its pods run a runtime
+			// at least one revision old. Without this branch they would be kept
+			// FOREVER (a settled zero-replica RS emits no further events).
+			dep: liveDepHashed(), cachedEnv: liveEnv(),
+			wantEnqueued: 1,
+		},
+		{
+			name:     "mangled hash label -> compares unequal -> clean",
+			ownerUID: depUID, tmplLabels: templateLabels("not-a-real-hash", nil),
+			dep: liveDep(false), cachedEnv: liveEnv(),
 			wantEnqueued: 1,
 		},
 		{
 			name:     "transient owner GET error -> error (requeue), nothing enqueued",
-			ownerUID: depUID, tmplLabels: templateLabels("3", nil),
-			dep: liveDep(false), cachedEnv: liveEnv(3), depGetErr: true,
+			ownerUID: depUID, tmplLabels: templateLabels(liveHash, nil),
+			dep: liveDep(false), cachedEnv: liveEnv(), depGetErr: true,
 			wantEnqueued: 0, wantErr: true,
 		},
 	}
@@ -188,7 +219,7 @@ func TestProcessRSDiscriminator(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "specialized-1", Namespace: ns,
 					Labels: func() map[string]string {
-						l := templateLabels("", nil) // pod labels need no generation for selection
+						l := templateLabels("", nil) // pod labels need no hash for selection
 						l["managed"] = "false"
 						return l
 					}(),
@@ -267,14 +298,22 @@ func TestProcessRSDiscriminator(t *testing.T) {
 	}
 }
 
-// TestPoolSelectorStaysGenerationFree is the selector-immutability guard: the
-// ENVIRONMENT_GENERATION label may exist ONLY on the pod template. A
-// Deployment selector is immutable, so a generation-bearing selector would
-// fail every environment update with "field is immutable".
-func TestPoolSelectorStaysGenerationFree(t *testing.T) {
+// TestPoolSelectorStaysHashFree is the selector-immutability guard AND the
+// alias-mutation guard: the ENVIRONMENT_RUNTIME_HASH label may exist ONLY on
+// the pod template (a Deployment selector is immutable, so a hash-bearing
+// selector would fail every environment update with "field is immutable") —
+// and genDeploymentSpec must never write it back into the caller's
+// Environment, whose labels are long-lived (gp.env) and feed Service
+// selectors on every specialization.
+func TestPoolSelectorStaysHashFree(t *testing.T) {
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default", UID: "u", Generation: 7},
-		Spec:       fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
+		// Non-nil Labels, deliberately: with nil labels genDeploymentSpec
+		// allocates a fresh map and the aliasing bug is invisible. A labelled
+		// env is the case where writing pool/hash labels back into env.Labels
+		// leaked them into Service selectors.
+		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default", UID: "u", Generation: 7,
+			Labels: map[string]string{"team": "core"}},
+		Spec: fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
 	}
 	fetcherCfg, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	require.NoError(t, err)
@@ -283,11 +322,37 @@ func TestPoolSelectorStaysGenerationFree(t *testing.T) {
 	spec, err := gp.genDeploymentSpec(env)
 	require.NoError(t, err)
 
-	assert.NotContains(t, spec.Selector.MatchLabels, fv1.ENVIRONMENT_GENERATION,
-		"the generation must NEVER reach the immutable selector")
-	assert.NotContains(t, gp.getEnvironmentPoolLabels(env), fv1.ENVIRONMENT_GENERATION,
-		"getEnvironmentPoolLabels feeds the selector and must stay generation-free")
-	assert.Equal(t, strconv.FormatInt(env.Generation, 10),
-		spec.Template.Labels[fv1.ENVIRONMENT_GENERATION],
-		"the pod template must carry the environment generation — it is what processRS keys on")
+	assert.NotContains(t, spec.Selector.MatchLabels, fv1.ENVIRONMENT_RUNTIME_HASH,
+		"the runtime hash must NEVER reach the immutable selector")
+	assert.Equal(t, envRuntimeHash(env), spec.Template.Labels[fv1.ENVIRONMENT_RUNTIME_HASH],
+		"the pod template must carry the runtime hash — it is what processRS keys on")
+	assert.Equal(t, map[string]string{"team": "core"}, env.Labels,
+		"genDeploymentSpec must not mutate the caller's Environment labels — gp.env is long-lived and feeds every specialization's label copy")
+}
+
+// TestEnvRuntimeHashIgnoresNonTemplateSpec pins the discriminator's key
+// choice: spec fields that never reach the pod template — poolsize above all,
+// a pure replica scale — must not move the hash. Keying on generation made
+// `env update --poolsize` recycle every warm pod, under load, which is the
+// exact operation the scale-up serves.
+func TestEnvRuntimeHashIgnoresNonTemplateSpec(t *testing.T) {
+	base := &fv1.Environment{
+		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default", UID: "u", Generation: 3},
+		Spec:       fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
+	}
+	scaled := base.DeepCopy()
+	scaled.Spec.Poolsize = 30
+	scaled.Generation = 4 // any spec write moves generation; the hash must not care
+	assert.Equal(t, envRuntimeHash(base), envRuntimeHash(scaled),
+		"poolsize feeds only Replicas, never the template — scaling must not recycle warm pods")
+
+	reimaged := base.DeepCopy()
+	reimaged.Spec.Runtime.Image = "img:v2"
+	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(reimaged),
+		"a runtime image change is exactly what the hash exists to catch")
+
+	relabelled := base.DeepCopy()
+	relabelled.Labels = map[string]string{"tier": "gold"}
+	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(relabelled),
+		"env labels land in the pod template and must move the hash")
 }
