@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -175,4 +176,30 @@ func (ns *TestNamespace) listPoolDeployments(ctx context.Context, envName string
 		return nil, err
 	}
 	return list.Items, nil
+}
+
+// SpecializedFunctionPods lists a function's specialized (managed=false, not
+// Deployment-owned) pool pods in the function namespace — the pods whose
+// survival across an executor roll is RFC-0028's warm-pod contract. Mirrors
+// the upgrade benchmark's specializedPodUIDs selector.
+func (ns *TestNamespace) SpecializedFunctionPods(t *testing.T, ctx context.Context, fnName string) []corev1.Pod {
+	t.Helper()
+	selector := fv1.FUNCTION_NAME + "=" + fnName + "," + fv1.MANAGED + "=false"
+	pods, err := ns.f.kubeClient.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	require.NoErrorf(t, err, "list specialized pods for %q", fnName)
+	return pods.Items
+}
+
+// UpdateEnvSpec mutates one Environment's spec through the typed client and
+// updates it — bumping metadata.generation, which is what the pool-roll
+// discriminator and the adopt pass key on. Use for tests that need "the
+// environment changed" as a precise, minimal event.
+func (ns *TestNamespace) UpdateEnvSpec(t *testing.T, ctx context.Context, envName string, mutate func(*fv1.Environment)) {
+	t.Helper()
+	envs := ns.f.FissionClient().CoreV1().Environments(ns.Name)
+	env, err := envs.Get(ctx, envName, metav1.GetOptions{})
+	require.NoErrorf(t, err, "get environment %q", envName)
+	mutate(env)
+	_, err = envs.Update(ctx, env, metav1.UpdateOptions{})
+	require.NoErrorf(t, err, "update environment %q", envName)
 }
