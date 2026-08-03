@@ -223,30 +223,41 @@ executor:
     enabled: false
   ## strategy is the Deployment rollout strategy for the executor.
   ##
-  ## Recreate is the default because the executor is a single-writer control
-  ## plane keyed on its instance ID: under RollingUpdate (the k8s default,
-  ## which surges at replicas=1) two executors with DIFFERENT instance IDs run
-  ## concurrently during every roll, with no leader election to arbitrate —
-  ## the outgoing one keeps re-stamping objects with its own ID while the
-  ## incoming one's adopt+cleanup pass runs, so the incoming reaper deletes
-  ## the very objects adoption exists to keep. The integration framework has
-  ## forced Recreate for its executor restarts for exactly this reason.
+  ## maxSurge 0 / maxUnavailable 1 makes every roll OVERLAP-FREE: the old pod
+  ## terminates before its replacement is created, at any replica count. That
+  ## matters because the executor is a single-writer control plane keyed on
+  ## its instance ID: under the k8s default (which surges at replicas=1) two
+  ## executors with DIFFERENT instance IDs run concurrently during every
+  ## roll, with no leader election to arbitrate — the outgoing one keeps
+  ## re-stamping objects with its own ID while the incoming one's
+  ## adopt+cleanup pass runs, so the incoming reaper deletes the very objects
+  ## adoption exists to keep.
   ##
-  ## The cost is a bounded executor-down window per upgrade (pod stop + start
-  ## + cache sync + adopt/cleanup, ≲60s). During it, WARM traffic keeps
+  ## Expressed WITHIN RollingUpdate rather than as `type: Recreate`
+  ## deliberately, and not only for equivalence at replicas=1: a live
+  ## Deployment whose strategy was ever defaulted carries a rollingUpdate
+  ## block, and the API forbids that block alongside type Recreate — so a
+  ## helm upgrade flipping the type fails validation against every existing
+  ## install ("spec.strategy.rollingUpdate: Forbidden"). Mutating two fields
+  ## inside the type the object already has upgrades cleanly.
+  ##
+  ## The cost is a bounded executor-down window per roll (pod stop + start +
+  ## cache sync + adopt/cleanup, ≲60s). During it, WARM traffic keeps
   ## serving: poolmgr from the EndpointSlice-fed router index, newdeploy from
   ## the router's cached Service addresses — neither needs a live executor.
   ## Cold starts fail fast and succeed once the new executor is ready.
   ##
-  ## Do NOT set a surge strategy with maxUnavailable: 0 together with
-  ## leaderElection: the executor's /readyz answers 503 on non-leaders, so
-  ## the surged pod can never become Ready while the old pod holds the lease
-  ## and the rollout deadlocks. For HA (replicas > 1 + leaderElection), use
-  ## RollingUpdate with maxUnavailable: 1 — the old leader dies first and
-  ## releases the lease to a standby.
+  ## This default also composes with HA (replicas > 1 + leaderElection):
+  ## pods roll one at a time and a dying leader releases its lease to a
+  ## standby. Never set maxUnavailable: 0 with leaderElection — /readyz
+  ## answers 503 on non-leaders, so a surged pod can never become Ready
+  ## while the old one holds the lease, and the rollout deadlocks.
   ##
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   ## terminationGracePeriodSeconds gives in-flight work time to drain on
   ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
   ## above GRACEFUL_SHUTDOWN_TIMEOUT.
