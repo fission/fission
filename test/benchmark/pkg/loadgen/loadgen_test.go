@@ -166,16 +166,17 @@ func TestHTTPTargetObserve(t *testing.T) {
 	t.Parallel()
 
 	type obs struct {
-		status    int
-		headerVal string
-		err       bool
+		status     int
+		headerVal  string
+		err        bool
+		hasLatency bool
 	}
 	var got []obs
 	var mu sync.Mutex
-	observe := func(status int, headerVal string, err error) {
+	observe := func(o Observation) {
 		mu.Lock()
 		defer mu.Unlock()
-		got = append(got, obs{status: status, headerVal: headerVal, err: err != nil})
+		got = append(got, obs{status: o.Status, headerVal: o.HeaderVal, err: o.Err != nil, hasLatency: o.Latency > 0})
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,8 +213,9 @@ func TestHTTPTargetObserve(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.Len(t, got, 3)
-	assert.Equal(t, obs{status: http.StatusOK, headerVal: "", err: false}, got[0])
-	assert.Equal(t, obs{status: http.StatusBadGateway, headerVal: "router", err: true}, got[1])
-	assert.Equal(t, obs{status: 0, headerVal: "", err: true}, got[2],
-		"a request that produced no response must observe status 0")
+	assert.Equal(t, obs{status: http.StatusOK, headerVal: "", err: false, hasLatency: true}, got[0])
+	assert.Equal(t, obs{status: http.StatusBadGateway, headerVal: "router", err: true, hasLatency: true}, got[1])
+	assert.Equal(t, obs{status: 0, headerVal: "", err: true, hasLatency: true}, got[2],
+		"a request that produced no response must observe status 0 — and still carry a latency, "+
+			"because a 30s client timeout reads very differently from a fast connection refusal")
 }

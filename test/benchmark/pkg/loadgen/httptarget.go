@@ -36,13 +36,26 @@ type HTTPTargetConfig struct {
 	// the RFC-0015 X-Fission-Component attribution header through this).
 	ObserveHeader string
 	// Observe, if set, is called once per issued request from the request
-	// goroutine. status is the HTTP status code, or 0 when the request
-	// produced no response at all (dial error, connection reset, client
-	// timeout) — the transport-level failures a status-only view cannot
-	// distinguish from the load driver's own saturation accounting.
-	// headerVal is the response's ObserveHeader value ("" when absent or on
-	// transport error). Observe must be safe for concurrent use.
-	Observe func(status int, headerVal string, err error)
+	// goroutine. It must be safe for concurrent use.
+	Observe func(Observation)
+}
+
+// Observation is one issued request's outcome, as seen by the client.
+type Observation struct {
+	// Status is the HTTP status code, or 0 when the request produced no
+	// response at all (dial error, connection reset, client timeout) — the
+	// transport-level failures a status-only view cannot distinguish from
+	// the load driver's own saturation accounting.
+	Status int
+	// HeaderVal is the response's ObserveHeader value ("" when absent or on
+	// transport error).
+	HeaderVal string
+	// Err is nil exactly when the request completed with a 2xx status.
+	Err error
+	// Latency is the client-side request duration, including any transport
+	// error path — a 30s value on a transport failure is a client timeout,
+	// which reads very differently from a fast connection refusal.
+	Latency time.Duration
 }
 
 // HTTPTarget is a reusable, tuned HTTP client bound to one request shape. Its
@@ -89,10 +102,11 @@ func (t *HTTPTarget) Do(ctx context.Context) (int64, error) {
 	if t.cfg.Headers != nil {
 		req.Header = maps.Clone(t.cfg.Headers)
 	}
+	start := time.Now()
 	resp, err := t.client.Do(req)
 	if err != nil {
 		if t.cfg.Observe != nil {
-			t.cfg.Observe(0, "", err)
+			t.cfg.Observe(Observation{Err: err, Latency: time.Since(start)})
 		}
 		return 0, err
 	}
@@ -103,7 +117,12 @@ func (t *HTTPTarget) Do(ctx context.Context) (int64, error) {
 		statusErr = fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	if t.cfg.Observe != nil {
-		t.cfg.Observe(resp.StatusCode, resp.Header.Get(t.cfg.ObserveHeader), statusErr)
+		t.cfg.Observe(Observation{
+			Status:    resp.StatusCode,
+			HeaderVal: resp.Header.Get(t.cfg.ObserveHeader),
+			Err:       statusErr,
+			Latency:   time.Since(start),
+		})
 	}
 	return n, statusErr
 }
