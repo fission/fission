@@ -471,3 +471,34 @@ func TestReportDialTimeoutIgnoredWhileQuarantined(t *testing.T) {
 		assert.False(t, ix.ReportDialTimeout("default", "fn-a", "", "10.0.0.1:8888"))
 	}
 }
+
+func TestRemoveNamespace(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+
+	// Populate functions across three namespaces.
+	ix.ApplySlice(slice("s1", "fn-a", "ns-1", 8888, "10.0.0.1"))
+	ix.ApplySlice(slice("s2", "fn-b", "ns-1", 8888, "10.0.0.2"))
+	ix.ApplySlice(slice("s3", "fn-c", "ns-2", 8888, "10.0.0.3"))
+	ix.ApplySlice(slice("s4", "fn-d", "ns-3", 8888, "10.0.0.4"))
+	assert.Equal(t, 4, ix.Size())
+
+	// Remove ns-1 only; ns-2 and ns-3 must survive.
+	ix.RemoveNamespace("ns-1")
+	assert.Empty(t, ix.Lookup("ns-1", "fn-a", ""), "ns-1 fn-a must be gone")
+	assert.Empty(t, ix.Lookup("ns-1", "fn-b", ""), "ns-1 fn-b must be gone")
+	assert.ElementsMatch(t, []string{"10.0.0.3:8888"}, addrs(ix.Lookup("ns-2", "fn-c", "")))
+	assert.ElementsMatch(t, []string{"10.0.0.4:8888"}, addrs(ix.Lookup("ns-3", "fn-d", "")))
+	assert.Equal(t, 2, ix.Size(), "only ns-2 and ns-3 functions remain")
+
+	// Removing a namespace that was never populated is a no-op.
+	ix.RemoveNamespace("never-existed")
+	assert.Equal(t, 2, ix.Size())
+
+	// Remove the rest.
+	ix.RemoveNamespace("ns-2")
+	ix.RemoveNamespace("ns-3")
+	assert.Equal(t, 0, ix.Size())
+	assert.Empty(t, ix.Lookup("ns-2", "fn-c", ""))
+	assert.Empty(t, ix.Lookup("ns-3", "fn-d", ""))
+}

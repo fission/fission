@@ -6,6 +6,7 @@ package tenant
 
 import (
 	"context"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -49,11 +50,34 @@ func SyncResolverFromTenants(ctx context.Context, c client.Client, resolver *uti
 type ResolverSyncReconciler struct {
 	client   client.Client
 	resolver *utils.NamespaceResolver
+	// hooks are called (with the live FissionResourceNamespaces set) after every
+	// successful SetTenants. The router uses one to re-scope its per-namespace
+	// EndpointSlice informers when tenants change at runtime (#3647); other
+	// callers (executor, buildermgr) pass none. A hook returns pending=true when
+	// it has unfinished work (e.g. a namespace whose EndpointSlice RBAC has not
+	// landed yet): the reconciler then requeues after a short delay, because no
+	// FissionTenant event will fire when the missing piece is a RoleBinding the
+	// tenant controller creates asynchronously.
+	hooks []func(map[string]string) (pending bool)
 }
+
+// hookRetryDelay is how soon the reconciler re-runs when a hook reports
+// pending work. Short: the common case is RBAC landing a second or two after
+// the FissionTenant event that triggered the reconcile.
+const hookRetryDelay = 2 * time.Second
 
 func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
 	if err := SyncResolverFromTenants(ctx, r.client, r.resolver); err != nil {
 		return ctrl.Result{}, err
+	}
+	pending := false
+	for _, h := range r.hooks {
+		if h(r.resolver.FissionResourceNamespaces()) {
+			pending = true
+		}
+	}
+	if pending {
+		return ctrl.Result{RequeueAfter: hookRetryDelay}, nil
 	}
 	return ctrl.Result{}, nil
 }
@@ -67,11 +91,18 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 // is cluster-wide in these modes, so the cluster-scoped FissionTenant watch needs
 // no extra cache wiring; the component's ClusterRole must grant fissiontenants
 // get/list/watch (charts/.../tenant-controller/dynamic-cluster-roles.yaml).
-func AddResolverSync(mgr ctrl.Manager) error {
+//
+// hooks are called (with the live FissionResourceNamespaces set) after every
+// successful SetTenants. The router passes one to re-scope its per-namespace
+// EndpointSlice informers (#3647); executor/buildermgr pass none. A hook
+// returns pending=true when it has unfinished work (e.g. RBAC not yet landed);
+// the reconciler then requeues after hookRetryDelay. Variadic so existing
+// callers (AddResolverSync(mgr)) compile unchanged.
+func AddResolverSync(mgr ctrl.Manager, hooks ...func(map[string]string) (pending bool)) error {
 	if !utils.CrdWatchClusterWide() {
 		return nil
 	}
-	r := &ResolverSyncReconciler{client: mgr.GetClient(), resolver: utils.DefaultNSResolver()}
+	r := &ResolverSyncReconciler{client: mgr.GetClient(), resolver: utils.DefaultNSResolver(), hooks: hooks}
 	return builder.ControllerManagedBy(mgr).
 		For(&fv1.FissionTenant{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Named("fission-resolver-sync").

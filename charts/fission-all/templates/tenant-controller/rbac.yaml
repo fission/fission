@@ -62,7 +62,8 @@ rules:
   - deletecollection
 # Bind ONLY the fixed-name tenant-workload ClusterRoles into tenant namespaces (via
 # the RoleBindings the controller provisions): the executor/buildermgr workload
-# roles AND the fetcher/builder/fetcher-websocket function-pod read roles.
+# roles, the fetcher/builder/fetcher-websocket function-pod read roles, AND the
+# router-dataplane EndpointSlice + Service read role.
 # resourceNames-scoped: the controller cannot bind any other ClusterRole, so it
 # cannot escalate itself to arbitrary cluster permissions.
 - apiGroups:

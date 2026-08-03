@@ -369,8 +369,11 @@ const (
 	// Control-plane ServiceAccounts (in the install/release namespace) that need
 	// workload RBAC in each tenant namespace under dynamic tenancy. The tenant
 	// controller binds them to the *TenantWorkloadClusterRole below per namespace.
+	// FissionRouterSA is the router's data-plane SA, bound to
+	// RouterDataplaneTenantClusterRole for EndpointSlice + Service reads.
 	FissionExecutorSA   = "fission-executor"
 	FissionBuildermgrSA = "fission-buildermgr"
+	FissionRouterSA     = "fission-router"
 
 	// The *TenantWorkloadClusterRole names are the fixed-name ClusterRoles
 	// (chart-rendered only in dynamic mode) holding the per-namespace rules a
@@ -379,13 +382,15 @@ const (
 	// install-independent (dynamic tenancy is one Fission install per cluster,
 	// since it watches cluster-wide). Executor/buildermgr carry workload-management
 	// rules; fetcher/builder/fetcher-websocket carry the function-pod sidecar read
-	// rules — all single-sourced from the chart's shared partials so the static
-	// and dynamic paths cannot drift.
+	// rules; router-dataplane carries the EndpointSlice + Service read grant for
+	// the RFC-0002 warm path — all single-sourced from the chart's shared partials
+	// so the static and dynamic paths cannot drift.
 	ExecutorTenantWorkloadClusterRole         = "fission-executor-tenant-workload"
 	BuildermgrTenantWorkloadClusterRole       = "fission-buildermgr-tenant-workload"
 	FetcherTenantWorkloadClusterRole          = "fission-fetcher-tenant-workload"
 	BuilderTenantWorkloadClusterRole          = "fission-builder-tenant-workload"
 	FetcherWebsocketTenantWorkloadClusterRole = "fission-fetcher-websocket-tenant-workload"
+	RouterDataplaneTenantClusterRole          = "fission-router-dataplane-tenant"
 )
 
 const (

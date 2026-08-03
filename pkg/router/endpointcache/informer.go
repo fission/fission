@@ -32,34 +32,7 @@ func RegisterInformer(ctx context.Context, mgr ctrl.Manager, ix *Index, logger l
 	if err != nil {
 		return nil, fmt.Errorf("error getting endpointslice informer: %w", err)
 	}
-	reg, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj any) {
-			if es, ok := obj.(*discoveryv1.EndpointSlice); ok {
-				ix.ApplySlice(es)
-			}
-		},
-		UpdateFunc: func(_, newObj any) {
-			if es, ok := newObj.(*discoveryv1.EndpointSlice); ok {
-				ix.ApplySlice(es)
-			}
-		},
-		DeleteFunc: func(obj any) {
-			es, ok := obj.(*discoveryv1.EndpointSlice)
-			if !ok {
-				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-				if !ok {
-					logger.V(1).Info("unexpected object type in endpointslice delete event")
-					return
-				}
-				es, ok = tombstone.Obj.(*discoveryv1.EndpointSlice)
-				if !ok {
-					logger.V(1).Info("unexpected tombstone object type in endpointslice delete event")
-					return
-				}
-			}
-			ix.DeleteSlice(es)
-		},
-	})
+	reg, err := informer.AddEventHandler(endpointSliceHandlers(ix, logger))
 	if err != nil {
 		return nil, fmt.Errorf("error adding endpointslice event handler: %w", err)
 	}

@@ -32,4 +32,9 @@ tests (a drift would fail tenant onboarding / the admission-policy test).
   rules: fissionFunction.builderRules
 - name: fission-fetcher-websocket-tenant-workload
   rules: fissionFunction.fetcherWebsocketRules
+# router-dataplane: read Fission-managed EndpointSlices + Services in tenant
+# namespaces (RFC-0002 warm path). The dynamic twin of the static per-namespace
+# Role in router/role-dataplane.yaml; pkg/tenant/provision.go binds this by name.
+- name: fission-router-dataplane-tenant
+  rules: router-dataplane-kuberules
 {{- end -}}

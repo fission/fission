@@ -7,7 +7,10 @@
 package serial_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +88,9 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
 	//    the derived-key Secret; the data-plane managers add the namespace to their
 	//    watched set AND re-enqueue the staged CRs — all without a restart.
+	//    Capture the router goroutine baseline first: the final offboard must
+	//    return to it (Tier-B informer teardown leak guard, testing-plan §4.2).
+	goroutinesBefore := scrapeRouterMetric(t, ctx, f, "go_goroutines")
 	ns.EnableTenant(t, ctx)
 	f.WaitForTenantReady(t, ctx, tenantNS)
 
@@ -120,6 +126,22 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// tenant's trigger on onboarding, with no restart.
 	r.GetEventually(t, ctx, routeURL, framework.BodyContains("hello"))
 
+	// 3b. The router's per-namespace EndpointSlice informer must have picked up
+	//     the new tenant (#3647): the RBAC grant exists AND the warm path served
+	//     a request — proving the informer fed the new tenant's EndpointSlices
+	//     into the index. Before the fix the informer was frozen at startup and
+	//     the router never saw the new tenant's EndpointSlices.
+	rbac, rerr := f.KubeClient().RbacV1().RoleBindings(tenantNS).Get(ctx, "fission-router-dataplane", metav1.GetOptions{})
+	require.NoErrorf(t, rerr, "router dataplane RoleBinding must exist in tenant namespace %q", tenantNS)
+	require.Equalf(t, "ClusterRole", rbac.RoleRef.Kind, "RoleBinding should reference a ClusterRole")
+	require.Equalf(t, "fission-router-dataplane-tenant", rbac.RoleRef.Name,
+		"RoleBinding should reference the fission-router-dataplane-tenant ClusterRole")
+
+	// The first invocation was a cold start (executor RPC); a warm hit proves the
+	// per-namespace informer fed the tenant's EndpointSlices into the index.
+	hitsBefore := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+	assertWarmPathHit(t, ctx, r, f, routeURL, hitsBefore, "warm path never served tenant %q's function", tenantNS)
+
 	// 4. Onboarding + serving a fresh tenant must not have rolled any
 	//    control-plane pod (#3298: the whole point of the dynamic model).
 	f.AssertNoControlPlaneRestart(t, ctx, before)
@@ -148,5 +170,120 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	ns.DisableTenant(t, ctx)
 	f.WaitForTenantOffboarded(t, ctx, tenantNS)
 
-	// 6. The namespace itself is deleted by the NewTestNamespaceIn cleanup hook.
+	// 6. Re-onboard the SAME namespace (testing-plan §4.2: onboard→offboard→
+	//    re-onboard). This is the Tier-B teardown leak guard: the old informer's
+	//    goroutine must have exited during offboard, and the new informer must
+	//    start cleanly without overlapping the old one. A function created in
+	//    the re-onboarded namespace must be invocable through the warm path.
+	ns.EnableTenant(t, ctx)
+	f.WaitForTenantReady(t, ctx, tenantNS)
+
+	// Re-create env + function + trigger in the same namespace, using the
+	// same patterns as the initial stage (ns.ID for unique names).
+	envName2 := "python2-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName2, Image: pyImage, Poolsize: 1})
+
+	fnName2 := "hello2-" + ns.ID
+	codePath2 := framework.WriteTestData(t, "python/hello/hello.py")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName2, Env: envName2, Code: codePath2})
+
+	route2URL := "/" + fnName2
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName2, URL: route2URL, Method: "GET"})
+
+	// First invocation cold-starts; verify the re-onboarded namespace serves.
+	r.GetEventually(t, ctx, route2URL, framework.BodyContains("hello"))
+
+	// Second invocation must hit the warm path — proves the new informer fed
+	// the re-onboarded tenant's EndpointSlices into the index.
+	hitsBefore2 := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+	assertWarmPathHit(t, ctx, r, f, route2URL, hitsBefore2, "warm path never served re-onboarded tenant %q's function", tenantNS)
+
+	// 7. Final offboard + goroutine-delta leak guard (testing-plan §4.2): the
+	//    per-namespace informer must die with the tenant. A leaked informer
+	//    would pin several goroutines (reflector + processor listeners) per
+	//    namespace forever, so the router's goroutine count must return to the
+	//    pre-onboard baseline once the tenant is offboarded.
+	require.NoError(t, fc.HTTPTriggers(tenantNS).Delete(ctx, "route-"+fnName2, metav1.DeleteOptions{}))
+	require.NoError(t, fc.Functions(tenantNS).Delete(ctx, fnName2, metav1.DeleteOptions{}))
+	require.NoError(t, fc.Environments(tenantNS).Delete(ctx, envName2, metav1.DeleteOptions{}))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err := fc.Functions(tenantNS).Get(ctx, fnName2, metav1.GetOptions{})
+		assert.Truef(c, apierrors.IsNotFound(err), "function %q should clear before offboarding (err=%v)", fnName2, err)
+	}, time.Minute, time.Second)
+	ns.DisableTenant(t, ctx)
+	f.WaitForTenantOffboarded(t, ctx, tenantNS)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		g := scrapeRouterMetric(t, ctx, f, "go_goroutines")
+		assert.LessOrEqualf(c, g, goroutinesBefore+10,
+			"router goroutines must return to the pre-onboard baseline after offboard (baseline=%.0f, current=%.0f) — a per-namespace informer leak pins goroutines forever",
+			goroutinesBefore, g)
+	}, 2*time.Minute, 5*time.Second, "router goroutines never returned to baseline — per-namespace informer leak suspected")
+
+	// 8. The namespace itself is deleted by the NewTestNamespaceIn cleanup hook.
+}
+
+// assertWarmPathHit polls until invoking routeURL increments the router's
+// fission_router_endpointcache_hits_total beyond hitsBefore — i.e. the warm
+// path (slice-fed index, no executor RPC) served a request. The invocation is
+// INSIDE the poll: after a cold start the executor patches the pod's served
+// label and the EndpointSlice controller mirrors it (both async, seconds of
+// lag), so scraping without invoking can never move the counter.
+func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterClient, f *framework.Framework, routeURL string, hitsBefore float64, msg string, args ...any) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, body, err := r.Get(ctx, routeURL)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Contains(c, strings.ToLower(body), "hello")
+		hitsAfter := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+		assert.Greaterf(c, hitsAfter, hitsBefore,
+			"endpointcache_hits_total must increase on a warm invocation — proves the warm path served the tenant's function")
+	}, 2*time.Minute, 5*time.Second, append([]any{msg}, args...)...)
+}
+
+// scrapeRouterMetric scrapes a single Prometheus metric from the router pods
+// (via pod proxy, no port-forward needed) and returns its sum across replicas.
+// Works for both gauges and counters (sums the latest sample per pod).
+func scrapeRouterMetric(t *testing.T, ctx context.Context, f *framework.Framework, metricName string) float64 {
+	t.Helper()
+	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=router"})
+	require.NoErrorf(t, err, "listing router pods")
+	require.NotEmptyf(t, pods.Items, "no router pod found in namespace %s", f.FissionNamespace())
+	var total float64
+	for _, p := range pods.Items {
+		raw, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).ProxyGet("http", p.Name, "8080", "/metrics", nil).DoRaw(ctx)
+		require.NoErrorf(t, err, "scraping /metrics from router pod %s", p.Name)
+		total += parseGaugeValue(raw, metricName)
+	}
+	return total
+}
+
+// parseGaugeValue extracts the value of a Prometheus metric from a /metrics
+// scrape body. Returns 0 if the metric is absent (e.g. before any slice event).
+// Works for gauges and counters (returns the last sample's value).
+func parseGaugeValue(raw []byte, name string) float64 {
+	sc := bufio.NewScanner(bytes.NewReader(raw))
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		rest, ok := strings.CutPrefix(line, name)
+		if !ok {
+			continue
+		}
+		if len(rest) == 0 || (rest[0] != ' ' && rest[0] != '{') {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		v, err := strconv.ParseFloat(fields[len(fields)-1], 64)
+		if err == nil {
+			return v
+		}
+	}
+	return 0
 }

@@ -330,6 +330,30 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 	}
 }
 
+// RemoveNamespace drops every function entry whose namespace matches, used when
+// a tenant is offboarded and its informer is stopped (nsinformers.go Sync).
+// Without this the index would hold stale pod IPs for a namespace the router
+// can no longer watch — routing requests to dead pods. Iterates all shards
+// since functions hash by FnKey (namespace+name+version), not by namespace alone.
+func (ix *Index) RemoveNamespace(ns string) {
+	for i := range ix.shards {
+		s := &ix.shards[i]
+		s.mu.Lock()
+		for key, e := range s.m {
+			if key.Namespace != ns {
+				continue
+			}
+			e.mu.Lock()
+			e.quarantined.Store(nil)
+			e.strikes = nil
+			e.mu.Unlock()
+			delete(s.m, key)
+			ix.size.Add(-1)
+		}
+		s.mu.Unlock()
+	}
+}
+
 // rebuildLocked re-merges the per-slice endpoint lists into the copy-on-write
 // snapshot, attaching each pod's shared in-flight counter (created on first
 // sight, pruned when the pod leaves every slice). Caller holds e.mu.
