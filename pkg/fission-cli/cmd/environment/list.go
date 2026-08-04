@@ -50,7 +50,7 @@ func (opts *ListSubCommand) do(input cli.Input) (err error) {
 			env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, fmt.Sprintf("%v", env.Spec.Poolsize),
 			env.Spec.Resources.Requests.Cpu().String(), env.Spec.Resources.Limits.Cpu().String(),
 			env.Spec.Resources.Requests.Memory().String(), env.Spec.Resources.Limits.Memory().String(),
-			fmt.Sprintf("%v", env.Spec.AllowAccessToExternalNetwork), fmt.Sprintf("%v", env.Spec.TerminationGracePeriod), env.Namespace,
+			fmt.Sprintf("%v", env.Spec.AllowAccessToExternalNetwork), fmt.Sprintf("%v", env.Spec.EffectiveTerminationGracePeriod()), env.Namespace,
 		}
 	}
 	wideExtra := []string{"AGE"}

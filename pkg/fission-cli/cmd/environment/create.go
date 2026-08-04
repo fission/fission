@@ -180,7 +180,7 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 			Poolsize:                     poolsize,
 			Resources:                    *resourceReq,
 			AllowAccessToExternalNetwork: envExternalNetwork,
-			TerminationGracePeriod:       envGracePeriod,
+			TerminationGracePeriod:       new(envGracePeriod),
 			KeepArchive:                  keepArchive,
 			ImagePullSecret:              pullSecret,
 		},

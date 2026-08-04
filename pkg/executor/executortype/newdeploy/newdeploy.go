@@ -121,12 +121,11 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		replicas = *targetReplicas
 	}
 
-	// The env value is authoritative: CRD validation floors it at 0 and the
-	// CRD default fills an omitted field with 90, so there is no in-code
-	// fallback — the previous 360s one was dead (the >= 0 guard is a
-	// tautology for a floored int64) and misled readers into believing a
-	// six-minute default existed.
-	gracePeriodSeconds := env.Spec.TerminationGracePeriod
+	// Effective value: the apiserver fills an absent field with the CRD
+	// default (90); the helper mirrors that for objects that never crossed
+	// it. An explicit 0 — expressible from typed clients since the field
+	// became a pointer — means no drain window.
+	gracePeriodSeconds := env.Spec.EffectiveTerminationGracePeriod()
 
 	podAnnotations := env.Annotations
 	if podAnnotations == nil {

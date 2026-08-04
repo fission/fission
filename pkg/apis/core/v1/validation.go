@@ -900,8 +900,8 @@ func (spec EnvironmentSpec) Validate() error {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.Poolsize", spec.Poolsize, "must be greater than or equal to 0"))
 	}
 
-	if spec.TerminationGracePeriod < 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", spec.TerminationGracePeriod, "must be greater than or equal to 0"))
+	if spec.TerminationGracePeriod != nil && *spec.TerminationGracePeriod < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", *spec.TerminationGracePeriod, "must be greater than or equal to 0"))
 	}
 
 	return errs

@@ -132,7 +132,7 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 	}
 
 	if input.IsSet(flagkey.EnvGracePeriod) {
-		env.Spec.TerminationGracePeriod = input.Int64(flagkey.EnvGracePeriod)
+		env.Spec.TerminationGracePeriod = new(input.Int64(flagkey.EnvGracePeriod))
 	}
 
 	if input.IsSet(flagkey.EnvKeeparchive) {

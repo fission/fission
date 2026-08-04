@@ -138,7 +138,7 @@ func TestPoolWarmSurvival(t *testing.T) {
 
 	// ---- Phase 2: environment spec change -> the pod IS recycled ----
 	ns.UpdateEnvSpec(t, ctx, envName, func(env *fv1.Environment) {
-		env.Spec.TerminationGracePeriod++
+		env.Spec.TerminationGracePeriod = new(env.Spec.EffectiveTerminationGracePeriod() + 1)
 	})
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		pods, lerr := ns.SpecializedFunctionPods(ctx, fnName)

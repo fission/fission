@@ -41,9 +41,13 @@ func envRuntimeHash(env *fv1.Environment) string {
 		Labels      map[string]string          `json:"labels"`
 		Annotations map[string]string          `json:"annotations"`
 	}{
-		Runtime:     env.Spec.Runtime,
-		Resources:   env.Spec.Resources,
-		Grace:       env.Spec.TerminationGracePeriod,
+		Runtime:   env.Spec.Runtime,
+		Resources: env.Spec.Resources,
+		// The EFFECTIVE value, not the pointer: nil and an explicit 90 bake
+		// the same template, so they must hash alike — which also kept the
+		// hash byte-identical across the int64 -> *int64 field migration
+		// (no pool roll on the release that shipped it).
+		Grace:       env.Spec.EffectiveTerminationGracePeriod(),
 		PullSecret:  env.Spec.ImagePullSecret,
 		ExtNet:      env.Spec.AllowAccessToExternalNetwork,
 		Labels:      env.Labels,

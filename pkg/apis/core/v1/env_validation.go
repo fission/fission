@@ -125,3 +125,21 @@ func validateFunctionEnv(env []apiv1.EnvVar, envFrom []apiv1.EnvFromSource) erro
 	}
 	return errs
 }
+
+// DefaultTerminationGracePeriod is the drain window an Environment gets when
+// spec.terminationGracePeriod is nil — the in-process mirror of the CRD
+// structural default (types.go: +kubebuilder:default=90). Keep the two equal:
+// the apiserver applies the marker at serving time, so this constant is only
+// reached by objects that never crossed the apiserver (hand-built fixtures,
+// direct constructors).
+const DefaultTerminationGracePeriod int64 = 90
+
+// EffectiveTerminationGracePeriod returns the drain window the pod template
+// actually gets: the field's value when set — an explicit 0 means "no drain
+// window, kill instantly" — else DefaultTerminationGracePeriod.
+func (spec EnvironmentSpec) EffectiveTerminationGracePeriod() int64 {
+	if spec.TerminationGracePeriod == nil {
+		return DefaultTerminationGracePeriod
+	}
+	return *spec.TerminationGracePeriod
+}
