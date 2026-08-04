@@ -184,18 +184,25 @@ func (p *PoolPodController) shouldCleanupForRS(ctx context.Context, rs *apps.Rep
 		return false, fmt.Errorf("get environment %s/%s: %w", envNS, envName, err)
 	}
 	if _, hasHash := tmpl[fv1.ENVIRONMENT_RUNTIME_HASH]; !hasHash {
-		// Pre-label RS (born under a release without the hash label). Keep by
-		// default — that is what makes warm pods survive the very upgrade
-		// that ships this fix; treating it as "clean" would re-kill them one
-		// last time. ONE sharpening: if the live pool Deployment's template
-		// already carries the label, the pool has been re-templated since,
-		// so this RS is provably a pre-hash generation whose pods run a
-		// runtime at least one revision old -> clean. During the shipping
-		// upgrade itself the live Deployment is not yet re-templated, so
-		// both sides are unlabelled and the keep still holds.
-		if _, ownerHasHash := dep.Spec.Template.Labels[fv1.ENVIRONMENT_RUNTIME_HASH]; ownerHasHash {
-			return true, nil
-		}
+		// Pre-label RS (born under a release without the hash label): KEEP,
+		// unconditionally — that is what makes warm pods survive the very
+		// upgrade that ships the labels.
+		//
+		// Do NOT sharpen this with "clean when the live Deployment's template
+		// already carries the label". That clause shipped once and killed the
+		// exact pods it was reviewed to protect: the executor's own
+		// hash-stamping update is what ROLLS the pool, so by the time the old
+		// RS reports zero replicas its owner ALWAYS carries the label — the
+		// "not yet re-templated" window does not exist (the upgrade gate
+		// measured warm_pod_survival 1 -> 0 on both legs). It would also
+		// re-fire on every later executor restart: zero-replica RSes are
+		// retained by the Deployment's revision history and replay through
+		// this reconciler on informer sync, condemning the survivors then.
+		//
+		// The cost of the plain keep is the documented one-release caveat
+		// (RELEASES.md): a pre-label pod whose environment changed while the
+		// executor was down is recycled by the idle reaper or the next
+		// function update rather than here.
 		return false, nil
 	}
 	// Recycle iff the template's birth runtime is no longer the live one: a
