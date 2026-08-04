@@ -239,3 +239,62 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 	waitForIndexSize(t, index, 1)
 	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
 }
+
+// TestNamespaceInformersFencePreventsResurrection verifies the teardown fence:
+// a slice event queued before offboard but processed during the informer drain
+// must be swept by RemoveNamespace. Without the fence (no <-ni.done wait), the
+// late ApplySlice resurrects the entry after RemoveNamespace — the index ends
+// up non-empty after offboard. With the fence, Sync blocks until the processor
+// drains, then sweeps, so the index is guaranteed empty.
+//
+// A continuous-churn goroutine fires Tracker().Add in a tight loop while the
+// main goroutine calls Sync. Tracker().Add fans out to the informer's watcher
+// natively, so events are constantly in flight. When cancel fires, some events
+// are already queued in the processor — the fence drains them before sweeping.
+// Without the fence, RemoveNamespace runs first and a late ApplySlice
+// resurrects the entry.
+func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
+	t.Parallel()
+
+	kubeClient := fake.NewSimpleClientset(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
+	index := NewIndex()
+	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
+	t.Cleanup(nsi.Close)
+
+	// Start informer for ns-a.
+	nsi.Sync([]string{"ns-a"})
+	require.True(t, nsi.WaitForCacheSync(t.Context()))
+	waitForIndexSize(t, index, 1)
+
+	// Continuous churn: fire Tracker().Add in a tight loop so events are
+	// constantly queued in the processor. When Sync cancels the informer,
+	// some events are already in-flight.
+	stop := make(chan struct{})
+	var churnDone sync.WaitGroup
+	churnDone.Add(1)
+	go func() {
+		defer churnDone.Done()
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			s := makeSlice("s-churn", "ns-a", "fn-a", "10.0.0.2")
+			kubeClient.Tracker().Add(s)
+		}
+	}()
+	// Brief window so at least a few events are in the processor queue.
+	time.Sleep(20 * time.Millisecond)
+
+	// Offboard: Sync blocks until the informer drains, then sweeps.
+	nsi.Sync([]string{})
+	close(stop)
+	churnDone.Wait()
+
+	// Index must be empty — the fence prevented resurrection.
+	assert.Equal(t, 0, index.Size(), "fence must prevent late ApplySlice from resurrecting entries after offboard")
+	// Double-check after a short settle: no delayed event should appear.
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 0, index.Size(), "index must stay empty after settle — no late resurrection")
+}
