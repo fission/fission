@@ -245,9 +245,12 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 
 // TestNamespaceInformersFencePreventsResurrection verifies the teardown fence
 // deterministically: Sync must block on <-ni.done before RemoveNamespace sweeps
-// the index. Uses an nsInformer with a done channel the test controls directly
-// (same-package access) — no sleeps, no fake-watch timing, no scheduler
-// dependence.
+// the index, and a slice applied while fenced must be swept too (no resurrection).
+//
+// Synchronization: the injected cancel closes entered when Sync calls it,
+// proving the goroutine has reached the fence. After <-entered the goroutine is
+// guaranteed to block on <-ni.done (the next statement), so asserting syncDone
+// is still open is deterministic — no sleeps, no scheduler dependence.
 func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	t.Parallel()
 
@@ -256,12 +259,14 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
 	t.Cleanup(nsi.Close)
 
-	// Inject an informer with a done channel we control directly.
+	// Inject an informer with a done channel we control and a cancel that
+	// signals when Sync calls it (proving the goroutine reached the fence).
 	done := make(chan struct{})
+	entered := make(chan struct{})
 	nsi.mu.Lock()
 	nsi.informers["ns-a"] = &nsInformer{
 		informer: nil, // not needed — Sync only uses cancel and done
-		cancel:   func() {},
+		cancel:   func() { close(entered) },
 		done:     done,
 	}
 	nsi.informerCount.Store(1)
@@ -271,28 +276,37 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	index.ApplySlice(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
 	require.Equal(t, 1, index.Size())
 
-	// Call Sync in a goroutine — it must block on <-ni.done.
+	// Call Sync in a goroutine.
 	syncDone := make(chan struct{})
 	go func() {
 		nsi.Sync([]string{})
 		close(syncDone)
 	}()
 
-	// Sync must NOT have completed — it's blocked on <-ni.done.
+	// Wait for the goroutine to call cancel — after this it will block on
+	// <-ni.done (the next statement). Without the fence, RemoveNamespace
+	// would run immediately and syncDone would close.
+	<-entered
+
+	// The fence must hold: syncDone is still open, index is not swept.
 	select {
 	case <-syncDone:
 		t.Fatal("Sync completed without waiting for done channel — fence missing")
 	default:
 	}
-
-	// Index still has the entry — RemoveNamespace hasn't run yet.
 	assert.Equal(t, 1, index.Size(), "index must not be swept until done fires")
+
+	// Apply a late slice while fenced — simulates an event that would
+	// resurrect without the fence. The fence holds, so this entry is
+	// swept along with the original when done fires.
+	index.ApplySlice(makeSlice("s2", "ns-a", "fn-a", "10.0.0.2"))
 
 	// Close done — Sync can now drain and sweep.
 	close(done)
 	<-syncDone
 
-	// Index must be empty — the fence waited for the drain, then swept.
+	// Index must be empty — the fence waited for the drain, then swept
+	// everything including the late entry.
 	assert.Equal(t, 0, index.Size(), "index must be empty after fence drain + sweep")
 }
 
