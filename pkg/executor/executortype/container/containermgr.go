@@ -401,7 +401,9 @@ func (caaf *Container) fnCreate(ctx context.Context, fn *fv1.Function) (*fscache
 		}
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
-	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
+	// Absolute FQDN — same rationale as the newdeploy site: keep the
+	// router's per-request dials off the resolv.conf search path.
+	svcAddress := utils.ServiceFQDN(svc.Name, svc.Namespace)
 
 	depl, err := caaf.createOrGetDeployment(ctx, fn, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {

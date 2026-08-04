@@ -78,7 +78,10 @@ func buildPackage(ctx context.Context, logger logr.Logger, fissionClient version
 		return nil, e, ferror.MakeError(http.StatusInternalServerError, e)
 	}
 
-	svcName := fmt.Sprintf("%s-%s.%s", env.Name, env.ResourceVersion, envBuilderNamespace)
+	// Dial address only (never a Service object name — those cannot contain
+	// dots). Absolute FQDN so every build's fetcher/builder calls skip the
+	// resolv.conf search-path walk; see utils.ServiceFQDN.
+	svcName := utils.ServiceFQDN(fmt.Sprintf("%s-%s", env.Name, env.ResourceVersion), envBuilderNamespace)
 	srcPkgFilename := fmt.Sprintf("%s-%s", pkg.Name, strings.ToLower(uniuri.NewLen(6)))
 	// HMACSecretFromEnv returns nil when internalAuth is disabled; the
 	// fetcher / builder clients pass-through unsigned in that case,

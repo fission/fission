@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -348,4 +349,19 @@ func TestRootFileChecksum_ConfinesToBase(t *testing.T) {
 	// A path escaping base is rejected.
 	_, err = RootFileChecksum(base, "../../etc/hostname")
 	assert.Error(t, err)
+}
+
+// TestServiceFQDN pins the absolute-name contract: in-cluster service dial
+// addresses must be fully qualified WITH the trailing dot, or Go's resolver
+// walks the pod's resolv.conf search path (ndots:5) and multiplies every
+// resolution into the extra A/AAAA queries that drop under parallel load.
+func TestServiceFQDN(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "fn-svc.default.svc.cluster.local.", ServiceFQDN("fn-svc", "default"),
+		"default cluster domain, absolute form, trailing dot")
+	assert.Equal(t, "b-123.fission-builder.svc.example.org.", serviceFQDN("b-123", "fission-builder", "example.org"),
+		"CLUSTER_DOMAIN override must reach the name")
+	assert.True(t, strings.HasSuffix(ServiceFQDN("a", "b"), "."),
+		"the trailing dot IS the fix: without it the name is still search-path relative")
 }
