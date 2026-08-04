@@ -38,6 +38,15 @@ const (
 	// sets it on every component that resolves the master.
 	InternalAuthSecretNameEnv = "FISSION_INTERNAL_AUTH_SECRET_NAME"
 
+	// InternalAuthSecretEnv and InternalAuthSecretOldEnv carry the
+	// internal-auth HMAC master (and, during rotation, the previous master),
+	// injected by the chart via secretKeyRef (internalAuth.envs). Readers may
+	// Getenv them freely: ValidateInternalAuthEnv rejects the
+	// present-but-empty state at every binary's entry point, so past startup
+	// an empty read can only mean "absent" (internal auth disabled).
+	InternalAuthSecretEnv    = "FISSION_INTERNAL_AUTH_SECRET"
+	InternalAuthSecretOldEnv = "FISSION_INTERNAL_AUTH_SECRET_OLD"
+
 	// TenantAuthKeysSecret is the controller-owned Secret (one per tenant
 	// namespace) holding that namespace's derived HMAC keys. It is deliberately
 	// a DIFFERENT name from the chart's master-bearing "fission-internal-auth":
