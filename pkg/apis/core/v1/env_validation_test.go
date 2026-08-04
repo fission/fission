@@ -5,6 +5,7 @@
 package v1
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -186,4 +187,33 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 		s.Secrets[0].MountPath = ""
 		assert.NoError(t, s.Validate())
 	})
+}
+
+// TestTerminationGracePeriodWireContract pins the reason the field is a
+// pointer: an explicit 0 must survive marshalling (the previous int64 +
+// omitempty dropped it as absent, and the apiserver's CRD default served it
+// back as 90 — "instant kill" was expressible only via raw YAML), while an
+// unset field must still marshal as absent so the CRD default applies.
+func TestTerminationGracePeriodWireContract(t *testing.T) {
+	t.Parallel()
+
+	explicitZero, err := json.Marshal(EnvironmentSpec{TerminationGracePeriod: new(int64(0))})
+	require.NoError(t, err)
+	assert.Contains(t, string(explicitZero), `"terminationGracePeriod":0`,
+		"an explicit 0 must reach the wire — it is a real value, not the absence of one")
+
+	unset, err := json.Marshal(EnvironmentSpec{})
+	require.NoError(t, err)
+	assert.NotContains(t, string(unset), "terminationGracePeriod",
+		"nil must marshal as absent so the apiserver's CRD default fills it")
+}
+
+func TestEffectiveTerminationGracePeriod(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, DefaultTerminationGracePeriod, EnvironmentSpec{}.EffectiveTerminationGracePeriod(),
+		"nil means: use the default")
+	assert.Zero(t, EnvironmentSpec{TerminationGracePeriod: new(int64(0))}.EffectiveTerminationGracePeriod(),
+		"an explicit 0 is 0, never the default")
+	assert.Equal(t, int64(300), EnvironmentSpec{TerminationGracePeriod: new(int64(300))}.EffectiveTerminationGracePeriod())
 }

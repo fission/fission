@@ -43,9 +43,35 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "new-image", got.Spec.Runtime.Image)
 		assert.Equal(t, 5, got.Spec.Poolsize)
-		assert.Equal(t, int64(42), got.Spec.TerminationGracePeriod)
+		require.NotNil(t, got.Spec.TerminationGracePeriod)
+		assert.Equal(t, int64(42), *got.Spec.TerminationGracePeriod)
 		assert.True(t, got.Spec.KeepArchive)
 		assert.Equal(t, "regcred", got.Spec.ImagePullSecret)
+	})
+
+	t.Run("explicit zero grace period is preserved, not dropped to the default", func(t *testing.T) {
+		t.Parallel()
+		in := dummy.TestFlagSet()
+		in.Set(flagkey.EnvGracePeriod, int64(0))
+
+		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
+		require.NoError(t, err)
+		// The pointer field is the whole mechanism: a non-nil 0 marshals as
+		// `"terminationGracePeriod":0` and the apiserver keeps it, where the
+		// previous int64+omitempty dropped it and served back 90.
+		require.NotNil(t, got.Spec.TerminationGracePeriod)
+		assert.Zero(t, *got.Spec.TerminationGracePeriod)
+	})
+
+	t.Run("grace period untouched when the flag is not set", func(t *testing.T) {
+		t.Parallel()
+		in := dummy.TestFlagSet()
+		in.Set(flagkey.EnvImage, "new-image")
+
+		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
+		require.NoError(t, err)
+		assert.Nil(t, got.Spec.TerminationGracePeriod,
+			"an unrelated update must not materialize a grace value the user never set")
 	})
 
 	t.Run("runtime env vars parsed", func(t *testing.T) {

@@ -355,4 +355,20 @@ func TestEnvRuntimeHashIgnoresNonTemplateSpec(t *testing.T) {
 	relabelled.Labels = map[string]string{"tier": "gold"}
 	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(relabelled),
 		"env labels land in the pod template and must move the hash")
+
+	// The hash is fed the EFFECTIVE grace, so nil (defaulted to 90 by the
+	// apiserver) and an explicit 90 bake the same template and must hash
+	// alike — this is also what kept the hash byte-stable across the
+	// int64 -> *int64 field migration (no warm-pod recycle wave on the
+	// release that shipped it).
+	defaulted := base.DeepCopy() // TerminationGracePeriod nil
+	explicit := base.DeepCopy()
+	explicit.Spec.TerminationGracePeriod = new(fv1.DefaultTerminationGracePeriod)
+	assert.Equal(t, envRuntimeHash(defaulted), envRuntimeHash(explicit),
+		"nil and explicit-default grace produce the same template and must not differ in hash")
+
+	instantKill := base.DeepCopy()
+	instantKill.Spec.TerminationGracePeriod = new(int64(0))
+	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(instantKill),
+		"an explicit 0 grace changes the template (no preStop drain) and must move the hash")
 }

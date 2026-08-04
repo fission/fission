@@ -29,7 +29,7 @@ func TestGenDeploymentSpecPreStopLifecycle(t *testing.T) {
 		t.Parallel()
 		gp := newTestGenericPool(t)
 		env := newTestEnv()
-		env.Spec.TerminationGracePeriod = 360
+		env.Spec.TerminationGracePeriod = new(int64(360))
 
 		deploymentSpec, err := gp.genDeploymentSpec(env)
 		require.NoError(t, err)
@@ -52,11 +52,11 @@ func TestGenDeploymentSpecPreStopLifecycle(t *testing.T) {
 		assert.Equal(t, int64(360), preStop.Sleep.Seconds, "PreStop.Sleep.Seconds must equal the environment TerminationGracePeriod")
 	})
 
-	t.Run("zero grace period produces nil lifecycle", func(t *testing.T) {
+	t.Run("explicit zero grace period produces nil lifecycle", func(t *testing.T) {
 		t.Parallel()
 		gp := newTestGenericPool(t)
 		env := newTestEnv()
-		env.Spec.TerminationGracePeriod = 0
+		env.Spec.TerminationGracePeriod = new(int64(0))
 
 		deploymentSpec, err := gp.genDeploymentSpec(env)
 		require.NoError(t, err)
@@ -71,6 +71,29 @@ func TestGenDeploymentSpecPreStopLifecycle(t *testing.T) {
 		require.NotNil(t, runtimeContainer, "runtime container must be present in the deployment spec")
 		assert.Nil(t, runtimeContainer.Lifecycle,
 			"runtime container Lifecycle must be nil when TerminationGracePeriod is 0 (no drain window, Sleep.Seconds>=1 is required by the API)")
+	})
+
+	t.Run("nil grace period drains for the mirrored CRD default", func(t *testing.T) {
+		t.Parallel()
+		gp := newTestGenericPool(t)
+		env := newTestEnv() // TerminationGracePeriod left nil on purpose
+
+		deploymentSpec, err := gp.genDeploymentSpec(env)
+		require.NoError(t, err)
+
+		var runtimeContainer *apiv1.Container
+		for i := range deploymentSpec.Template.Spec.Containers {
+			if deploymentSpec.Template.Spec.Containers[i].Name == envContainerName {
+				runtimeContainer = &deploymentSpec.Template.Spec.Containers[i]
+				break
+			}
+		}
+		require.NotNil(t, runtimeContainer, "runtime container must be present in the deployment spec")
+		require.NotNil(t, runtimeContainer.Lifecycle, "nil grace must behave as the default, not as zero")
+		require.NotNil(t, runtimeContainer.Lifecycle.PreStop)
+		require.NotNil(t, runtimeContainer.Lifecycle.PreStop.Sleep)
+		assert.Equal(t, fv1.DefaultTerminationGracePeriod, runtimeContainer.Lifecycle.PreStop.Sleep.Seconds,
+			"an unset grace period must drain for the in-process mirror of the CRD default")
 	})
 }
 

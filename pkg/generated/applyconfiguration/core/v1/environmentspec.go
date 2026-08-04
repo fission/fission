@@ -55,11 +55,16 @@ type EnvironmentSpecApplyConfiguration struct {
 	// it per environment for functions with longer request timeouts.
 	//
 	// The CRD default below is what makes the documented default true for
-	// API-created Environments: the field is an int64, so before it existed
-	// an Environment created without the field got 0 — instant SIGKILL,
-	// every in-flight request on the pod dying as a connection reset. The
-	// in-code fallback cannot distinguish that 0 from an explicit one, and
-	// admission-time defaulting can.
+	// API-created Environments: nil means "use the default" and the
+	// apiserver fills an absent field with 90 at serving time.
+	//
+	// The *pointer* is what makes an EXPLICIT 0 ("no drain window, kill
+	// instantly") expressible from typed Go clients: on the previous
+	// int64 field, omitempty marshalled 0 as absent and the apiserver
+	// served it back as 90, so raw YAML was the only way to say 0.
+	// In-process readers must use EffectiveTerminationGracePeriod()
+	// (env_validation.go), which mirrors the CRD default for objects
+	// that never crossed the apiserver.
 	// (Optional) defaults to 90 seconds
 	TerminationGracePeriod *int64 `json:"terminationGracePeriod,omitempty"`
 	// KeepArchive is used by fetcher to determine if the extracted archive

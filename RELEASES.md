@@ -78,8 +78,8 @@ Set `terminationGracePeriod` per environment if your functions serve requests lo
 This is the **Environment-level** grace only; the container executor's function-level `--graceperiod` keeps its 360s default.
 How it reaches existing objects: CRD structural defaults apply when the apiserver **serves** an object, not only at write time — so an Environment stored without the field reads back as 90 the moment the upgraded CRD is applied, with no object update.
 Practically, every such environment's pods roll **once** on the first executor reconcile after this upgrade (the pod template's grace changes 0→90); that roll is the fix taking effect.
-Only an explicit `terminationGracePeriod: 0` applied as raw YAML keeps 0 — and raw YAML is now the *only* way to express 0: the Go field's `omitempty` drops a zero before the apiserver sees it, so the CLI and any typed client cannot set it (they never could — `omitempty` predates this change — but previously the served value for an absent field was 0, so it looked like it worked).
-Making 0 first-class again for typed clients requires migrating the field to a pointer; tracked as follow-up work.
+An explicit `terminationGracePeriod: 0` (no drain window; instant kill) is preserved wherever it is expressed: the Go field is now a `*int64`, so `fission env create|update --graceperiod 0` and typed clients marshal a real 0 instead of `omitempty` dropping it, and the apiserver keeps it rather than serving back 90.
+For Go library consumers this is an API break: `EnvironmentSpec.TerminationGracePeriod` changed from `int64` to `*int64` (nil means "use the default"); read it through `EffectiveTerminationGracePeriod()`, which folds nil to the CRD default.
 
 ## Deprecation policy
 

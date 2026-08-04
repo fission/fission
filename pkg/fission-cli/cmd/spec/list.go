@@ -208,7 +208,7 @@ func ShowEnvironments(envs []fv1.Environment) {
 				env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
 				env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
 				env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-				env.Spec.AllowAccessToExternalNetwork, env.Spec.TerminationGracePeriod)
+				env.Spec.AllowAccessToExternalNetwork, env.Spec.EffectiveTerminationGracePeriod())
 		}
 		fmt.Fprintf(w, "\n")
 		w.Flush()
