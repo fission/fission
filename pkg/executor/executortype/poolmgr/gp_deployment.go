@@ -100,12 +100,26 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		podAnnotations["sidecar.istio.io/inject"] = "false"
 	}
 
-	podLabels := env.Labels
+	// Clone, never alias: env is caller-owned and long-lived (gp.env, which
+	// labelsForFunction copies on every specialization). maps.Copy below
+	// writes the pool labels into this map — and since RFC-0028 a
+	// per-runtime-hash label too. Aliasing leaked both into env.Labels, from
+	// where getEnvironmentPoolLabels copies them into the RefreshFuncPods
+	// list selector and the legacy useSvc Service selector, pinning those to
+	// one runtime revision.
+	podLabels := maps.Clone(env.Labels)
 	if podLabels == nil {
 		podLabels = make(map[string]string)
 	}
 
 	maps.Copy(podLabels, deployLabels)
+	// Template labels ONLY — deployLabels doubles as the immutable Deployment
+	// selector, and a hash there would break every env update. The pod
+	// inherits this label through the RS, and choosePod's specialization
+	// relabel is additive, so specialized pods keep their birth hash — which
+	// is what lets processRS tell an env runtime change from an executor
+	// roll.
+	podLabels[fv1.ENVIRONMENT_RUNTIME_HASH] = envRuntimeHash(env)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,

@@ -221,16 +221,41 @@ executor:
   ##
   leaderElection:
     enabled: false
-  ## strategy is the Deployment rollout strategy for the executor. Leave unset
-  ## for the Kubernetes default. With leaderElection enabled, a surge strategy
-  ## keeps a standby warm across upgrades, e.g.:
-  ##   strategy:
-  ##     type: RollingUpdate
-  ##     rollingUpdate:
-  ##       maxSurge: 1
-  ##       maxUnavailable: 0
+  ## strategy is the Deployment rollout strategy for the executor.
   ##
-  strategy: {}
+  ## maxSurge 0 / maxUnavailable 1 makes every roll OVERLAP-FREE: the old pod
+  ## terminates before its replacement is created, at any replica count. That
+  ## matters because the executor is a single-writer control plane keyed on
+  ## its instance ID: under the k8s default (which surges at replicas=1) two
+  ## executors with DIFFERENT instance IDs run concurrently during every
+  ## roll, with no leader election to arbitrate — the outgoing one keeps
+  ## re-stamping objects with its own ID while the incoming one's
+  ## adopt+cleanup pass runs, so the incoming reaper deletes the very objects
+  ## adoption exists to keep.
+  ##
+  ## Expressed WITHIN RollingUpdate rather than as `type: Recreate`
+  ## deliberately, and not only for equivalence at replicas=1: a live
+  ## Deployment whose strategy was ever defaulted carries a rollingUpdate
+  ## block, and the API forbids that block alongside type Recreate — so a
+  ## helm upgrade flipping the type fails validation against every existing
+  ## install ("spec.strategy.rollingUpdate: Forbidden"). Mutating two fields
+  ## inside the type the object already has upgrades cleanly.
+  ##
+  ## The cost is a bounded executor-down window per roll (≲60s). Warm traffic
+  ## keeps serving throughout — neither poolmgr nor newdeploy needs a live
+  ## executor; only cold starts wait for the new one.
+  ##
+  ## This default also composes with HA (replicas > 1 + leaderElection):
+  ## pods roll one at a time and a dying leader releases its lease to a
+  ## standby. Never set maxUnavailable: 0 with leaderElection — /readyz
+  ## answers 503 on non-leaders, so a surged pod can never become Ready
+  ## while the old one holds the lease, and the rollout deadlocks.
+  ##
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   ## terminationGracePeriodSeconds gives in-flight work time to drain on
   ## shutdown. Leave unset for the Kubernetes default (30s). Keep it at or
   ## above GRACEFUL_SHUTDOWN_TIMEOUT.
@@ -254,9 +279,19 @@ executor:
   ## terminationMessagePolicy is the policy for the executor termination message.
   ##
   terminationMessagePolicy: ""
-  ## adoptExistingResources decides whether to adopt existing resources when executor restarts or Fission is redeployed.
+  ## adoptExistingResources decides whether to adopt existing resources when
+  ## the executor restarts or Fission is upgraded.
   ##
-  adoptExistingResources: false
+  ## Enabled by default: on restart the executor re-stamps the previous
+  ## instance's objects (specialized warm pods, function Deployments and
+  ## Services — same UID, in place) instead of deleting and recreating them.
+  ## This is half of what lets warm pods survive a `helm upgrade`; the other
+  ## half is the pool-roll discriminator keyed on the environment generation.
+  ## With adoption off, the startup cleanup deletes every pod whose
+  ## executorInstanceId annotation belongs to the previous instance — which
+  ## is exactly the specialized pods, and only them.
+  ##
+  adoptExistingResources: true
   ## Mount OCI packages directly into function pods (needs Kubernetes 1.33+;
   ## older clusters automatically fall back to downloading the package).
   ## Gives noticeably faster cold starts. Set false to always download.

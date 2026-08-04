@@ -6,6 +6,7 @@ package poolmgr
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -68,26 +69,52 @@ func IsPodActive(p *v1.Pod) bool {
 		p.DeletionTimestamp == nil
 }
 
-func (p *PoolPodController) processRS(ctx context.Context, rs *apps.ReplicaSet) {
+// processRS reaps a retired pool template's specialized pods — but ONLY when
+// the retirement means their runtime is stale or their pool is gone, never
+// merely because the executor restarted.
+//
+// A zero-replica pool RS has exactly two producers, and they demand opposite
+// treatment. An ENVIRONMENT change (new runtime image) rolls the pool and the
+// specialized pods born from the old template must be recycled onto the new
+// runtime — before RFC-0028 this was the ONLY reading, and reconcileEnvPool
+// still relies on it. An EXECUTOR-side template change (new FETCHER_IMAGE on
+// upgrade, fetcher config) also rolls the pool — and here the specialized
+// pods must SURVIVE: they are already specialized, their runtime is current,
+// and deleting them is precisely the warm-pod kill that made every upgrade
+// drop ~4% of poolmgr requests (mechanism B in the RFC-0028 gate work).
+// The ENVIRONMENT_GENERATION template label is what tells the two apart.
+//
+// Errors propagate (-> controller-runtime backoff requeue): a transient API
+// failure while deciding must retry, not silently drop a legitimate cleanup.
+func (p *PoolPodController) processRS(ctx context.Context, rs *apps.ReplicaSet) error {
 	if *(rs.Spec.Replicas) != 0 {
-		return
+		return nil
 	}
 	logger := p.logger.WithValues("rs", rs.Name, "namespace", rs.Namespace)
 	logger.V(1).Info("replica set has zero replica count")
-	// List all specialized pods and schedule for cleanup
+	// List all specialized pods born from this template (the RS selector
+	// includes pod-template-hash; managed=false overrides to specialized).
 	rsLabelMap, err := metav1.LabelSelectorAsMap(rs.Spec.Selector)
 	if err != nil {
-		p.logger.Error(err, "Failed to parse label selector")
-		return
+		logger.Error(err, "Failed to parse label selector")
+		return nil // malformed selector cannot succeed on retry
 	}
 	rsLabelMap["managed"] = "false"
 	podList := &v1.PodList{}
 	if err := p.gpm.crClient.List(ctx, podList, client.InNamespace(rs.Namespace), client.MatchingLabels(rsLabelMap)); err != nil {
-		logger.Error(err, "Failed to list specialized pods")
-		return
+		return fmt.Errorf("list specialized pods for RS %s/%s: %w", rs.Namespace, rs.Name, err)
 	}
 	if len(podList.Items) == 0 {
-		return
+		return nil
+	}
+	clean, err := p.shouldCleanupForRS(ctx, rs, logger)
+	if err != nil {
+		return err
+	}
+	if !clean {
+		logger.Info("pool RS rolled without an environment change; keeping specialized pods",
+			"numPods", len(podList.Items))
+		return nil
 	}
 	logger.Info("specialized pods identified for cleanup with RS", "numPods", len(podList.Items))
 	for i := range podList.Items {
@@ -102,6 +129,80 @@ func (p *PoolPodController) processRS(ctx context.Context, rs *apps.ReplicaSet) 
 		}
 		p.spCleanupPodQueue.Add(key)
 	}
+	return nil
+}
+
+// shouldCleanupForRS decides teardown-or-env-change (clean) vs
+// executor-side-roll (keep) for a zero-replica pool RS.
+func (p *PoolPodController) shouldCleanupForRS(ctx context.Context, rs *apps.ReplicaSet, logger logr.Logger) (bool, error) {
+	ownerRef := metav1.GetControllerOf(rs)
+	if ownerRef == nil || !strings.EqualFold(ownerRef.Kind, "Deployment") {
+		return true, nil // orphan RS: legacy behavior
+	}
+	// Direct client, deliberately: the executor Manager cache's Deployment
+	// watch is label-bounded to newdeploy/container, so a cache Get of a
+	// poolmgr pool Deployment ALWAYS returns NotFound — which this path
+	// would read as "teardown" and delete pods that must survive.
+	dep, err := p.kubernetesClient.AppsV1().Deployments(rs.Namespace).Get(ctx, ownerRef.Name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return true, nil // owner gone: pool destroyed
+	}
+	if err != nil {
+		return false, fmt.Errorf("get pool Deployment %s/%s: %w", rs.Namespace, ownerRef.Name, err)
+	}
+	if dep.DeletionTimestamp != nil || dep.UID != ownerRef.UID {
+		return true, nil // owner deleting, or a new Deployment reused the name
+	}
+
+	// The owner is a live pool mid-roll. Recycle iff the ENVIRONMENT moved.
+	tmpl := rs.Spec.Template.Labels
+	envName, envNS := tmpl[fv1.ENVIRONMENT_NAME], tmpl[fv1.ENVIRONMENT_NAMESPACE]
+	if envName == "" || envNS == "" {
+		return true, nil // unrecognized template shape: legacy behavior
+	}
+	env := &fv1.Environment{}
+	err = p.gpm.crClient.Get(ctx, client.ObjectKey{Namespace: envNS, Name: envName}, env)
+	if apierrors.IsNotFound(err) {
+		// Destructive decision on a cache miss: verify uncached first — the
+		// same stale-cache guard the Environment reconciler applies before
+		// CleanupEnvironment (a watch reconnect can transiently report
+		// NotFound for an object that exists).
+		if _, aerr := p.gpm.fissionClient.CoreV1().Environments(envNS).Get(ctx, envName, metav1.GetOptions{}); aerr != nil {
+			if apierrors.IsNotFound(aerr) {
+				return true, nil // env genuinely gone: teardown
+			}
+			return false, fmt.Errorf("verify environment %s/%s uncached: %w", envNS, envName, aerr)
+		}
+		// Requeue via error, deliberately: the RS reconciler is registered
+		// with GenerationChangedPredicate, so a settled zero-replica RS emits
+		// no further events and returning (false, nil) here would FORGET the
+		// decision — stale-runtime pods would keep serving until the executor
+		// next restarts. The error path is the only re-visit mechanism.
+		return false, fmt.Errorf("environment %s/%s NotFound in cache but live in API server (stale cache); requeueing the decision", envNS, envName)
+	}
+	if err != nil {
+		return false, fmt.Errorf("get environment %s/%s: %w", envNS, envName, err)
+	}
+	if _, hasHash := tmpl[fv1.ENVIRONMENT_RUNTIME_HASH]; !hasHash {
+		// Pre-label RS (born under a release without the hash label). Keep by
+		// default — that is what makes warm pods survive the very upgrade
+		// that ships this fix; treating it as "clean" would re-kill them one
+		// last time. ONE sharpening: if the live pool Deployment's template
+		// already carries the label, the pool has been re-templated since,
+		// so this RS is provably a pre-hash generation whose pods run a
+		// runtime at least one revision old -> clean. During the shipping
+		// upgrade itself the live Deployment is not yet re-templated, so
+		// both sides are unlabelled and the keep still holds.
+		if _, ownerHasHash := dep.Spec.Template.Labels[fv1.ENVIRONMENT_RUNTIME_HASH]; ownerHasHash {
+			return true, nil
+		}
+		return false, nil
+	}
+	// Recycle iff the template's birth runtime is no longer the live one: a
+	// same-name recreate, or an env change that touched the template inputs.
+	// Shared with the adopt pass (envLabelsMatchLiveEnv) so the two paths
+	// cannot disagree about which pods deserve to live.
+	return !envLabelsMatchLiveEnv(tmpl, env), nil
 }
 
 // cleanupSpecializedPodsForEnv enqueues an environment's specialized pods for

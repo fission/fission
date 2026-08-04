@@ -177,6 +177,41 @@ func (f *Framework) ExecutorEnvEnabled(t *testing.T, ctx context.Context, name s
 	return v == "true"
 }
 
+// WaitForExecutorSettled blocks until the executor Deployment's status has
+// caught up with its spec and every replica is available — regardless of
+// which generation that is. Use it from a t.Cleanup registered BEFORE
+// SetExecutorEnv's restores (cleanups run LIFO, so it executes AFTER them):
+// the restores deliberately do not await their rollouts, and without this a
+// test's un-awaited restore lands in whichever serial test runs next.
+func (f *Framework) WaitForExecutorSettled(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	// The test's own ctx may already be done during cleanup.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	ns := f.FissionNamespace()
+	deadline := time.Now().Add(timeout)
+	for {
+		dep, err := f.kubeClient.AppsV1().Deployments(ns).Get(ctx, executorDeploymentName, metav1.GetOptions{})
+		if err == nil {
+			replicas := int32(1)
+			if dep.Spec.Replicas != nil {
+				replicas = *dep.Spec.Replicas
+			}
+			if dep.Status.ObservedGeneration >= dep.Generation &&
+				dep.Status.UpdatedReplicas >= replicas &&
+				dep.Status.AvailableReplicas >= replicas &&
+				dep.Status.UnavailableReplicas == 0 {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Logf("WaitForExecutorSettled: executor not settled after %s (continuing; next test may see a rolling executor)", timeout)
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 // WaitForExecutorRollout blocks until the executor Deployment has fully rolled
 // out at generation atLeast or newer: the controller has observed the new
 // generation, every replica is updated and available, and no old pods remain.

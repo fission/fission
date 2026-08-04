@@ -59,6 +59,16 @@ Only hook Jobs are affected — no Deployment, Service, Secret, ConfigMap, Servi
 Set `nameFormat: legacy` to keep the previous names.
 A hook Job that failed and was never cleaned up will linger under its old name after the upgrade; it is inert, but can be deleted by hand.
 
+- **The executor's rollout becomes overlap-free (`maxSurge: 0, maxUnavailable: 1`), and `adoptExistingResources` defaults to `true`.**
+Together these are what let poolmgr's warm (specialized) pods survive a `helm upgrade` in place — previously every upgrade deleted them, and requests hung in the cold-start path while the executor and pools rolled (~4% of requests during the roll, measured by the upgrade gate).
+The overlap-free rollout exists because the executor is a single-writer control plane keyed on its instance ID: the previous default rolled two executors concurrently with no leader election, and the incoming one's cleanup deleted the objects the outgoing one was still stamping.
+It is expressed within `RollingUpdate` rather than as `type: Recreate` because a live Deployment carries a defaulted `rollingUpdate` block that the API forbids alongside `Recreate` — flipping the type fails validation on every existing install.
+The cost is a bounded executor-down window per upgrade (≲60s): warm poolmgr and newdeploy traffic keep serving throughout (neither needs a live executor); only cold starts wait for the new one.
+Adoption means the executor re-stamps the previous instance's pods and Deployments in place (same UID) instead of recreating them.
+Opt-outs: `executor.strategy` and `executor.adoptExistingResources`.
+The same default serves HA installs (replicas > 1 with leaderElection): pods roll one at a time and a dying leader releases its lease — never set `maxUnavailable: 0` with leader election, which deadlocks against the leadership-gated readiness probe.
+One caveat rides the first upgrade to this release: pods born under the previous release carry no environment-generation label, so an environment updated during that same upgrade window keeps its old pods until the idle reaper or a function update recycles them.
+
 - **`Environment.terminationGracePeriod` defaults to `90` seconds — and now actually defaults.**
 A terminating function pod keeps serving for the whole grace window (the drain preStop hook sleeps through it), so this value is exactly how long every pod teardown takes: idle reap, environment update, upgrade, node drain.
 Two changes land together.

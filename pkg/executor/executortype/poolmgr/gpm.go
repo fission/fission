@@ -620,8 +620,13 @@ func (gpm *GenericPoolManager) adoptPools(ctx context.Context, wg *sync.WaitGrou
 	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
 		envs, err := gpm.fissionClient.CoreV1().Environments(namespace).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			gpm.logger.Error(err, "error getting environment list")
-			return envMap
+			// continue, not return: a truncated envMap is not merely
+			// incomplete — every specialized pod whose env is missing from it
+			// fails adoption, goes unstamped, and is DELETED by the cleanup
+			// pass that follows. One namespace's transient list failure must
+			// not cost another namespace its warm pods.
+			gpm.logger.Error(err, "error getting environment list", "namespace", namespace)
+			continue
 		}
 
 		for i := range envs.Items {
@@ -688,24 +693,33 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 		fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr),
 	}
 
-	for _, namespace := range utils.DefaultNSResolver().FissionResourceNamespaces() {
+	// FunctionNamespaces, not FissionResourceNamespaces: pool pods live in the
+	// FUNCTION namespace (GetFunctionNS), and the post-adopt reaper sweeps a
+	// superset of it. Iterating the CR namespaces here meant a split-namespace
+	// install (FISSION_FUNCTION_NAMESPACE set) adopted NOTHING while the
+	// reaper deleted everything — adopt coverage must be ⊇ what cleanup can
+	// reach, and this is the set that makes that hold.
+	for _, namespace := range gpm.nsResolver.FunctionNamespaces() {
 		podList, err := gpm.kubernetesClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 			LabelSelector: labels.Set(l).AsSelector().String(),
 		})
 
 		if err != nil {
-			gpm.logger.Error(err, "error getting pod list")
-			return
+			gpm.logger.Error(err, "error getting pod list", "namespace", namespace)
+			continue
 		}
 
 		for i := range podList.Items {
 			pod := &podList.Items[i]
-			if !utils.IsReadyPod(pod) {
-				if len(pod.Status.ContainerStatuses) == 0 {
-					gpm.logger.V(1).Info("adopt: skipping pod, containerStatuses empty",
-						"pod", pod.Name, "namespace", pod.Namespace,
-						"phase", pod.Status.Phase, "podIP", pod.Status.PodIP)
-				}
+			// Active, not Ready: a pod that blips not-Ready during the ≤30s
+			// adopt window must still be adopted — an fsCache entry is what
+			// gives the idle reaper ownership of it, and IsValid already
+			// gates every cached hand-out on live readiness. Skipping it
+			// here meant the post-adopt reaper deleted it instead (the
+			// annotation was never re-stamped), turning a readiness blip
+			// into a killed warm pod. Only terminal or already-deleting
+			// pods are skipped.
+			if !IsPodActive(pod) {
 				continue
 			}
 
@@ -713,18 +727,30 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 				// avoid too many requests arrive Kubernetes API server at the same time.
 				time.Sleep(time.Duration(rand.Intn(30)) * time.Millisecond)
 
-				patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
-				// Locals, not the loop-level pod/err: these goroutines run
-				// concurrently and writes to shared captures would race.
-				pod, perr := gpm.kubernetesClient.CoreV1().Pods(pod.Namespace).Patch(ctx, pod.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
-				if perr != nil {
-					// just log the error since it won't affect the function serving
-					gpm.logger.Error(perr, "error patching executor instance ID of pod", "pod", pod.Name, "ns", pod.Namespace)
-					return
+				// stamp re-marks the pod as owned by THIS executor instance,
+				// which is exactly what shields it from CleanupPods. It runs
+				// AFTER the adoption checks below for specialized pods:
+				// stamping first and then failing a check minted a class of
+				// pods that were protected from cleanup but never registered
+				// in fsCache — invisible to the idle reaper, leaked until a
+				// human noticed. An unstamped pod that fails adoption is
+				// recycled by the post-adopt cleanup pass, which is the
+				// correct fate for it.
+				stamp := func(p *apiv1.Pod) (*apiv1.Pod, bool) {
+					patch := fmt.Sprintf(`{"metadata":{"annotations":{"%s":"%s"}}}`, fv1.EXECUTOR_INSTANCEID_LABEL, gpm.instanceID)
+					claimed, perr := gpm.kubernetesClient.CoreV1().Pods(p.Namespace).Patch(ctx, p.Name, k8sTypes.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+					if perr != nil {
+						// just log the error since it won't affect the function serving
+						gpm.logger.Error(perr, "error patching executor instance ID of pod", "pod", p.Name, "ns", p.Namespace)
+						return nil, false
+					}
+					return claimed, true
 				}
 
-				// for unspecialized pod, we only update its annotations
+				// for unspecialized (warm generic) pod, the annotation is all
+				// there is to adopt.
 				if pod.Labels["managed"] == "true" {
+					stamp(pod)
 					return
 				}
 
@@ -742,6 +768,28 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 						"env", env.Name)
 					return
 				}
+				// The pod must belong to the LIVE environment on its CURRENT
+				// runtime: adopting across a delete+recreate, or across an
+				// env change that landed while the executor was down,
+				// registers a pod whose runtime predates the CR. Skip (no
+				// stamp) -> the post-adopt reaper recycles it. Shared with
+				// the RS-cleanup path (envLabelsMatchLiveEnv) so the two
+				// cannot disagree about which pods deserve to live.
+				if !envLabelsMatchLiveEnv(pod.Labels, &env) {
+					gpm.logger.Info("not adopting pod: its labels no longer describe the live environment",
+						"pod", pod.Name,
+						"podEnvUID", pod.Labels[fv1.ENVIRONMENT_UID], "liveEnvUID", string(env.UID),
+						"podEnvRuntimeHash", pod.Labels[fv1.ENVIRONMENT_RUNTIME_HASH], "liveEnvRuntimeHash", envRuntimeHash(&env))
+					return
+				}
+				// All label/annotation checks passed: claim the pod, then
+				// read the post-patch object below (fresh ResourceVersion)
+				// exactly as the pre-restructure code did.
+				claimed, ok := stamp(pod)
+				if !ok {
+					return
+				}
+				pod = claimed
 
 				// fsCache keys on (UID, Generation), not ResourceVersion (see
 				// #3596 and functionServiceCache.go's UR->UG migration). A synthetic
@@ -823,13 +871,21 @@ func (gpm *GenericPoolManager) adoptSpecializedPods(ctx context.Context, wg *syn
 					Atime:    time.Now(),
 				}
 
-				if _, aerr := gpm.fsCache.Add(fsvc); aerr != nil {
-					// If fsvc already exists we just skip the duplicate one. And let reaper to recycle the duplicate pods.
-					// This is for the case that there are multiple function pods for the same function due to unknown reason.
-					if !fscache.IsNameExistError(aerr) {
-						gpm.logger.Error(aerr, "failed to adopt pod for function", "pod", pod.Name)
-					}
-
+				existing, aerr := gpm.fsCache.Add(fsvc)
+				if aerr != nil {
+					gpm.logger.Error(aerr, "failed to adopt pod for function", "pod", pod.Name)
+					return
+				}
+				if existing != nil {
+					// Add DEDUPS by (function UID, generation) and returns the
+					// incumbent with a NIL error — the old IsNameExistError
+					// branch here was dead code. This pod is stamped (shielded
+					// from cleanup) but has no cache identity, so no reaper
+					// owns it; it is recycled only by a Function update or an
+					// env change. Pre-existing behaviour, now at least said
+					// out loud instead of silently minted.
+					gpm.logger.Info("adopt: duplicate specialized pod for function generation; pod has no cache identity",
+						"pod", pod.Name, "incumbent", existing.Name)
 					return
 				}
 
@@ -1048,8 +1104,8 @@ func (gpm *GenericPoolManager) deleteFnSvcEnsuredForUID(uid k8sTypes.UID) {
 // processReplicaSet reaps a pool's specialized pods when its ReplicaSet has
 // scaled to zero. Driven by the ReplicaSet reconciler; delegates to the pool pod
 // controller, which owns the specialized-pod cleanup queue.
-func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet) {
-	gpm.poolPodC.processRS(ctx, rs)
+func (gpm *GenericPoolManager) processReplicaSet(ctx context.Context, rs *appsv1.ReplicaSet) error {
+	return gpm.poolPodC.processRS(ctx, rs)
 }
 
 // readyPodEnqueueDelay debounces a warm pod's entry into its readyPodQueue.
@@ -1149,7 +1205,10 @@ func (gpm *GenericPoolManager) reconcileEnvPool(ctx context.Context, env *fv1.En
 	if errs != nil {
 		return errs
 	}
-	// Any specialized pods are recycled by the ReplicaSet → cleanup path.
+	// Specialized pods on the OLD template are recycled by the ReplicaSet →
+	// cleanup path — which since RFC-0028 keys on the ENVIRONMENT_GENERATION
+	// template label, so only an env-spec change (this function's trigger)
+	// recycles them; an executor-side template roll leaves them serving.
 	return nil
 }
 
