@@ -4,7 +4,40 @@
 
 package v1
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
+
+// ValidateInternalAuthEnv enforces the fail-closed contract on the
+// internal-auth environment. It is called once from every binary's entry
+// point (fission-bundle — covering all its subsystems — fetcher, builder,
+// and the CLI) before anything constructs a signer or verifier.
+//
+// Three states, two of them fine:
+//   - variable ABSENT: internal auth is disabled; signers and verifiers pass
+//     through, the documented dev-mode contract.
+//   - present and NON-EMPTY: internal auth is on.
+//   - present but EMPTY: refused. This is exactly what a misconfigured
+//     Secret produces — the chart's secretKeyRef injects an
+//     existing-but-empty `secret` key verbatim — and every downstream
+//     constructor treats an empty key as "disabled", silently demoting the
+//     deployment to unauthenticated pass-through: the GHSA-3g33-6vg6-27m8
+//     exposure internal auth exists to close. A MISSING key already fails
+//     closed (the pod wedges in CreateContainerConfigError); the empty
+//     value must not be the one misconfiguration that fails open.
+//
+// Validating once per process is what lets the many env readers stay
+// unchanged and unable to disagree: past startup, an empty Getenv can only
+// mean absent.
+func ValidateInternalAuthEnv() error {
+	for _, env := range []string{InternalAuthSecretEnv, InternalAuthSecretOldEnv} {
+		if v, ok := os.LookupEnv(env); ok && v == "" {
+			return fmt.Errorf("%s is set but empty: internal auth is configured, yet the key material is missing — refusing to run with HMAC verification silently disabled; fix the referenced Secret's key, or remove the variable to run with internal auth off", env)
+		}
+	}
+	return nil
+}
 
 // InternalAuthSecretName is the name of the Secret holding the internal-auth
 // HMAC master for this install.

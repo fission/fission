@@ -17,6 +17,7 @@ import (
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/canaryconfigmgr"
 	"github.com/fission/fission/pkg/crd"
@@ -140,6 +141,14 @@ func main() {
 
 	// Initialize logger
 	logger := loggerfactory.GetLogger()
+
+	// Fail closed on a present-but-empty internal-auth key before ANY
+	// subsystem constructs a verifier — every --<flag> this binary dispatches
+	// to reads the same environment, so this one check covers them all.
+	if err := fv1.ValidateInternalAuthEnv(); err != nil {
+		logger.Error(err, "invalid internal-auth environment")
+		os.Exit(1)
+	}
 
 	// GOMAXPROCS is left to the runtime: Go ≥1.25 derives it from the cgroup
 	// CPU quota (including on in-place resize); automaxprocs would regress that.

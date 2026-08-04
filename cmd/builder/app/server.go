@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	builder "github.com/fission/fission/pkg/builder"
 	"github.com/fission/fission/pkg/svcinfo"
@@ -22,6 +23,14 @@ import (
 
 // Usage: builder <shared volume path>
 func Run(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, shareVolume string) {
+	// Fail closed on a present-but-empty internal-auth key before the
+	// build-endpoint verifier is constructed from it. Run has no error
+	// return; exiting matches how the surrounding startup treats a
+	// configuration this broken.
+	if err := fv1.ValidateInternalAuthEnv(); err != nil {
+		logger.Error(err, "invalid internal-auth environment")
+		os.Exit(1)
+	}
 	builder := builder.MakeBuilder(logger, shareVolume)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", builder.Handler)

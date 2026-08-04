@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/fetcher"
@@ -42,6 +43,11 @@ func Run(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger log
 	if flag.NArg() == 0 {
 		flag.Usage()
 		return errors.New("missing arguments")
+	}
+	// Fail closed on a present-but-empty internal-auth key before the
+	// specialize/fetch verifier is constructed from it.
+	if err := fv1.ValidateInternalAuthEnv(); err != nil {
+		return err
 	}
 
 	dir := flag.Arg(0)
