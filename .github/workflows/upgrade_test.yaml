@@ -24,6 +24,9 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      # Self-trigger: changes to the gate itself (posture steps, error budget,
+      # flipping continue-on-error) must produce a run as evidence.
+      - ".github/workflows/upgrade_test.yaml"
   pull_request:
     branches:
       - main
@@ -33,6 +36,7 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      - ".github/workflows/upgrade_test.yaml"
 
 env:
   HELM_VERSION: v4.2.2
