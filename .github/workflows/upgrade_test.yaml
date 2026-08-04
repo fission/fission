@@ -1,7 +1,8 @@
 name: Fission CI upgrade
 
 # RFC-0028 phase 1: upgrade-under-load. Installs the latest published release,
-# seeds fixtures, drives constant-rate load against the router via NodePort
+# aligns its router with the chart's steady-state drain posture, seeds
+# fixtures, drives constant-rate load against the router via NodePort
 # (port-forward would reconnect during the roll and pollute the transport-
 # failure signal), runs `helm upgrade` to HEAD mid-load, and classifies every
 # request outcome (ok / transport failure / platform-attributed / unattributed
@@ -23,6 +24,9 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      # Self-trigger: changes to the gate itself (posture steps, error budget,
+      # flipping continue-on-error) must produce a run as evidence.
+      - ".github/workflows/upgrade_test.yaml"
   pull_request:
     branches:
       - main
@@ -32,6 +36,7 @@ on:
       - "test/**"
       - go.mod
       - go.sum
+      - ".github/workflows/upgrade_test.yaml"
 
 env:
   HELM_VERSION: v4.2.2
@@ -147,6 +152,46 @@ jobs:
           kubectl create -k "github.com/fission/fission/crds/v1?ref=$FROM_TAG"
           helm install --wait --timeout 10m --namespace ${{ env.FISSION_NAMESPACE }} fission \
             fission-charts/fission-all --version "$CHART_VER" --set routerServiceType=NodePort,analytics=false
+
+      # The published releases predate the chart's router drain posture
+      # (preStopSleep + gracefulShutdownTimeout + 90s grace, RFC-0028 §2), so
+      # their router pods close the listener the instant the mid-load roll
+      # reaches them, and every connection kube-proxy has not yet re-routed is
+      # refused: a handful of transport failures pinned to the router roll
+      # that no code in HEAD can prevent — the pods are born from the OLD
+      # release's chart. Patch the same posture onto the installed release
+      # before load starts, so the gate measures the steady-state upgrade path
+      # (N-with-posture -> N+1) — the path every future upgrade takes — rather
+      # than the one-time bootstrap from a pre-posture release.
+      #
+      # The values mirror the router defaults in charts/fission-all/values.yaml
+      # and are also semantically pinned (grace 90 > drain 75s > the 60s
+      # default function timeout); `helm upgrade` later replaces the patch
+      # with the identical chart-rendered fields, so there is nothing to
+      # unwind. GRACEFUL_SHUTDOWN_TIMEOUT is unread by binaries that predate
+      # it, and the Sleep lifecycle action is served by the kubelet (GA in
+      # Kubernetes 1.32) — no sleep binary is needed in the old image. Once
+      # the oldest release this matrix installs ships the posture itself, the
+      # patch matches the live spec and no-ops; delete the step then.
+      - name: Align installed release with the router drain posture
+        if: ${{ env.SKIP_LEG != '1' }}
+        run: |
+          kubectl patch deployment router -n ${{ env.FISSION_NAMESPACE }} --type strategic --patch '
+          spec:
+            template:
+              spec:
+                terminationGracePeriodSeconds: 90
+                containers:
+                  - name: router
+                    lifecycle:
+                      preStop:
+                        sleep:
+                          seconds: 5
+                    env:
+                      - name: GRACEFUL_SHUTDOWN_TIMEOUT
+                        value: "75s"
+          '
+          kubectl rollout status deployment/router -n ${{ env.FISSION_NAMESPACE }} --timeout=3m
 
       # Record which Secrets the HEAD chart will ask the pre-upgrade hook to
       # adopt AND that the PUBLISHED release actually created. Both filters
