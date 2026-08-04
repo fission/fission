@@ -1,0 +1,57 @@
+{{- if and .Values.preUpgradeChecks.enabled (include "fission.internalAuthGenerateInCluster" .) }}
+{{- /*
+Defence-in-depth over the authgen Role alongside this file. That Role must
+grant an UNFENCED `create secrets`: a plain POST carries the object name in
+the body, so a resourceNames fence never matches and would void the grant
+(see the long comment on the Role). RBAC's floor is therefore "create A
+Secret in this namespace" — and that composes with the Role's fenced `get`
+into a ServiceAccount-token read: create <master-name> as a
+kubernetes.io/service-account-token Secret annotated for any SA, let the
+token controller populate it, read it back. This policy is the constraint
+RBAC cannot express: the hook SA may create ONLY the master Secret, and only
+as a plain Opaque object.
+
+Bound to the hook SA by username in matchConditions, so it constrains that
+identity only — a cluster admin creating Secrets is never touched. Rendered
+as a hook at weight -5 (before the RBAC at -2 and the Job at 1), mirroring
+the CRD guard next door; the same before-hook-creation recreate-window note
+applies and grants nothing extra, since the RBAC it backs is present-or-absent
+with it.
+*/}}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Name }}-fission-authgen-secret-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["*"]
+        operations: ["CREATE"]
+        resources: ["secrets"]
+  matchConditions:
+    - name: only-the-fission-authgen-hook
+      expression: 'request.userInfo.username == "system:serviceaccount:{{ .Release.Namespace }}:fission-preupgrade"'
+  validations:
+    - expression: 'object.metadata.name == "{{ include "fission.internalAuthSecretName" . }}"'
+      message: "the Fission auth hook may only create the internal-auth master Secret"
+      reason: Forbidden
+    - expression: "!has(object.type) || object.type == 'Opaque'"
+      message: "the Fission auth hook may not create typed Secrets (a service-account-token Secret would be populated by the token controller and readable through the hook's fenced get)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Name }}-fission-authgen-secret-guard
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-4"
+spec:
+  policyName: {{ .Release.Name }}-fission-authgen-secret-guard
+  validationActions: [Deny]
+{{- end }}

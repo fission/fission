@@ -143,11 +143,10 @@ rules:
 #     ServiceAccounts live — not just the release namespace.
 #
 # It is bounded by needing control of the hook ServiceAccount already, and by
-# that ServiceAccount being torn down with the hook. The real fix is a
-# ValidatingAdmissionPolicy pinning CREATE secrets by this SA to
-# name == <master> && type == Opaque — the chart already ships exactly that
-# pattern in validatingadmissionpolicy.yaml for the CRD grant. Tracked as
-# follow-up work; until it lands, this comment is the honest description.
+# that ServiceAccount being torn down with the hook — and it is now FENCED
+# beyond what RBAC can express: validatingadmissionpolicy-authgen.yaml pins
+# CREATE secrets by this SA to name == <master> && type Opaque, which is
+# exactly the constraint that breaks the token-read composition above.
 - apiGroups: [""]
   resources: ["secrets"]
   verbs: ["create"]
