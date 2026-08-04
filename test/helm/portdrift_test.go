@@ -245,7 +245,13 @@ func TestChartPortsMatchSvcinfo(t *testing.T) {
 
 	t.Run("sibling-service URL args", func(t *testing.T) {
 		router := containerArgs(t, find(docs, "Deployment", svcinfo.SvcRouter))
-		assert.Equal(t, svcinfo.ExecutorURL("fission"), argAfter(router, "--executorUrl"))
+		// The chart renders the ABSOLUTE (trailing-dot) form of the svcinfo
+		// URL — same service, namespace, and implicit port, plus the
+		// .svc.<clusterDomain>. suffix that keeps the router's cold-start
+		// dials off the resolv.conf search path. In-process consumers (the
+		// e2e/portless framework) deliberately keep the short svcinfo form:
+		// they resolve by registry name, not DNS.
+		assert.Equal(t, svcinfo.ExecutorURL("fission")+".svc.cluster.local.", argAfter(router, "--executorUrl"))
 
 		buildermgr := containerArgs(t, find(docs, "Deployment", "buildermgr"))
 		assert.Equal(t, svcinfo.StorageSvcURL("fission"), argAfter(buildermgr, "--storageSvcUrl"))
