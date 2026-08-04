@@ -185,14 +185,16 @@ func TestProcessRSDiscriminator(t *testing.T) {
 			wantEnqueued: 0,
 		},
 		{
-			name:     "pre-label RS under a re-templated (hash-stamped) owner -> clean",
+			name:     "pre-label RS under the hash-stamped owner that just rolled it -> KEEP (the shipping upgrade)",
 			ownerUID: depUID, tmplLabels: templateLabels("", nil),
-			// The live pool Deployment's template already carries the label, so
-			// this RS is provably a pre-hash generation: its pods run a runtime
-			// at least one revision old. Without this branch they would be kept
-			// FOREVER (a settled zero-replica RS emits no further events).
+			// This IS the shipping-upgrade shape, not a rare one: the new
+			// executor's hash-stamping update is what rolls the pool, so the
+			// old RS always reports zero replicas AFTER the owner carries the
+			// label. A "clean" here killed every N-1-born warm pod (the gate
+			// measured warm_pod_survival 1 -> 0) and would re-fire on each
+			// executor restart via the revision-history RSes.
 			dep: liveDepHashed(), cachedEnv: liveEnv(),
-			wantEnqueued: 1,
+			wantEnqueued: 0,
 		},
 		{
 			name:     "mangled hash label -> compares unequal -> clean",
