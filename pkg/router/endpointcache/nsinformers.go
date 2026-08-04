@@ -22,11 +22,8 @@ import (
 )
 
 // nsInformer pairs one namespace's EndpointSlice informer with the cancel
-// function that stops it and a done channel closed only after the informer's
-// goroutines have fully drained (factory.Start + factory.Shutdown). Stored in
-// NamespaceInformers.informers, keyed by namespace. Waiting on done before
-// sweeping the index is the teardown fence (PRD §11.1): it guarantees no queued
-// or in-flight ApplySlice can repopulate a namespace after offboard.
+// function that stops it and a done channel closed after the informer's
+// goroutines have drained. See start for the teardown-fence contract.
 type nsInformer struct {
 	informer cache.SharedIndexInformer
 	cancel   context.CancelFunc
@@ -62,13 +59,10 @@ func NewNamespaceInformers(kubeClient kubernetes.Interface, index *Index, logger
 
 // Sync reconciles the running informer set to match namespaces:
 // starts informers for new namespaces, stops informers for removed namespaces.
-// The whole transition is serialized under n.mu: cancel → wait for the
-// informer's goroutines to drain (factory.Shutdown via the done channel) →
-// sweep the index. Holding the lock across the wait prevents a concurrent
-// Sync from installing a replacement informer whose fresh entries the earlier
-// call would then delete (offboard/re-onboard overlap). The drain never takes
-// n.mu (handlers only touch the Index's own locks), so this cannot deadlock —
-// other callers just wait a moment.
+// Serialized under n.mu: cancel → wait for drain (see start's done channel) →
+// sweep the index. Holding the lock across the wait prevents offboard/re-onboard
+// overlap. The drain never takes n.mu (handlers only touch the Index's own
+// locks), so this cannot deadlock.
 func (n *NamespaceInformers) Sync(namespaces []string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -80,10 +74,8 @@ func (n *NamespaceInformers) Sync(namespaces []string) {
 	for _, ns := range namespaces {
 		desired[ns] = struct{}{}
 	}
-	// Stop informers for namespaces no longer in the desired set. Waiting for
-	// the drain BEFORE sweeping is the teardown fence (PRD §11.1): no queued
-	// ApplySlice from the dying informer can repopulate the namespace after
-	// RemoveNamespace, resurrecting stale endpoints during offboard.
+	// Stop informers for namespaces no longer in the desired set.
+	// <-ni.done is the teardown fence (see start).
 	for ns, ni := range n.informers {
 		if _, ok := desired[ns]; !ok {
 			ni.cancel()
