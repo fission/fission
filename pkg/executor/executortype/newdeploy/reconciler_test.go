@@ -85,6 +85,8 @@ func TestReconcileNewdeployFunc(t *testing.T) {
 		mgr := &fakeFuncMgr{resourcesGone: true}
 		require.NoError(t, reconcileNewdeployFunc(t.Context(), mgr, fn, fn))
 		assert.Equal(t, []string{"fn"}, mgr.created, "drifted-away resources must be recreated via get-or-create")
+		assert.Equal(t, []string{"fn"}, mgr.reconciled,
+			"a drift FALSE-ALARM (cache lag) on the update's own reconcile otherwise swallows the update forever: createFunction adopts the old-spec deployment without a respec, lastReconciled stores the new spec, and no event re-fires")
 		assert.Empty(t, mgr.updated, "no diff against a non-existent object")
 	})
 

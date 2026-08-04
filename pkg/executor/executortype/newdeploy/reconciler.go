@@ -75,8 +75,19 @@ func reconcileNewdeployFunc(ctx context.Context, mgr funcManager, old, fn *fv1.F
 		return err
 	}
 	if !exist {
-		_, err := mgr.createFunction(ctx, fn)
-		return err
+		if _, err := mgr.createFunction(ctx, fn); err != nil {
+			return err
+		}
+		// The same chaser as first sight, for the same reason: createFunction
+		// only adopts/scales an existing deployment, it never rewrites the pod
+		// spec. When !exist was a cache false-alarm (the Deployment exists in
+		// the API but lagged out of the Manager cache), this reconcile may be
+		// the ONLY carrier of a spec change — adopt-without-respec would
+		// consume the update permanently: lastReconciled stores the new spec,
+		// GenerationChangedPredicate filters resyncs, and no event ever
+		// re-fires. Measured in the wild as a function serving its old
+		// entrypoint indefinitely after `fn update`.
+		return mgr.reconcileDeploymentSpec(ctx, fn)
 	}
 	return mgr.updateFunction(ctx, old, fn)
 }

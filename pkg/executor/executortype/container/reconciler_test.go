@@ -17,8 +17,8 @@ import (
 )
 
 type fakeFuncMgr struct {
-	created, updated, deleted []string
-	resourcesGone             bool // resourcesExist returns false (drift)
+	created, updated, deleted, reconciled []string
+	resourcesGone                         bool // resourcesExist returns false (drift)
 }
 
 func (f *fakeFuncMgr) resourcesExist(_ context.Context, _ *fv1.Function) (bool, error) {
@@ -37,6 +37,10 @@ func (f *fakeFuncMgr) deleteFunction(_ context.Context, fn *fv1.Function) error 
 	f.deleted = append(f.deleted, fn.Name)
 	return nil
 }
+func (f *fakeFuncMgr) reconcileDeploymentSpec(_ context.Context, fn *fv1.Function) error {
+	f.reconciled = append(f.reconciled, fn.Name)
+	return nil
+}
 
 func fnOfType(name string, et fv1.ExecutorType) *fv1.Function {
 	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
@@ -47,10 +51,12 @@ func fnOfType(name string, et fv1.ExecutorType) *fv1.Function {
 func TestReconcileContainerFunc(t *testing.T) {
 	fn := fnOfType("fn", fv1.ExecutorTypeContainer)
 
-	t.Run("create (old == nil) creates the function", func(t *testing.T) {
+	t.Run("create (old == nil) creates the function and converges the spec", func(t *testing.T) {
 		mgr := &fakeFuncMgr{}
 		require.NoError(t, reconcileContainerFunc(t.Context(), mgr, nil, fn))
 		assert.Equal(t, []string{"fn"}, mgr.created)
+		assert.Equal(t, []string{"fn"}, mgr.reconciled,
+			"a coalesced create+update makes this reconcile the only carrier of the update — createFunction adopts without a respec, so the chaser must run")
 		assert.Empty(t, mgr.updated)
 	})
 
@@ -59,12 +65,15 @@ func TestReconcileContainerFunc(t *testing.T) {
 		require.NoError(t, reconcileContainerFunc(t.Context(), mgr, fn, fn))
 		assert.Equal(t, []string{"fn"}, mgr.updated)
 		assert.Empty(t, mgr.created)
+		assert.Empty(t, mgr.reconciled, "the diff path owns spec convergence on plain updates")
 	})
 
 	t.Run("drift: missing backing resources are recreated, not diffed", func(t *testing.T) {
 		mgr := &fakeFuncMgr{resourcesGone: true}
 		require.NoError(t, reconcileContainerFunc(t.Context(), mgr, fn, fn))
 		assert.Equal(t, []string{"fn"}, mgr.created, "drifted-away resources must be recreated via get-or-create")
+		assert.Equal(t, []string{"fn"}, mgr.reconciled,
+			"a drift FALSE-ALARM (cache lag) on the update's own reconcile otherwise swallows the update forever: createFunction adopts the old-spec deployment, lastReconciled stores the new spec, and no event re-fires")
 		assert.Empty(t, mgr.updated, "no diff against a non-existent object")
 	})
 

@@ -606,6 +606,42 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 	return nil
 }
 
+// reconcileDeploymentSpec brings an already-existing deployment up to the
+// function's current spec when it lags — the container-type mirror of
+// newdeploy's helper, and the level-trigger half of reconcileContainerFunc:
+// createFunction only adopts/scales an existing deployment, so a reconcile
+// that both routed through createFunction AND carried a spec change (a
+// coalesced create+update, or a drift false-alarm on the update's reconcile)
+// would otherwise leave the deployment on the old spec with nothing left to
+// re-fire. The deployment carries the function's ResourceVersion as an
+// annotation (getDeployAnnotations); compare it and push the current spec
+// when stale. A no-op when already current.
+func (caaf *Container) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
+	// Live entry only: versioned projections sharing the UID pin immutable
+	// snapshots that must not be rewritten to the live spec.
+	fsvc, err := caaf.fsCache.GetLiveByFunctionUID(fn.UID)
+	if err != nil {
+		// Not specialized yet — no deployment to reconcile; the on-demand path
+		// creates it from the current spec on first invocation.
+		return nil
+	}
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
+	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fsvc.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION] == fn.ResourceVersion {
+		return nil // deployment already reflects the current function spec
+	}
+	caaf.logger.Info("reconciling stale deployment to current function spec",
+		"function", fn.Name, "deployment", fsvc.Name,
+		"deployment_rv", existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION], "function_rv", fn.ResourceVersion)
+	return caaf.updateFuncDeployment(ctx, fn)
+}
+
 func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Function) error {
 	// Live entry only — see updateFunction: versioned projections' entries
 	// share the UID but must keep their pinned spec.

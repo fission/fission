@@ -19,6 +19,7 @@ import (
 type functionManager interface {
 	createFunction(context.Context, *fv1.Function) (*fscache.FuncSvc, error)
 	updateFunction(context.Context, *fv1.Function, *fv1.Function) error
+	reconcileDeploymentSpec(context.Context, *fv1.Function) error
 	deleteFunction(context.Context, *fv1.Function) error
 	// resourcesExist reports whether the function's backing Deployment and Service
 	// are present (read from the Manager cache). False means they drifted away
@@ -47,18 +48,29 @@ func (caaf *Container) DeleteFunction(ctx context.Context, fn *fv1.Function) err
 // of a managed function whose backing Deployment/Service drifted away (deleted
 // out-of-band, surfaced by the drift watch) recreates them via the idempotent
 // get-or-create path rather than diffing a no-longer-existent object.
+//
+// Both create-routed branches chase createFunction with reconcileDeploymentSpec,
+// mirroring newdeploy: createFunction only adopts/scales an existing deployment.
+// If this reconcile is the only carrier of a spec change — a create and an
+// update coalesced into one first reconcile, or a drift false-alarm from cache
+// lag on the update's reconcile — adopting without a respec consumes the update
+// permanently (lastReconciled stores the new spec; no event re-fires).
 func reconcileContainerFunc(ctx context.Context, mgr functionManager, old, fn *fv1.Function) error {
 	if old == nil {
-		_, err := mgr.createFunction(ctx, fn)
-		return err
+		if _, err := mgr.createFunction(ctx, fn); err != nil {
+			return err
+		}
+		return mgr.reconcileDeploymentSpec(ctx, fn)
 	}
 	exist, err := mgr.resourcesExist(ctx, fn)
 	if err != nil {
 		return err
 	}
 	if !exist {
-		_, err := mgr.createFunction(ctx, fn)
-		return err
+		if _, err := mgr.createFunction(ctx, fn); err != nil {
+			return err
+		}
+		return mgr.reconcileDeploymentSpec(ctx, fn)
 	}
 	return mgr.updateFunction(ctx, old, fn)
 }
