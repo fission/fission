@@ -569,7 +569,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// AddResolverSync further down. A hook returns pending=true to make the
 	// reconciler requeue (no FissionTenant event fires when the missing piece
 	// is a RoleBinding provisioned asynchronously by the tenant controller).
-	var resolverSyncHooks []func(map[string]string) (pending bool)
+	var resolverSyncHooks []func() (pending bool)
 
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		index := endpointcache.NewIndex()
@@ -634,7 +634,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 				return fmt.Errorf("error registering tenant seed runnable: %w", err)
 			}
 			endpointsSynced = nsInformers.HasSynced
-			resolverSyncHooks = append(resolverSyncHooks, func(_ map[string]string) (pending bool) {
+			resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
 				return dynCache.syncInformers(ctx)
 			})
 			// Stop all informers when the router's context is cancelled.

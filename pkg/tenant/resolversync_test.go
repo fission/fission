@@ -42,22 +42,19 @@ func TestResolverSyncReconciler(t *testing.T) {
 }
 
 // TestResolverSyncReconcilerHooks verifies that hooks are called after
-// SetTenants, receiving the live namespace set. This is the mechanism the
-// router uses to re-scope its per-namespace EndpointSlice informers when
-// tenants change at runtime (#3647).
+// SetTenants. This is the mechanism the router uses to re-scope its
+// per-namespace EndpointSlice informers when tenants change at runtime (#3647).
 func TestResolverSyncReconcilerHooks(t *testing.T) {
 	c := newFakeClient(t, tenant("team-a", "team-a"), tenant("team-b", "team-b"))
 	resolver := &utils.NamespaceResolver{}
 
 	var called int
-	var got map[string]string
 	r := &ResolverSyncReconciler{
 		client:   c,
 		resolver: resolver,
-		hooks: []func(map[string]string) bool{
-			func(set map[string]string) bool {
+		hooks: []func() bool{
+			func() bool {
 				called++
-				got = set
 				return false
 			},
 		},
@@ -66,8 +63,6 @@ func TestResolverSyncReconcilerHooks(t *testing.T) {
 	res, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)
 	assert.Equal(t, 1, called, "hook must be called once per Reconcile")
-	assert.Contains(t, got, "team-a", "hook must receive the live namespace set")
-	assert.Contains(t, got, "team-b", "hook must receive the live namespace set")
 	assert.Zero(t, res.RequeueAfter, "no requeue when no hook reports pending")
 }
 
@@ -81,8 +76,8 @@ func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 	r := &ResolverSyncReconciler{
 		client:   c,
 		resolver: resolver,
-		hooks: []func(map[string]string) bool{
-			func(set map[string]string) bool { return true },
+		hooks: []func() bool{
+			func() bool { return true },
 		},
 	}
 

@@ -282,7 +282,7 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 			default:
 			}
 			s := makeSlice("s-churn", "ns-a", "fn-a", "10.0.0.2")
-			kubeClient.Tracker().Add(s)
+			_ = kubeClient.Tracker().Add(s)
 		}
 	}()
 	// Brief window so at least a few events are in the processor queue.

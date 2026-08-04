@@ -50,15 +50,14 @@ func SyncResolverFromTenants(ctx context.Context, c client.Client, resolver *uti
 type ResolverSyncReconciler struct {
 	client   client.Client
 	resolver *utils.NamespaceResolver
-	// hooks are called (with the live FissionResourceNamespaces set) after every
-	// successful SetTenants. The router uses one to re-scope its per-namespace
-	// EndpointSlice informers when tenants change at runtime (#3647); other
-	// callers (executor, buildermgr) pass none. A hook returns pending=true when
-	// it has unfinished work (e.g. a namespace whose EndpointSlice RBAC has not
-	// landed yet): the reconciler then requeues after a short delay, because no
-	// FissionTenant event will fire when the missing piece is a RoleBinding the
-	// tenant controller creates asynchronously.
-	hooks []func(map[string]string) (pending bool)
+	// hooks are called after every successful SetTenants. The router uses one
+	// to re-scope its per-namespace EndpointSlice informers when tenants change
+	// at runtime (#3647); other callers (executor, buildermgr) pass none. A hook
+	// returns pending=true when it has unfinished work (e.g. a namespace whose
+	// EndpointSlice RBAC has not landed yet): the reconciler then requeues after
+	// a short delay, because no FissionTenant event will fire when the missing
+	// piece is a RoleBinding the tenant controller creates asynchronously.
+	hooks []func() (pending bool)
 }
 
 // hookRetryDelay is how soon the reconciler re-runs when a hook reports
@@ -72,7 +71,7 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 	}
 	pending := false
 	for _, h := range r.hooks {
-		if h(r.resolver.FissionResourceNamespaces()) {
+		if h() {
 			pending = true
 		}
 	}
@@ -92,13 +91,12 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 // no extra cache wiring; the component's ClusterRole must grant fissiontenants
 // get/list/watch (charts/.../tenant-controller/dynamic-cluster-roles.yaml).
 //
-// hooks are called (with the live FissionResourceNamespaces set) after every
-// successful SetTenants. The router passes one to re-scope its per-namespace
-// EndpointSlice informers (#3647); executor/buildermgr pass none. A hook
-// returns pending=true when it has unfinished work (e.g. RBAC not yet landed);
-// the reconciler then requeues after hookRetryDelay. Variadic so existing
-// callers (AddResolverSync(mgr)) compile unchanged.
-func AddResolverSync(mgr ctrl.Manager, hooks ...func(map[string]string) (pending bool)) error {
+// hooks are called after every successful SetTenants. The router passes one to
+// re-scope its per-namespace EndpointSlice informers (#3647); executor/buildermgr
+// pass none. A hook returns pending=true when it has unfinished work (e.g. RBAC
+// not yet landed); the reconciler then requeues after hookRetryDelay. Variadic so
+// existing callers (AddResolverSync(mgr)) compile unchanged.
+func AddResolverSync(mgr ctrl.Manager, hooks ...func() (pending bool)) error {
 	if !utils.CrdWatchClusterWide() {
 		return nil
 	}
