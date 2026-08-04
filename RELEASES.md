@@ -71,6 +71,11 @@ Opt-outs: `executor.strategy` and `executor.adoptExistingResources`.
 The same default serves HA installs (replicas > 1 with leaderElection): pods roll one at a time and a dying leader releases its lease — never set `maxUnavailable: 0` with leader election, which deadlocks against the leadership-gated readiness probe.
 One caveat rides the first upgrade to this release: pods born under the previous release carry no environment-generation label, so an environment updated during that same upgrade window keeps its old pods until the idle reaper or a function update recycles them.
 
+- **In-cluster service names are dialed as absolute FQDNs (`<name>.<ns>.svc.<clusterDomain>.`), with a new `clusterDomain` value defaulting to `cluster.local`.**
+The router's executor URL and the executor/buildermgr-built function and builder addresses no longer use the short `<name>.<namespace>` form, whose resolv.conf search-path expansion multiplied every resolution into the extra DNS queries that drop under parallel load.
+Clusters using the standard `cluster.local` DNS domain need no action.
+**Clusters with a custom cluster DNS domain must set `clusterDomain`** to it, or cold starts and builds will fail DNS resolution after the upgrade — the short form previously worked on any domain precisely because it went through the search path.
+
 - **`Environment.terminationGracePeriod` defaults to `90` seconds — and now actually defaults.**
 A terminating function pod keeps serving for the whole grace window (the drain preStop hook sleeps through it), so this value is exactly how long every pod teardown takes: idle reap, environment update, upgrade, node drain.
 Two changes land together.
