@@ -240,8 +240,7 @@ func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterCli
 
 // scrapeRouterMetric scrapes a single Prometheus metric from the router pods
 // (via pod proxy, no port-forward needed) and returns its sum across replicas.
-// Works for gauges and counters whose callers know are unlabeled (first
-// matching sample per pod — correct when there is exactly one).
+// Sums all matching samples per pod via framework.SumMetricLines.
 func scrapeRouterMetric(t require.TestingT, ctx context.Context, f *framework.Framework, metricName string) float64 {
 	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=router"})
 	require.NoErrorf(t, err, "listing router pods")

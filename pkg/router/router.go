@@ -594,23 +594,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 				nsInformers: nsInformers,
 				logger:      logger,
 			}
-			// Seed with the env seed immediately so HasSynced isn't vacuously namespaces whose EndpointSlice RBAC has passed
-			// the SelfSubjectAccessReview. A namespace onboarded at runtime gets
-			// its fission-router-dataplane RoleBinding from the tenant controller,
-			// which races the informer start (issue #3647), and an orphaned
-			// FissionTenant (namespace deleted) can never pass — so explicitly-
-			// denied namespaces are EXCLUDED from the informer set (their functions
-			// fall back to the executor RPC, same as the legacy data plane) and
-			// re-checked on every reconcile until the binding lands. Exclusion is
-			// what keeps one bad namespace from wedging /readyz for every tenant.
-			dynCache.syncInformers(ctx)
-			// After the Manager cache syncs
-			// namespaces, filtered by EndpointSlice RBAC. Shared by the startup
-			// seed, the post-cache-sync re-seed, and the resolver-sync hook so
-			// all three apply the same exclusion semantics. Returns pending=true
-			// when any namespace is still waiting on its RBAC — the reconciler
-			// requeues until every namespace passes (no tenant event fires for
-			// a RoleBinding the tenant controller creates asynchronously).
 			// Seed with the env seed immediately so HasSynced isn't vacuously
 			// true with zero informers. The RunnableFunc below re-seeds from
 			// the LIVE FissionTenant set after the Manager cache syncs (the

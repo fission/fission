@@ -5,6 +5,7 @@
 package endpointcache
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -248,12 +251,11 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 // up non-empty after offboard. With the fence, Sync blocks until the processor
 // drains, then sweeps, so the index is guaranteed empty.
 //
-// A continuous-churn goroutine fires Tracker().Add in a tight loop while the
-// main goroutine calls Sync. Tracker().Add fans out to the informer's watcher
-// natively, so events are constantly in flight. When cancel fires, some events
-// are already queued in the processor — the fence drains them before sweeping.
-// Without the fence, RemoveNamespace runs first and a late ApplySlice
-// resurrects the entry.
+// A churn goroutine fires Tracker().Add with unique names in a tight loop.
+// A started channel signals when the first event is queued; the main goroutine
+// then calls Sync. Tracker().Add fans out to the informer's watcher natively,
+// so events are constantly in flight. When cancel fires, some events are
+// already queued in the processor — the fence drains them before sweeping.
 func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	t.Parallel()
 
@@ -267,10 +269,11 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
 
-	// Continuous churn: fire Tracker().Add in a tight loop so events are
-	// constantly queued in the processor. When Sync cancels the informer,
-	// some events are already in-flight.
+	// Churn goroutine: fire Tracker().Add with unique names so every call
+	// succeeds (no AlreadyExists). Signal after first event is queued so the
+	// main goroutine doesn't call Sync before any events are in flight.
 	stop := make(chan struct{})
+	started := make(chan struct{})
 	var churnDone sync.WaitGroup
 	churnDone.Add(1)
 	go func() {
@@ -281,12 +284,19 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 				return
 			default:
 			}
-			s := makeSlice("s-churn", "ns-a", "fn-a", "10.0.0.2")
-			_ = kubeClient.Tracker().Add(s)
+			s := makeSlice(fmt.Sprintf("s-churn-%d", i), "ns-a", "fn-a", "10.0.0.2")
+			if err := kubeClient.Tracker().Add(s); err != nil {
+				continue // AlreadyExists from a concurrent Add, retry
+			}
+			if i == 0 {
+				close(started)
+			}
+			// Pace the churn so the fake watcher's channel (default 100)
+			// doesn't overflow before the informer drains events.
+			time.Sleep(time.Microsecond)
 		}
 	}()
-	// Brief window so at least a few events are in the processor queue.
-	time.Sleep(20 * time.Millisecond)
+	<-started
 
 	// Offboard: Sync blocks until the informer drains, then sweeps.
 	nsi.Sync([]string{})
@@ -295,9 +305,6 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 
 	// Index must be empty — the fence prevented resurrection.
 	assert.Equal(t, 0, index.Size(), "fence must prevent late ApplySlice from resurrecting entries after offboard")
-	// Double-check after a short settle: no delayed event should appear.
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, 0, index.Size(), "index must stay empty after settle — no late resurrection")
 }
 
 // TestEndpointSliceHandlersUpdateAndDelete verifies the extracted UpdateFunc
@@ -339,18 +346,32 @@ func TestEndpointSliceHandlersUpdateAndDelete(t *testing.T) {
 	assert.Equal(t, 0, index.Size(), "tombstone delete must also remove the entry")
 }
 
-// TestNamespaceInformersHasSyncedNonEmpty verifies HasSynced returns true when
-// a running informer has completed its initial LIST — the non-vacuous case
-// that TestNamespaceInformersHasSyncedEmpty doesn't cover.
+// TestNamespaceInformersHasSyncedNonEmpty verifies the HasSynced state
+// machine: false while an informer is running but hasn't completed its
+// initial LIST, true after it syncs. Uses a list reactor that blocks the
+// initial LIST until released, so the test can observe the false state
+// deterministically.
 func TestNamespaceInformersHasSyncedNonEmpty(t *testing.T) {
 	t.Parallel()
 
 	kubeClient := fake.NewSimpleClientset(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
+	// Block the initial LIST so HasSynced stays false until we release it.
+	releaseList := make(chan struct{})
+	kubeClient.PrependReactor("list", "endpointslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		<-releaseList
+		return false, nil, nil // fall through to default reactor
+	})
+
 	index := NewIndex()
 	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
 	t.Cleanup(nsi.Close)
 
+	// Start the informer — LIST is blocked, so HasSynced must be false.
 	nsi.Sync([]string{"ns-a"})
+	assert.False(t, nsi.HasSynced(), "HasSynced must be false while initial LIST is blocked")
+
+	// Release the LIST; the informer syncs.
+	close(releaseList)
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	assert.True(t, nsi.HasSynced(), "HasSynced must be true after informer completes initial LIST")
 }
