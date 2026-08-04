@@ -40,10 +40,8 @@ type envFunctionUpdater interface {
 // last-reconciled cache and executor-type transitions, so this only sees same-type
 // create/update:
 //
-//   - create (old == nil): createFunction, then reconcileDeploymentSpec to bring a
-//     possibly-stale adopted deployment (e.g. the router specialized the function
-//     on-demand before `fn update` landed) to the current spec. A no-op when
-//     already current.
+//   - create (old == nil), and any reconcile whose backing objects drifted away:
+//     createAndConverge.
 //   - update (old != nil): updateFunction(old, fn), which diffs HPA min/max/metrics
 //     and secret/configmap/package changes.
 func (deploy *NewDeploy) ReconcileFunction(ctx context.Context, old, fn *fv1.Function) error {
@@ -65,20 +63,37 @@ func (deploy *NewDeploy) DeleteFunction(ctx context.Context, fn *fv1.Function) e
 // functions warm without waiting for one.)
 func reconcileNewdeployFunc(ctx context.Context, mgr funcManager, old, fn *fv1.Function) error {
 	if old == nil {
-		if _, err := mgr.createFunction(ctx, fn); err != nil {
-			return err
-		}
-		return mgr.reconcileDeploymentSpec(ctx, fn)
+		return createAndConverge(ctx, mgr, fn)
 	}
 	exist, err := mgr.resourcesExist(ctx, fn)
 	if err != nil {
 		return err
 	}
 	if !exist {
-		_, err := mgr.createFunction(ctx, fn)
-		return err
+		return createAndConverge(ctx, mgr, fn)
 	}
 	return mgr.updateFunction(ctx, old, fn)
+}
+
+// createAndConverge is the create-routed path both branches above take: create (or
+// adopt) the function's backing objects, then bring the deployment to the current
+// spec. reconcileDeploymentSpec is a no-op when the deployment already reflects fn.
+//
+// The second step is not optional. createFunction only adopts/scales an existing
+// deployment — it never rewrites the pod spec — so when this reconcile is the ONLY
+// carrier of a spec change, adopting without a respec consumes the update
+// permanently: lastReconciled stores the new spec, GenerationChangedPredicate
+// filters resyncs, and no event ever re-fires (measured in the wild as a function
+// serving its old entrypoint indefinitely after `fn update`). Two ways in: a create
+// and a later update coalescing into one first reconcile — the router specialized
+// the function on-demand just before `fission fn update` landed — or a cache
+// false-alarm where !exist saw a Deployment that had lagged out of the Manager
+// cache.
+func createAndConverge(ctx context.Context, mgr funcManager, fn *fv1.Function) error {
+	if _, err := mgr.createFunction(ctx, fn); err != nil {
+		return err
+	}
+	return mgr.reconcileDeploymentSpec(ctx, fn)
 }
 
 // ReconcileEnvironment satisfies executortype.EnvReconciler: it propagates an

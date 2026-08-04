@@ -16,6 +16,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -606,6 +607,40 @@ func (caaf *Container) updateFunction(ctx context.Context, oldFn *fv1.Function, 
 	return nil
 }
 
+// reconcileDeploymentSpec brings an already-existing deployment up to the
+// function's current spec when it lags — the container-type mirror of
+// newdeploy's helper, and the level-trigger half of every create-routed
+// reconcile (see createAndConverge in reconciler.go for why it must follow
+// createFunction). The deployment carries the function's ResourceVersion as
+// an annotation (getDeployAnnotations); compare it and push the current spec
+// when stale. A no-op when already current.
+func (caaf *Container) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
+	// Live entry only: versioned projections sharing the UID pin immutable
+	// snapshots that must not be rewritten to the live spec.
+	fsvc, err := caaf.fsCache.GetLiveByFunctionUID(fn.UID)
+	if err != nil {
+		// Not specialized yet — no deployment to reconcile; the on-demand path
+		// creates it from the current spec on first invocation.
+		return nil
+	}
+	ns := caaf.nsResolver.GetFunctionNS(fn.Namespace)
+	existingDepl, err := caaf.kubernetesClient.AppsV1().Deployments(ns).Get(ctx, fsvc.Name, metav1.GetOptions{})
+	if err != nil {
+		if k8sErrs.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	deplRV := existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION]
+	if deplRV == fn.ResourceVersion {
+		return nil // deployment already reflects the current function spec
+	}
+	caaf.logger.Info("reconciling stale deployment to current function spec",
+		"function", fn.Name, "deployment", fsvc.Name,
+		"deployment_rv", deplRV, "function_rv", fn.ResourceVersion)
+	return caaf.updateFuncDeployment(ctx, fn)
+}
+
 func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Function) error {
 	// Live entry only — see updateFunction: versioned projections' entries
 	// share the UID but must keep their pinned spec.
@@ -636,6 +671,18 @@ func (caaf *Container) updateFuncDeployment(ctx context.Context, fn *fv1.Functio
 	if err != nil {
 		caaf.updateStatus(fn, err, "failed to get new deployment spec while updating function")
 		return err
+	}
+
+	// A Deployment's selector is immutable, and for container functions it is
+	// derived from the Function CR's own labels (getDeployLabels copies them),
+	// which can change without bumping Generation. An in-place Update with a
+	// different selector is rejected by the API server; returning nil (not an
+	// error) avoids requeuing forever against a permanently immutable field —
+	// the same guard newdeploy's updateFuncDeployment carries.
+	if !apiequality.Semantic.DeepEqual(existingDepl.Spec.Selector, newDeployment.Spec.Selector) {
+		caaf.logger.Info("deployment selector changed (function labels changed); cannot update in place, leaving existing deployment",
+			"deployment", fnObjName, "function", fn.Name)
+		return nil
 	}
 
 	err = caaf.updateDeployment(ctx, newDeployment, ns)
