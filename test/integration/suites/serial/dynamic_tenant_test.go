@@ -7,10 +7,7 @@
 package serial_test
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -243,7 +240,8 @@ func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterCli
 
 // scrapeRouterMetric scrapes a single Prometheus metric from the router pods
 // (via pod proxy, no port-forward needed) and returns its sum across replicas.
-// Works for both gauges and counters (sums the latest sample per pod).
+// Works for gauges and counters whose callers know are unlabeled (first
+// matching sample per pod — correct when there is exactly one).
 func scrapeRouterMetric(t require.TestingT, ctx context.Context, f *framework.Framework, metricName string) float64 {
 	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=router"})
 	require.NoErrorf(t, err, "listing router pods")
@@ -252,36 +250,7 @@ func scrapeRouterMetric(t require.TestingT, ctx context.Context, f *framework.Fr
 	for _, p := range pods.Items {
 		raw, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).ProxyGet("http", p.Name, "8080", "/metrics", nil).DoRaw(ctx)
 		require.NoErrorf(t, err, "scraping /metrics from router pod %s", p.Name)
-		total += parseGaugeValue(raw, metricName)
+		total += framework.SumMetricLines(raw, metricName)
 	}
 	return total
-}
-
-// parseGaugeValue extracts the value of a Prometheus metric from a /metrics
-// scrape body. Returns 0 if the metric is absent (e.g. before any slice event).
-// Works for gauges and counters (returns the last sample's value).
-func parseGaugeValue(raw []byte, name string) float64 {
-	sc := bufio.NewScanner(bytes.NewReader(raw))
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		rest, ok := strings.CutPrefix(line, name)
-		if !ok {
-			continue
-		}
-		if len(rest) == 0 || (rest[0] != ' ' && rest[0] != '{') {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		v, err := strconv.ParseFloat(fields[len(fields)-1], 64)
-		if err == nil {
-			return v
-		}
-	}
-	return 0
 }

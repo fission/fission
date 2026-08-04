@@ -17,8 +17,6 @@
 package common_test
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -338,42 +336,7 @@ func scrapeCounterSum(t *testing.T, ctx context.Context, f *framework.Framework,
 	for _, p := range pods.Items {
 		raw, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).ProxyGet("http", p.Name, "8080", "/metrics", nil).DoRaw(ctx)
 		require.NoErrorf(t, err, "scraping /metrics from %s pod %s", svc, p.Name)
-		total += sumMetricLines(raw, metricName)
-	}
-	return total
-}
-
-// sumMetricLines sums every Prometheus exposition line for `name`, labeled
-// or not (both "foo 3" and `foo{a="b"} 3` match), skipping comment lines.
-// Unlike memory_soak_test.go's parseMetric, which returns the first match
-// for a metric callers know by construction is unlabeled, this sums every
-// label combination -- needed here because callers only know these two
-// counters are unlabeled by reading their registration site, not by
-// contract.
-func sumMetricLines(raw []byte, name string) float64 {
-	var total float64
-	sc := bufio.NewScanner(bytes.NewReader(raw))
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		rest, ok := strings.CutPrefix(line, name)
-		if !ok {
-			continue
-		}
-		if len(rest) == 0 || (rest[0] != ' ' && rest[0] != '{') {
-			continue // matched a longer metric name sharing this prefix
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		v, err := strconv.ParseFloat(fields[len(fields)-1], 64)
-		if err != nil {
-			continue
-		}
-		total += v
+		total += framework.SumMetricLines(raw, metricName)
 	}
 	return total
 }
