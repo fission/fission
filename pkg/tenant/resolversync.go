@@ -50,13 +50,8 @@ func SyncResolverFromTenants(ctx context.Context, c client.Client, resolver *uti
 type ResolverSyncReconciler struct {
 	client   client.Client
 	resolver *utils.NamespaceResolver
-	// hooks are called after every successful SetTenants. The router uses one
-	// to re-scope its per-namespace EndpointSlice informers when tenants change
-	// at runtime (#3647); other callers (executor, buildermgr) pass none. A hook
-	// returns pending=true when it has unfinished work (e.g. a namespace whose
-	// EndpointSlice RBAC has not landed yet): the reconciler then requeues after
-	// a short delay, because no FissionTenant event will fire when the missing
-	// piece is a RoleBinding the tenant controller creates asynchronously.
+	// hooks are called after every successful SetTenants. See AddResolverSync
+	// for the hook/pending contract.
 	hooks []func() (pending bool)
 }
 

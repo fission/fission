@@ -310,6 +310,66 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 	return pending
 }
 
+// setupDynamicEndpointCache wires the dynamic-mode EndpointSlice data plane:
+// creates the per-namespace informer manager, seeds the informer set from the
+// env config immediately (so HasSynced isn't vacuously true with zero informers),
+// and registers a post-cache-sync RunnableFunc that re-seeds from the LIVE
+// FissionTenant set. The resolver-sync hook calls Sync on every FissionTenant
+// change, so no restart is needed to admit a new tenant's warm path.
+//
+// The returned InformerSynced gates router readiness: it is true only after
+// every running informer has completed its initial LIST. The caller must not
+// call Close — the returned nsInformers is closed by the ctx-cancel goroutine
+// registered here.
+func setupDynamicEndpointCache(
+	ctx context.Context,
+	kubeClient kubernetes.Interface,
+	index *endpointcache.Index,
+	crMgr ctrl.Manager,
+	resolverSyncHooks []func() (pending bool),
+	logger logr.Logger,
+) (cache.InformerSynced, []func() (pending bool), error) {
+	nsInformers := endpointcache.NewNamespaceInformers(kubeClient, index, logger.WithName("endpointcache"))
+	resolver := utils.DefaultNSResolver()
+	dynCache := &dynamicEndpointCache{
+		kubeClient:  kubeClient,
+		resolver:    resolver,
+		nsInformers: nsInformers,
+		logger:      logger,
+	}
+	// Seed with the env seed immediately so HasSynced isn't vacuously
+	// true with zero informers. The RunnableFunc below re-seeds from
+	// the LIVE FissionTenant set after the Manager cache syncs (the
+	// direct client list fails before the cache starts).
+	dynCache.syncInformers(ctx)
+	// After the Manager cache syncs, re-seed the resolver from existing
+	// FissionTenant CRs and re-sync the informers to cover tenants that
+	// existed before startup. This closes the gap between the env-seed
+	// and the live tenant set (the resolver-sync reconciler hasn't run
+	// yet — it's registered below and fires on its first Reconcile).
+	// Log-and-continue on error: the reconciler retries on the next
+	// FissionTenant event, so a transient cache miss isn't fatal.
+	if err := crMgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		if err := tenant.SyncResolverFromTenants(ctx, crMgr.GetClient(), resolver); err != nil {
+			logger.Error(err, "error seeding resolver from existing tenants — reconciler will retry")
+			return nil
+		}
+		dynCache.syncInformers(ctx)
+		return nil
+	})); err != nil {
+		return nil, nil, fmt.Errorf("error registering tenant seed runnable: %w", err)
+	}
+	resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
+		return dynCache.syncInformers(ctx)
+	})
+	// Stop all informers when the router's context is cancelled.
+	go func() {
+		<-ctx.Done()
+		nsInformers.Close()
+	}()
+	return nsInformers.HasSynced, resolverSyncHooks, nil
+}
+
 // runnableFunc adapts a function to a controller-runtime manager.Runnable.
 type runnableFunc func(context.Context) error
 
@@ -586,45 +646,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// added later — this replaces it entirely in dynamic mode. The
 			// resolver-sync hook calls Sync on every FissionTenant change, so
 			// no restart is needed to admit a new tenant's warm path.
-			nsInformers := endpointcache.NewNamespaceInformers(kubeClient, index, logger.WithName("endpointcache"))
-			resolver := utils.DefaultNSResolver()
-			dynCache := &dynamicEndpointCache{
-				kubeClient:  kubeClient,
-				resolver:    resolver,
-				nsInformers: nsInformers,
-				logger:      logger,
+			endpointsSynced, resolverSyncHooks, err = setupDynamicEndpointCache(ctx, kubeClient, index, crMgr, resolverSyncHooks, logger)
+			if err != nil {
+				return err
 			}
-			// Seed with the env seed immediately so HasSynced isn't vacuously
-			// true with zero informers. The RunnableFunc below re-seeds from
-			// the LIVE FissionTenant set after the Manager cache syncs (the
-			// direct client list fails before the cache starts).
-			dynCache.syncInformers(ctx)
-			// After the Manager cache syncs, re-seed the resolver from existing
-			// FissionTenant CRs and re-sync the informers to cover tenants that
-			// existed before startup. This closes the gap between the env-seed
-			// and the live tenant set (the resolver-sync reconciler hasn't run
-			// yet — it's registered below and fires on its first Reconcile).
-			// Log-and-continue on error: the reconciler retries on the next
-			// FissionTenant event, so a transient cache miss isn't fatal.
-			if err := crMgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-				if err := tenant.SyncResolverFromTenants(ctx, crMgr.GetClient(), resolver); err != nil {
-					logger.Error(err, "error seeding resolver from existing tenants — reconciler will retry")
-					return nil
-				}
-				dynCache.syncInformers(ctx)
-				return nil
-			})); err != nil {
-				return fmt.Errorf("error registering tenant seed runnable: %w", err)
-			}
-			endpointsSynced = nsInformers.HasSynced
-			resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
-				return dynCache.syncInformers(ctx)
-			})
-			// Stop all informers when the router's context is cancelled.
-			go func() {
-				<-ctx.Done()
-				nsInformers.Close()
-			}()
 		} else {
 			// Static + cluster modes: the manager-cache informer (scoped at
 			// startup) covers all watched namespaces — no runtime re-scoping

@@ -24,8 +24,7 @@ import (
 // whose SAR reactor consults the allowedNS map. A namespace present with value
 // true → SAR Allowed=true; absent or false → Allowed=false. The map is shared
 // so tests can flip a namespace's RBAC state between calls (the re-onboard
-// scenario). Returns the cache, the resolver (so tests can onboard/offboard),
-// and the clientset (so tests can mutate allowedNS via the reactor closure).
+// scenario). Returns the cache and the resolver (so tests can onboard/offboard).
 func newDynamicCacheTest(t *testing.T, allowedNS map[string]bool) (*dynamicEndpointCache, *utils.NamespaceResolver) {
 	t.Helper()
 	kubeClient := fake.NewSimpleClientset()

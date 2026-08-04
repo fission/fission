@@ -5,7 +5,6 @@
 package endpointcache
 
 import (
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -244,19 +243,66 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
 }
 
-// TestNamespaceInformersFencePreventsResurrection verifies the teardown fence:
-// a slice event queued before offboard but processed during the informer drain
-// must be swept by RemoveNamespace. Without the fence (no <-ni.done wait), the
-// late ApplySlice resurrects the entry after RemoveNamespace — the index ends
-// up non-empty after offboard. With the fence, Sync blocks until the processor
-// drains, then sweeps, so the index is guaranteed empty.
-//
-// A churn goroutine fires Tracker().Add with unique names in a tight loop.
-// A started channel signals when the first event is queued; the main goroutine
-// then calls Sync. Tracker().Add fans out to the informer's watcher natively,
-// so events are constantly in flight. When cancel fires, some events are
-// already queued in the processor — the fence drains them before sweeping.
+// TestNamespaceInformersFencePreventsResurrection verifies the teardown fence
+// deterministically: Sync must block on <-ni.done before RemoveNamespace sweeps
+// the index. Uses an nsInformer with a done channel the test controls directly
+// (same-package access) — no sleeps, no fake-watch timing, no scheduler
+// dependence.
 func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
+	t.Parallel()
+
+	kubeClient := fake.NewSimpleClientset()
+	index := NewIndex()
+	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
+	t.Cleanup(nsi.Close)
+
+	// Inject an informer with a done channel we control directly.
+	done := make(chan struct{})
+	nsi.mu.Lock()
+	nsi.informers["ns-a"] = &nsInformer{
+		informer: nil, // not needed — Sync only uses cancel and done
+		cancel:   func() {},
+		done:     done,
+	}
+	nsi.informerCount.Store(1)
+	nsi.mu.Unlock()
+
+	// Populate the index for ns-a so the sweep has something to remove.
+	index.ApplySlice(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
+	require.Equal(t, 1, index.Size())
+
+	// Call Sync in a goroutine — it must block on <-ni.done.
+	syncDone := make(chan struct{})
+	go func() {
+		nsi.Sync([]string{})
+		close(syncDone)
+	}()
+
+	// Sync must NOT have completed — it's blocked on <-ni.done.
+	select {
+	case <-syncDone:
+		t.Fatal("Sync completed without waiting for done channel — fence missing")
+	default:
+	}
+
+	// Index still has the entry — RemoveNamespace hasn't run yet.
+	assert.Equal(t, 1, index.Size(), "index must not be swept until done fires")
+
+	// Close done — Sync can now drain and sweep.
+	close(done)
+	<-syncDone
+
+	// Index must be empty — the fence waited for the drain, then swept.
+	assert.Equal(t, 0, index.Size(), "index must be empty after fence drain + sweep")
+}
+
+// TestNamespaceInformersCreateUpdateDeleteThroughInformer exercises
+// Create→Update→Delete through the fake client's informer/watch path —
+// the full event lifecycle the shared handlers in handlers.go must handle.
+// The initial LIST replay exercises AddFunc; this test additionally exercises
+// UpdateFunc (via REST Update) and DeleteFunc (via REST Delete), asserting
+// the index converges after each step.
+func TestNamespaceInformersCreateUpdateDeleteThroughInformer(t *testing.T) {
 	t.Parallel()
 
 	kubeClient := fake.NewSimpleClientset(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
@@ -264,55 +310,35 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
 	t.Cleanup(nsi.Close)
 
-	// Start informer for ns-a.
+	// Create: initial LIST replay through the informer (AddFunc).
 	nsi.Sync([]string{"ns-a"})
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
+	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
 
-	// Churn goroutine: fire Tracker().Add with unique names so every call
-	// succeeds (no AlreadyExists). Signal after first event is queued so the
-	// main goroutine doesn't call Sync before any events are in flight.
-	stop := make(chan struct{})
-	started := make(chan struct{})
-	var churnDone sync.WaitGroup
-	churnDone.Add(1)
-	go func() {
-		defer churnDone.Done()
-		for i := 0; ; i++ {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			s := makeSlice(fmt.Sprintf("s-churn-%d", i), "ns-a", "fn-a", "10.0.0.2")
-			if err := kubeClient.Tracker().Add(s); err != nil {
-				continue // AlreadyExists from a concurrent Add, retry
-			}
-			if i == 0 {
-				close(started)
-			}
-			// Pace the churn so the fake watcher's channel (default 100)
-			// doesn't overflow before the informer drains events.
-			time.Sleep(time.Microsecond)
-		}
-	}()
-	<-started
+	// Update: REST Update triggers MODIFIED → UpdateFunc → ApplySlice.
+	updated := makeSlice("s1", "ns-a", "fn-a", "10.0.0.2", "10.0.0.3")
+	_, err := kubeClient.DiscoveryV1().EndpointSlices("ns-a").Update(t.Context(), updated, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	// Wait for the endpoints to reflect the update (size stays 1 — same function).
+	require.Eventually(t, func() bool {
+		got := addrs(index.Lookup("ns-a", "fn-a", ""))
+		return len(got) == 2
+	}, 10*time.Second, 10*time.Millisecond, "endpoints must converge after update")
+	assert.ElementsMatch(t, []string{"10.0.0.2:8888", "10.0.0.3:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
 
-	// Offboard: Sync blocks until the informer drains, then sweeps.
-	nsi.Sync([]string{})
-	close(stop)
-	churnDone.Wait()
-
-	// Index must be empty — the fence prevented resurrection.
-	assert.Equal(t, 0, index.Size(), "fence must prevent late ApplySlice from resurrecting entries after offboard")
+	// Delete: REST Delete triggers DELETED → DeleteFunc → DeleteSlice.
+	err = kubeClient.DiscoveryV1().EndpointSlices("ns-a").Delete(t.Context(), "s1", metav1.DeleteOptions{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return index.Size() == 0 }, 10*time.Second, 10*time.Millisecond,
+		"delete must remove the function entry from the index")
+	assert.Empty(t, index.Lookup("ns-a", "fn-a", ""))
 }
 
 // TestEndpointSliceHandlersUpdateAndDelete verifies the extracted UpdateFunc
-// and DeleteFunc handlers in handlers.go. The initial LIST replay exercises
-// AddFunc through the informer; this test exercises the Update and Delete paths
-// directly — including the tombstone unwrap in DeleteFunc — by calling the
-// handler functions, which is simpler and more reliable than relying on the
-// fake clientset's watch MODIFIED/DELETED event delivery.
+// and DeleteFunc handlers in handlers.go — including the tombstone unwrap —
+// by calling the handler functions directly. Covers the unit-level logic that
+// the informer-level test above exercises end-to-end.
 func TestEndpointSliceHandlersUpdateAndDelete(t *testing.T) {
 	t.Parallel()
 
