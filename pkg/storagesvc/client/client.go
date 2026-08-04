@@ -130,19 +130,18 @@ func HMACSecretFromEnv() []byte {
 	return nil
 }
 
-// HMACSecretFromCluster reads the HMAC secret from the
-// fission-internal-auth Secret in the install namespace. Returns
-// (nil, nil) when the Secret does not exist (internalAuth disabled in
-// the chart) so callers can fall back to unsigned requests; returns
-// a descriptive error when the Secret exists but has no usable
-// `secret` key (mis-configured or hand-authored Secret) so callers
-// don't silently fall back to unsigned and confuse 401 debugging
-// downstream.
+// HMACSecretFromCluster reads the HMAC secret from the internal-auth
+// Secret in the install namespace. Returns (nil, nil) when the Secret
+// does not exist (internalAuth disabled in the chart) so callers can
+// fall back to unsigned requests; returns a descriptive error when the
+// Secret exists but has no usable `secret` key (mis-configured or
+// hand-authored Secret) so callers don't silently fall back to unsigned
+// and confuse 401 debugging downstream.
 func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) ([]byte, error) {
 	if kubeClient == nil {
 		return nil, nil
 	}
-	secretName := fv1.InternalAuthSecretName()
+	secretName := internalAuthSecretNameFromCluster(ctx, kubeClient, namespace)
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -156,6 +155,42 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 			namespace, secretName, internalAuthSecretKey)
 	}
 	return value, nil
+}
+
+// internalAuthSecretNameFromCluster resolves which Secret holds the
+// internal-auth master, for callers OUTSIDE the cluster — every
+// HMACSecretFromCluster caller is the CLI on a laptop, where the
+// FISSION_INTERNAL_AUTH_SECRET_NAME variable the chart sets on pods does not
+// exist. With internalAuth.existingSecret pointing the install at a
+// non-default name, resolving only env-or-default made `fission package
+// create` / `archive upload` look up the wrong Secret, get NotFound, and
+// silently send unsigned requests that 401.
+//
+// The cluster itself knows the name: the chart stamps it as a literal env on
+// every control-plane Deployment (internalAuth.envs). Read it off the
+// executor Deployment — present in every install profile. Precedence:
+//
+//  1. an explicitly exported FISSION_INTERNAL_AUTH_SECRET_NAME (user intent,
+//     and the pre-existing escape hatch) wins;
+//  2. the name the running cluster was installed with;
+//  3. the chart default, for auth-disabled installs and pre-name-env charts
+//     (where the follow-up Secret Get correctly finds nothing or the
+//     default).
+func internalAuthSecretNameFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) string {
+	if name := os.Getenv(fv1.InternalAuthSecretNameEnv); name != "" {
+		return name
+	}
+	depl, err := kubeClient.AppsV1().Deployments(namespace).Get(ctx, "executor", metav1.GetOptions{})
+	if err == nil {
+		for _, c := range depl.Spec.Template.Spec.Containers {
+			for _, e := range c.Env {
+				if e.Name == fv1.InternalAuthSecretNameEnv && e.Value != "" {
+					return e.Value
+				}
+			}
+		}
+	}
+	return fv1.DefaultInternalAuthSecret
 }
 
 // Upload sends the local file pointed to by filePath to the storage
