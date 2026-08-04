@@ -25,8 +25,8 @@ It is the policy users can plan upgrades around; the engineering contract behind
 A release is tagged only when all of the following are green, mechanically and auditably:
 
 1. The full CI matrix on the release commit: unit and integration suites across the supported Kubernetes versions, lint, license, codegen drift, and dependency verification.
-2. The **upgrade leg**: `helm upgrade` from the previous minor to the release candidate completes with the cluster serving traffic afterwards.
-   As RFC-0028 lands, this gate tightens to upgrade-under-load with zero platform-attributed request failures, and later to skip-level (N−2 → N) coverage.
+2. The **upgrade leg**: upgrade-under-load from the previous minor to the release candidate, enforcing the full error budget — zero transport failures, zero platform-attributed failures, zero unattributed errors (for both poolmgr and newdeploy traffic), and the warm pod surviving the upgrade in place.
+   The skip-level (N−2 → N) leg runs the same measurement without gating; see Version skew.
 3. The **benchmark suite** within its regression bars against the previous release.
 4. No open release-blocking issues on the milestone.
 
@@ -37,6 +37,8 @@ A release is tagged only when all of the following are green, mechanically and a
 - **Skip-level upgrades (N−2 → N) are exercised in CI but not promised.**
   Clusters routinely defer upgrading until something forces it, so the jump from an out-of-window line is the common real-world case; CI runs it on every change so we learn whether it works rather than hearing it from an issue.
   The supported path remains one minor at a time.
+  One measured caveat while the N−2 source predates the router's graceful-drain posture: established keep-alive connections pinned to the old router blackhole when its pod is deleted mid-upgrade (~0.7% of in-flight requests in CI, as 30s client timeouts).
+  Nothing in the new release can reach it, and it retires once drain-capable releases age into the N−2 slot.
 
 ## State schema (statestore)
 

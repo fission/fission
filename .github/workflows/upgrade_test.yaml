@@ -8,10 +8,12 @@ name: Fission CI upgrade
 # request outcome (ok / transport failure / platform-attributed / unattributed
 # error) plus warm-pod UID survival and async queue durability.
 #
-# The error-budget evaluation step is NON-GATING (continue-on-error) while the
-# rollout-posture work (RFC-0028 phases 2-3) drives the numbers to zero; the
-# scenario itself fails the job only on infrastructure errors (fixtures,
-# upgrade command, rollout timeout).
+# The error-budget evaluation ENFORCES the published budget on the "latest"
+# (N-1 -> N) leg — the path RELEASES.md promises. The skip-level (N-2) leg
+# runs the same measurement without gating: its source release predates the
+# router's graceful-drain posture, so established keep-alive connections
+# pinned to the old router blackhole at its deletion — unreachable from HEAD
+# and self-retiring once drain-capable releases age into the N-2 slot.
 
 on:
   push:
@@ -310,16 +312,19 @@ jobs:
           done < "$GITHUB_WORKSPACE/pre-upgrade-secrets.txt"
           exit $rc
 
-      - name: Evaluate error budget (non-gating)
+      - name: Evaluate error budget
         if: ${{ env.SKIP_LEG != '1' }}
-        continue-on-error: true
+        # Gating on the supported path only: "latest" (N-1 -> N) fails the
+        # job on any budget miss; "skip-level" keeps measuring without
+        # gating (see the header — the N-2 source's missing drain posture
+        # is not reachable from HEAD).
+        continue-on-error: ${{ matrix.upgradeFrom == 'skip-level' }}
         run: |
           jq '.scenarios[] | select(.name=="upgrade-under-load")' upgrade-results.json | tee upgrade-summary.json
-          # Published error budget, phase 1: zero platform-attributed failures,
-          # zero transport-level failures, zero unattributed errors, warm pods
-          # survive. Non-gating until RFC-0028 phases 2-3 land the rollout
-          # posture that makes it reliably true; flip by removing
-          # continue-on-error above.
+          # Published error budget (RFC-0028, RELEASES.md): zero transport
+          # failures, zero platform-attributed failures, zero unattributed
+          # errors — for both poolmgr and newdeploy targets — and the warm
+          # pod survives the upgrade in place.
           fail=0
           for metric in poolmgr_transport_failures poolmgr_platform_attributed poolmgr_unattributed_errors \
                         newdeploy_transport_failures newdeploy_platform_attributed newdeploy_unattributed_errors; do
