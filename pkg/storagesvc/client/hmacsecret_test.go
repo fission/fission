@@ -81,4 +81,21 @@ func TestHMACSecretFromClusterDiscoversNonDefaultName(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
+
+	// The load-bearing regression guard: CLI callers pass an EMPTY namespace
+	// (util.GetFissionNamespace has no default, and a single-install user never
+	// exports FISSION_NAMESPACE). Without the install-namespace default the
+	// executor-Deployment discovery and the Secret Get both target unroutable
+	// paths, 404, and silently fall back to unsigned — the exact bug this
+	// feature fixes. Pass "" and require it still discovers the non-default name.
+	t.Run("empty namespace defaults to the install namespace", func(t *testing.T) {
+		kube := fake.NewClientset(
+			executorDeploymentWithSecretName(defaultFissionNamespace, "org-auth-master"),
+			masterSecret(defaultFissionNamespace, "org-auth-master", "0123456789abcdef0123456789abcdef"),
+		)
+		got, err := HMACSecretFromCluster(t.Context(), kube, "")
+		require.NoError(t, err)
+		assert.Equal(t, []byte("0123456789abcdef0123456789abcdef"), got,
+			"an unset FISSION_NAMESPACE must resolve against the default install namespace, not query nothing")
+	})
 }

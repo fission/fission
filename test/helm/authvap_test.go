@@ -60,18 +60,64 @@ func TestAuthgenSecretGuard(t *testing.T) {
 			"typed Secrets (service-account-token) are the escalation primitive and must be forbidden")
 	})
 
-	t.Run("existingSecret name reaches the name pin", func(t *testing.T) {
-		t.Parallel()
-		// existingSecret disables in-cluster generation, so the grant AND the
-		// guard both disappear — the fence tracks the grant exactly.
-		docs := render(t, "--set", "preUpgradeChecks.enabled=true,internalAuth.enabled=true,internalAuth.autoGenerate=true,internalAuth.existingSecret=org-master")
-		assert.Nil(t, find(docs, "ValidatingAdmissionPolicy", "fission-fission-authgen-secret-guard"),
-			"with existingSecret the hook does not generate, so neither grant nor guard should render")
-	})
+	// The invariant the whole fix rests on: the create-secrets grant and its
+	// fence must appear and disappear together. Assert BOTH sides across every
+	// value set, so widening the grant without the guard (or vice versa) fails.
+	authgenRoleGrantsCreateSecrets := func(docs []map[string]any) bool {
+		for _, d := range docs {
+			if d["kind"] != "Role" {
+				continue
+			}
+			md, _ := d["metadata"].(map[string]any)
+			if md == nil || md["name"] != "fission-preupgrade-authgen" {
+				continue
+			}
+			for _, r := range asSlice(d["rules"]) {
+				rule := r.(map[string]any)
+				if containsStr(rule["resources"], "secrets") && containsStr(rule["verbs"], "create") {
+					return true
+				}
+			}
+		}
+		return false
+	}
 
-	t.Run("absent when generation is off", func(t *testing.T) {
+	t.Run("fence and grant travel together across value sets", func(t *testing.T) {
 		t.Parallel()
-		docs := render(t, "--set", "preUpgradeChecks.enabled=true,internalAuth.enabled=false")
-		assert.Nil(t, find(docs, "ValidatingAdmissionPolicy", "fission-fission-authgen-secret-guard"))
+		for _, tc := range []struct {
+			name    string
+			setArgs string
+		}{
+			// The chart forbids preUpgradeChecks.enabled=false alongside
+			// autoGenerate (the master is provisioned by that Job), so
+			// "generation on, hook off" is unrepresentable — the grant-absent
+			// axis is exercised via generation instead.
+			{"default in-cluster generation", "preUpgradeChecks.enabled=true,internalAuth.enabled=true,internalAuth.autoGenerate=true"},
+			{"existingSecret disables both", "preUpgradeChecks.enabled=true,internalAuth.enabled=true,internalAuth.autoGenerate=true,internalAuth.existingSecret=org-master"},
+			{"internalAuth off disables both", "crds.mode=none,preUpgradeChecks.enabled=false,internalAuth.enabled=false"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				docs := render(t, "--set", tc.setArgs)
+				grant := authgenRoleGrantsCreateSecrets(docs)
+				fence := find(docs, "ValidatingAdmissionPolicy", "fission-fission-authgen-secret-guard") != nil
+				assert.Equalf(t, grant, fence,
+					"the unfenced create-secrets grant (%v) and its VAP fence (%v) must render together", grant, fence)
+			})
+		}
 	})
+}
+
+func asSlice(v any) []any {
+	s, _ := v.([]any)
+	return s
+}
+
+func containsStr(v any, want string) bool {
+	for _, e := range asSlice(v) {
+		if s, ok := e.(string); ok && s == want {
+			return true
+		}
+	}
+	return false
 }

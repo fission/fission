@@ -32,9 +32,9 @@ import (
 // internalAuthSecretKey is the data key inside that Secret.
 const internalAuthSecretKey = "secret"
 
-// internalAuthEnv is the env var that controller pods read to obtain
-// the HMAC secret. The chart mounts it as a secretKeyRef.
-const internalAuthEnv = "FISSION_INTERNAL_AUTH_SECRET"
+// defaultFissionNamespace is the install namespace assumed when the caller
+// supplies none — the same fallback the workflow-history CLI path uses.
+const defaultFissionNamespace = "fission"
 
 type (
 	ClientInterface interface {
@@ -124,7 +124,7 @@ func MakeClientNS(url string, masterSecret []byte, namespace string) ClientInter
 // the storagesvc client unsigned — the correct backwards-compatible
 // default for installs that have internalAuth disabled.
 func HMACSecretFromEnv() []byte {
-	if s := os.Getenv(internalAuthEnv); s != "" {
+	if s := os.Getenv(fv1.InternalAuthSecretEnv); s != "" {
 		return []byte(s)
 	}
 	return nil
@@ -140,6 +140,19 @@ func HMACSecretFromEnv() []byte {
 func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) ([]byte, error) {
 	if kubeClient == nil {
 		return nil, nil
+	}
+	// Default the install namespace, because the CLI callers pass
+	// util.GetFissionNamespace() — os.Getenv("FISSION_NAMESPACE") with no
+	// fallback — and a single-install user never exports it. An empty
+	// namespace makes both the executor-Deployment discovery Get and the
+	// Secret Get target unroutable paths that 404, silently demoting every
+	// signed request to unsigned (a 401 with no named cause). The install
+	// namespace defaults to "fission"; this mirrors the workflow-history
+	// path's own fissionNamespace() helper. An operator who installed
+	// elsewhere already has to export FISSION_NAMESPACE for the CLI to find
+	// anything.
+	if namespace == "" {
+		namespace = defaultFissionNamespace
 	}
 	secretName := internalAuthSecretNameFromCluster(ctx, kubeClient, namespace)
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
@@ -176,6 +189,15 @@ func HMACSecretFromCluster(ctx context.Context, kubeClient kubernetes.Interface,
 //  3. the chart default, for auth-disabled installs and pre-name-env charts
 //     (where the follow-up Secret Get correctly finds nothing or the
 //     default).
+//
+// Discovery is deliberately best-effort: ANY error reading the Deployment —
+// absent (old chart), Forbidden (a least-privilege kubeconfig with secrets:get
+// but not deployments:get), or transport — falls through to the default name,
+// because the old code needed only secrets:get and making a Deployment read
+// mandatory would newly break those least-privilege users on the common
+// default-name install. The one configuration this cannot serve — a
+// non-default existingSecret name AND no Deployment read — must set
+// FISSION_INTERNAL_AUTH_SECRET_NAME explicitly (precedence 1).
 func internalAuthSecretNameFromCluster(ctx context.Context, kubeClient kubernetes.Interface, namespace string) string {
 	if name := os.Getenv(fv1.InternalAuthSecretNameEnv); name != "" {
 		return name
