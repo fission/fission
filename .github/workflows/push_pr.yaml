@@ -12,6 +12,9 @@ on:
       - go.mod
       - go.sum
       - .github/workflows/push_pr.yaml
+      # The integration job's cluster shape (node count, kubelet maxPods)
+      # lives here — capacity changes must produce a run as evidence.
+      - kind.yaml
   pull_request:
     branches:
       - main
@@ -22,6 +25,7 @@ on:
       - go.mod
       - go.sum
       - .github/workflows/push_pr.yaml
+      - kind.yaml
 
 env:
   HELM_VERSION: v4.2.2
@@ -514,6 +518,22 @@ jobs:
           # context fires first (clear failure) rather than the hard timeout.
           go test -tags=integration "${COVER_FLAGS[@]}" -p 1 -timeout=25m -v \
             ./test/integration/suites/serial/... "${COVER_ARGS[@]}"
+
+      # When the suite goes red from pod-capacity starvation, the per-test
+      # symptoms are misleading (builder timeouts, HPA that never scales,
+      # canary promotions that hang) and the cause — pods Pending on
+      # "Too many pods" — is buried in events that expire from etcd. Surface
+      # it loudly next to the failure so nobody root-causes the same
+      # starvation twice.
+      - name: Surface scheduling starvation (capacity check)
+        timeout-minutes: 2
+        if: ${{ failure() }}
+        run: |
+          echo "=== node pod capacity vs live pods ==="
+          kubectl get nodes -o custom-columns='NAME:.metadata.name,PODS-CAP:.status.capacity.pods,PODS-ALLOC:.status.allocatable.pods' || true
+          kubectl get pods -A --no-headers 2>/dev/null | wc -l | sed 's/^/total pods now: /' || true
+          echo "=== FailedScheduling events (capacity exhaustion reads 'Too many pods') ==="
+          kubectl get events -A --field-selector reason=FailedScheduling --sort-by=.lastTimestamp 2>/dev/null | tail -30 || true
 
       - name: Collect integration coverage
         # Only the instrumented leg produced coverage; collect there.
