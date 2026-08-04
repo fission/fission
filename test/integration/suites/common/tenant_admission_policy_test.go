@@ -61,4 +61,14 @@ func TestTenantWorkloadBindingAdmissionPolicy(t *testing.T) {
 	t.Cleanup(func() {
 		_ = f.KubeClient().RbacV1().RoleBindings(ns).Delete(context.Background(), good, metav1.DeleteOptions{})
 	})
+
+	// Binding to the fixed fission-router SA is also allowed (#3653: the router
+	// SA was added to the ValidatingAdmissionPolicy allowlist for per-tenant
+	// dataplane RoleBindings).
+	goodRouter := "vap-good-router-" + framework.RandomID()
+	_, err = f.KubeClient().RbacV1().RoleBindings(ns).Create(ctx, rb(goodRouter, fv1.FissionRouterSA), metav1.CreateOptions{})
+	require.NoError(t, err, "binding to the fixed fission-router SA must be allowed")
+	t.Cleanup(func() {
+		_ = f.KubeClient().RbacV1().RoleBindings(ns).Delete(context.Background(), goodRouter, metav1.DeleteOptions{})
+	})
 }

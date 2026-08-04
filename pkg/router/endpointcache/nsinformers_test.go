@@ -15,6 +15,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -297,4 +298,59 @@ func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	// Double-check after a short settle: no delayed event should appear.
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, 0, index.Size(), "index must stay empty after settle — no late resurrection")
+}
+
+// TestEndpointSliceHandlersUpdateAndDelete verifies the extracted UpdateFunc
+// and DeleteFunc handlers in handlers.go. The initial LIST replay exercises
+// AddFunc through the informer; this test exercises the Update and Delete paths
+// directly — including the tombstone unwrap in DeleteFunc — by calling the
+// handler functions, which is simpler and more reliable than relying on the
+// fake clientset's watch MODIFIED/DELETED event delivery.
+func TestEndpointSliceHandlersUpdateAndDelete(t *testing.T) {
+	t.Parallel()
+
+	index := NewIndex()
+	handlers := endpointSliceHandlers(index, logr.Discard())
+
+	s1 := makeSlice("s1", "ns-a", "fn-a", "10.0.0.1")
+
+	// Add: same path as the informer's initial LIST replay.
+	handlers.AddFunc(s1)
+	assert.Equal(t, 1, index.Size())
+	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+
+	// Update: UpdateFunc must call ApplySlice with the new endpoints.
+	updated := makeSlice("s1", "ns-a", "fn-a", "10.0.0.2", "10.0.0.3")
+	handlers.UpdateFunc(s1, updated)
+	assert.Equal(t, 1, index.Size(), "update must not change function count")
+	assert.ElementsMatch(t, []string{"10.0.0.2:8888", "10.0.0.3:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+
+	// Delete: DeleteFunc must call DeleteSlice, removing the entry.
+	handlers.DeleteFunc(updated)
+	assert.Equal(t, 0, index.Size(), "delete must remove the function entry")
+	assert.Empty(t, index.Lookup("ns-a", "fn-a", ""))
+
+	// Tombstone unwrap: when the informer's store loses the object, the
+	// reflector wraps it in a DeletedFinalStateUnknown. DeleteFunc must
+	// unwrap the tombstone and call DeleteSlice on the real object.
+	handlers.AddFunc(s1)
+	assert.Equal(t, 1, index.Size())
+	handlers.DeleteFunc(cache.DeletedFinalStateUnknown{Key: "ns-a/s1", Obj: s1})
+	assert.Equal(t, 0, index.Size(), "tombstone delete must also remove the entry")
+}
+
+// TestNamespaceInformersHasSyncedNonEmpty verifies HasSynced returns true when
+// a running informer has completed its initial LIST — the non-vacuous case
+// that TestNamespaceInformersHasSyncedEmpty doesn't cover.
+func TestNamespaceInformersHasSyncedNonEmpty(t *testing.T) {
+	t.Parallel()
+
+	kubeClient := fake.NewSimpleClientset(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
+	index := NewIndex()
+	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
+	t.Cleanup(nsi.Close)
+
+	nsi.Sync([]string{"ns-a"})
+	require.True(t, nsi.WaitForCacheSync(t.Context()))
+	assert.True(t, nsi.HasSynced(), "HasSynced must be true after informer completes initial LIST")
 }
