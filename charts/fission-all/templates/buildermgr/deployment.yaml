@@ -31,6 +31,10 @@ spec:
         env:
         {{- include "fission.podNamespaceEnv" . | nindent 8 }}
         {{- include "leaderElection.envs" (dict "enabled" (dig "leaderElection" "enabled" false (.Values.buildermgr | default dict))) | indent 8 }}
+        # Consumed by utils.ServiceFQDN when dialing per-environment builder
+        # services (absolute names, no search-path walk).
+        - name: CLUSTER_DOMAIN
+          value: {{ .Values.clusterDomain | quote }}
         - name: FETCHER_IMAGE
           value: {{ include "fetcherImage" . | quote }}
         {{- if .Values.packageRegistry.enabled }}

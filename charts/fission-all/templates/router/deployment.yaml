@@ -58,7 +58,10 @@ spec:
           - "--routerInternalPort"
           - {{ include "fission.routerInternalPort" . | quote }}
           - "--executorUrl"
-          - "http://executor.{{ .Release.Namespace }}"
+          # Absolute FQDN (trailing dot): the router calls this on every cold
+          # start, and the short name's resolv.conf search walk is the DNS
+          # load that melts down under parallel traffic.
+          - "http://executor.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}."
         env:
         {{- if .Values.authentication.enabled }}
         - name: AUTH_USERNAME

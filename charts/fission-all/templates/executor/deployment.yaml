@@ -61,6 +61,10 @@ spec:
           value: "{{ .Values.pullPolicy }}"
         - name: ADOPT_EXISTING_RESOURCES
           value: {{ .Values.executor.adoptExistingResources | default false | quote }}
+        # Consumed by utils.ServiceFQDN when building newdeploy/container
+        # function-service addresses (absolute names, no search-path walk).
+        - name: CLUSTER_DOMAIN
+          value: {{ .Values.clusterDomain | quote }}
         - name: FINALIZER_ENABLED
           value: {{ .Values.finalizerEnabled | quote }}
         - name: POD_READY_TIMEOUT

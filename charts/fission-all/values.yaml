@@ -11,6 +11,17 @@ serviceType: ClusterIP
 ##
 routerServiceType: LoadBalancer
 
+## clusterDomain is the cluster's DNS suffix, used to build ABSOLUTE
+## (trailing-dot) in-cluster Service names on the request hot paths — the
+## router's executor URL and the executor/buildermgr-built function and
+## builder service addresses. Absolute names skip the pod resolv.conf
+## search-path walk (ndots:5), cutting per-resolution DNS queries ~4x;
+## the short forms' extra queries are what drop under parallel load
+## ("lookup <svc>.<ns>: i/o timeout" cascades). Change only if your
+## cluster uses a non-default DNS domain.
+##
+clusterDomain: cluster.local
+
 ## repository represents base repository for images used in the chart.
 ## Keep it empty for using existing local image
 ##

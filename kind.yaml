@@ -1,6 +1,7 @@
 #######################################################################################
 # Kind Config for running a local cluster (More about Kind:https://kind.sigs.k8s.io/)
-# Creates a three node cluster for local development and testing
+# Creates a single-node cluster, used both for local development and by the
+# CI integration job (.github/workflows/push_pr.yaml).
 #
 #######################################################################################
 
@@ -15,6 +16,18 @@ nodes:
         kubeletExtraArgs:
           node-labels: "ingress-ready=true"
           authorization-mode: "AlwaysAllow"
+    # The kubelet default of 110 pods starves the CI integration suite: six
+    # parallel test packages spawn pool/builder/function pods that peak past
+    # the cap, and every pod over it sits Pending with a FailedScheduling
+    # "Too many pods" event while tests burn their timeouts (the recurring
+    # builder/HPA/canary red legs). One node with a higher cap beats extra
+    # nodes here: the 4-vCPU runner would pay per-node kubelet/etcd overhead
+    # and `kind load` copies every image to every node. The pods are small
+    # (warm pool + fetcher sidecars, mostly idle), so the binding constraint
+    # is the count, not CPU.
+    - |
+      kind: KubeletConfiguration
+      maxPods: 250
   extraPortMappings:
   - containerPort: 80
     hostPort: 80

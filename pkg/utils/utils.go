@@ -43,6 +43,32 @@ const (
 // `:<alias>`/`:<version>` route into the not-yet-materialized hint.
 const HeaderRouteMiss = "X-Fission-Route-Miss"
 
+// ServiceFQDN returns the ABSOLUTE in-cluster DNS name for a Service:
+// "<name>.<namespace>.svc.<cluster-domain>." — trailing dot included.
+//
+// The short "<name>.<namespace>" form resolves only through the pod's
+// resolv.conf search path (ndots:5), so every resolution first walks the
+// search domains: up to three extra name attempts, each an A/AAAA query
+// pair, before the one that hits. Under parallel load those extra UDP round
+// trips through kube-proxy's DNAT are exactly the queries that get dropped
+// (the conntrack race behind "lookup <svc>.<ns>: i/o timeout" cascades that
+// fail dozens of in-flight requests at once). An absolute name is answered
+// in a single attempt and never touches the search path.
+//
+// The cluster domain comes from CLUSTER_DOMAIN (the chart sets it from
+// .Values.clusterDomain on the components that build these names); unset
+// falls back to the near-universal default "cluster.local".
+func ServiceFQDN(name, namespace string) string {
+	return serviceFQDN(name, namespace, os.Getenv("CLUSTER_DOMAIN"))
+}
+
+func serviceFQDN(name, namespace, domain string) string {
+	if domain == "" {
+		domain = "cluster.local"
+	}
+	return fmt.Sprintf("%s.%s.svc.%s.", name, namespace, domain)
+}
+
 func UrlForFunction(name, namespace string) string {
 	prefix := "/fission-function"
 	if namespace != metav1.NamespaceDefault {

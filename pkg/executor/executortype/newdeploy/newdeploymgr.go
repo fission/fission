@@ -495,7 +495,10 @@ func (deploy *NewDeploy) fnCreate(ctx context.Context, fn *fv1.Function) (*fscac
 		}
 		return nil, fmt.Errorf("error creating service %s: %w", objName, err)
 	}
-	svcAddress := fmt.Sprintf("%s.%s", svc.Name, svc.Namespace)
+	// Absolute FQDN, deliberately: the router dials this on every proxied
+	// request whose connection isn't already warm, and the short name's
+	// search-path walk is what melts down in-cluster DNS under load.
+	svcAddress := utils.ServiceFQDN(svc.Name, svc.Namespace)
 
 	depl, err := deploy.createOrGetDeployment(ctx, fn, env, objName, deployLabels, deployAnnotations, ns)
 	if err != nil {
