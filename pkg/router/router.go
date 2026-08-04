@@ -227,6 +227,89 @@ func sliceWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, ver
 	return res, err
 }
 
+// dynamicEndpointCache manages per-namespace EndpointSlice informers in dynamic
+// tenancy mode. It re-scopes the informer set as tenants are onboarded/offboarded,
+// gating each namespace on a SelfSubjectAccessReview so a namespace whose
+// fission-router-dataplane RoleBinding hasn't landed yet is EXCLUDED rather than
+// wedging /readyz with a forbidden LIST (issue #3647).
+//
+// rbacChecked caches namespaces that have passed the SAR. It is pruned on every
+// sync for namespaces that have left the live set: offboarding deletes the
+// tenant's RoleBinding, so a later re-onboard MUST re-run the SAR rather than
+// trust a stale pass — otherwise the informer starts before the binding is
+// recreated, its LIST stays forbidden, HasSynced never latches, and /readyz
+// returns 503 fleet-wide (no leader election — every replica wedges).
+type dynamicEndpointCache struct {
+	kubeClient  kubernetes.Interface
+	resolver    *utils.NamespaceResolver
+	nsInformers *endpointcache.NamespaceInformers
+	rbacChecked sync.Map
+	logger      logr.Logger
+	mu          sync.Mutex // serializes syncInformers; prevents TOCTOU on namespace set
+}
+
+// syncInformers re-scopes the informer set to the resolver's live namespaces,
+// filtered by EndpointSlice RBAC. Shared by the startup seed, the post-cache-sync
+// re-seed, and the resolver-sync hook so all three apply the same exclusion
+// semantics. Returns pending=true when any namespace is still waiting on its
+// RBAC — the reconciler requeues until every namespace passes (no tenant event
+// fires for a RoleBinding the tenant controller creates asynchronously).
+func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	// Re-read inside the lock: the namespace set may have changed since the
+	// caller was invoked (startup seed vs. post-cache-sync re-seed vs. hook).
+	// Reading after the lock makes last-writer-wins converge — no namespace
+	// onboarded during a slow SAR check is silently dropped.
+	namespaces := d.resolver.FunctionNamespaces()
+	live := make(map[string]struct{}, len(namespaces))
+	for _, ns := range namespaces {
+		live[ns] = struct{}{}
+	}
+	// Drop cached passes for namespaces that have left the set:
+	// offboarding deletes the tenant's fission-router-dataplane
+	// RoleBinding, so a later re-onboard MUST re-run the SAR rather
+	// than start an informer whose LIST stays forbidden until the
+	// tenant controller recreates the binding — an informer that
+	// never syncs holds HasSynced (and so /readyz) false fleet-wide.
+	d.rbacChecked.Range(func(k, _ any) bool {
+		if _, ok := live[k.(string)]; !ok {
+			d.rbacChecked.Delete(k)
+		}
+		return true
+	})
+	allowed := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if _, ok := d.rbacChecked.Load(ns); ok {
+			allowed = append(allowed, ns)
+			continue
+		}
+		ok, err := sliceWatchAllowedForNamespace(ctx, d.kubeClient, ns)
+		if err != nil {
+			// Transient SAR failure — optimistic include; the
+			// reflector's own retry absorbs apiserver flakes.
+			// Still mark pending: if the namespace genuinely lacks
+			// RBAC the informer can never sync, and no FissionTenant
+			// event will fire to re-run this check.
+			d.logger.Error(err, "endpointslice RBAC check failed transiently; keeping informer", "namespace", ns)
+			allowed = append(allowed, ns)
+			pending = true
+			continue
+		}
+		if !ok {
+			d.logger.Info("endpointslice RBAC not yet granted for tenant namespace; "+
+				"the tenant controller provisions fission-router-dataplane at onboarding — "+
+				"namespace excluded from the warm path until it lands", "namespace", ns)
+			pending = true
+			continue
+		}
+		d.rbacChecked.Store(ns, struct{}{})
+		allowed = append(allowed, ns)
+	}
+	d.nsInformers.Sync(allowed)
+	return pending
+}
+
 // runnableFunc adapts a function to a controller-runtime manager.Runnable.
 type runnableFunc func(context.Context) error
 
@@ -505,7 +588,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// no restart is needed to admit a new tenant's warm path.
 			nsInformers := endpointcache.NewNamespaceInformers(kubeClient, index, logger.WithName("endpointcache"))
 			resolver := utils.DefaultNSResolver()
-			// rbacChecked caches namespaces whose EndpointSlice RBAC has passed
+			dynCache := &dynamicEndpointCache{
+				kubeClient:  kubeClient,
+				resolver:    resolver,
+				nsInformers: nsInformers,
+				logger:      logger,
+			}
+			// Seed with the env seed immediately so HasSynced isn't vacuously namespaces whose EndpointSlice RBAC has passed
 			// the SelfSubjectAccessReview. A namespace onboarded at runtime gets
 			// its fission-router-dataplane RoleBinding from the tenant controller,
 			// which races the informer start (issue #3647), and an orphaned
@@ -514,48 +603,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// fall back to the executor RPC, same as the legacy data plane) and
 			// re-checked on every reconcile until the binding lands. Exclusion is
 			// what keeps one bad namespace from wedging /readyz for every tenant.
-			var rbacChecked sync.Map
-			// syncInformers re-scopes the informer set to the resolver's live
+			dynCache.syncInformers(ctx)
+			// After the Manager cache syncs
 			// namespaces, filtered by EndpointSlice RBAC. Shared by the startup
 			// seed, the post-cache-sync re-seed, and the resolver-sync hook so
 			// all three apply the same exclusion semantics. Returns pending=true
 			// when any namespace is still waiting on its RBAC — the reconciler
 			// requeues until every namespace passes (no tenant event fires for
 			// a RoleBinding the tenant controller creates asynchronously).
-			syncInformers := func() (pending bool) {
-				namespaces := resolver.FunctionNamespaces()
-				allowed := make([]string, 0, len(namespaces))
-				for _, ns := range namespaces {
-					if _, ok := rbacChecked.Load(ns); ok {
-						allowed = append(allowed, ns)
-						continue
-					}
-					ok, err := sliceWatchAllowedForNamespace(ctx, kubeClient, ns)
-					if err != nil {
-						// Transient SAR failure — optimistic include; the
-						// reflector's own retry absorbs apiserver flakes.
-						logger.Error(err, "endpointslice RBAC check failed transiently; keeping informer", "namespace", ns)
-						allowed = append(allowed, ns)
-						continue
-					}
-					if !ok {
-						logger.Info("endpointslice RBAC not yet granted for tenant namespace; "+
-							"the tenant controller provisions fission-router-dataplane at onboarding — "+
-							"namespace excluded from the warm path until it lands", "namespace", ns)
-						pending = true
-						continue
-					}
-					rbacChecked.Store(ns, struct{}{})
-					allowed = append(allowed, ns)
-				}
-				nsInformers.Sync(allowed)
-				return pending
-			}
 			// Seed with the env seed immediately so HasSynced isn't vacuously
 			// true with zero informers. The RunnableFunc below re-seeds from
 			// the LIVE FissionTenant set after the Manager cache syncs (the
 			// direct client list fails before the cache starts).
-			syncInformers()
+			dynCache.syncInformers(ctx)
 			// After the Manager cache syncs, re-seed the resolver from existing
 			// FissionTenant CRs and re-sync the informers to cover tenants that
 			// existed before startup. This closes the gap between the env-seed
@@ -568,14 +628,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 					logger.Error(err, "error seeding resolver from existing tenants — reconciler will retry")
 					return nil
 				}
-				syncInformers()
+				dynCache.syncInformers(ctx)
 				return nil
 			})); err != nil {
 				return fmt.Errorf("error registering tenant seed runnable: %w", err)
 			}
 			endpointsSynced = nsInformers.HasSynced
 			resolverSyncHooks = append(resolverSyncHooks, func(_ map[string]string) (pending bool) {
-				return syncInformers()
+				return dynCache.syncInformers(ctx)
 			})
 			// Stop all informers when the router's context is cancelled.
 			go func() {

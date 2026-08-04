@@ -142,6 +142,41 @@ func TestNamespaceInformersCloseStopsAll(t *testing.T) {
 	assert.Equal(t, 1, index.Size(), "Close must not sweep the index")
 }
 
+// TestNamespaceInformersSyncAfterCloseIsNoop verifies the closed guard: after
+// Close, a racing Sync must not repopulate informers. Without the guard, Close
+// drains the map outside the lock, a racing Sync repopulates it, and those new
+// informers — parented on context.Background() — are unreachable by any cancel
+// and leak until process exit. With the guard, Sync returns immediately and the
+// informer map stays empty.
+func TestNamespaceInformersSyncAfterCloseIsNoop(t *testing.T) {
+	t.Parallel()
+
+	kubeClient := fake.NewSimpleClientset(
+		makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"),
+		makeSlice("s2", "ns-b", "fn-b", "10.0.0.2"),
+	)
+	index := NewIndex()
+	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
+
+	// Start an informer for ns-a.
+	nsi.Sync([]string{"ns-a"})
+	require.True(t, nsi.WaitForCacheSync(t.Context()))
+	waitForIndexSize(t, index, 1)
+
+	// Close: stops ns-a informer, sets closed=true.
+	nsi.Close()
+
+	// Sync with ns-b: must be a no-op because closed=true.
+	// Without the guard, this would start an informer for ns-b.
+	nsi.Sync([]string{"ns-b"})
+
+	// ns-b's slice must NOT be in the index — Sync was a no-op.
+	assert.Equal(t, 1, index.Size(), "Sync after Close must not start informers")
+	assert.NotEmpty(t, index.Lookup("ns-a", "fn-a", ""), "ns-a entries survive Close")
+	assert.Empty(t, index.Lookup("ns-b", "fn-b", ""), "ns-b must not appear — Sync was a no-op")
+	assert.True(t, nsi.HasSynced(), "HasSynced vacuously true after Close (zero informers)")
+}
+
 // TestNamespaceInformersOffboardReonboard exercises the PRD §11.1 lifecycle:
 // onboard → offboard → re-onboard the same namespace. After the fence, a
 // re-onboarded informer must deliver fresh entries, and a final offboard must

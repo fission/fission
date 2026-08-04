@@ -72,7 +72,19 @@ var (
 		"fission_router_endpointcache_mode",
 		"Always 1; labels carry the requested and effective EndpointSlice cache modes (off|on) and whether endpoint LB is enabled.",
 	)
+	// informersGauge reports the number of running per-namespace EndpointSlice
+	// informers. Dynamic-mode tests assert it returns to 0 after offboard as a
+	// deterministic leak guard (exact, vs. goroutine-count delta ±10).
+	informersGauge = metrics.Int64Gauge(
+		"fission_router_endpointcache_informers",
+		"Number of running per-namespace EndpointSlice informers.",
+	)
 )
+
+// RecordInformersCount sets the running-informer count gauge.
+func RecordInformersCount(n int64) {
+	informersGauge.Record(context.Background(), n)
+}
 
 // RecordHit counts one index-admitted request.
 func RecordHit() { hits.Add(context.Background(), 1) }

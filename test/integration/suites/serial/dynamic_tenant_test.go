@@ -88,9 +88,9 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
 	//    the derived-key Secret; the data-plane managers add the namespace to their
 	//    watched set AND re-enqueue the staged CRs — all without a restart.
-	//    Capture the router goroutine baseline first: the final offboard must
-	//    return to it (Tier-B informer teardown leak guard, testing-plan §4.2).
-	goroutinesBefore := scrapeRouterMetric(t, ctx, f, "go_goroutines")
+	//    Capture the router's informer count baseline: the final offboard must
+	//    return to it (deterministic leak guard — exact, vs. goroutine delta ±10).
+	informersBefore := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_informers")
 	ns.EnableTenant(t, ctx)
 	f.WaitForTenantReady(t, ctx, tenantNS)
 
@@ -198,11 +198,10 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	hitsBefore2 := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
 	assertWarmPathHit(t, ctx, r, f, route2URL, hitsBefore2, "warm path never served re-onboarded tenant %q's function", tenantNS)
 
-	// 7. Final offboard + goroutine-delta leak guard (testing-plan §4.2): the
-	//    per-namespace informer must die with the tenant. A leaked informer
-	//    would pin several goroutines (reflector + processor listeners) per
-	//    namespace forever, so the router's goroutine count must return to the
-	//    pre-onboard baseline once the tenant is offboarded.
+	// 7. Final offboard + informer-count leak guard (testing-plan §4.2): the
+	//    per-namespace informer must die with the tenant. The informer count
+	//    gauge is exact (0 = no leak, >0 = leak), replacing the ±10 goroutine
+	//    delta which couldn't detect a single leaked informer (~5-7 goroutines).
 	require.NoError(t, fc.HTTPTriggers(tenantNS).Delete(ctx, "route-"+fnName2, metav1.DeleteOptions{}))
 	require.NoError(t, fc.Functions(tenantNS).Delete(ctx, fnName2, metav1.DeleteOptions{}))
 	require.NoError(t, fc.Environments(tenantNS).Delete(ctx, envName2, metav1.DeleteOptions{}))
@@ -213,11 +212,11 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	ns.DisableTenant(t, ctx)
 	f.WaitForTenantOffboarded(t, ctx, tenantNS)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		g := scrapeRouterMetric(t, ctx, f, "go_goroutines")
-		assert.LessOrEqualf(c, g, goroutinesBefore+10,
-			"router goroutines must return to the pre-onboard baseline after offboard (baseline=%.0f, current=%.0f) — a per-namespace informer leak pins goroutines forever",
-			goroutinesBefore, g)
-	}, 2*time.Minute, 5*time.Second, "router goroutines never returned to baseline — per-namespace informer leak suspected")
+		n := scrapeRouterMetric(c, ctx, f, "fission_router_endpointcache_informers")
+		assert.Equalf(c, informersBefore, n,
+			"informer count must return to the pre-onboard baseline after offboard (baseline=%.0f, current=%.0f) — a leaked informer pins goroutines forever",
+			informersBefore, n)
+	}, 2*time.Minute, 5*time.Second, "informer count never returned to baseline — per-namespace informer leak suspected")
 
 	// 8. The namespace itself is deleted by the NewTestNamespaceIn cleanup hook.
 }
@@ -236,7 +235,7 @@ func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterCli
 			return
 		}
 		assert.Contains(c, strings.ToLower(body), "hello")
-		hitsAfter := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+		hitsAfter := scrapeRouterMetric(c, ctx, f, "fission_router_endpointcache_hits_total")
 		assert.Greaterf(c, hitsAfter, hitsBefore,
 			"endpointcache_hits_total must increase on a warm invocation — proves the warm path served the tenant's function")
 	}, 2*time.Minute, 5*time.Second, append([]any{msg}, args...)...)
@@ -245,8 +244,7 @@ func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterCli
 // scrapeRouterMetric scrapes a single Prometheus metric from the router pods
 // (via pod proxy, no port-forward needed) and returns its sum across replicas.
 // Works for both gauges and counters (sums the latest sample per pod).
-func scrapeRouterMetric(t *testing.T, ctx context.Context, f *framework.Framework, metricName string) float64 {
-	t.Helper()
+func scrapeRouterMetric(t require.TestingT, ctx context.Context, f *framework.Framework, metricName string) float64 {
 	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=router"})
 	require.NoErrorf(t, err, "listing router pods")
 	require.NotEmptyf(t, pods.Items, "no router pod found in namespace %s", f.FissionNamespace())

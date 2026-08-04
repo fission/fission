@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/go-logr/logr"
 
@@ -38,11 +39,13 @@ type nsInformer struct {
 // Close stops every running informer and waits for their goroutines to exit;
 // tests must call it (typically via t.Cleanup) to avoid leaking goroutines.
 type NamespaceInformers struct {
-	kubeClient kubernetes.Interface
-	index      *Index
-	logger     logr.Logger
-	mu         sync.Mutex
-	informers  map[string]*nsInformer
+	kubeClient    kubernetes.Interface
+	index         *Index
+	logger        logr.Logger
+	mu            sync.Mutex
+	informers     map[string]*nsInformer
+	closed        bool         // set by Close; Sync returns immediately when true
+	informerCount atomic.Int64 // running per-namespace informer count; exposed as metric
 }
 
 // NewNamespaceInformers creates an empty informer manager. The caller owns
@@ -69,6 +72,9 @@ func NewNamespaceInformers(kubeClient kubernetes.Interface, index *Index, logger
 func (n *NamespaceInformers) Sync(namespaces []string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.closed {
+		return
+	}
 	// Build a set of desired namespaces.
 	desired := make(map[string]struct{}, len(namespaces))
 	for _, ns := range namespaces {
@@ -84,6 +90,8 @@ func (n *NamespaceInformers) Sync(namespaces []string) {
 			<-ni.done
 			n.index.RemoveNamespace(ns)
 			delete(n.informers, ns)
+			n.informerCount.Add(-1)
+			RecordInformersCount(n.informerCount.Load())
 			n.logger.Info("stopped endpointslice informer for namespace", "namespace", ns)
 		}
 	}
@@ -100,6 +108,8 @@ func (n *NamespaceInformers) Sync(namespaces []string) {
 			continue
 		}
 		n.informers[ns] = &nsInformer{informer: informer, cancel: cancel, done: done}
+		n.informerCount.Add(1)
+		RecordInformersCount(n.informerCount.Load())
 		n.logger.Info("started endpointslice informer for namespace", "namespace", ns)
 	}
 }
@@ -177,6 +187,7 @@ func (n *NamespaceInformers) WaitForCacheSync(ctx context.Context) bool {
 // context is cancelled; tests should register it via t.Cleanup.
 func (n *NamespaceInformers) Close() {
 	n.mu.Lock()
+	n.closed = true
 	stopped := n.informers
 	n.informers = make(map[string]*nsInformer)
 	n.mu.Unlock()
@@ -184,4 +195,6 @@ func (n *NamespaceInformers) Close() {
 		ni.cancel()
 		<-ni.done
 	}
+	n.informerCount.Store(0)
+	RecordInformersCount(0)
 }
