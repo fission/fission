@@ -48,31 +48,37 @@ func (caaf *Container) DeleteFunction(ctx context.Context, fn *fv1.Function) err
 // of a managed function whose backing Deployment/Service drifted away (deleted
 // out-of-band, surfaced by the drift watch) recreates them via the idempotent
 // get-or-create path rather than diffing a no-longer-existent object.
-//
-// Both create-routed branches chase createFunction with reconcileDeploymentSpec,
-// mirroring newdeploy: createFunction only adopts/scales an existing deployment.
-// If this reconcile is the only carrier of a spec change — a create and an
-// update coalesced into one first reconcile, or a drift false-alarm from cache
-// lag on the update's reconcile — adopting without a respec consumes the update
-// permanently (lastReconciled stores the new spec; no event re-fires).
 func reconcileContainerFunc(ctx context.Context, mgr functionManager, old, fn *fv1.Function) error {
 	if old == nil {
-		if _, err := mgr.createFunction(ctx, fn); err != nil {
-			return err
-		}
-		return mgr.reconcileDeploymentSpec(ctx, fn)
+		return createAndConverge(ctx, mgr, fn)
 	}
 	exist, err := mgr.resourcesExist(ctx, fn)
 	if err != nil {
 		return err
 	}
 	if !exist {
-		if _, err := mgr.createFunction(ctx, fn); err != nil {
-			return err
-		}
-		return mgr.reconcileDeploymentSpec(ctx, fn)
+		return createAndConverge(ctx, mgr, fn)
 	}
 	return mgr.updateFunction(ctx, old, fn)
+}
+
+// createAndConverge is the create-routed path both branches above take, mirroring
+// newdeploy: create (or adopt) the function's backing objects, then bring the
+// deployment to the current spec. reconcileDeploymentSpec is a no-op when the
+// deployment already reflects fn.
+//
+// The second step is not optional. createFunction only adopts/scales an existing
+// deployment — it never rewrites the pod spec — so when this reconcile is the ONLY
+// carrier of a spec change (a create and an update coalesced into one first
+// reconcile, or a drift false-alarm from cache lag on the update's own reconcile),
+// adopting without a respec consumes the update permanently: lastReconciled stores
+// the new spec, GenerationChangedPredicate filters resyncs, and no event ever
+// re-fires.
+func createAndConverge(ctx context.Context, mgr functionManager, fn *fv1.Function) error {
+	if _, err := mgr.createFunction(ctx, fn); err != nil {
+		return err
+	}
+	return mgr.reconcileDeploymentSpec(ctx, fn)
 }
 
 // RegisterReconcilers registers no type-specific watches: the container type's

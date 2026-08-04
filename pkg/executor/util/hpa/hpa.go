@@ -204,6 +204,23 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 			existingHpa.Spec.Metrics = hpa.Spec.Metrics
 			needsUpdate = true
 		}
+		// Converge min/max/behavior too: the function's ExecutionStrategy is
+		// their sole source of truth (nothing else writes them), so any drift
+		// means a spec update this executor never applied. The load-bearing
+		// case is a create-routed reconcile carrying an InvokeStrategy update
+		// (a coalesced create+update, or a drift false-alarm re-routing the
+		// update through createFunction): updateFunction's HPA diff never runs
+		// there, and without this convergence the update is consumed
+		// permanently — worse, the deployment gets scaled to the new minScale
+		// while the stale HPA drags it back.
+		if !apiequality.Semantic.DeepEqual(existingHpa.Spec.MinReplicas, hpa.Spec.MinReplicas) ||
+			existingHpa.Spec.MaxReplicas != hpa.Spec.MaxReplicas ||
+			!apiequality.Semantic.DeepEqual(existingHpa.Spec.Behavior, hpa.Spec.Behavior) {
+			existingHpa.Spec.MinReplicas = hpa.Spec.MinReplicas
+			existingHpa.Spec.MaxReplicas = hpa.Spec.MaxReplicas
+			existingHpa.Spec.Behavior = hpa.Spec.Behavior
+			needsUpdate = true
+		}
 		if needsUpdate {
 			existingHpa, err = hpaops.kubernetesClient.AutoscalingV2().HorizontalPodAutoscalers(depl.ObjectMeta.Namespace).Update(ctx, existingHpa, metav1.UpdateOptions{})
 			if err != nil {

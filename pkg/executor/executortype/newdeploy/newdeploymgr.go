@@ -700,15 +700,11 @@ func (deploy *NewDeploy) updateFunction(ctx context.Context, oldFn *fv1.Function
 }
 
 // reconcileDeploymentSpec brings an already-existing deployment up to the
-// function's current spec when it lags. createFunction only *adopts/scales* an
-// existing deployment (it does not rewrite the pod spec), and updateFunction is
-// diff-based against the last-reconciled object. So if a function's create and a
-// later spec update coalesce into a single first reconcile — common when the
-// router specializes the function on-demand (creating the deployment) just before
-// `fission fn update` lands — the deployment can be left on the old spec with no
-// transition for updateFunction to diff. The deployment carries the function's
-// ResourceVersion as a metadata annotation (getDeployAnnotations), so compare it:
-// if stale, push the current spec. A no-op when already current.
+// function's current spec when it lags — the level-trigger half of every
+// create-routed reconcile (see createAndConverge in reconciler.go for why it
+// must follow createFunction). The deployment carries the function's
+// ResourceVersion as a metadata annotation (getDeployAnnotations), so compare
+// it: if stale, push the current spec. A no-op when already current.
 func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Function) error {
 	// Live entry only: fn is the live Function CR here, and versioned
 	// projections sharing its UID pin immutable snapshots that must not be
@@ -727,7 +723,8 @@ func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Fu
 		}
 		return err
 	}
-	if existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION] == fn.ResourceVersion {
+	deplRV := existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION]
+	if deplRV == fn.ResourceVersion {
 		return nil // deployment already reflects the current function spec
 	}
 	env, err := deploy.fissionClient.CoreV1().Environments(fn.Spec.Environment.Namespace).
@@ -735,9 +732,9 @@ func (deploy *NewDeploy) reconcileDeploymentSpec(ctx context.Context, fn *fv1.Fu
 	if err != nil {
 		return err
 	}
-	deploy.logger.Info("reconciling stale deployment to current function spec on first sight",
+	deploy.logger.Info("reconciling stale deployment to current function spec",
 		"function", fn.Name, "deployment", fsvc.Name,
-		"deployment_rv", existingDepl.Annotations[fv1.FUNCTION_RESOURCE_VERSION], "function_rv", fn.ResourceVersion)
+		"deployment_rv", deplRV, "function_rv", fn.ResourceVersion)
 	return deploy.updateFuncDeployment(ctx, fn, env)
 }
 
@@ -979,7 +976,8 @@ func (deploy *NewDeploy) DumpDebugInfo(ctx context.Context) error {
 // that lands in the pod template but is missing from this diff leaves the CR
 // and the running container disagreeing indefinitely, because updateFunction
 // is the only steady-state path that rewrites the template (the RV-annotation
-// catch-all in reconcileDeploymentSpec runs only on the old == nil branch).
+// catch-all in reconcileDeploymentSpec runs only on create-routed reconciles —
+// first sight and drift-recreate — never on the plain update path).
 func podTemplateChanged(oldFn, newFn *fv1.Function) bool {
 	return oldFn.Spec.Environment != newFn.Spec.Environment ||
 		oldFn.Spec.Package.PackageRef != newFn.Spec.Package.PackageRef ||

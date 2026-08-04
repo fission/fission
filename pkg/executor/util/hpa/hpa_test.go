@@ -347,6 +347,11 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 	})
 
 	t.Run("already-correct metric issues no update", func(t *testing.T) {
+		// "Already correct" must mean the WHOLE adopt-reconciled surface:
+		// min/max/behavior are converged now too, so the seed carries the
+		// execStrategy's bounds (the old seed's min=50 silently leaned on
+		// bounds drift being ignored — the exact swallowed-update bug).
+		minRepl := int32(execStrategy.MinScale)
 		seeded := &asv2.HorizontalPodAutoscaler{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        "test-hpa",
@@ -355,8 +360,8 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 			},
 			Spec: asv2.HorizontalPodAutoscalerSpec{
 				ScaleTargetRef: getScaleTargetRef(depl),
-				MinReplicas:    &util50,
-				MaxReplicas:    5,
+				MinReplicas:    &minRepl,
+				MaxReplicas:    int32(execStrategy.MaxScale),
 				Metrics: []asv2.MetricSpec{{
 					Type: asv2.ContainerResourceMetricSourceType,
 					ContainerResource: &asv2.ContainerResourceMetricSource{
@@ -376,5 +381,68 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 				t.Errorf("expected no update action for an already-correct HPA, got one")
 			}
 		}
+	})
+}
+
+// TestCreateOrGetHpaScaleBoundsReconcile pins the adopt-branch convergence of
+// MinReplicas/MaxReplicas/Behavior. The function's ExecutionStrategy is their
+// sole source of truth, and the load-bearing consumer is a create-routed
+// reconcile carrying an InvokeStrategy update (coalesced create+update, or a
+// drift false-alarm): updateFunction's HPA diff never runs there, so this is
+// the only site that can apply the change.
+func TestCreateOrGetHpaScaleBoundsReconcile(t *testing.T) {
+	logger := loggerfactory.GetLogger()
+	instanceID := strings.ToLower(uniuri.NewLen(8))
+	ns := "test-namespace"
+
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "test-fn", UID: uuid.NewUUID()}}
+	execStrategy := &fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypeNewdeploy, MinScale: 5, MaxScale: 10}
+	depl := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "test-deployment", Namespace: ns}}
+	// The instanceID annotation is what routes CreateOrGetHpa into the adopt
+	// branch; production passes it via getDeployAnnotations.
+	annotations := map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID}
+
+	// Learn the desired object from the production builder itself, so these
+	// subtests stay correct when the builder's defaults (e.g. metrics) change.
+	desired := func(t *testing.T) *asv2.HorizontalPodAutoscaler {
+		t.Helper()
+		client := fake.NewClientset()
+		hpaops := NewHpaOperations(logger, client, instanceID)
+		hpa, err := hpaops.CreateOrGetHpa(t.Context(), fn, "test-hpa", execStrategy, "fn-container", depl, nil, annotations)
+		require.NoError(t, err)
+		return hpa
+	}
+
+	countUpdates := func(client *fake.Clientset) int {
+		n := 0
+		for _, a := range client.Actions() {
+			if a.GetVerb() == "update" && a.GetResource().Resource == "horizontalpodautoscalers" {
+				n++
+			}
+		}
+		return n
+	}
+
+	t.Run("stale min/max converge to the execution strategy", func(t *testing.T) {
+		stale := desired(t)
+		one, three := int32(1), int32(3)
+		stale.Spec.MinReplicas = &one
+		stale.Spec.MaxReplicas = three
+		client := fake.NewClientset(stale)
+		hpaops := NewHpaOperations(logger, client, instanceID)
+		hpa, err := hpaops.CreateOrGetHpa(t.Context(), fn, "test-hpa", execStrategy, "fn-container", depl, nil, annotations)
+		require.NoError(t, err)
+		require.NotNil(t, hpa.Spec.MinReplicas)
+		assert.Equal(t, int32(5), *hpa.Spec.MinReplicas)
+		assert.Equal(t, int32(10), hpa.Spec.MaxReplicas)
+		assert.Equal(t, 1, countUpdates(client), "stale bounds must be written back")
+	})
+
+	t.Run("matching spec issues no update (idempotent adopt)", func(t *testing.T) {
+		client := fake.NewClientset(desired(t))
+		hpaops := NewHpaOperations(logger, client, instanceID)
+		_, err := hpaops.CreateOrGetHpa(t.Context(), fn, "test-hpa", execStrategy, "fn-container", depl, nil, annotations)
+		require.NoError(t, err)
+		assert.Zero(t, countUpdates(client), "an already-converged HPA must not be rewritten on every reconcile")
 	})
 }
