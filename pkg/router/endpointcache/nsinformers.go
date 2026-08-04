@@ -9,13 +9,15 @@ import (
 	"fmt"
 	"sync"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/go-logr/logr"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // nsInformer pairs one namespace's EndpointSlice informer with the cancel
