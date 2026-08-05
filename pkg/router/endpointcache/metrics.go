@@ -72,19 +72,7 @@ var (
 		"fission_router_endpointcache_mode",
 		"Always 1; labels carry the requested and effective EndpointSlice cache modes (off|on) and whether endpoint LB is enabled.",
 	)
-	// informersGauge reports the number of running per-namespace EndpointSlice
-	// informers. Dynamic-mode tests assert it returns to 0 after offboard as a
-	// deterministic leak guard (exact, vs. goroutine-count delta ±10).
-	informersGauge = metrics.Int64Gauge(
-		"fission_router_endpointcache_informers",
-		"Number of running per-namespace EndpointSlice informers.",
-	)
 )
-
-// RecordInformersCount sets the running-informer count gauge.
-func RecordInformersCount(n int64) {
-	informersGauge.Record(context.Background(), n)
-}
 
 // RecordHit counts one index-admitted request.
 func RecordHit() { hits.Add(context.Background(), 1) }
@@ -119,8 +107,10 @@ func RegisterModeInfo(requested, effective string, endpointLB bool) {
 }
 
 var (
-	sizeIndex     atomic.Pointer[Index]
-	sizeGaugeOnce sync.Once
+	sizeIndex          atomic.Pointer[Index]
+	sizeGaugeOnce      sync.Once
+	informersManager   atomic.Pointer[NamespaceInformers]
+	informersGaugeOnce sync.Once
 )
 
 // RegisterSizeGauge publishes an observable gauge reporting the number of
@@ -138,6 +128,25 @@ func RegisterSizeGauge(ix *Index) {
 			func(_ context.Context, o metric.Int64Observer) error {
 				if ix := sizeIndex.Load(); ix != nil {
 					o.Observe(int64(ix.Size()))
+				}
+				return nil
+			},
+		)
+	})
+}
+
+// RegisterInformersGauge publishes an observable gauge reporting the number of
+// running per-namespace informers. It registers the callback exactly once and
+// points later registrations at the newest NamespaceInformers instance.
+func RegisterInformersGauge(nsi *NamespaceInformers) {
+	informersManager.Store(nsi)
+	informersGaugeOnce.Do(func() {
+		metrics.Int64ObservableGauge(
+			"fission_router_endpointcache_informers",
+			"Number of running per-namespace EndpointSlice informers.",
+			func(_ context.Context, o metric.Int64Observer) error {
+				if nsi := informersManager.Load(); nsi != nil {
+					o.Observe(nsi.informerCount.Load())
 				}
 				return nil
 			},

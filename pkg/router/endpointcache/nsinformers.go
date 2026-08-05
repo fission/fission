@@ -47,14 +47,17 @@ type NamespaceInformers struct {
 
 // NewNamespaceInformers creates an empty informer manager. The caller owns
 // the lifecycle: call Close when done (production ties it to the router's
-// context; tests register it via t.Cleanup).
+// context; tests register it via t.Cleanup). It also registers this manager as
+// the current informer-count metric source.
 func NewNamespaceInformers(kubeClient kubernetes.Interface, index *Index, logger logr.Logger) *NamespaceInformers {
-	return &NamespaceInformers{
+	nsi := &NamespaceInformers{
 		kubeClient: kubeClient,
 		index:      index,
 		logger:     logger,
 		informers:  make(map[string]*nsInformer),
 	}
+	RegisterInformersGauge(nsi)
+	return nsi
 }
 
 // Sync reconciles the running informer set to match namespaces:
@@ -83,7 +86,6 @@ func (n *NamespaceInformers) Sync(namespaces []string) {
 			n.index.RemoveNamespace(ns)
 			delete(n.informers, ns)
 			n.informerCount.Add(-1)
-			RecordInformersCount(n.informerCount.Load())
 			n.logger.Info("stopped endpointslice informer for namespace", "namespace", ns)
 		}
 	}
@@ -101,7 +103,6 @@ func (n *NamespaceInformers) Sync(namespaces []string) {
 		}
 		n.informers[ns] = &nsInformer{informer: informer, cancel: cancel, done: done}
 		n.informerCount.Add(1)
-		RecordInformersCount(n.informerCount.Load())
 		n.logger.Info("started endpointslice informer for namespace", "namespace", ns)
 	}
 }
@@ -162,8 +163,8 @@ func (n *NamespaceInformers) HasSynced() bool {
 
 // WaitForCacheSync blocks until all running informers have completed their
 // initial list or ctx is cancelled. Returns true if all synced, false on
-// timeout/cancel. This is the deterministic synchronization point for tests
-// (replacing polling) and for the router's readiness gate.
+// timeout/cancel. Tests use it as a deterministic synchronization point;
+// production readiness polls HasSynced instead.
 func (n *NamespaceInformers) WaitForCacheSync(ctx context.Context) bool {
 	n.mu.Lock()
 	informers := make([]cache.InformerSynced, 0, len(n.informers))
@@ -188,5 +189,4 @@ func (n *NamespaceInformers) Close() {
 		<-ni.done
 	}
 	n.informerCount.Store(0)
-	RecordInformersCount(0)
 }
