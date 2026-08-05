@@ -17,6 +17,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
@@ -414,4 +415,48 @@ func TestApplyFunctionAliasesPruneOnlyWithDeploymentUID(t *testing.T) {
 
 	_, err = fc.CoreV1().FunctionAliases("default").Get(t.Context(), "foreign", metav1.GetOptions{})
 	assert.NoError(t, err, "foreign alias must survive prune")
+}
+
+// TestSpecApplyListsPackagesOnce pins the single cluster-wide Package
+// enumeration per apply. applyArchives (archive de-duplication) and
+// applyPackages (the create/update/delete diff) both need the full list; they
+// used to fetch it independently, so every apply paid for two full listings of
+// every Package in every namespace. Both now read one snapshot taken in
+// applyResources.
+//
+// The assertion is on the *count*, not on the resulting diff, because the
+// regression this guards is invisible in behaviour — two lists and one list
+// produce the same apply result, they just cost the apiserver twice.
+func TestSpecApplyListsPackagesOnce(t *testing.T) {
+	t.Parallel()
+
+	live := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "hello", Namespace: "default",
+			Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: "uid-1"},
+		},
+		Spec:   fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},
+	}
+	fc := fissionfake.NewSimpleClientset(live) //nolint:staticcheck // see k8s#126850
+
+	var pkgLists int
+	fc.PrependReactor("list", "packages", func(k8stesting.Action) (bool, runtime.Object, error) {
+		pkgLists++
+		return false, nil, nil // fall through to the default object tracker
+	})
+
+	fr := &FissionResources{
+		DeploymentConfig: spectypes.DeploymentConfig{Name: "test", UID: "uid-1"},
+		Packages:         []fv1.Package{*live.DeepCopy()},
+	}
+
+	// dryRun: the listing this asserts on happens on the read-only path too, so
+	// the count is pinned without mutating the fake cluster.
+	_, _, err := applyResources(
+		fakeInput{ctx: t.Context()}, cmd.Client{FissionClientSet: fc}, "",
+		fr, false /* delete */, false /* allowConflicts */, true /* dryRun */)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, pkgLists, "one spec apply must enumerate cluster-wide Packages exactly once")
 }
