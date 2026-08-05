@@ -335,9 +335,8 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 // change, so no restart is needed to admit a new tenant's warm path.
 //
 // The returned InformerSynced gates router readiness: it is true only after
-// every running informer has completed its initial LIST. The caller must not
-// call Close — the returned nsInformers is closed by the ctx-cancel goroutine
-// registered here.
+// every running informer has completed its initial LIST. The internal informer
+// manager is closed when ctx is cancelled.
 func setupDynamicEndpointCache(
 	ctx context.Context,
 	kubeClient kubernetes.Interface,
@@ -354,6 +353,11 @@ func setupDynamicEndpointCache(
 		nsInformers: nsInformers,
 		logger:      logger,
 	}
+	// Stop all informers when the router's context is cancelled.
+	go func() {
+		<-ctx.Done()
+		nsInformers.Close()
+	}()
 	// Seed with the env seed immediately so HasSynced isn't vacuously
 	// true with zero informers. The RunnableFunc below re-seeds from
 	// the LIVE FissionTenant set after the Manager cache syncs (the
@@ -379,11 +383,6 @@ func setupDynamicEndpointCache(
 	resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
 		return dynCache.syncInformers(ctx)
 	})
-	// Stop all informers when the router's context is cancelled.
-	go func() {
-		<-ctx.Done()
-		nsInformers.Close()
-	}()
 	return nsInformers.HasSynced, resolverSyncHooks, nil
 }
 
@@ -426,7 +425,8 @@ func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTr
 }
 
 func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, opts Options,
-	httpTriggerSet *HTTPTriggerSet) error {
+	httpTriggerSet *HTTPTriggerSet,
+) error {
 	publicMR, internalMR, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
 		return fmt.Errorf("error making router: %w", err)
