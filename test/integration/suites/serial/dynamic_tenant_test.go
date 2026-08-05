@@ -54,9 +54,13 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// executor restore) settle, then snapshot the control plane so we can prove
 	// onboarding restarts nothing — the headline promise of dynamic tenancy.
 	f.WaitForControlPlaneStable(t, ctx, 3*time.Minute)
-	if !f.RouterEndpointSliceCacheActive(t, ctx) {
-		t.Skip("router EndpointSlice cache fell back to off; dynamic warm-path assertions cannot run")
-	}
+	// The requested mode is "on" (gated above), so a false result here means
+	// the router degraded to off after an RBAC preflight failure — the exact
+	// defect this PR guards against. Assert rather than skip: a chart regression
+	// that drops the router-dataplane Role must fail the suite, not green-skip it.
+	require.Truef(t, f.RouterEndpointSliceCacheActive(t, ctx),
+		"router EndpointSlice cache fell back to off after RBAC preflight failure; "+
+			"expected effective=on on every running router pod (the requested mode is on)")
 	before := f.ControlPlanePodUIDs(t, ctx)
 
 	// A namespace that did not exist at install time: the dynamic path's reason

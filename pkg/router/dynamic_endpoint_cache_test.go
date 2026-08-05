@@ -8,6 +8,8 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -212,29 +214,103 @@ func TestDynamicCacheReOnboardAfterRBACLands(t *testing.T) {
 // is still set true. Without pending, a genuinely-unauthorized namespace whose
 // SAR consistently errors keeps an unsyncable informer forever — no FissionTenant
 // event fires to re-run the check.
+//
+// The test drives a genuine API error (assert.AnError from the reactor), NOT a
+// cancelled context. A cancelled context makes sliceWatchSAR return ctx.Err()
+// (context.Canceled), which syncInformers now distinguishes from a real API
+// failure and skips — so the cancellation path can no longer stand in for a
+// flake. Runs under testing/synctest so the 2 × 2s SAR retry delays elapse
+// instantly under virtual time instead of sleeping 4s real.
 func TestDynamicCacheSARErrorReportsPending(t *testing.T) {
 	t.Parallel()
-	kubeClient := fake.NewSimpleClientset()
-	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, assert.AnError
+	synctest.Test(t, func(t *testing.T) {
+		kubeClient := fake.NewSimpleClientset()
+		kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, assert.AnError
+		})
+		resolver := &utils.NamespaceResolver{}
+		nsi := endpointcache.NewNamespaceInformers(kubeClient, endpointcache.NewIndex(), logr.Discard())
+		dyn := &dynamicEndpointCache{
+			kubeClient:  kubeClient,
+			resolver:    resolver,
+			nsInformers: nsi,
+			logger:      logr.Discard(),
+		}
+		resolver.SetTenants(map[string]string{"team-a": "team-a"})
+
+		// syncInformers blocks on the SAR retry delays (time.After inside
+		// sliceWatchSAR). Under synctest those are fake timers, so run the
+		// call in a goroutine and advance virtual time to fire them.
+		var pending bool
+		done := make(chan struct{})
+		go func() {
+			pending = dyn.syncInformers(t.Context())
+			close(done)
+		}()
+		synctest.Wait()
+		<-done
+
+		assert.True(t, pending, "SAR error must report pending so reconciler requeues")
+		_, cached := dyn.rbacChecked.Load("team-a")
+		assert.False(t, cached, "namespace with SAR error must not be cached")
+
+		// Drain informer goroutines before the bubble closes.
+		go func() { nsi.Close() }()
+		synctest.Wait()
 	})
-	resolver := &utils.NamespaceResolver{}
-	nsi := endpointcache.NewNamespaceInformers(kubeClient, endpointcache.NewIndex(), logr.Discard())
-	t.Cleanup(nsi.Close)
-	dyn := &dynamicEndpointCache{
-		kubeClient:  kubeClient,
-		resolver:    resolver,
-		nsInformers: nsi,
-		logger:      logr.Discard(),
+}
+
+// TestDynamicCacheCancellationNotCountedAsSARError verifies that a cancelled
+// context (router shutting down) does NOT bump sarErrors or log at Error for
+// every namespace. sliceWatchSAR returns ctx.Err() (context.Canceled or
+// context.DeadlineExceeded), which syncInformers distinguishes from a genuine
+// API failure and skips. Without this guard a shutdown would count every
+// namespace as an SAR flake.
+func TestDynamicCacheCancellationNotCountedAsSARError(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		ctx  func(t *testing.T) context.Context
+	}{
+		{"canceled", func(t *testing.T) context.Context {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			return ctx
+		}},
+		{"deadline exceeded", func(t *testing.T) context.Context {
+			ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+			t.Cleanup(cancel)
+			return ctx
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			kubeClient := fake.NewSimpleClientset()
+			kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				return true, nil, assert.AnError
+			})
+			resolver := &utils.NamespaceResolver{}
+			nsi := endpointcache.NewNamespaceInformers(kubeClient, endpointcache.NewIndex(), logr.Discard())
+			t.Cleanup(nsi.Close)
+			dyn := &dynamicEndpointCache{
+				kubeClient:  kubeClient,
+				resolver:    resolver,
+				nsInformers: nsi,
+				logger:      logr.Discard(),
+			}
+			resolver.SetTenants(map[string]string{"team-a": "team-a"})
+
+			// sliceWatchSAR returns ctx.Err() immediately on the first
+			// attempt (the cancelled context short-circuits the retry loop),
+			// so syncInformers returns without the retry delay.
+			pending := dyn.syncInformers(tc.ctx(t))
+
+			assert.False(t, pending, "cancelled context must not report pending")
+			_, counted := dyn.sarErrors["team-a"]
+			assert.False(t, counted, "cancelled context must not bump sarErrors")
+			_, cached := dyn.rbacChecked.Load("team-a")
+			assert.False(t, cached, "cancelled context must not cache the namespace")
+		})
 	}
-	resolver.SetTenants(map[string]string{"team-a": "team-a"})
-
-	errCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	pending := dyn.syncInformers(errCtx)
-
-	assert.True(t, pending, "SAR error must report pending so reconciler requeues")
-	_, cached := dyn.rbacChecked.Load("team-a")
-	assert.False(t, cached, "namespace with SAR error must not be cached")
 }

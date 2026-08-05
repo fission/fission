@@ -337,6 +337,21 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 // from the namespace containing the slice, so cleanup must inspect the stored
 // slice keys. Function entries are rebuilt or removed after matching slices are
 // deleted.
+//
+// Two side effects worth noting, neither a bug:
+//
+//  1. A partially-removed entry (slices in multiple namespaces, only the
+//     offboarded one matched) has its quarantined set and strike map cleared
+//     for the surviving addresses. The old code never touched surviving
+//     entries. This is consistent with the "any slice event lifts quarantines"
+//     rule applied by ApplySlice/DeleteSlice, but it is a new side effect for
+//     offboard.
+//
+//  2. The shard lock is held for the full sweep with one entry lock taken per
+//     inhabited entry, so on a large index offboard briefly stalls concurrent
+//     Lookup/Admit. Acceptable because offboard is rare (a tenant removal), but
+//     a caller doing bulk offboard on a hot router should expect a short
+//     admission pause proportional to the shard size.
 func (ix *Index) RemoveNamespace(ns string) {
 	for i := range ix.shards {
 		s := &ix.shards[i]

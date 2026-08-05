@@ -185,6 +185,9 @@ func checkSliceWatchRBACForNamespace(ctx context.Context, kubeClient kubernetes.
 // informer must not wedge readiness on a LIST that only fails. A transient
 // apiserver error is reported as allowed (optimistic: the informer's own
 // reflector retry handles flakes) so a wobble never tears down working watches.
+// The caller (syncInformers) caps this optimism at maxOptimisticSARErrors
+// consecutive failures per namespace, after which it excludes the namespace
+// regardless of the optimistic allow returned here.
 func sliceWatchAllowedForNamespace(ctx context.Context, kubeClient kubernetes.Interface, ns string) (bool, error) {
 	for _, verb := range []string{"list", "watch"} {
 		res, err := sliceWatchSAR(ctx, kubeClient, ns, verb)
@@ -197,6 +200,12 @@ func sliceWatchAllowedForNamespace(ctx context.Context, kubeClient kubernetes.In
 	}
 	return true, nil
 }
+
+// sarRetryDelay is the delay between SAR retry attempts in sliceWatchSAR. A
+// boot-time apiserver flake must not degrade the data plane for the router's
+// whole lifetime, so the SAR is attempted up to 3 times total, waiting this
+// delay between attempts, before surfacing the error to the caller.
+const sarRetryDelay = 2 * time.Second
 
 // sliceWatchSAR issues one SelfSubjectAccessReview for verb+endpointslices in
 // ns, retrying transient apiserver errors (a boot-time flake must not degrade
@@ -219,7 +228,7 @@ func sliceWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, ver
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(2 * time.Second):
+			case <-time.After(sarRetryDelay):
 			}
 		}
 		res, err = kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
@@ -230,6 +239,14 @@ func sliceWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, ver
 	return res, err
 }
 
+// maxOptimisticSARErrors is the number of consecutive transient SAR failures
+// (apiserver flakes, throttling) a namespace is tolerated for before being
+// excluded from the informer set. Up to and including this cap the namespace
+// stays admitted optimistically — the informer's own reflector retry handles
+// transient LIST failures — so a brief wobble never tears down a working
+// watch. Exceeding the cap excludes the namespace: a persistently-failing
+// check must not wedge /readyz on a LIST that only fails. The counter resets
+// on the next successful SAR or when the namespace leaves the live set.
 const maxOptimisticSARErrors = 3
 
 // dynamicEndpointCache manages per-namespace EndpointSlice informers in dynamic
@@ -302,8 +319,22 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 		}
 		ok, err := sliceWatchAllowedForNamespace(ctx, d.kubeClient, ns)
 		if err != nil {
-			// we check for SAR errors optimistically; if the namespace
-			// continues to fail we exclude it from the informer set
+			// A cancelled context (router shutting down) surfaces as a SAR
+			// error here because sliceWatchSAR returns ctx.Err(). Don't treat
+			// that as an apiserver flake: skip the error accounting and log
+			// so a shutdown doesn't bump sarErrors and log at Error for every
+			// namespace. Both Canceled and DeadlineExceeded are context
+			// errors, not genuine API failures. errors.Is rather than
+			// ctx.Err()!=nil so a real API failure arriving on a cancelled
+			// context (e.g. a test reactor returning assert.AnError) is
+			// still counted.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return pending
+			}
+			// A transient SAR failure is handled optimistically for up to
+			// maxOptimisticSARErrors consecutive attempts; after that the
+			// namespace is excluded so a persistently-failing check does not
+			// wedge readiness on a LIST that only fails.
 			d.sarErrors[ns]++
 			pending = true
 			if d.sarErrors[ns] <= maxOptimisticSARErrors {
@@ -394,6 +425,11 @@ func setupDynamicEndpointCache(
 	resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
 		return dynCache.syncInformers(ctx)
 	})
+	// Register the informer-count gauge only after setup has succeeded
+	// (crMgr.Add above can fail). Registered here, not inside
+	// NewNamespaceInformers, so the constructor stays deterministic per
+	// the CLAUDE.md library-constructor guidance.
+	endpointcache.RegisterInformersGauge(nsInformers)
 	return nsInformers.HasSynced, resolverSyncHooks, nil
 }
 

@@ -47,17 +47,18 @@ type NamespaceInformers struct {
 
 // NewNamespaceInformers creates an empty informer manager. The caller owns
 // the lifecycle: call Close when done (production ties it to the router's
-// context; tests register it via t.Cleanup). It also registers this manager as
-// the current informer-count metric source.
+// context; tests register it via t.Cleanup). RegisterInformersGauge is NOT
+// called here — the constructor stays deterministic (no process-global side
+// effect, per the CLAUDE.md library-constructor guidance). The production
+// call site (setupDynamicEndpointCache) registers the gauge after setup
+// has succeeded.
 func NewNamespaceInformers(kubeClient kubernetes.Interface, index *Index, logger logr.Logger) *NamespaceInformers {
-	nsi := &NamespaceInformers{
+	return &NamespaceInformers{
 		kubeClient: kubeClient,
 		index:      index,
 		logger:     logger,
 		informers:  make(map[string]*nsInformer),
 	}
-	RegisterInformersGauge(nsi)
-	return nsi
 }
 
 // Sync reconciles the running informer set to match namespaces:

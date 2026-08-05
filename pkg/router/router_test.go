@@ -5,14 +5,12 @@
 package router
 
 import (
-	"context"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +24,12 @@ import (
 )
 
 func TestDynamicCachePersistentSARErrorsEventuallyExcludeAndRecover(t *testing.T) {
+	// Runs under testing/synctest so the 2 × 2s SAR retry delays per step
+	// elapse instantly under virtual time. The test drives a genuine API
+	// error (assert.AnError from the reactor), NOT a cancelled context —
+	// syncInformers now distinguishes context.Canceled from a real API
+	// failure and skips the former, so the cancellation path can no longer
+	// stand in for a flake.
 	type testStep struct {
 		name                 string
 		sarError             bool
@@ -119,72 +123,84 @@ func TestDynamicCachePersistentSARErrorsEventuallyExcludeAndRecover(t *testing.T
 		},
 	}
 
-	fakeClient := fake.NewClientset(fakeEndpointSlice)
+	synctest.Test(t, func(t *testing.T) {
+		fakeClient := fake.NewClientset(fakeEndpointSlice)
 
-	permissionCheck := atomic.Bool{}
-	permissionCheck.Store(true)
-	fakeClient.PrependReactor(
-		"create",
-		"selfsubjectaccessreviews",
-		func(action k8stesting.Action) (bool, runtime.Object, error) {
-			sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
-			if permissionCheck.Load() {
-				return true, nil, assert.AnError
-			}
-			return true, &authorizationv1.SelfSubjectAccessReview{
-				Spec: sar.Spec,
-				Status: authorizationv1.SubjectAccessReviewStatus{
-					Allowed: true,
-				},
-			}, nil
-		},
-	)
+		permissionCheck := atomic.Bool{}
+		permissionCheck.Store(true)
+		fakeClient.PrependReactor(
+			"create",
+			"selfsubjectaccessreviews",
+			func(action k8stesting.Action) (bool, runtime.Object, error) {
+				sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+				if permissionCheck.Load() {
+					return true, nil, assert.AnError
+				}
+				return true, &authorizationv1.SelfSubjectAccessReview{
+					Spec: sar.Spec,
+					Status: authorizationv1.SubjectAccessReviewStatus{
+						Allowed: true,
+					},
+				}, nil
+			},
+		)
 
-	index := endpointcache.NewIndex()
-	nsManager := endpointcache.NewNamespaceInformers(
-		fakeClient,
-		index,
-		logr.Discard(),
-	)
-	t.Cleanup(nsManager.Close)
+		index := endpointcache.NewIndex()
+		nsManager := endpointcache.NewNamespaceInformers(
+			fakeClient,
+			index,
+			logr.Discard(),
+		)
 
-	nsResolver := &utils.NamespaceResolver{}
-	dynCache := &dynamicEndpointCache{
-		kubeClient:  fakeClient,
-		resolver:    nsResolver,
-		nsInformers: nsManager,
-		logger:      logr.Discard(),
-	}
-	nsResolver.AddTenant("team-a")
+		nsResolver := &utils.NamespaceResolver{}
+		dynCache := &dynamicEndpointCache{
+			kubeClient:  fakeClient,
+			resolver:    nsResolver,
+			nsInformers: nsManager,
+			logger:      logr.Discard(),
+		}
+		nsResolver.AddTenant("team-a")
 
-	errCtx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	for _, step := range steps {
-		t.Run(step.name, func(t *testing.T) {
-			ctx := t.Context()
-			if step.sarError {
-				ctx = errCtx
-			}
+		for _, step := range steps {
 			permissionCheck.Store(step.sarError)
-			got := dynCache.syncInformers(ctx)
-			assert.Equal(t, step.wantPending, got)
-			if step.wantIndexSize > 0 {
-				require.True(t, nsManager.WaitForCacheSync(t.Context()))
-			}
 
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
-				assert.Equal(c, step.wantIndexSize, index.Size())
-			}, 1*time.Second, 100*time.Millisecond,
-			)
+			// syncInformers blocks on SAR retry delays (time.After inside
+			// sliceWatchSAR) and on informer start/stop (nsInformers.Sync
+			// waits on <-ni.done). Under synctest those are fake timers,
+			// so run in a goroutine and advance virtual time.
+			var got bool
+			done := make(chan struct{})
+			go func() {
+				got = dynCache.syncInformers(t.Context())
+				close(done)
+			}()
+			synctest.Wait()
+			<-done
+
+			// The informer's internal goroutines (reflector + processor) use
+			// sync.Mutex/sync.Cond which are NOT durably blocking, so a single
+			// Wait may return before the handler has processed the initial LIST.
+			// Wait again so the processor goroutine gets scheduled and drains
+			// its queue.
+			synctest.Wait()
+
+			assert.Equal(t, step.wantPending, got, step.name)
+			// After synctest.Wait the informer goroutines have completed
+			// their initial LIST (synchronous against the fake clientset)
+			// and processed all queued handler calls, so the index size
+			// is settled — no EventuallyWithT polling needed.
+			assert.Equal(t, step.wantIndexSize, index.Size(), step.name)
 			count, ok := dynCache.sarErrors["team-a"]
-			assert.Equal(t, step.wantErrorEntry, ok)
+			assert.Equal(t, step.wantErrorEntry, ok, step.name)
 			if step.wantErrorEntry {
-				assert.Equal(t, step.wantErrorCount, count)
+				assert.Equal(t, step.wantErrorCount, count, step.name)
 			}
 			_, ok = dynCache.rbacChecked.Load("team-a")
-			assert.Equal(t, step.wantPermissionCached, ok)
-		})
-	}
+			assert.Equal(t, step.wantPermissionCached, ok, step.name)
+		}
 
+		// Drain informer goroutines before the bubble closes.
+		go func() { nsManager.Close() }()
+		synctest.Wait()
+	})
 }

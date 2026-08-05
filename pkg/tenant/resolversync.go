@@ -6,6 +6,7 @@ package tenant
 
 import (
 	"context"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -15,6 +16,17 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// hookRetryDelay is the fixed poll interval used when a hook reports pending
+// work (e.g. the router waiting on a tenant's fission-router-dataplane
+// RoleBinding, which the tenant controller provisions asynchronously — no
+// FissionTenant event fires when it lands). A fixed interval is used instead
+// of Result.Requeue because Requeue drives the workqueue rate limiter, whose
+// exponential backoff caps at ~1000s and would leave a namespace unadmitted
+// for ~16 minutes after the binding finally lands. Requeue is also deprecated
+// in controller-runtime v0.24.x; when it is removed, Requeue:true silently
+// becomes a no-op and the wedge returns with no compile error.
+const hookRetryDelay = 2 * time.Second
 
 // SyncResolverFromTenants sets the resolver's live tenant set to the env seed
 // plus every FissionTenant's namespace. It is shared by the tenant controller
@@ -65,7 +77,7 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 		}
 	}
 	if pending {
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: hookRetryDelay}, nil
 	}
 	return ctrl.Result{}, nil
 }

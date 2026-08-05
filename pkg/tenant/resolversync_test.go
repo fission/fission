@@ -67,8 +67,10 @@ func TestResolverSyncReconcilerHooks(t *testing.T) {
 }
 
 // TestResolverSyncReconcilerPendingRequeues verifies that a hook reporting
-// pending work uses the controller's rate-limited requeue. This retries quickly
-// at first while avoiding a fixed two-second retry loop when RBAC never lands.
+// pending work triggers a fixed-interval requeue (hookRetryDelay). This retries
+// quickly while avoiding the workqueue rate limiter's exponential backoff,
+// which would leave a namespace unadmitted for ~16 minutes when the missing
+// RoleBinding finally lands.
 func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 	c := newFakeClient(t, tenant("team-a", "team-a"))
 	resolver := &utils.NamespaceResolver{}
@@ -82,8 +84,7 @@ func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 
 	res, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)
-	assert.True(t, res.Requeue, "pending hook must trigger a rate-limited requeue") //nolint:staticcheck // intentional rate-limiter coverage
-	assert.Zero(t, res.RequeueAfter, "pending hook must not bypass rate limiting with a fixed delay")
+	assert.Equal(t, hookRetryDelay, res.RequeueAfter, "pending hook must requeue after the fixed poll interval")
 }
 
 // TestResolverSyncReconcilerNoHooks verifies that a reconciler with no hooks
