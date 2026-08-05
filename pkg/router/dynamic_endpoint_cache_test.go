@@ -5,6 +5,7 @@
 package router
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -166,9 +167,6 @@ func TestDynamicCacheReOnboardAfterRBACLands(t *testing.T) {
 // event fires to re-run the check.
 func TestDynamicCacheSARErrorReportsPending(t *testing.T) {
 	t.Parallel()
-	// SAR reactor that always errors — the retry loop in sliceWatchSAR
-	// exhausts 3 attempts (~4s), then sliceWatchAllowedForNamespace returns
-	// (true, error).
 	kubeClient := fake.NewSimpleClientset()
 	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, assert.AnError
@@ -184,7 +182,10 @@ func TestDynamicCacheSARErrorReportsPending(t *testing.T) {
 	}
 	resolver.SetTenants(map[string]string{"team-a": "team-a"})
 
-	pending := dyn.syncInformers(t.Context())
+	errCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	pending := dyn.syncInformers(errCtx)
 
 	assert.True(t, pending, "SAR error must report pending so reconciler requeues")
 	_, cached := dyn.rbacChecked.Load("team-a")
