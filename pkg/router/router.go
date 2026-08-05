@@ -227,6 +227,8 @@ func sliceWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, ver
 	return res, err
 }
 
+const maxOptimisticSARErrors = 3
+
 // dynamicEndpointCache manages per-namespace EndpointSlice informers in dynamic
 // tenancy mode. It re-scopes the informer set as tenants are onboarded/offboarded,
 // gating each namespace on a SelfSubjectAccessReview so a namespace whose
@@ -245,6 +247,7 @@ type dynamicEndpointCache struct {
 	nsInformers *endpointcache.NamespaceInformers
 	rbacChecked sync.Map
 	logger      logr.Logger
+	sarErrors   map[string]int
 	mu          sync.Mutex // serializes syncInformers; prevents TOCTOU on namespace set
 }
 
@@ -257,6 +260,9 @@ type dynamicEndpointCache struct {
 func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.sarErrors == nil {
+		d.sarErrors = make(map[string]int)
+	}
 	// Re-read inside the lock: the namespace set may have changed since the
 	// caller was invoked (startup seed vs. post-cache-sync re-seed vs. hook).
 	// Reading after the lock makes last-writer-wins converge — no namespace
@@ -278,6 +284,13 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 		}
 		return true
 	})
+	// Drop stale error counts for namespaces that left the live set.
+	for ns := range d.sarErrors {
+		if _, ok := live[ns]; !ok {
+			delete(d.sarErrors, ns)
+		}
+	}
+
 	allowed := make([]string, 0, len(namespaces))
 	for _, ns := range namespaces {
 		if _, ok := d.rbacChecked.Load(ns); ok {
@@ -286,20 +299,24 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 		}
 		ok, err := sliceWatchAllowedForNamespace(ctx, d.kubeClient, ns)
 		if err != nil {
-			// Transient SAR failure — optimistic include; the
-			// reflector's own retry absorbs apiserver flakes.
-			// Still mark pending: if the namespace genuinely lacks
-			// RBAC the informer can never sync, and no FissionTenant
-			// event will fire to re-run this check.
-			d.logger.Error(err, "endpointslice RBAC check failed transiently; keeping informer", "namespace", ns)
-			allowed = append(allowed, ns)
+			// we check for SAR errors optimistically; if the namespace
+			// continues to fail we exclude it from the informer set
+			d.sarErrors[ns]++
 			pending = true
+			if d.sarErrors[ns] <= maxOptimisticSARErrors {
+				d.logger.Info("endpointslice RBAC check failed transiently; keeping informer", "namespace", ns)
+				allowed = append(allowed, ns)
+				continue
+			}
+			d.logger.Error(err, "endpointslice RBAC check continues to fail; excluding namespace", "namespace", ns, "consecutive_errors", d.sarErrors[ns])
 			continue
 		}
+		delete(d.sarErrors, ns)
 		if !ok {
 			d.logger.Info("endpointslice RBAC not yet granted for tenant namespace; "+
 				"the tenant controller provisions fission-router-dataplane at onboarding — "+
-				"namespace excluded from the warm path until it lands", "namespace", ns)
+				"namespace excluded from the warm path until it lands", "namespace", ns,
+			)
 			pending = true
 			continue
 		}
