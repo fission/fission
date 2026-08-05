@@ -12,6 +12,7 @@ package endpointcache
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -330,25 +331,38 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 	}
 }
 
-// RemoveNamespace drops every function entry whose namespace matches, used when
-// a tenant is offboarded and its informer is stopped (nsinformers.go Sync).
-// Without this the index would hold stale pod IPs for a namespace the router
-// can no longer watch — routing requests to dead pods. Iterates all shards
-// since functions hash by FnKey (namespace+name+version), not by namespace alone.
+// RemoveNamespace drops every slice whose object namespace matches, used when a
+// tenant is offboarded and its informer is stopped (nsinformers.go Sync).
+// FnKey.Namespace comes from the slice's functionNamespace label and may differ
+// from the namespace containing the slice, so cleanup must inspect the stored
+// slice keys. Function entries are rebuilt or removed after matching slices are
+// deleted.
 func (ix *Index) RemoveNamespace(ns string) {
 	for i := range ix.shards {
 		s := &ix.shards[i]
 		s.mu.Lock()
 		for key, e := range s.m {
-			if key.Namespace != ns {
+			e.mu.Lock()
+			removed := false
+			for sliceKey := range e.slices {
+				sliceNamespace, _, ok := strings.Cut(sliceKey, "/")
+				if ok && sliceNamespace == ns {
+					delete(e.slices, sliceKey)
+					removed = true
+				}
+			}
+			if !removed {
+				e.mu.Unlock()
 				continue
 			}
-			e.mu.Lock()
 			e.quarantined.Store(nil)
 			e.strikes = nil
+			e.rebuildLocked()
+			if len(e.slices) == 0 {
+				delete(s.m, key)
+				ix.size.Add(-1)
+			}
 			e.mu.Unlock()
-			delete(s.m, key)
-			ix.size.Add(-1)
 		}
 		s.mu.Unlock()
 	}

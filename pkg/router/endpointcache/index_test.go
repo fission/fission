@@ -25,7 +25,7 @@ func slice(name, fnName, fnNamespace string, port int32, addrs ...string) *disco
 	es := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: "fn-ns",
+			Namespace: fnNamespace,
 			Labels: map[string]string{
 				fv1.FUNCTION_NAME:      fnName,
 				fv1.FUNCTION_NAMESPACE: fnNamespace,
@@ -474,31 +474,63 @@ func TestReportDialTimeoutIgnoredWhileQuarantined(t *testing.T) {
 
 func TestRemoveNamespace(t *testing.T) {
 	t.Parallel()
-	ix := NewIndex()
 
-	// Populate functions across three namespaces.
-	ix.ApplySlice(slice("s1", "fn-a", "ns-1", 8888, "10.0.0.1"))
-	ix.ApplySlice(slice("s2", "fn-b", "ns-1", 8888, "10.0.0.2"))
-	ix.ApplySlice(slice("s3", "fn-c", "ns-2", 8888, "10.0.0.3"))
-	ix.ApplySlice(slice("s4", "fn-d", "ns-3", 8888, "10.0.0.4"))
-	assert.Equal(t, 4, ix.Size())
+	t.Run("matching function and slice namespaces", func(t *testing.T) {
+		ix := NewIndex()
+		// Populate functions across three namespaces.
+		ix.ApplySlice(slice("s1", "fn-a", "ns-1", 8888, "10.0.0.1"))
+		ix.ApplySlice(slice("s2", "fn-b", "ns-1", 8888, "10.0.0.2"))
+		ix.ApplySlice(slice("s3", "fn-c", "ns-2", 8888, "10.0.0.3"))
+		ix.ApplySlice(slice("s4", "fn-d", "ns-3", 8888, "10.0.0.4"))
+		assert.Equal(t, 4, ix.Size())
 
-	// Remove ns-1 only; ns-2 and ns-3 must survive.
-	ix.RemoveNamespace("ns-1")
-	assert.Empty(t, ix.Lookup("ns-1", "fn-a", ""), "ns-1 fn-a must be gone")
-	assert.Empty(t, ix.Lookup("ns-1", "fn-b", ""), "ns-1 fn-b must be gone")
-	assert.ElementsMatch(t, []string{"10.0.0.3:8888"}, addrs(ix.Lookup("ns-2", "fn-c", "")))
-	assert.ElementsMatch(t, []string{"10.0.0.4:8888"}, addrs(ix.Lookup("ns-3", "fn-d", "")))
-	assert.Equal(t, 2, ix.Size(), "only ns-2 and ns-3 functions remain")
+		// Remove ns-1 only; ns-2 and ns-3 must survive.
+		ix.RemoveNamespace("ns-1")
+		assert.Empty(t, ix.Lookup("ns-1", "fn-a", ""), "ns-1 fn-a must be gone")
+		assert.Empty(t, ix.Lookup("ns-1", "fn-b", ""), "ns-1 fn-b must be gone")
+		assert.ElementsMatch(t, []string{"10.0.0.3:8888"}, addrs(ix.Lookup("ns-2", "fn-c", "")))
+		assert.ElementsMatch(t, []string{"10.0.0.4:8888"}, addrs(ix.Lookup("ns-3", "fn-d", "")))
+		assert.Equal(t, 2, ix.Size(), "only ns-2 and ns-3 functions remain")
 
-	// Removing a namespace that was never populated is a no-op.
-	ix.RemoveNamespace("never-existed")
-	assert.Equal(t, 2, ix.Size())
+		// Removing a namespace that was never populated is a no-op.
+		ix.RemoveNamespace("never-existed")
+		assert.Equal(t, 2, ix.Size())
 
-	// Remove the rest.
-	ix.RemoveNamespace("ns-2")
-	ix.RemoveNamespace("ns-3")
-	assert.Equal(t, 0, ix.Size())
-	assert.Empty(t, ix.Lookup("ns-2", "fn-c", ""))
-	assert.Empty(t, ix.Lookup("ns-3", "fn-d", ""))
+		// Remove the rest.
+		ix.RemoveNamespace("ns-2")
+		ix.RemoveNamespace("ns-3")
+		assert.Equal(t, 0, ix.Size())
+		assert.Empty(t, ix.Lookup("ns-2", "fn-c", ""))
+		assert.Empty(t, ix.Lookup("ns-3", "fn-d", ""))
+	})
+
+	t.Run("different function and slice namespaces", func(t *testing.T) {
+		ix := NewIndex()
+		sl := slice("s5", "hello", "default", 8888, "10.0.0.5")
+		sl.Namespace = "workloads"
+		ix.ApplySlice(sl)
+		assert.Equal(t, 1, ix.Size())
+		assert.ElementsMatch(t, []string{"10.0.0.5:8888"}, addrs(ix.Lookup("default", "hello", "")))
+		ix.RemoveNamespace("workloads")
+		assert.Empty(t, ix.Lookup("default", "hello", ""))
+		assert.Equal(t, 0, ix.Size())
+	})
+
+	t.Run("preserves slices from other namespaces", func(t *testing.T) {
+		ix := NewIndex()
+		first := slice("s6", "hello", "default", 8888, "10.0.0.6")
+		first.Namespace = "workloads-a"
+		second := slice("s7", "hello", "default", 8888, "10.0.0.7")
+		second.Namespace = "workloads-b"
+		ix.ApplySlice(first)
+		ix.ApplySlice(second)
+
+		ix.RemoveNamespace("workloads-a")
+		assert.ElementsMatch(t, []string{"10.0.0.7:8888"}, addrs(ix.Lookup("default", "hello", "")))
+		assert.Equal(t, 1, ix.Size())
+
+		ix.RemoveNamespace("workloads-b")
+		assert.Empty(t, ix.Lookup("default", "hello", ""))
+		assert.Equal(t, 0, ix.Size())
+	})
 }
