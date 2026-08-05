@@ -324,9 +324,7 @@ func servedPodNameEventually(t *testing.T, ctx context.Context, f *framework.Fra
 // instruments with at least one recorded point) but omits
 // resync_drift/version_fallback entirely until something increments them.
 // So "absent from the scrape" and "zero" are the same observable state for
-// these two counters, and scrapeCounterSum returns 0 rather than failing
-// when no line matches, instead of requiring a match the way
-// memory_soak_test.go's parseMetric does for an always-present gauge.
+// these two counters, and scrapeCounterSum returns 0 when no line matches.
 func scrapeCounterSum(t *testing.T, ctx context.Context, f *framework.Framework, svc, metricName string) float64 {
 	t.Helper()
 	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=" + svc})

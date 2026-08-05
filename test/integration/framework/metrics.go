@@ -9,6 +9,9 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+
+	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 )
 
 // SumMetricLines sums every Prometheus exposition line for name, labeled or
@@ -45,4 +48,35 @@ func SumMetricLines(raw []byte, name string) float64 {
 		total += v
 	}
 	return total
+}
+
+// MetricHasLabels reports whether the Prometheus exposition contains a sample
+// for name with every requested label. Extra labels on the sample are allowed.
+func MetricHasLabels(raw []byte, name string, want map[string]string) (bool, error) {
+	parser := expfmt.NewTextParser(model.UTF8Validation)
+	families, err := parser.TextToMetricFamilies(bytes.NewReader(raw))
+	if err != nil {
+		return false, err
+	}
+	family := families[name]
+	if family == nil {
+		return false, nil
+	}
+	for _, metric := range family.GetMetric() {
+		labels := make(map[string]string, len(metric.GetLabel()))
+		for _, label := range metric.GetLabel() {
+			labels[label.GetName()] = label.GetValue()
+		}
+		matched := true
+		for label, value := range want {
+			if labels[label] != value {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
 }

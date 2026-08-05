@@ -10,9 +10,6 @@ import (
 	"testing"
 	"time"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/router/endpointcache"
-	"github.com/fission/fission/pkg/utils"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,6 +19,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/endpointcache"
+	"github.com/fission/fission/pkg/utils"
 )
 
 func TestDynamicCachePersistentSARErrorsEventuallyExcludeAndRecover(t *testing.T) {

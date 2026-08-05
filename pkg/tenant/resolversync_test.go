@@ -82,7 +82,7 @@ func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 
 	res, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)
-	assert.True(t, res.Requeue, "pending hook must trigger a rate-limited requeue")
+	assert.True(t, res.Requeue, "pending hook must trigger a rate-limited requeue") //nolint:staticcheck // intentional rate-limiter coverage
 	assert.Zero(t, res.RequeueAfter, "pending hook must not bypass rate limiting with a fixed delay")
 }
 

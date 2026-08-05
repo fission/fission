@@ -126,6 +126,37 @@ func (f *Framework) RouterEndpointSliceMode(t *testing.T, ctx context.Context) s
 	return "off"
 }
 
+// RouterEndpointSliceCacheActive reports whether every running router replica
+// is actually using the EndpointSlice cache. This reads the effective runtime
+// mode, so it detects a configured-on router that fell back to off after an
+// RBAC preflight failure.
+func (f *Framework) RouterEndpointSliceCacheActive(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	pods, err := f.kubeClient.CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{
+		LabelSelector: "svc=router",
+	})
+	require.NoError(t, err, "list router pods")
+	running := 0
+	for _, pod := range pods.Items {
+		if pod.DeletionTimestamp != nil || pod.Status.Phase != apiv1.PodRunning {
+			continue
+		}
+		running++
+		raw, err := f.kubeClient.CoreV1().Pods(f.FissionNamespace()).
+			ProxyGet("http", pod.Name, "8080", "/metrics", nil).DoRaw(ctx)
+		require.NoErrorf(t, err, "scrape metrics from router pod %s", pod.Name)
+		active, err := MetricHasLabels(raw, "fission_router_endpointcache_mode", map[string]string{
+			"effective": "on",
+		})
+		require.NoErrorf(t, err, "parse metrics from router pod %s", pod.Name)
+		if !active {
+			return false
+		}
+	}
+	require.NotZero(t, running, "no running router pod found")
+	return true
+}
+
 // ExecutorFunctionServicesEnabled reports the executor's
 // ENABLE_FUNCTION_SERVICES gate.
 func (f *Framework) ExecutorFunctionServicesEnabled(t *testing.T, ctx context.Context) bool {

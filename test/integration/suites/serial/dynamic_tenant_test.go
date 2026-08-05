@@ -42,12 +42,21 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	if !f.DynamicNamespacesEnabled(t, ctx) {
 		t.Skip("tenancy.mode is not dynamic; this leg runs a different tenancy model")
 	}
+	if f.RouterEndpointSliceMode(t, ctx) != "on" {
+		t.Skip("router.endpointSliceCache.mode is not 'on'; dynamic warm-path assertions require it")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("executor.functionServices.enabled is off; poolmgr functions have no EndpointSlices")
+	}
 	pyImage := f.Images().RequirePython(t)
 
 	// Let any rollout from a prior serial test (e.g. the adopt test's un-waited
 	// executor restore) settle, then snapshot the control plane so we can prove
 	// onboarding restarts nothing — the headline promise of dynamic tenancy.
 	f.WaitForControlPlaneStable(t, ctx, 3*time.Minute)
+	if !f.RouterEndpointSliceCacheActive(t, ctx) {
+		t.Skip("router EndpointSlice cache fell back to off; dynamic warm-path assertions cannot run")
+	}
 	before := f.ControlPlanePodUIDs(t, ctx)
 
 	// A namespace that did not exist at install time: the dynamic path's reason
@@ -134,8 +143,9 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	require.Equalf(t, "fission-router-dataplane-tenant", rbac.RoleRef.Name,
 		"RoleBinding should reference the fission-router-dataplane-tenant ClusterRole")
 
-	// The first invocation was a cold start (executor RPC); a warm hit proves the
-	// per-namespace informer fed the tenant's EndpointSlices into the index.
+	// The first invocation was a cold start (executor RPC). This serial test makes
+	// no other function requests, so a warm hit observed while invoking this route
+	// shows the per-namespace informer fed the EndpointSlices into the index.
 	hitsBefore := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
 	assertWarmPathHit(t, ctx, r, f, routeURL, hitsBefore, "warm path never served tenant %q's function", tenantNS)
 
@@ -190,8 +200,8 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// First invocation cold-starts; verify the re-onboarded namespace serves.
 	r.GetEventually(t, ctx, route2URL, framework.BodyContains("hello"))
 
-	// Second invocation must hit the warm path — proves the new informer fed
-	// the re-onboarded tenant's EndpointSlices into the index.
+	// A warm hit observed while invoking the second route shows the new informer
+	// fed the re-onboarded tenant's EndpointSlices into the index.
 	hitsBefore2 := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
 	assertWarmPathHit(t, ctx, r, f, route2URL, hitsBefore2, "warm path never served re-onboarded tenant %q's function", tenantNS)
 
@@ -220,8 +230,10 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 
 // assertWarmPathHit polls until invoking routeURL increments the router's
 // fission_router_endpointcache_hits_total beyond hitsBefore — i.e. the warm
-// path (slice-fed index, no executor RPC) served a request. The invocation is
-// INSIDE the poll: after a cold start the executor patches the pod's served
+// path (slice-fed index, no executor RPC) served a request. The counter is
+// process-wide rather than tenant-labeled; this serial test makes no competing
+// function requests, so the increase is attributable to the route invoked
+// inside the poll. After a cold start the executor patches the pod's served
 // label and the EndpointSlice controller mirrors it (both async, seconds of
 // lag), so scraping without invoking can never move the counter.
 func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterClient, f *framework.Framework, routeURL string, hitsBefore float64, msg string, args ...any) {
@@ -234,7 +246,7 @@ func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterCli
 		assert.Contains(c, strings.ToLower(body), "hello")
 		hitsAfter := scrapeRouterMetric(c, ctx, f, "fission_router_endpointcache_hits_total")
 		assert.Greaterf(c, hitsAfter, hitsBefore,
-			"endpointcache_hits_total must increase on a warm invocation — proves the warm path served the tenant's function")
+			"endpointcache_hits_total must increase while the route is invoked — shows the router warm path was active")
 	}, 2*time.Minute, 5*time.Second, append([]any{msg}, args...)...)
 }
 

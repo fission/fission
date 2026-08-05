@@ -6,7 +6,6 @@ package router
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -80,12 +79,9 @@ func TestSetupDynamicEndpointCacheReusesPreflightRBAC(t *testing.T) {
 func newDynamicCacheTest(t *testing.T, allowedNS map[string]bool) (*dynamicEndpointCache, *utils.NamespaceResolver) {
 	t.Helper()
 	kubeClient := fake.NewSimpleClientset()
-	var mu sync.Mutex
 	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		ns := sar.Spec.ResourceAttributes.Namespace
-		mu.Lock()
-		defer mu.Unlock()
 		return true, &authorizationv1.SelfSubjectAccessReview{
 			Spec:   sar.Spec,
 			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: allowedNS[ns]},
