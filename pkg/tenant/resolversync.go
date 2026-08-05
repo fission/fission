@@ -6,7 +6,6 @@ package tenant
 
 import (
 	"context"
-	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -55,11 +54,6 @@ type ResolverSyncReconciler struct {
 	hooks []func() (pending bool)
 }
 
-// hookRetryDelay is how soon the reconciler re-runs when a hook reports
-// pending work. Short: the common case is RBAC landing a second or two after
-// the FissionTenant event that triggered the reconcile.
-const hookRetryDelay = 2 * time.Second
-
 func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
 	if err := SyncResolverFromTenants(ctx, r.client, r.resolver); err != nil {
 		return ctrl.Result{}, err
@@ -71,7 +65,7 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 		}
 	}
 	if pending {
-		return ctrl.Result{RequeueAfter: hookRetryDelay}, nil
+		return ctrl.Result{Requeue: true}, nil
 	}
 	return ctrl.Result{}, nil
 }

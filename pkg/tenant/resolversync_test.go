@@ -67,9 +67,8 @@ func TestResolverSyncReconcilerHooks(t *testing.T) {
 }
 
 // TestResolverSyncReconcilerPendingRequeues verifies that a hook reporting
-// pending work makes the reconciler requeue after hookRetryDelay — the
-// mechanism that re-checks RBAC after the tenant controller provisions it
-// asynchronously (#3647: no FissionTenant event fires for that).
+// pending work uses the controller's rate-limited requeue. This retries quickly
+// at first while avoiding a fixed two-second retry loop when RBAC never lands.
 func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 	c := newFakeClient(t, tenant("team-a", "team-a"))
 	resolver := &utils.NamespaceResolver{}
@@ -83,7 +82,8 @@ func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 
 	res, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)
-	assert.Equal(t, hookRetryDelay, res.RequeueAfter, "pending hook must trigger a requeue")
+	assert.True(t, res.Requeue, "pending hook must trigger a rate-limited requeue")
+	assert.Zero(t, res.RequeueAfter, "pending hook must not bypass rate limiting with a fixed delay")
 }
 
 // TestResolverSyncReconcilerNoHooks verifies that a reconciler with no hooks
