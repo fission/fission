@@ -113,7 +113,7 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return fmt.Errorf("function delete failed: %w", err)
 	}
 
-	_, _, err = applyPackages(ctx, fclient, fr, true, false, false)
+	_, _, err = applyPackages(ctx, fclient, fr, true, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("package delete failed: %w", err)
 	}

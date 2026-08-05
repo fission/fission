@@ -361,7 +361,7 @@ func pluralize(num int, word string) string {
 // specs (and therefore the diff) are accurate for unchanged archives; only the
 // actual upload of a new/changed archive is skipped (such a Package legitimately
 // shows as a would-create/update).
-func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) error {
+func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) (*fv1.PackageList, error) {
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
 
@@ -372,7 +372,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 	for _, aus := range fr.ArchiveUploadSpecs {
 		ar, err := localArchiveFromSpec(input.Context(), specDir, &aus)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		archiveUrl := fmt.Sprintf("%v%v", ARCHIVE_URL_PREFIX, aus.Name)
 		archiveFiles[archiveUrl] = *ar
@@ -382,7 +382,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 	availableArchives := make(map[string]string) // (sha256 -> url)
 	pkgs, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, pkg := range pkgs.Items {
 		for _, ar := range []fv1.Archive{pkg.Spec.Source, pkg.Spec.Deployment} {
@@ -419,7 +419,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			// tracked follow-up that needs per-package-namespace upload handling.
 			uploadedAr, err := pkgutil.UploadArchiveFile(input.Context(), fclient, ar.URL, "")
 			if err != nil {
-				return err
+				return nil, err
 			}
 			archiveFiles[name] = *uploadedAr
 		}
@@ -431,7 +431,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			if strings.HasPrefix(ar.URL, ARCHIVE_URL_PREFIX) {
 				availableAr, ok := archiveFiles[ar.URL]
 				if !ok {
-					return fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
+					return nil, fmt.Errorf("unknown archive name %v", strings.TrimPrefix(ar.URL, ARCHIVE_URL_PREFIX))
 				}
 				ar.Type = availableAr.Type
 				ar.Literal = availableAr.Literal
@@ -440,7 +440,7 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 			}
 		}
 	}
-	return nil
+	return pkgs, nil
 }
 
 // applyResources applies the given set of fission resources. When dryRun is set
@@ -450,7 +450,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	applyStatus := make(map[string]ResourceApplyStatus)
 
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(input, fclient, specDir, fr, dryRun)
+	packageSnapshot, err := applyArchives(input, fclient, specDir, fr, dryRun)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -461,7 +461,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
+	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun, packageSnapshot)
 	if err != nil {
 		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
@@ -720,13 +720,20 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 	}
 }
 
-func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool, packageSnapshot *fv1.PackageList) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	packages := func(ns string) typedv1.PackageInterface {
 		return fclient.FissionClientSet.CoreV1().Packages(ns)
 	}
 	return applyResourceType(ctx, fr, resourceOps[fv1.Package, *fv1.Package]{
 		items: func(fr *FissionResources) []fv1.Package { return fr.Packages },
 		list: func(ctx context.Context) ([]fv1.Package, error) {
+			if packageSnapshot != nil {
+				// The apply flow already listed Packages before uploading archives.
+				// Reusing that snapshot avoids a second cluster-wide List; apply is
+				// the only writer in this interval, so the reconciliation sees the
+				// same package set that archive de-duplication inspected.
+				return packageSnapshot.Items, nil
+			}
 			l, err := packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 			if err != nil {
 				return nil, err

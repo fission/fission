@@ -262,6 +262,42 @@ func TestPackageRetriggerDecision(t *testing.T) {
 	}
 }
 
+// TestApplyPackagesUsesArchivePackageSnapshot verifies that the apply path can
+// reuse the cluster-wide Package list collected while resolving archives. A
+// second List would reintroduce the API load that issue #3664 is intended to
+// remove.
+func TestApplyPackagesUsesArchivePackageSnapshot(t *testing.T) {
+	t.Parallel()
+
+	existing := fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "deploypkg",
+			Namespace:   "default",
+			Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		},
+		Spec: fv1.PackageSpec{
+			Deployment: fv1.Archive{URL: "http://storagesvc/deploy.zip"},
+		},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusNone},
+	}
+
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck // see k8s#126850
+	fc.PrependReactor("list", "packages", func(k8stesting.Action) (bool, runtime.Object, error) {
+		t.Fatal("applyPackages must use the archive package snapshot instead of listing again")
+		return false, nil, nil
+	})
+
+	fr := &FissionResources{
+		Packages: []fv1.Package{existing},
+	}
+	fr.DeploymentConfig.UID = testDeployUID
+	fr.DeploymentConfig.Name = "test-deploy"
+	_, ras, err := applyPackages(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false, &fv1.PackageList{Items: []fv1.Package{existing}})
+	require.NoError(t, err)
+	assert.Empty(t, ras.Created)
+	assert.Empty(t, ras.Updated)
+}
+
 // aliasFR builds a minimal FissionResources carrying the given aliases,
 // stamped with the test deployment UID (mirrors frWith in resourcetype_test.go).
 func aliasFR(aliases ...fv1.FunctionAlias) *FissionResources {
