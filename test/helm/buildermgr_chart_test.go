@@ -4,6 +4,7 @@
 package helm
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,4 +46,27 @@ func TestBuildermgrCanRollBuilderDeployments(t *testing.T) {
 		}
 	}
 	require.True(t, found, "no buildermgr Role/ClusterRole granting apps/deployments was rendered")
+}
+
+// verbsFor returns the verbs a rendered Role/ClusterRole grants for a resource
+// in an API group, merged across every rule that mentions it.
+func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
+	out := map[string]bool{}
+	rules, _ := doc["rules"].([]any)
+	for _, r := range rules {
+		rule, _ := r.(map[string]any)
+		groups, _ := rule["apiGroups"].([]any)
+		resources, _ := rule["resources"].([]any)
+		if !slices.Contains(stringsOf(groups), apiGroup) ||
+			!slices.Contains(stringsOf(resources), resource) {
+			continue
+		}
+		verbs, _ := rule["verbs"].([]any)
+		for _, v := range stringsOf(verbs) {
+			if v != "" {
+				out[v] = true
+			}
+		}
+	}
+	return out
 }

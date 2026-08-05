@@ -232,49 +232,6 @@ func stringsOf(vals []any) []string {
 	return out
 }
 
-// verbsFor returns the verbs a rendered Role/ClusterRole grants for a resource
-// in an API group, merged across every rule that mentions it.
-func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
-	out := map[string]bool{}
-	rules, _ := doc["rules"].([]any)
-	for _, r := range rules {
-		rule, _ := r.(map[string]any)
-		groups, _ := rule["apiGroups"].([]any)
-		resources, _ := rule["resources"].([]any)
-		if !slices.Contains(stringsOf(groups), apiGroup) ||
-			!slices.Contains(stringsOf(resources), resource) {
-			continue
-		}
-		verbs, _ := rule["verbs"].([]any)
-		for _, v := range stringsOf(verbs) {
-			if v != "" {
-				out[v] = true
-			}
-		}
-	}
-	return out
-}
-
-// podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references —
-// the workload it TARGETS plus everything its ingress allowlists admit. Both
-// must name a workload that actually renders, which is what this feeds.
-func podSelectorSvcLabels(doc map[string]any) []string {
-	var out []string
-	spec, _ := doc["spec"].(map[string]any)
-	sel, _ := spec["podSelector"].(map[string]any)
-	if v := selectorSvcLabel(sel); v != "" {
-		out = append(out, v)
-	}
-	return append(out, ingressSvcLabels(doc)...)
-}
-
-// jobNamesFor renders with a given release name and nameFormat, returning the
-// generated Job names (the fullname helper's only consumers today).
-func jobNamesFor(t *testing.T, release, format string) []string {
-	t.Helper()
-	return jobNamesFrom(renderAs(t, release, "--set", "nameFormat="+format))
-}
-
 // jobNamesFrom extracts generated Job names, dropping the random suffix so the
 // stable prefix can be compared.
 func jobNamesFrom(docs []map[string]any) []string {
@@ -292,38 +249,6 @@ func jobNamesFrom(docs []map[string]any) []string {
 		}
 	}
 	sort.Strings(out)
-	return out
-}
-
-// internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
-// secretKeyRef points at, across every rendered pod template.
-func internalAuthEnvNames(docs []map[string]any) []string {
-	var out []string
-	forEachContainerEnv(docs, func(e map[string]any) {
-		name, _ := e["name"].(string)
-		if name != "FISSION_INTERNAL_AUTH_SECRET" {
-			return
-		}
-		vf, _ := e["valueFrom"].(map[string]any)
-		skr, _ := vf["secretKeyRef"].(map[string]any)
-		if n, ok := skr["name"].(string); ok {
-			out = append(out, n)
-		}
-	})
-	return out
-}
-
-// envValues collects the literal values of a named env var across every
-// rendered pod template.
-func envValues(docs []map[string]any, envName string) []string {
-	var out []string
-	forEachContainerEnv(docs, func(e map[string]any) {
-		if name, _ := e["name"].(string); name == envName {
-			if v, ok := e["value"].(string); ok {
-				out = append(out, v)
-			}
-		}
-	})
 	return out
 }
 

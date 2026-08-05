@@ -65,3 +65,16 @@ func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
 	}
 	require.Positive(t, checked, "no NetworkPolicy svc selectors were checked; the guard is inert")
 }
+
+// podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references —
+// the workload it TARGETS plus everything its ingress allowlists admit. Both
+// must name a workload that actually renders, which is what this feeds.
+func podSelectorSvcLabels(doc map[string]any) []string {
+	var out []string
+	spec, _ := doc["spec"].(map[string]any)
+	sel, _ := spec["podSelector"].(map[string]any)
+	if v := selectorSvcLabel(sel); v != "" {
+		out = append(out, v)
+	}
+	return append(out, ingressSvcLabels(doc)...)
+}

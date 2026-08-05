@@ -210,3 +210,35 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 		assert.Positive(t, sawCreate, "generation needs a create it can actually use")
 	})
 }
+
+// internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
+// secretKeyRef points at, across every rendered pod template.
+func internalAuthEnvNames(docs []map[string]any) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		name, _ := e["name"].(string)
+		if name != "FISSION_INTERNAL_AUTH_SECRET" {
+			return
+		}
+		vf, _ := e["valueFrom"].(map[string]any)
+		skr, _ := vf["secretKeyRef"].(map[string]any)
+		if n, ok := skr["name"].(string); ok {
+			out = append(out, n)
+		}
+	})
+	return out
+}
+
+// envValues collects the literal values of a named env var across every
+// rendered pod template.
+func envValues(docs []map[string]any, envName string) []string {
+	var out []string
+	forEachContainerEnv(docs, func(e map[string]any) {
+		if name, _ := e["name"].(string); name == envName {
+			if v, ok := e["value"].(string); ok {
+				out = append(out, v)
+			}
+		}
+	})
+	return out
+}

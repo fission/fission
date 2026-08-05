@@ -84,3 +84,10 @@ func TestNameFormat(t *testing.T) {
 		assert.Contains(t, err.Error(), "nameFormat must be")
 	})
 }
+
+// jobNamesFor renders with a given release name and nameFormat, returning the
+// generated Job names (the fullname helper's only consumers today).
+func jobNamesFor(t *testing.T, release, format string) []string {
+	t.Helper()
+	return jobNamesFrom(renderAs(t, release, "--set", "nameFormat="+format))
+}
