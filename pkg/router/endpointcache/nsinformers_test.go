@@ -176,10 +176,25 @@ func TestNamespaceInformersCloseStopsAll(t *testing.T) {
 func TestNamespaceInformersSyncAfterCloseIsNoop(t *testing.T) {
 	t.Parallel()
 
+	releaseList := make(chan struct{})
+
 	kubeClient := fake.NewSimpleClientset(
 		makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"),
 		makeSlice("s2", "ns-b", "fn-b", "10.0.0.2"),
 	)
+
+	kubeClient.PrependReactor("list", "endpointslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		ns := action.GetNamespace()
+		switch ns {
+		case "ns-a":
+			return false, nil, nil
+		case "ns-b":
+			<-releaseList
+			return false, nil, nil
+		}
+		return false, nil, nil
+	})
+
 	index := NewIndex()
 	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
 
@@ -188,7 +203,14 @@ func TestNamespaceInformersSyncAfterCloseIsNoop(t *testing.T) {
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
 
+	releaseFunc := sync.OnceFunc(func() {
+		close(releaseList)
+	})
+
 	// Close: stops ns-a informer, sets closed=true.
+	t.Cleanup(nsi.Close)
+	t.Cleanup(releaseFunc)
+
 	nsi.Close()
 
 	// Sync with ns-b: must be a no-op because closed=true.
