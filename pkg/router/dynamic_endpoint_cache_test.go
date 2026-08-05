@@ -7,6 +7,7 @@ package router
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -16,10 +17,60 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/utils"
 )
+
+// addOnlyManager lets setupDynamicEndpointCache register its startup runnable
+// without starting a full controller-runtime manager. No other Manager method
+// is used while setupDynamicEndpointCache is being called.
+type addOnlyManager struct {
+	ctrl.Manager
+}
+
+func (*addOnlyManager) Add(manager.Runnable) error {
+	return nil
+}
+
+// TestSetupDynamicEndpointCacheReusesPreflightRBAC verifies that namespaces
+// approved by the startup preflight are reused by the initial dynamic-cache
+// sync instead of issuing the same SelfSubjectAccessReviews again.
+func TestSetupDynamicEndpointCacheReusesPreflightRBAC(t *testing.T) {
+	kubeClient := fake.NewSimpleClientset()
+	var sarCalls atomic.Int32
+	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		sarCalls.Add(1)
+		sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+		return true, &authorizationv1.SelfSubjectAccessReview{
+			Spec:   sar.Spec,
+			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
+		}, nil
+	})
+
+	precheckedNamespaces := sliceWatchNamespaces()
+	require.NotEmpty(t, precheckedNamespaces)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	_, hooks, err := setupDynamicEndpointCache(
+		ctx,
+		kubeClient,
+		endpointcache.NewIndex(),
+		&addOnlyManager{},
+		nil,
+		logr.Discard(),
+		precheckedNamespaces,
+	)
+	require.NoError(t, err)
+	require.Len(t, hooks, 1)
+
+	pending := hooks[0]()
+	assert.False(t, pending)
+	assert.Zero(t, sarCalls.Load(), "preflight-approved namespaces must not repeat SARs during dynamic-cache setup")
+}
 
 // newDynamicCacheTest builds a dynamicEndpointCache backed by a fake clientset
 // whose SAR reactor consults the allowedNS map. A namespace present with value

@@ -134,12 +134,15 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 // symptom is a reflector error log. The chart renders the required Role +
 // RoleBinding (router/role-dataplane.yaml) whenever
 // router.endpointSliceCache.mode != off; bespoke-RBAC installs must mirror it.
+// On success it returns the exact namespace scopes that passed the review so
+// dynamic mode can seed its RBAC cache without repeating the same checks during
+// informer setup.
 //
 // Callers degrade to mode=off on error rather than exiting: the slice cache is
 // a warm-path optimization with a full legacy fallback, and crash-looping the
 // data plane over a missing optimization grant (e.g. a GitOps prune dropping
 // the Role) would turn it into an outage.
-func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
+func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) ([]string, error) {
 	// Cluster mode watches EndpointSlices cluster-wide, so a single cluster-scoped
 	// review (empty Namespace) is the right preflight; other modes check each
 	// function namespace the informer scopes to.
@@ -149,10 +152,10 @@ func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) e
 	}
 	for _, ns := range watchNamespaces {
 		if err := checkSliceWatchRBACForNamespace(ctx, kubeClient, ns); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return watchNamespaces, nil
 }
 
 // checkSliceWatchRBACForNamespace verifies list+watch on EndpointSlices in one
@@ -336,7 +339,10 @@ func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool)
 //
 // The returned InformerSynced gates router readiness: it is true only after
 // every running informer has completed its initial LIST. The internal informer
-// manager is closed when ctx is cancelled.
+// manager is closed when ctx is cancelled. Successful startup preflight results
+// seed rbacChecked so the initial informer sync does not repeat the same
+// permission checks. Existing pruning removes those results when a namespace is
+// offboarded, so re-onboarding still performs fresh checks.
 func setupDynamicEndpointCache(
 	ctx context.Context,
 	kubeClient kubernetes.Interface,
@@ -344,6 +350,7 @@ func setupDynamicEndpointCache(
 	crMgr ctrl.Manager,
 	resolverSyncHooks []func() (pending bool),
 	logger logr.Logger,
+	precheckedSliceNamespaces []string,
 ) (cache.InformerSynced, []func() (pending bool), error) {
 	nsInformers := endpointcache.NewNamespaceInformers(kubeClient, index, logger.WithName("endpointcache"))
 	resolver := utils.DefaultNSResolver()
@@ -352,6 +359,10 @@ func setupDynamicEndpointCache(
 		resolver:    resolver,
 		nsInformers: nsInformers,
 		logger:      logger,
+	}
+	// Reuse successful startup preflight results during initial informer sync.
+	for _, ns := range precheckedSliceNamespaces {
+		dynCache.rbacChecked.Store(ns, struct{}{})
 	}
 	// Stop all informers when the router's context is cancelled.
 	go func() {
@@ -574,12 +585,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		"idleConnTimeout", transportIdleConnTimeout)
 
 	requestedMode := cfg.endpointSliceCacheMode
+	var precheckedSliceNamespaces []string
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
-		if rerr := checkSliceWatchRBAC(ctx, kubeClient); rerr != nil {
-			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)",
-				"requested_mode", cfg.endpointSliceCacheMode)
+		nsList, rerr := checkSliceWatchRBAC(ctx, kubeClient)
+		if rerr != nil {
+			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)", "requested_mode", cfg.endpointSliceCacheMode)
 			cfg.endpointSliceCacheMode = endpointSliceCacheOff
 		}
+		precheckedSliceNamespaces = nsList
 	}
 	// Registered unconditionally so the requested-vs-effective mode is
 	// alertable: an absent series cannot distinguish "mode=off install" from
@@ -663,7 +676,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			// added later — this replaces it entirely in dynamic mode. The
 			// resolver-sync hook calls Sync on every FissionTenant change, so
 			// no restart is needed to admit a new tenant's warm path.
-			endpointsSynced, resolverSyncHooks, err = setupDynamicEndpointCache(ctx, kubeClient, index, crMgr, resolverSyncHooks, logger)
+			endpointsSynced, resolverSyncHooks, err = setupDynamicEndpointCache(ctx, kubeClient, index, crMgr, resolverSyncHooks, logger, precheckedSliceNamespaces)
 			if err != nil {
 				return err
 			}
