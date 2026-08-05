@@ -355,13 +355,27 @@ func pluralize(num int, word string) string {
 	return word + "s"
 }
 
+// listClusterPackages returns every Package across all namespaces. A single
+// `spec apply` needs this list twice — to build the archive dedup map
+// (applyArchives) and to diff desired vs live packages (applyPackages) — so the
+// caller fetches it once and threads the same snapshot to both, halving the
+// apiserver load of an apply on large multi-tenant clusters where Packages carry
+// archive metadata and build logs in .status and are far from tiny.
+func listClusterPackages(ctx context.Context, fclient cmd.Client) ([]fv1.Package, error) {
+	l, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return l.Items, nil
+}
+
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
 // Under dryRun the read-only work still runs — local archives are built/checksummed
 // and matched against archives already on the cluster — so the resolved Package
 // specs (and therefore the diff) are accurate for unchanged archives; only the
 // actual upload of a new/changed archive is skipped (such a Package legitimately
 // shows as a would-create/update).
-func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) error {
+func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool, clusterPkgs []fv1.Package) error {
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
 
@@ -378,13 +392,11 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 		archiveFiles[archiveUrl] = *ar
 	}
 
-	// get list of packages, make content-indexed map of available archives
+	// Make a content-indexed map of available archives from the cluster-wide
+	// Package snapshot the caller fetched once (see listClusterPackages) and
+	// shares with applyPackages, so a single apply lists Packages once.
 	availableArchives := make(map[string]string) // (sha256 -> url)
-	pkgs, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, pkg := range pkgs.Items {
+	for _, pkg := range clusterPkgs {
 		for _, ar := range []fv1.Archive{pkg.Spec.Source, pkg.Spec.Deployment} {
 			if ar.Type == fv1.ArchiveTypeUrl && len(ar.URL) > 0 {
 				availableArchives[ar.Checksum.Sum] = ar.URL
@@ -449,8 +461,24 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
+	// Fetch every Package on the cluster once and share the snapshot with both
+	// consumers below: applyArchives builds its content-indexed (sha256 -> URL)
+	// archive dedup map from it, and applyPackages diffs the spec's desired
+	// packages against it. A single `spec apply` therefore lists Packages once
+	// instead of twice.
+	//
+	// The two consumers run at different points (applyArchives before archive
+	// uploads, applyPackages after), so sharing one snapshot assumes nothing
+	// relevant to the package set changes in between. That holds within an apply:
+	// the fission CLI is the only writer of Packages, and the archive uploads in
+	// between touch storage, not Package objects.
+	clusterPkgs, err := listClusterPackages(input.Context(), fclient)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(input, fclient, specDir, fr, dryRun)
+	err = applyArchives(input, fclient, specDir, fr, dryRun, clusterPkgs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -461,7 +489,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
+	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun, clusterPkgs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
@@ -720,18 +748,17 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 	}
 }
 
-func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool, clusterPkgs []fv1.Package) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	packages := func(ns string) typedv1.PackageInterface {
 		return fclient.FissionClientSet.CoreV1().Packages(ns)
 	}
 	return applyResourceType(ctx, fr, resourceOps[fv1.Package, *fv1.Package]{
 		items: func(fr *FissionResources) []fv1.Package { return fr.Packages },
+		// list returns the cluster-wide Package snapshot the caller already
+		// fetched (see listClusterPackages); applyArchives consumes the same
+		// slice, so one `spec apply` lists Packages once, not twice.
 		list: func(ctx context.Context) ([]fv1.Package, error) {
-			l, err := packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return l.Items, nil
+			return clusterPkgs, nil
 		},
 		meta: func(p *fv1.Package) *metav1.ObjectMeta { return &p.ObjectMeta },
 		// A package is up to date when its spec matches (or its env + non-empty
