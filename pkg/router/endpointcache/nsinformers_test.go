@@ -15,6 +15,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
@@ -121,6 +122,27 @@ func waitForIndexSize(t *testing.T, index *Index, n int) {
 	require.Eventuallyf(t, func() bool {
 		return index.Size() == n
 	}, 10*time.Second, 10*time.Millisecond, "index size never converged to %d", n)
+}
+
+// blockingStopWatch lets a test hold a real informer inside watcher shutdown.
+// Stop reports that shutdown began, then waits until the test releases it.
+type blockingStopWatch struct {
+	result      chan watch.Event
+	stopStarted chan struct{}
+	releaseStop <-chan struct{}
+	stopOnce    sync.Once
+}
+
+func (w *blockingStopWatch) Stop() {
+	w.stopOnce.Do(func() {
+		close(w.stopStarted)
+		<-w.releaseStop
+		close(w.result)
+	})
+}
+
+func (w *blockingStopWatch) ResultChan() <-chan watch.Event {
+	return w.result
 }
 
 // TestNamespaceInformersCloseStopsAll verifies that Close stops every running
@@ -243,71 +265,86 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
 }
 
-// TestNamespaceInformersFencePreventsResurrection verifies the teardown fence
-// deterministically: Sync must block on <-ni.done before RemoveNamespace sweeps
-// the index, and a slice applied while fenced must be swept too (no resurrection).
-//
-// Synchronization: the injected cancel closes entered when Sync calls it,
-// proving the goroutine has reached the fence. After <-entered the goroutine is
-// guaranteed to block on <-ni.done (the next statement), so asserting syncDone
-// is still open is deterministic — no sleeps, no scheduler dependence.
+// TestNamespaceInformersFencePreventsResurrection verifies that the real done
+// channel does not fire until the real informer has fully shut down. Moving
+// close(done) before factory.Shutdown would let Sync sweep the namespace and
+// return while the watcher can still deliver a late event and resurrect it.
 func TestNamespaceInformersFencePreventsResurrection(t *testing.T) {
 	t.Parallel()
 
-	kubeClient := fake.NewSimpleClientset()
+	kubeClient := fake.NewSimpleClientset(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
+	watchStarted := make(chan struct{})
+	stopStarted := make(chan struct{})
+	releaseStop := make(chan struct{})
+	blockingWatch := &blockingStopWatch{
+		result:      make(chan watch.Event),
+		stopStarted: stopStarted,
+		releaseStop: releaseStop,
+	}
+	var watchStartOnce sync.Once
+	kubeClient.PrependWatchReactor("endpointslices", func(action k8stesting.Action) (bool, watch.Interface, error) {
+		watchStartOnce.Do(func() { close(watchStarted) })
+		return true, blockingWatch, nil
+	})
+
 	index := NewIndex()
 	nsi := NewNamespaceInformers(kubeClient, index, logr.Discard())
 	t.Cleanup(nsi.Close)
+	release := sync.OnceFunc(func() { close(releaseStop) })
+	t.Cleanup(release)
 
-	// Inject an informer with a done channel we control and a cancel that
-	// signals when Sync calls it (proving the goroutine reached the fence).
-	done := make(chan struct{})
-	entered := make(chan struct{})
-	nsi.mu.Lock()
-	nsi.informers["ns-a"] = &nsInformer{
-		informer: nil, // not needed — Sync only uses cancel and done
-		cancel:   func() { close(entered) },
-		done:     done,
-	}
-	nsi.informerCount.Store(1)
-	nsi.mu.Unlock()
+	// Start the real informer and wait until its initial list has populated
+	// the index and its watch connection is active.
+	nsi.Sync([]string{"ns-a"})
+	require.True(t, nsi.WaitForCacheSync(t.Context()))
+	waitForIndexSize(t, index, 1)
+	require.Eventually(t, func() bool {
+		select {
+		case <-watchStarted:
+			return true
+		default:
+			return false
+		}
+	}, 10*time.Second, 10*time.Millisecond, "informer watch never started")
 
-	// Populate the index for ns-a so the sweep has something to remove.
-	index.ApplySlice(makeSlice("s1", "ns-a", "fn-a", "10.0.0.1"))
-	require.Equal(t, 1, index.Size())
-
-	// Call Sync in a goroutine.
+	// Offboard in the background. Cancelling the informer reaches the real
+	// watch's Stop method, which remains blocked until release is called.
 	syncDone := make(chan struct{})
 	go func() {
 		nsi.Sync([]string{})
 		close(syncDone)
 	}()
 
-	// Wait for the goroutine to call cancel — after this it will block on
-	// <-ni.done (the next statement). Without the fence, RemoveNamespace
-	// would run immediately and syncDone would close.
-	<-entered
+	require.Eventually(t, func() bool {
+		select {
+		case <-stopStarted:
+			return true
+		default:
+			return false
+		}
+	}, 10*time.Second, 10*time.Millisecond, "watcher shutdown never started")
 
-	// The fence must hold: syncDone is still open, index is not swept.
+	// Since the real watcher has not finished stopping, Sync must still be
+	// waiting and the namespace must not have been swept yet.
 	select {
 	case <-syncDone:
-		t.Fatal("Sync completed without waiting for done channel — fence missing")
+		t.Fatal("Sync completed before the watcher fully stopped")
 	default:
 	}
-	assert.Equal(t, 1, index.Size(), "index must not be swept until done fires")
+	assert.Equal(t, 1, index.Size(), "index must not be swept while the watcher is still stopping")
 
-	// Apply a late slice while fenced — simulates an event that would
-	// resurrect without the fence. The fence holds, so this entry is
-	// swept along with the original when done fires.
-	index.ApplySlice(makeSlice("s2", "ns-a", "fn-a", "10.0.0.2"))
+	// Let watcher shutdown finish. Only then may Sync sweep and return.
+	release()
+	require.Eventually(t, func() bool {
+		select {
+		case <-syncDone:
+			return true
+		default:
+			return false
+		}
+	}, 10*time.Second, 10*time.Millisecond, "Sync did not finish after watcher shutdown")
 
-	// Close done — Sync can now drain and sweep.
-	close(done)
-	<-syncDone
-
-	// Index must be empty — the fence waited for the drain, then swept
-	// everything including the late entry.
-	assert.Equal(t, 0, index.Size(), "index must be empty after fence drain + sweep")
+	assert.Equal(t, 0, index.Size(), "index must be empty after watcher shutdown and sweep")
 }
 
 // TestNamespaceInformersCreateUpdateDeleteThroughInformer exercises
