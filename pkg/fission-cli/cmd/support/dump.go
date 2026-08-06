@@ -76,18 +76,22 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
 		"fission-components-pod-log": resources.NewKubernetesPodLogDumper(k8sClient,
 			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+		"fission-components-pod-events": resources.NewKubernetesPodEventDumper(k8sClient,
+			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
 
 		// fission builder logs & spec
 		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "owner=buildermgr"),
 		"fission-builder-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "owner=buildermgr"),
 		"fission-builder-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "owner=buildermgr"),
 		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "owner=buildermgr"),
+		"fission-builder-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "owner=buildermgr"),
 
 		// fission function logs & spec
 		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "executorType=newdeploy"),
 		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "executorType in (poolmgr, newdeploy)"),
 		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "executorType in (poolmgr, newdeploy)"),
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
+		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
 
 		// CRD resources
 		"fission-crd-packages":      resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
