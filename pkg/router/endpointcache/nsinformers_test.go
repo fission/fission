@@ -70,8 +70,8 @@ func TestNamespaceInformersSyncStartsAndStops(t *testing.T) {
 	waitForIndexSize(t, index, 2)
 
 	// Both functions must be in the index — proves the informers fed it.
-	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
-	assert.ElementsMatch(t, []string{"10.0.0.2:8888"}, addrs(index.Lookup("ns-b", "fn-b", "")))
+	waitForEndpoints(t, index, "ns-a", "fn-a", "10.0.0.1:8888")
+	waitForEndpoints(t, index, "ns-b", "fn-b", "10.0.0.2:8888")
 
 	// Stop ns-b's informer; its entries must be swept from the index.
 	// Sync waits for the informer goroutine to exit before sweeping, so the
@@ -117,11 +117,27 @@ func TestNamespaceInformersHasSyncedEmpty(t *testing.T) {
 // still travel through the informer's async processor before ApplySlice runs,
 // so index state is genuinely eventual-convergence after a sync (bounded here
 // — never a bare sleep).
+//
+// Size() alone is NOT a sufficient sync point for asserting on endpoints:
+// ApplySlice creates the entry and bumps ix.size under the SHARD lock, releases
+// it, and only then fills e.slices and rebuilds under the ENTRY lock. A poller
+// can therefore observe the entry while Lookup still returns nothing. Use
+// waitForEndpoints whenever the next assertion is about addresses.
 func waitForIndexSize(t *testing.T, index *Index, n int) {
 	t.Helper()
 	require.Eventuallyf(t, func() bool {
 		return index.Size() == n
 	}, 10*time.Second, 10*time.Millisecond, "index size never converged to %d", n)
+}
+
+// waitForEndpoints waits until the function's endpoint set matches want. It
+// polls the very thing being asserted, so unlike waitForIndexSize it cannot
+// observe the half-applied entry described above.
+func waitForEndpoints(t *testing.T, index *Index, ns, fn string, want ...string) {
+	t.Helper()
+	require.EventuallyWithTf(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(c, want, addrs(index.Lookup(ns, fn, "")))
+	}, 10*time.Second, 10*time.Millisecond, "endpoints for %s/%s never converged to %v", ns, fn, want)
 }
 
 // blockingStopWatch lets a test hold a real informer inside watcher shutdown.
@@ -248,7 +264,7 @@ func TestNamespaceInformersOffboardReonboard(t *testing.T) {
 	nsi.Sync([]string{"ns-a"})
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
-	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+	waitForEndpoints(t, index, "ns-a", "fn-a", "10.0.0.1:8888")
 
 	// Final offboard leaves nothing behind.
 	nsi.Sync([]string{})
@@ -284,7 +300,7 @@ func TestNamespaceInformersConcurrentSync(t *testing.T) {
 	nsi.Sync([]string{"ns-a"})
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
-	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+	waitForEndpoints(t, index, "ns-a", "fn-a", "10.0.0.1:8888")
 }
 
 // TestNamespaceInformersFencePreventsResurrection verifies that the real done
@@ -387,18 +403,14 @@ func TestNamespaceInformersCreateUpdateDeleteThroughInformer(t *testing.T) {
 	nsi.Sync([]string{"ns-a"})
 	require.True(t, nsi.WaitForCacheSync(t.Context()))
 	waitForIndexSize(t, index, 1)
-	assert.ElementsMatch(t, []string{"10.0.0.1:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+	waitForEndpoints(t, index, "ns-a", "fn-a", "10.0.0.1:8888")
 
 	// Update: REST Update triggers MODIFIED → UpdateFunc → ApplySlice.
 	updated := makeSlice("s1", "ns-a", "fn-a", "10.0.0.2", "10.0.0.3")
 	_, err := kubeClient.DiscoveryV1().EndpointSlices("ns-a").Update(t.Context(), updated, metav1.UpdateOptions{})
 	require.NoError(t, err)
-	// Wait for the endpoints to reflect the update (size stays 1 — same function).
-	require.Eventually(t, func() bool {
-		got := addrs(index.Lookup("ns-a", "fn-a", ""))
-		return len(got) == 2
-	}, 10*time.Second, 10*time.Millisecond, "endpoints must converge after update")
-	assert.ElementsMatch(t, []string{"10.0.0.2:8888", "10.0.0.3:8888"}, addrs(index.Lookup("ns-a", "fn-a", "")))
+	// Size stays 1 — same function; only the endpoint set changes.
+	waitForEndpoints(t, index, "ns-a", "fn-a", "10.0.0.2:8888", "10.0.0.3:8888")
 
 	// Delete: REST Delete triggers DELETED → DeleteFunc → DeleteSlice.
 	err = kubeClient.DiscoveryV1().EndpointSlices("ns-a").Delete(t.Context(), "s1", metav1.DeleteOptions{})
