@@ -6,6 +6,7 @@ package tenant
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,10 +68,10 @@ func TestResolverSyncReconcilerHooks(t *testing.T) {
 }
 
 // TestResolverSyncReconcilerPendingRequeues verifies that a hook reporting
-// pending work triggers a fixed-interval requeue (hookRetryDelay). This retries
-// quickly while avoiding the workqueue rate limiter's exponential backoff,
-// which would leave a namespace unadmitted for ~16 minutes when the missing
-// RoleBinding finally lands.
+// pending work triggers an explicit-interval requeue starting at
+// hookRetryDelay. This retries quickly while avoiding the workqueue rate
+// limiter's exponential backoff, which would leave a namespace unadmitted for
+// ~16 minutes when the missing RoleBinding finally lands.
 func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 	c := newFakeClient(t, tenant("team-a", "team-a"))
 	resolver := &utils.NamespaceResolver{}
@@ -84,7 +85,43 @@ func TestResolverSyncReconcilerPendingRequeues(t *testing.T) {
 
 	res, err := r.Reconcile(t.Context(), ctrl.Request{})
 	require.NoError(t, err)
-	assert.Equal(t, hookRetryDelay, res.RequeueAfter, "pending hook must requeue after the fixed poll interval")
+	assert.Equal(t, hookRetryDelay, res.RequeueAfter, "first pending reconcile must requeue after the base poll interval")
+}
+
+// TestResolverSyncReconcilerPendingBackoff verifies the escalating poll
+// interval: consecutive pending reconciles double the delay up to
+// hookRetryMaxDelay and hold there, so a namespace that can never pass (an
+// orphaned FissionTenant) settles into a cheap poll instead of re-checking
+// every 2s forever. A clean reconcile resets it, so the next onboarding race
+// still converges at the base interval.
+func TestResolverSyncReconcilerPendingBackoff(t *testing.T) {
+	c := newFakeClient(t, tenant("team-a", "team-a"))
+	pending := true
+	r := &ResolverSyncReconciler{
+		client:   c,
+		resolver: &utils.NamespaceResolver{},
+		hooks: []func() bool{
+			func() bool { return pending },
+		},
+	}
+
+	for _, want := range []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, hookRetryMaxDelay, hookRetryMaxDelay} {
+		res, err := r.Reconcile(t.Context(), ctrl.Request{})
+		require.NoError(t, err)
+		assert.Equal(t, want, res.RequeueAfter, "escalating poll interval")
+	}
+
+	// A clean reconcile clears the counter...
+	pending = false
+	res, err := r.Reconcile(t.Context(), ctrl.Request{})
+	require.NoError(t, err)
+	require.Zero(t, res.RequeueAfter, "no requeue once hooks report no pending work")
+
+	// ...so the next pending round starts over at the base interval.
+	pending = true
+	res, err = r.Reconcile(t.Context(), ctrl.Request{})
+	require.NoError(t, err)
+	assert.Equal(t, hookRetryDelay, res.RequeueAfter, "backoff must reset after a clean reconcile")
 }
 
 // TestResolverSyncReconcilerNoHooks verifies that a reconciler with no hooks
