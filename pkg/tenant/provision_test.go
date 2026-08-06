@@ -94,6 +94,28 @@ func TestEnsureNamespaceRBACBindsWorkloadClusterRoles(t *testing.T) {
 	}
 }
 
+// TestEnsureNamespaceRBACBindsRouterDataplane pins that the router's
+// dataplane ClusterRole is bound in each tenant namespace, so the router can
+// read EndpointSlices + Services for the warm path (#3647). The binding is
+// scoped to the namespace (RoleBinding) and the subject points at the release
+// namespace (where the router SA lives).
+func TestEnsureNamespaceRBACBindsRouterDataplane(t *testing.T) {
+	c := newFakeClient(t)
+	ctx := t.Context()
+	require.NoError(t, EnsureNamespaceRBAC(ctx, c, "team-a", "fission", metav1.OwnerReference{}))
+
+	rb := &rbacv1.RoleBinding{}
+	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-router-dataplane"}, rb),
+		"router dataplane RoleBinding must exist in tenant namespace")
+	assert.Equal(t, "ClusterRole", rb.RoleRef.Kind, "must bind a ClusterRole")
+	assert.Equal(t, fv1.RouterDataplaneTenantClusterRole, rb.RoleRef.Name,
+		"must reference the router dataplane ClusterRole")
+	require.Len(t, rb.Subjects, 1)
+	assert.Equal(t, fv1.FissionRouterSA, rb.Subjects[0].Name, "subject must be the router SA")
+	assert.Equal(t, "fission", rb.Subjects[0].Namespace, "subject SA lives in the release namespace")
+	assert.Equal(t, managedByValue, rb.Labels[managedByLabelKey], "must be labelled for cleanup")
+}
+
 // TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS guards the
 // fallback: with no release namespace known, the workload bindings are skipped
 // (an unresolvable subject would be useless), leaving the fetcher/builder RBAC.
@@ -105,6 +127,8 @@ func TestEnsureNamespaceRBACSkipsWorkloadBindingsWithoutReleaseNS(t *testing.T) 
 	rb := &rbacv1.RoleBinding{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-executor-workload"}, rb)),
 		"workload binding must be skipped when the release namespace is unknown")
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-router-dataplane"}, &rbacv1.RoleBinding{})),
+		"router dataplane binding must be skipped when the release namespace is unknown")
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, &rbacv1.RoleBinding{}),
 		"the fetcher function-access binding is still provisioned without a release namespace")
 }
@@ -132,6 +156,8 @@ func TestDeleteNamespaceRBACRemovesManaged(t *testing.T) {
 	rb := &rbacv1.RoleBinding{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fetcherRoleName}, rb)), "fetcher RoleBinding must be deleted")
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: builderRoleName}, rb)), "builder RoleBinding must be deleted")
+	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: "fission-router-dataplane"}, &rbacv1.RoleBinding{})),
+		"router dataplane RoleBinding must be deleted")
 	keys := &corev1.Secret{}
 	assert.True(t, apierrors.IsNotFound(c.Get(ctx, types.NamespacedName{Namespace: "team-a", Name: fv1.TenantAuthKeysSecret}, keys)),
 		"derived-key Secret must be deleted by name on teardown")

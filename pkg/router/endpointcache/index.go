@@ -12,6 +12,7 @@ package endpointcache
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -325,6 +326,58 @@ func (ix *Index) DeleteSlice(es *discoveryv1.EndpointSlice) {
 				ix.size.Add(-1)
 			}
 			cur.mu.Unlock()
+		}
+		s.mu.Unlock()
+	}
+}
+
+// RemoveNamespace drops every slice whose object namespace matches, used when a
+// tenant is offboarded and its informer is stopped (nsinformers.go Sync).
+// FnKey.Namespace comes from the slice's functionNamespace label and may differ
+// from the namespace containing the slice, so cleanup must inspect the stored
+// slice keys. Function entries are rebuilt or removed after matching slices are
+// deleted.
+//
+// Two side effects worth noting, neither a bug:
+//
+//  1. A partially-removed entry (slices in multiple namespaces, only the
+//     offboarded one matched) has its quarantined set and strike map cleared
+//     for the surviving addresses. The old code never touched surviving
+//     entries. This is consistent with the "any slice event lifts quarantines"
+//     rule applied by ApplySlice/DeleteSlice, but it is a new side effect for
+//     offboard.
+//
+//  2. The shard lock is held for the full sweep with one entry lock taken per
+//     inhabited entry, so on a large index offboard briefly stalls concurrent
+//     Lookup/Admit. Acceptable because offboard is rare (a tenant removal), but
+//     a caller doing bulk offboard on a hot router should expect a short
+//     admission pause proportional to the shard size.
+func (ix *Index) RemoveNamespace(ns string) {
+	for i := range ix.shards {
+		s := &ix.shards[i]
+		s.mu.Lock()
+		for key, e := range s.m {
+			e.mu.Lock()
+			removed := false
+			for sliceKey := range e.slices {
+				sliceNamespace, _, ok := strings.Cut(sliceKey, "/")
+				if ok && sliceNamespace == ns {
+					delete(e.slices, sliceKey)
+					removed = true
+				}
+			}
+			if !removed {
+				e.mu.Unlock()
+				continue
+			}
+			e.quarantined.Store(nil)
+			e.strikes = nil
+			e.rebuildLocked()
+			if len(e.slices) == 0 {
+				delete(s.m, key)
+				ix.size.Add(-1)
+			}
+			e.mu.Unlock()
 		}
 		s.mu.Unlock()
 	}

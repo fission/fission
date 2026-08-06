@@ -17,8 +17,6 @@
 package common_test
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -326,9 +324,7 @@ func servedPodNameEventually(t *testing.T, ctx context.Context, f *framework.Fra
 // instruments with at least one recorded point) but omits
 // resync_drift/version_fallback entirely until something increments them.
 // So "absent from the scrape" and "zero" are the same observable state for
-// these two counters, and scrapeCounterSum returns 0 rather than failing
-// when no line matches, instead of requiring a match the way
-// memory_soak_test.go's parseMetric does for an always-present gauge.
+// these two counters, and scrapeCounterSum returns 0 when no line matches.
 func scrapeCounterSum(t *testing.T, ctx context.Context, f *framework.Framework, svc, metricName string) float64 {
 	t.Helper()
 	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=" + svc})
@@ -338,42 +334,7 @@ func scrapeCounterSum(t *testing.T, ctx context.Context, f *framework.Framework,
 	for _, p := range pods.Items {
 		raw, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).ProxyGet("http", p.Name, "8080", "/metrics", nil).DoRaw(ctx)
 		require.NoErrorf(t, err, "scraping /metrics from %s pod %s", svc, p.Name)
-		total += sumMetricLines(raw, metricName)
-	}
-	return total
-}
-
-// sumMetricLines sums every Prometheus exposition line for `name`, labeled
-// or not (both "foo 3" and `foo{a="b"} 3` match), skipping comment lines.
-// Unlike memory_soak_test.go's parseMetric, which returns the first match
-// for a metric callers know by construction is unlabeled, this sums every
-// label combination -- needed here because callers only know these two
-// counters are unlabeled by reading their registration site, not by
-// contract.
-func sumMetricLines(raw []byte, name string) float64 {
-	var total float64
-	sc := bufio.NewScanner(bytes.NewReader(raw))
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		rest, ok := strings.CutPrefix(line, name)
-		if !ok {
-			continue
-		}
-		if len(rest) == 0 || (rest[0] != ' ' && rest[0] != '{') {
-			continue // matched a longer metric name sharing this prefix
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		v, err := strconv.ParseFloat(fields[len(fields)-1], 64)
-		if err != nil {
-			continue
-		}
-		total += v
+		total += framework.SumMetricLines(raw, metricName)
 	}
 	return total
 }

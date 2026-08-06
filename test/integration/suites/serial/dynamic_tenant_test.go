@@ -42,12 +42,25 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	if !f.DynamicNamespacesEnabled(t, ctx) {
 		t.Skip("tenancy.mode is not dynamic; this leg runs a different tenancy model")
 	}
+	if f.RouterEndpointSliceMode(t, ctx) != "on" {
+		t.Skip("router.endpointSliceCache.mode is not 'on'; dynamic warm-path assertions require it")
+	}
+	if !f.ExecutorFunctionServicesEnabled(t, ctx) {
+		t.Skip("executor.functionServices.enabled is off; poolmgr functions have no EndpointSlices")
+	}
 	pyImage := f.Images().RequirePython(t)
 
 	// Let any rollout from a prior serial test (e.g. the adopt test's un-waited
 	// executor restore) settle, then snapshot the control plane so we can prove
 	// onboarding restarts nothing — the headline promise of dynamic tenancy.
 	f.WaitForControlPlaneStable(t, ctx, 3*time.Minute)
+	// The requested mode is "on" (gated above), so a false result here means
+	// the router degraded to off after an RBAC preflight failure — the exact
+	// defect this PR guards against. Assert rather than skip: a chart regression
+	// that drops the router-dataplane Role must fail the suite, not green-skip it.
+	require.Truef(t, f.RouterEndpointSliceCacheActive(t, ctx),
+		"router EndpointSlice cache fell back to off after RBAC preflight failure; "+
+			"expected effective=on on every running router pod (the requested mode is on)")
 	before := f.ControlPlanePodUIDs(t, ctx)
 
 	// A namespace that did not exist at install time: the dynamic path's reason
@@ -85,6 +98,9 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// 2. Onboard. The controller provisions per-namespace RBAC, ServiceAccounts and
 	//    the derived-key Secret; the data-plane managers add the namespace to their
 	//    watched set AND re-enqueue the staged CRs — all without a restart.
+	//    Capture the router's informer count baseline: the final offboard must
+	//    return to it (deterministic leak guard — exact, vs. goroutine delta ±10).
+	informersBefore := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_informers")
 	ns.EnableTenant(t, ctx)
 	f.WaitForTenantReady(t, ctx, tenantNS)
 
@@ -120,6 +136,23 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	// tenant's trigger on onboarding, with no restart.
 	r.GetEventually(t, ctx, routeURL, framework.BodyContains("hello"))
 
+	// 3b. The router's per-namespace EndpointSlice informer must have picked up
+	//     the new tenant (#3647): the RBAC grant exists AND the warm path served
+	//     a request — proving the informer fed the new tenant's EndpointSlices
+	//     into the index. Before the fix the informer was frozen at startup and
+	//     the router never saw the new tenant's EndpointSlices.
+	rbac, rerr := f.KubeClient().RbacV1().RoleBindings(tenantNS).Get(ctx, "fission-router-dataplane", metav1.GetOptions{})
+	require.NoErrorf(t, rerr, "router dataplane RoleBinding must exist in tenant namespace %q", tenantNS)
+	require.Equalf(t, "ClusterRole", rbac.RoleRef.Kind, "RoleBinding should reference a ClusterRole")
+	require.Equalf(t, "fission-router-dataplane-tenant", rbac.RoleRef.Name,
+		"RoleBinding should reference the fission-router-dataplane-tenant ClusterRole")
+
+	// The first invocation was a cold start (executor RPC). This serial test makes
+	// no other function requests, so a warm hit observed while invoking this route
+	// shows the per-namespace informer fed the EndpointSlices into the index.
+	hitsBefore := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+	assertWarmPathHit(t, ctx, r, f, routeURL, hitsBefore, "warm path never served tenant %q's function", tenantNS)
+
 	// 4. Onboarding + serving a fresh tenant must not have rolled any
 	//    control-plane pod (#3298: the whole point of the dynamic model).
 	f.AssertNoControlPlaneRestart(t, ctx, before)
@@ -148,5 +181,91 @@ func TestDynamicTenantLifecycle(t *testing.T) {
 	ns.DisableTenant(t, ctx)
 	f.WaitForTenantOffboarded(t, ctx, tenantNS)
 
-	// 6. The namespace itself is deleted by the NewTestNamespaceIn cleanup hook.
+	// 6. Re-onboard the SAME namespace (testing-plan §4.2: onboard→offboard→
+	//    re-onboard). This is the Tier-B teardown leak guard: the old informer's
+	//    goroutine must have exited during offboard, and the new informer must
+	//    start cleanly without overlapping the old one. A function created in
+	//    the re-onboarded namespace must be invocable through the warm path.
+	ns.EnableTenant(t, ctx)
+	f.WaitForTenantReady(t, ctx, tenantNS)
+
+	// Re-create env + function + trigger in the same namespace, using the
+	// same patterns as the initial stage (ns.ID for unique names).
+	envName2 := "python2-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName2, Image: pyImage, Poolsize: 1})
+
+	fnName2 := "hello2-" + ns.ID
+	codePath2 := framework.WriteTestData(t, "python/hello/hello.py")
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName2, Env: envName2, Code: codePath2})
+
+	route2URL := "/" + fnName2
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName2, URL: route2URL, Method: "GET"})
+
+	// First invocation cold-starts; verify the re-onboarded namespace serves.
+	r.GetEventually(t, ctx, route2URL, framework.BodyContains("hello"))
+
+	// A warm hit observed while invoking the second route shows the new informer
+	// fed the re-onboarded tenant's EndpointSlices into the index.
+	hitsBefore2 := scrapeRouterMetric(t, ctx, f, "fission_router_endpointcache_hits_total")
+	assertWarmPathHit(t, ctx, r, f, route2URL, hitsBefore2, "warm path never served re-onboarded tenant %q's function", tenantNS)
+
+	// 7. Final offboard + informer-count leak guard (testing-plan §4.2): the
+	//    per-namespace informer must die with the tenant. The informer count
+	//    gauge is exact (0 = no leak, >0 = leak), replacing the ±10 goroutine
+	//    delta which couldn't detect a single leaked informer (~5-7 goroutines).
+	require.NoError(t, fc.HTTPTriggers(tenantNS).Delete(ctx, "route-"+fnName2, metav1.DeleteOptions{}))
+	require.NoError(t, fc.Functions(tenantNS).Delete(ctx, fnName2, metav1.DeleteOptions{}))
+	require.NoError(t, fc.Environments(tenantNS).Delete(ctx, envName2, metav1.DeleteOptions{}))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err := fc.Functions(tenantNS).Get(ctx, fnName2, metav1.GetOptions{})
+		assert.Truef(c, apierrors.IsNotFound(err), "function %q should clear before offboarding (err=%v)", fnName2, err)
+	}, time.Minute, time.Second)
+	ns.DisableTenant(t, ctx)
+	f.WaitForTenantOffboarded(t, ctx, tenantNS)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		n := scrapeRouterMetric(c, ctx, f, "fission_router_endpointcache_informers")
+		assert.Equalf(c, informersBefore, n,
+			"informer count must return to the pre-onboard baseline after offboard (baseline=%.0f, current=%.0f) — a leaked informer pins goroutines forever",
+			informersBefore, n)
+	}, 2*time.Minute, 5*time.Second, "informer count never returned to baseline — per-namespace informer leak suspected")
+
+	// 8. The namespace itself is deleted by the NewTestNamespaceIn cleanup hook.
+}
+
+// assertWarmPathHit polls until invoking routeURL increments the router's
+// fission_router_endpointcache_hits_total beyond hitsBefore — i.e. the warm
+// path (slice-fed index, no executor RPC) served a request. The counter is
+// process-wide rather than tenant-labeled; this serial test makes no competing
+// function requests, so the increase is attributable to the route invoked
+// inside the poll. After a cold start the executor patches the pod's served
+// label and the EndpointSlice controller mirrors it (both async, seconds of
+// lag), so scraping without invoking can never move the counter.
+func assertWarmPathHit(t *testing.T, ctx context.Context, r *framework.RouterClient, f *framework.Framework, routeURL string, hitsBefore float64, msg string, args ...any) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, body, err := r.Get(ctx, routeURL)
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Contains(c, strings.ToLower(body), "hello")
+		hitsAfter := scrapeRouterMetric(c, ctx, f, "fission_router_endpointcache_hits_total")
+		assert.Greaterf(c, hitsAfter, hitsBefore,
+			"endpointcache_hits_total must increase while the route is invoked — shows the router warm path was active")
+	}, 2*time.Minute, 5*time.Second, append([]any{msg}, args...)...)
+}
+
+// scrapeRouterMetric scrapes a single Prometheus metric from the router pods
+// (via pod proxy, no port-forward needed) and returns its sum across replicas.
+// Sums all matching samples per pod via framework.SumMetricLines.
+func scrapeRouterMetric(t require.TestingT, ctx context.Context, f *framework.Framework, metricName string) float64 {
+	pods, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).List(ctx, metav1.ListOptions{LabelSelector: "svc=router"})
+	require.NoErrorf(t, err, "listing router pods")
+	require.NotEmptyf(t, pods.Items, "no router pod found in namespace %s", f.FissionNamespace())
+	var total float64
+	for _, p := range pods.Items {
+		raw, err := f.KubeClient().CoreV1().Pods(f.FissionNamespace()).ProxyGet("http", p.Name, "8080", "/metrics", nil).DoRaw(ctx)
+		require.NoErrorf(t, err, "scraping /metrics from router pod %s", p.Name)
+		total += framework.SumMetricLines(raw, metricName)
+	}
+	return total
 }

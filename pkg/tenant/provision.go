@@ -124,16 +124,20 @@ func namespaceRBACObjects(ns, releaseNamespace string, owner metav1.OwnerReferen
 		clusterRoleBinding(fetcherWebsocketRoleName, fv1.FissionFetcherSA, ns, fv1.FetcherWebsocketTenantWorkloadClusterRole),
 	}
 
-	// Bind the executor and buildermgr (release-namespace SAs) to their workload
-	// ClusterRoles so they can create/manage workloads in this tenant namespace —
-	// the dynamic equivalent of the chart's per-namespace executor/buildermgr
-	// kubernetes Roles. Skipped when the release namespace is unknown (the subject
-	// would be unresolvable), in which case the executor/buildermgr fall back to
-	// any statically-rendered Role for this namespace.
+	// Bind the executor, buildermgr, and router (release-namespace SAs) to their
+	// workload ClusterRoles so they can create/manage workloads (executor,
+	// buildermgr) or read EndpointSlices + Services (router) in this tenant
+	// namespace — the dynamic equivalent of the chart's per-namespace kubernetes
+	// Roles. Skipped when the release namespace is unknown (the subject would be
+	// unresolvable), in which case the executor/buildermgr fall back to any
+	// statically-rendered Role for this namespace. The router has no static
+	// fallback in dynamic mode; its warm path is inert until a tenant is
+	// onboarded with a known release namespace.
 	if releaseNamespace != "" {
 		objs = append(objs,
 			clusterRoleBinding("fission-executor-workload", fv1.FissionExecutorSA, releaseNamespace, fv1.ExecutorTenantWorkloadClusterRole),
 			clusterRoleBinding("fission-buildermgr-workload", fv1.FissionBuildermgrSA, releaseNamespace, fv1.BuildermgrTenantWorkloadClusterRole),
+			clusterRoleBinding("fission-router-dataplane", fv1.FissionRouterSA, releaseNamespace, fv1.RouterDataplaneTenantClusterRole),
 		)
 	}
 	return objs

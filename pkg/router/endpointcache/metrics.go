@@ -107,8 +107,10 @@ func RegisterModeInfo(requested, effective string, endpointLB bool) {
 }
 
 var (
-	sizeIndex     atomic.Pointer[Index]
-	sizeGaugeOnce sync.Once
+	sizeIndex          atomic.Pointer[Index]
+	sizeGaugeOnce      sync.Once
+	informersManager   atomic.Pointer[NamespaceInformers]
+	informersGaugeOnce sync.Once
 )
 
 // RegisterSizeGauge publishes an observable gauge reporting the number of
@@ -126,6 +128,25 @@ func RegisterSizeGauge(ix *Index) {
 			func(_ context.Context, o metric.Int64Observer) error {
 				if ix := sizeIndex.Load(); ix != nil {
 					o.Observe(int64(ix.Size()))
+				}
+				return nil
+			},
+		)
+	})
+}
+
+// RegisterInformersGauge publishes an observable gauge reporting the number of
+// running per-namespace informers. It registers the callback exactly once and
+// points later registrations at the newest NamespaceInformers instance.
+func RegisterInformersGauge(nsi *NamespaceInformers) {
+	informersManager.Store(nsi)
+	informersGaugeOnce.Do(func() {
+		metrics.Int64ObservableGauge(
+			"fission_router_endpointcache_informers",
+			"Number of running per-namespace EndpointSlice informers.",
+			func(_ context.Context, o metric.Int64Observer) error {
+				if nsi := informersManager.Load(); nsi != nil {
+					o.Observe(nsi.informerCount.Load())
 				}
 				return nil
 			},

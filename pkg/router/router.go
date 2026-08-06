@@ -36,6 +36,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -50,9 +51,11 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
 	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -131,12 +134,15 @@ func routerCacheOptions(mode endpointSliceCacheMode) crcache.Options {
 // symptom is a reflector error log. The chart renders the required Role +
 // RoleBinding (router/role-dataplane.yaml) whenever
 // router.endpointSliceCache.mode != off; bespoke-RBAC installs must mirror it.
+// On success it returns the exact namespace scopes that passed the review so
+// dynamic mode can seed its RBAC cache without repeating the same checks during
+// informer setup.
 //
 // Callers degrade to mode=off on error rather than exiting: the slice cache is
 // a warm-path optimization with a full legacy fallback, and crash-looping the
 // data plane over a missing optimization grant (e.g. a GitOps prune dropping
 // the Role) would turn it into an outage.
-func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
+func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) ([]string, error) {
 	// Cluster mode watches EndpointSlices cluster-wide, so a single cluster-scoped
 	// review (empty Namespace) is the right preflight; other modes check each
 	// function namespace the informer scopes to.
@@ -145,47 +151,286 @@ func checkSliceWatchRBAC(ctx context.Context, kubeClient kubernetes.Interface) e
 		watchNamespaces = []string{""}
 	}
 	for _, ns := range watchNamespaces {
-		for _, verb := range []string{"list", "watch"} {
-			sar := &authorizationv1.SelfSubjectAccessReview{
-				Spec: authorizationv1.SelfSubjectAccessReviewSpec{
-					ResourceAttributes: &authorizationv1.ResourceAttributes{
-						Namespace: ns,
-						Verb:      verb,
-						Group:     "discovery.k8s.io",
-						Resource:  "endpointslices",
-					},
-				},
-			}
-			// Retry the review itself: a transient apiserver error during boot
-			// must not degrade the data plane for the router's whole lifetime.
-			// Only an explicit Allowed=false (genuinely missing RBAC) or a
-			// persistent API failure degrades.
-			var res *authorizationv1.SelfSubjectAccessReview
-			var err error
-			for attempt := range 3 {
-				if attempt > 0 {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-time.After(2 * time.Second):
-					}
-				}
-				res, err = kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
-				if err == nil {
-					break
-				}
-			}
-			if err != nil {
-				return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
-			}
-			if !res.Status.Allowed {
-				return fmt.Errorf("router is not allowed to %s endpointslices in namespace %q "+
-					"(reason: %s); the Helm chart renders the required router-dataplane Role for "+
-					"router.endpointSliceCache.mode != off — grant the RBAC to enable the EndpointSlice data plane", verb, ns, res.Status.Reason)
-			}
+		if err := checkSliceWatchRBACForNamespace(ctx, kubeClient, ns); err != nil {
+			return nil, err
+		}
+	}
+	return watchNamespaces, nil
+}
+
+// checkSliceWatchRBACForNamespace verifies list+watch on EndpointSlices in one
+// namespace via SelfSubjectAccessReview, returning an actionable error. Used by
+// the startup preflight.
+func checkSliceWatchRBACForNamespace(ctx context.Context, kubeClient kubernetes.Interface, ns string) error {
+	for _, verb := range []string{"list", "watch"} {
+		res, err := sliceWatchSAR(ctx, kubeClient, ns, verb)
+		if err != nil {
+			return fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
+		}
+		if !res.Status.Allowed {
+			return fmt.Errorf("router is not allowed to %s endpointslices in namespace %q "+
+				"(reason: %s); the Helm chart renders the required router-dataplane Role for "+
+				"router.endpointSliceCache.mode != off — grant the RBAC to enable the EndpointSlice data plane", verb, ns, res.Status.Reason)
 		}
 	}
 	return nil
+}
+
+// sliceWatchAllowedForNamespace reports whether the router may list+watch
+// EndpointSlices in one namespace. The dynamic-tenancy resolver-sync hook uses
+// it to EXCLUDE explicitly-denied namespaces from the informer set: a namespace
+// onboarded at runtime gets its fission-router-dataplane RoleBinding from the
+// tenant controller, which races the informer start (issue #3647), and an
+// orphaned FissionTenant (namespace deleted) can never pass — either way the
+// informer must not wedge readiness on a LIST that only fails. A transient
+// apiserver error is reported as allowed (optimistic: the informer's own
+// reflector retry handles flakes) so a wobble never tears down working watches.
+// The caller (syncInformers) caps this optimism at maxOptimisticSARErrors
+// consecutive failures per namespace, after which it excludes the namespace
+// regardless of the optimistic allow returned here.
+func sliceWatchAllowedForNamespace(ctx context.Context, kubeClient kubernetes.Interface, ns string) (bool, error) {
+	for _, verb := range []string{"list", "watch"} {
+		res, err := sliceWatchSAR(ctx, kubeClient, ns, verb)
+		if err != nil {
+			return true, fmt.Errorf("error checking endpointslice RBAC in namespace %q: %w", ns, err)
+		}
+		if !res.Status.Allowed {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// sarRetryDelay is the delay between SAR retry attempts in sliceWatchSAR. A
+// boot-time apiserver flake must not degrade the data plane for the router's
+// whole lifetime, so the SAR is attempted up to 3 times total, waiting this
+// delay between attempts, before surfacing the error to the caller.
+const sarRetryDelay = 2 * time.Second
+
+// sliceWatchSAR issues one SelfSubjectAccessReview for verb+endpointslices in
+// ns, retrying transient apiserver errors (a boot-time flake must not degrade
+// the data plane for the router's whole lifetime).
+func sliceWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, verb string) (*authorizationv1.SelfSubjectAccessReview, error) {
+	sar := &authorizationv1.SelfSubjectAccessReview{
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace: ns,
+				Verb:      verb,
+				Group:     "discovery.k8s.io",
+				Resource:  "endpointslices",
+			},
+		},
+	}
+	var res *authorizationv1.SelfSubjectAccessReview
+	var err error
+	for attempt := range 3 {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(sarRetryDelay):
+			}
+		}
+		res, err = kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+		if err == nil {
+			break
+		}
+	}
+	return res, err
+}
+
+// maxOptimisticSARErrors is the number of consecutive transient SAR failures
+// (apiserver flakes, throttling) a namespace is tolerated for before being
+// excluded from the informer set. Up to and including this cap the namespace
+// stays admitted optimistically — the informer's own reflector retry handles
+// transient LIST failures — so a brief wobble never tears down a working
+// watch. Exceeding the cap excludes the namespace: a persistently-failing
+// check must not wedge /readyz on a LIST that only fails. The counter resets
+// on the next successful SAR or when the namespace leaves the live set.
+const maxOptimisticSARErrors = 3
+
+// dynamicEndpointCache manages per-namespace EndpointSlice informers in dynamic
+// tenancy mode. It re-scopes the informer set as tenants are onboarded/offboarded,
+// gating each namespace on a SelfSubjectAccessReview so a namespace whose
+// fission-router-dataplane RoleBinding hasn't landed yet is EXCLUDED rather than
+// wedging /readyz with a forbidden LIST (issue #3647).
+//
+// rbacChecked caches namespaces that have passed the SAR. It is pruned on every
+// sync for namespaces that have left the live set: offboarding deletes the
+// tenant's RoleBinding, so a later re-onboard MUST re-run the SAR rather than
+// trust a stale pass — otherwise the informer starts before the binding is
+// recreated, its LIST stays forbidden, HasSynced never latches, and /readyz
+// returns 503 fleet-wide (no leader election — every replica wedges).
+type dynamicEndpointCache struct {
+	kubeClient  kubernetes.Interface
+	resolver    *utils.NamespaceResolver
+	nsInformers *endpointcache.NamespaceInformers
+	rbacChecked sync.Map
+	logger      logr.Logger
+	sarErrors   map[string]int
+	mu          sync.Mutex // serializes syncInformers; prevents TOCTOU on namespace set
+}
+
+// syncInformers re-scopes the informer set to the resolver's live namespaces,
+// filtered by EndpointSlice RBAC. Shared by the startup seed, the post-cache-sync
+// re-seed, and the resolver-sync hook so all three apply the same exclusion
+// semantics. Returns pending=true when any namespace is still waiting on its
+// RBAC — the reconciler requeues until every namespace passes (no tenant event
+// fires for a RoleBinding the tenant controller creates asynchronously).
+func (d *dynamicEndpointCache) syncInformers(ctx context.Context) (pending bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.sarErrors == nil {
+		d.sarErrors = make(map[string]int)
+	}
+	// Re-read inside the lock: the namespace set may have changed since the
+	// caller was invoked (startup seed vs. post-cache-sync re-seed vs. hook).
+	// Reading after the lock makes last-writer-wins converge — no namespace
+	// onboarded during a slow SAR check is silently dropped.
+	namespaces := d.resolver.FunctionNamespaces()
+	live := make(map[string]struct{}, len(namespaces))
+	for _, ns := range namespaces {
+		live[ns] = struct{}{}
+	}
+	// Drop cached passes for namespaces that have left the set:
+	// offboarding deletes the tenant's fission-router-dataplane
+	// RoleBinding, so a later re-onboard MUST re-run the SAR rather
+	// than start an informer whose LIST stays forbidden until the
+	// tenant controller recreates the binding — an informer that
+	// never syncs holds HasSynced (and so /readyz) false fleet-wide.
+	d.rbacChecked.Range(func(k, _ any) bool {
+		if _, ok := live[k.(string)]; !ok {
+			d.rbacChecked.Delete(k)
+		}
+		return true
+	})
+	// Drop stale error counts for namespaces that left the live set.
+	for ns := range d.sarErrors {
+		if _, ok := live[ns]; !ok {
+			delete(d.sarErrors, ns)
+		}
+	}
+
+	allowed := make([]string, 0, len(namespaces))
+	for _, ns := range namespaces {
+		if _, ok := d.rbacChecked.Load(ns); ok {
+			allowed = append(allowed, ns)
+			continue
+		}
+		ok, err := sliceWatchAllowedForNamespace(ctx, d.kubeClient, ns)
+		if err != nil {
+			// A cancelled context (router shutting down) surfaces as a SAR
+			// error here because sliceWatchSAR returns ctx.Err(). Don't treat
+			// that as an apiserver flake: skip the error accounting and log
+			// so a shutdown doesn't bump sarErrors and log at Error for every
+			// namespace. Both Canceled and DeadlineExceeded are context
+			// errors, not genuine API failures. errors.Is rather than
+			// ctx.Err()!=nil so a real API failure arriving on a cancelled
+			// context (e.g. a test reactor returning assert.AnError) is
+			// still counted.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return pending
+			}
+			// A transient SAR failure is handled optimistically for up to
+			// maxOptimisticSARErrors consecutive attempts; after that the
+			// namespace is excluded so a persistently-failing check does not
+			// wedge readiness on a LIST that only fails.
+			d.sarErrors[ns]++
+			pending = true
+			if d.sarErrors[ns] <= maxOptimisticSARErrors {
+				d.logger.Info("endpointslice RBAC check failed transiently; keeping informer", "namespace", ns)
+				allowed = append(allowed, ns)
+				continue
+			}
+			d.logger.Error(err, "endpointslice RBAC check continues to fail; excluding namespace", "namespace", ns, "consecutive_errors", d.sarErrors[ns])
+			continue
+		}
+		delete(d.sarErrors, ns)
+		if !ok {
+			d.logger.Info("endpointslice RBAC not yet granted for tenant namespace; "+
+				"the tenant controller provisions fission-router-dataplane at onboarding — "+
+				"namespace excluded from the warm path until it lands", "namespace", ns,
+			)
+			pending = true
+			continue
+		}
+		d.rbacChecked.Store(ns, struct{}{})
+		allowed = append(allowed, ns)
+	}
+	d.nsInformers.Sync(allowed)
+	return pending
+}
+
+// setupDynamicEndpointCache wires the dynamic-mode EndpointSlice data plane:
+// creates the per-namespace informer manager, seeds the informer set from the
+// env config immediately (so HasSynced isn't vacuously true with zero informers),
+// and registers a post-cache-sync RunnableFunc that re-seeds from the LIVE
+// FissionTenant set. The resolver-sync hook calls Sync on every FissionTenant
+// change, so no restart is needed to admit a new tenant's warm path.
+//
+// The returned InformerSynced gates router readiness: it is true only after
+// every running informer has completed its initial LIST. The internal informer
+// manager is closed when ctx is cancelled. Successful startup preflight results
+// seed rbacChecked so the initial informer sync does not repeat the same
+// permission checks. Existing pruning removes those results when a namespace is
+// offboarded, so re-onboarding still performs fresh checks.
+func setupDynamicEndpointCache(
+	ctx context.Context,
+	kubeClient kubernetes.Interface,
+	index *endpointcache.Index,
+	crMgr ctrl.Manager,
+	resolverSyncHooks []func() (pending bool),
+	logger logr.Logger,
+	precheckedSliceNamespaces []string,
+) (cache.InformerSynced, []func() (pending bool), error) {
+	nsInformers := endpointcache.NewNamespaceInformers(kubeClient, index, logger.WithName("endpointcache"))
+	resolver := utils.DefaultNSResolver()
+	dynCache := &dynamicEndpointCache{
+		kubeClient:  kubeClient,
+		resolver:    resolver,
+		nsInformers: nsInformers,
+		logger:      logger,
+	}
+	// Reuse successful startup preflight results during initial informer sync.
+	for _, ns := range precheckedSliceNamespaces {
+		dynCache.rbacChecked.Store(ns, struct{}{})
+	}
+	// Stop all informers when the router's context is cancelled.
+	go func() {
+		<-ctx.Done()
+		nsInformers.Close()
+	}()
+	// Seed with the env seed immediately so HasSynced isn't vacuously
+	// true with zero informers. The RunnableFunc below re-seeds from
+	// the LIVE FissionTenant set after the Manager cache syncs (the
+	// direct client list fails before the cache starts).
+	dynCache.syncInformers(ctx)
+	// After the Manager cache syncs, re-seed the resolver from existing
+	// FissionTenant CRs and re-sync the informers to cover tenants that
+	// existed before startup. This closes the gap between the env-seed
+	// and the live tenant set (the resolver-sync reconciler hasn't run
+	// yet — it's registered below and fires on its first Reconcile).
+	// Log-and-continue on error: the reconciler retries on the next
+	// FissionTenant event, so a transient cache miss isn't fatal.
+	if err := crMgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		if err := tenant.SyncResolverFromTenants(ctx, crMgr.GetClient(), resolver); err != nil {
+			logger.Error(err, "error seeding resolver from existing tenants — reconciler will retry")
+			return nil
+		}
+		dynCache.syncInformers(ctx)
+		return nil
+	})); err != nil {
+		return nil, nil, fmt.Errorf("error registering tenant seed runnable: %w", err)
+	}
+	resolverSyncHooks = append(resolverSyncHooks, func() (pending bool) {
+		return dynCache.syncInformers(ctx)
+	})
+	// Register the informer-count gauge only after setup has succeeded
+	// (crMgr.Add above can fail). Registered here, not inside
+	// NewNamespaceInformers, so the constructor stays deterministic per
+	// the CLAUDE.md library-constructor guidance.
+	endpointcache.RegisterInformersGauge(nsInformers)
+	return nsInformers.HasSynced, resolverSyncHooks, nil
 }
 
 // runnableFunc adapts a function to a controller-runtime manager.Runnable.
@@ -227,7 +472,8 @@ func router(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, httpTr
 }
 
 func serve(ctx context.Context, logger logr.Logger, mgr *errgroup.Group, opts Options,
-	httpTriggerSet *HTTPTriggerSet) error {
+	httpTriggerSet *HTTPTriggerSet,
+) error {
 	publicMR, internalMR, err := router(ctx, logger, mgr, httpTriggerSet)
 	if err != nil {
 		return fmt.Errorf("error making router: %w", err)
@@ -375,12 +621,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		"idleConnTimeout", transportIdleConnTimeout)
 
 	requestedMode := cfg.endpointSliceCacheMode
+	var precheckedSliceNamespaces []string
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
-		if rerr := checkSliceWatchRBAC(ctx, kubeClient); rerr != nil {
-			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)",
-				"requested_mode", cfg.endpointSliceCacheMode)
+		nsList, rerr := checkSliceWatchRBAC(ctx, kubeClient)
+		if rerr != nil {
+			logger.Error(rerr, "disabling the EndpointSlice cache (degrading to the executor-RPC data plane)", "requested_mode", cfg.endpointSliceCacheMode)
 			cfg.endpointSliceCacheMode = endpointSliceCacheOff
 		}
+		precheckedSliceNamespaces = nsList
 	}
 	// Registered unconditionally so the requested-vs-effective mode is
 	// alertable: an absent series cannot distinguish "mode=off install" from
@@ -441,16 +689,43 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// shape changes.
 	triggers.initIncrementalRoutes()
 
-	// EndpointSlice-fed endpoint index (RFC-0002). Every router replica watches
-	// independently (no leader election — that is the point: warm-path state is
-	// replica-local). The fallback resolver serves the warm path from the
-	// index and uses the executor for cold starts, capacity, and strict-mode
-	// functions.
+	// resolverSyncHooks collects hooks for the tenant resolver-sync reconciler.
+	// The EndpointSlice block below may append one so per-namespace informers
+	// re-scope when tenants are onboarded/offboarded at runtime. Passed to
+	// AddResolverSync further down. A hook returns pending=true to make the
+	// reconciler requeue (no FissionTenant event fires when the missing piece
+	// is a RoleBinding provisioned asynchronously by the tenant controller).
+	var resolverSyncHooks []func() (pending bool)
+
 	if cfg.endpointSliceCacheMode != endpointSliceCacheOff {
 		index := endpointcache.NewIndex()
-		endpointsSynced, err := endpointcache.RegisterInformer(ctx, crMgr, index, logger)
-		if err != nil {
-			return fmt.Errorf("error registering endpointslice informer: %w", err)
+		endpointcache.RegisterSizeGauge(index)
+		executorResolver, ok := triggers.addressResolver.(*executorResolver)
+		if !ok {
+			return fmt.Errorf("unexpected address resolver type %T", triggers.addressResolver)
+		}
+		var endpointsSynced cache.InformerSynced
+		if utils.DynamicNamespacesEnabled() {
+			// Dynamic tenancy: per-namespace informers that re-scope at runtime
+			// as tenants are onboarded/offboarded. The manager-cache informer is
+			// frozen at startup, so it cannot see EndpointSlices in namespaces
+			// added later — this replaces it entirely in dynamic mode. The
+			// resolver-sync hook calls Sync on every FissionTenant change, so
+			// no restart is needed to admit a new tenant's warm path.
+			endpointsSynced, resolverSyncHooks, err = setupDynamicEndpointCache(ctx, kubeClient, index, crMgr, resolverSyncHooks, logger, precheckedSliceNamespaces)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Static + cluster modes: the manager-cache informer (scoped at
+			// startup) covers all watched namespaces — no runtime re-scoping
+			// needed. Cluster mode watches cluster-wide; static mode watches
+			// the env-seeded set, both fixed for the process lifetime.
+			var err error
+			endpointsSynced, err = endpointcache.RegisterInformer(ctx, crMgr, index, logger)
+			if err != nil {
+				return fmt.Errorf("error registering endpointslice informer: %w", err)
+			}
 		}
 		// Gate readiness on the index having seen the initial replay, not just
 		// on the Manager's cache being populated: a Ready replica with a
@@ -458,24 +733,20 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// fallback instead of the fast path — a latency cliff precisely during
 		// a rolling upgrade (RFC-0028 §2).
 		triggers.endpointsSynced = endpointsSynced
-		endpointcache.RegisterSizeGauge(index)
-		execResolver, ok := triggers.addressResolver.(*executorResolver)
-		if !ok {
-			return fmt.Errorf("unexpected address resolver type %T", triggers.addressResolver)
-		}
 		switch cfg.endpointSliceCacheMode {
 		case endpointSliceCacheOn:
 			// The client interface carries EnsureCapacity since phase 4; an
 			// OLD executor (predating /v2/ensureCapacity) still degrades at
 			// runtime via the 404 → legacy-RPC fallback in the resolver.
-			triggers.addressResolver = newFallbackResolver(logger, index, execResolver, executor, cfg.endpointSliceEndpointLB)
+			triggers.addressResolver = newFallbackResolver(logger, index, executorResolver, executor, cfg.endpointSliceEndpointLB)
 		default:
 			// Unreachable: loadRouterConfig validates the mode. The guard
 			// keeps a future refactor from silently paying for the informer
 			// while leaving the legacy resolver wired.
 			return fmt.Errorf("unhandled endpointslice cache mode %q", cfg.endpointSliceCacheMode)
 		}
-		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode, "endpoint_lb", cfg.endpointSliceEndpointLB)
+		logger.Info("endpointslice cache enabled", "mode", cfg.endpointSliceCacheMode, "endpoint_lb", cfg.endpointSliceEndpointLB,
+			"dynamic", utils.DynamicNamespacesEnabled())
 	}
 
 	// Build the route providers. The ingress provider is always registered (it
@@ -523,7 +794,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// reads this resolver) and its HTTPTriggers start routing without a restart.
 	// The router's cache is already cluster-wide in this mode (FissionCacheOptions).
 	// AddResolverSync is a no-op when dynamic tenancy is off.
-	if err := tenant.AddResolverSync(crMgr); err != nil {
+	if err := tenant.AddResolverSync(crMgr, resolverSyncHooks...); err != nil {
 		return fmt.Errorf("error registering tenant resolver-sync: %w", err)
 	}
 

@@ -7,12 +7,8 @@
 package common_test
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"os"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -114,29 +110,7 @@ func readResidentMemory(t *testing.T, ctx context.Context, f *framework.Framewor
 		ProxyGet("http", podName, "8080", "/metrics", nil).DoRaw(ctx)
 	require.NoErrorf(t, err, "scraping /metrics from %s pod %s", svc, podName)
 
-	val, ok := parseMetric(raw, "process_resident_memory_bytes")
-	require.Truef(t, ok, "process_resident_memory_bytes not found in %s metrics", svc)
+	val := framework.SumMetricLines(raw, "process_resident_memory_bytes")
+	require.NotZerof(t, val, "process_resident_memory_bytes not found in %s metrics", svc)
 	return val
-}
-
-// parseMetric returns the value of an unlabelled prometheus metric line.
-func parseMetric(raw []byte, name string) (float64, bool) {
-	sc := bufio.NewScanner(bytes.NewReader(raw))
-	prefix := name + " "
-	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, prefix) {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		v, err := strconv.ParseFloat(fields[1], 64)
-		if err != nil {
-			continue
-		}
-		return v, true
-	}
-	return 0, false
 }
