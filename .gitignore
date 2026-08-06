@@ -81,8 +81,3 @@ kind-132.yaml
 # whole source tree to the builder, which runs mvn itself — a locally-built
 # target/ is both redundant and easy to commit by accident.
 test/integration/testdata/**/target/
-/.agents/
-/.continue/
-/.devin/
-/.windsurf/
-/skills-lock.json
