@@ -113,7 +113,14 @@ func forceDeleteResources(ctx context.Context, fclient cmd.Client, fr *FissionRe
 		return fmt.Errorf("function delete failed: %w", err)
 	}
 
-	_, _, err = applyPackages(ctx, fclient, fr, true, false, false)
+	// destroy uploads no archives, so unlike apply it has no snapshot in hand:
+	// take the one cluster-wide Package enumeration it needs here.
+	livePkgs, err := listAllPackages(ctx, fclient)
+	if err != nil {
+		return fmt.Errorf("list packages: %w", err)
+	}
+
+	_, _, err = applyPackages(ctx, fclient, fr, livePkgs, true, false, false)
 	if err != nil {
 		return fmt.Errorf("package delete failed: %w", err)
 	}

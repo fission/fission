@@ -17,6 +17,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	spectypes "github.com/fission/fission/pkg/fission-cli/cmd/spec/types"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
@@ -414,4 +415,68 @@ func TestApplyFunctionAliasesPruneOnlyWithDeploymentUID(t *testing.T) {
 
 	_, err = fc.CoreV1().FunctionAliases("default").Get(t.Context(), "foreign", metav1.GetOptions{})
 	assert.NoError(t, err, "foreign alias must survive prune")
+}
+
+// TestSpecApplyListsPackagesOnce pins the single cluster-wide Package
+// enumeration per apply. applyArchives (archive de-duplication) and
+// applyPackages (the create/update/delete diff) both need the full list; they
+// used to fetch it independently, so every apply paid for two full listings of
+// every Package in every namespace. Both now read one snapshot taken in
+// applyResources.
+//
+// Two assertions, guarding two different regressions:
+//
+//   - the *count*, because collapsing two lists into one is invisible in the
+//     apply result — it only costs the apiserver twice;
+//   - the resulting *diff*, because the count alone does not pin that the
+//     snapshot actually reaches applyPackages. Threading nil instead of
+//     livePkgs still lists exactly once, but the diff then sees an empty
+//     cluster and reports this already-live package as a would-create.
+//
+// The fixture is a re-apply of an unchanged package, so a correctly threaded
+// snapshot makes it a no-op: the annotations below are exactly what
+// setDeploymentUID stamps (both the name and UID keys — isObjectMetaEqual
+// compares the whole map), and BuildStatusSucceeded satisfies equal()'s
+// readiness check.
+func TestSpecApplyListsPackagesOnce(t *testing.T) {
+	t.Parallel()
+
+	live := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "hello", Namespace: "default",
+			Annotations: map[string]string{
+				FISSION_DEPLOYMENT_NAME_KEY: "test",
+				FISSION_DEPLOYMENT_UID_KEY:  "uid-1",
+			},
+		},
+		Spec:   fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},
+	}
+	fc := fissionfake.NewSimpleClientset(live) //nolint:staticcheck // see k8s#126850
+
+	var pkgLists int
+	fc.PrependReactor("list", "packages", func(k8stesting.Action) (bool, runtime.Object, error) {
+		pkgLists++
+		return false, nil, nil // fall through to the default object tracker
+	})
+
+	fr := &FissionResources{
+		DeploymentConfig: spectypes.DeploymentConfig{Name: "test", UID: "uid-1"},
+		Packages:         []fv1.Package{*live.DeepCopy()},
+	}
+
+	// dryRun: the listing this asserts on happens on the read-only path too, so
+	// the count is pinned without mutating the fake cluster.
+	_, applyStatus, err := applyResources(
+		fakeInput{ctx: t.Context()}, cmd.Client{FissionClientSet: fc}, "",
+		fr, false /* delete */, false /* allowConflicts */, true /* dryRun */)
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, pkgLists, "applyResources must enumerate cluster-wide Packages exactly once")
+
+	pkgStatus, ok := applyStatus["package"]
+	require.True(t, ok, "apply status must carry a package entry")
+	assert.Empty(t, pkgStatus.Created, "an unchanged package must not be reported as a would-create — the snapshot did not reach applyPackages")
+	assert.Empty(t, pkgStatus.Updated, "an unchanged package must not be reported as a would-update")
+	assert.Empty(t, pkgStatus.Deleted, "nothing must be pruned when the spec matches the cluster")
 }

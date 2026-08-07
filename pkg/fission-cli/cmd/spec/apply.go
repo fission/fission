@@ -355,13 +355,35 @@ func pluralize(num int, word string) string {
 	return word + "s"
 }
 
+// listAllPackages enumerates every Package in every namespace.
+//
+// This is the single cluster-wide Package enumeration applyResources performs:
+// the resulting snapshot is threaded to both consumers that need it (archive
+// de-duplication in applyArchives and the create/update/delete diff in
+// applyPackages) rather than each listing for itself. See applyResources for
+// what sharing one snapshot across both costs.
+//
+// It is not the only Package listing a `spec apply` command makes: validation
+// lists them too (getAllPackages, in validate.go), as does the build watch
+// under --wait.
+func listAllPackages(ctx context.Context, fclient cmd.Client) ([]fv1.Package, error) {
+	l, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return l.Items, nil
+}
+
 // applyArchives figures out the set of archives that need to be uploaded, and uploads them.
 // Under dryRun the read-only work still runs — local archives are built/checksummed
 // and matched against archives already on the cluster — so the resolved Package
 // specs (and therefore the diff) are accurate for unchanged archives; only the
 // actual upload of a new/changed archive is skipped (such a Package legitimately
 // shows as a would-create/update).
-func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, dryRun bool) error {
+//
+// livePkgs is the caller's cluster-wide Package snapshot; it is read only to
+// build the content-index of archives already present on the cluster.
+func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *FissionResources, livePkgs []fv1.Package, dryRun bool) error {
 	// archive:// URL -> archive map.
 	archiveFiles := make(map[string]fv1.Archive)
 
@@ -378,13 +400,9 @@ func applyArchives(input cli.Input, fclient cmd.Client, specDir string, fr *Fiss
 		archiveFiles[archiveUrl] = *ar
 	}
 
-	// get list of packages, make content-indexed map of available archives
+	// make content-indexed map of available archives from the caller's snapshot
 	availableArchives := make(map[string]string) // (sha256 -> url)
-	pkgs, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(input.Context(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	for _, pkg := range pkgs.Items {
+	for _, pkg := range livePkgs {
 		for _, ar := range []fv1.Archive{pkg.Spec.Source, pkg.Spec.Deployment} {
 			if ar.Type == fv1.ArchiveTypeUrl && len(ar.URL) > 0 {
 				availableArchives[ar.Checksum.Sum] = ar.URL
@@ -449,8 +467,36 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 
 	applyStatus := make(map[string]ResourceApplyStatus)
 
+	// One cluster-wide Package enumeration per apply, shared by the two consumers
+	// that need it: applyArchives indexes it by archive checksum to skip
+	// re-uploading bytes already on the cluster, and applyPackages diffs the spec
+	// against it.
+	//
+	// Nothing the CLI itself does between the two consumers writes a Package:
+	// pkgutil.UploadArchiveFile only pushes archive bytes to storagesvc, and
+	// applyEnvironments touches only Environments.
+	//
+	// The buildermgr, though, is a genuine concurrent writer of these same
+	// objects — updatePackage sets spec.Deployment, and the status write that
+	// follows it sets status.BuildStatus — and those are exactly the fields the
+	// equal() closure in applyPackages reads. So sharing one snapshot does not
+	// merely move the staleness window, it widens it: the second List this
+	// replaces ran *after* the archive uploads, this one runs before them, so
+	// the diff can now be reading a package set that is stale by the whole
+	// upload duration.
+	//
+	// That is accepted deliberately. A build landing inside the window makes its
+	// package read not-ready, so it takes the update path and gets retriggered:
+	// redundant work that converges on the next reconcile, not lost data. The
+	// alternative is the second full cluster-wide enumeration on every apply
+	// that issue #3664 was filed to remove.
+	livePkgs, err := listAllPackages(input.Context(), fclient)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list packages: %w", err)
+	}
+
 	// upload archives that need to be uploaded. Changes archive references in fr.Packages.
-	err := applyArchives(input, fclient, specDir, fr, dryRun)
+	err = applyArchives(input, fclient, specDir, fr, livePkgs, dryRun)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -461,7 +507,7 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	}
 	applyStatus["environment"] = *ras
 
-	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, delete, specAllowConflicts, dryRun)
+	pkgMeta, ras, err := applyPackages(input.Context(), fclient, fr, livePkgs, delete, specAllowConflicts, dryRun)
 	if err != nil {
 		return nil, nil, fmt.Errorf("package apply failed: %w", err)
 	}
@@ -720,19 +766,20 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 	}
 }
 
-func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
+// applyPackages reconciles the spec's Packages against livePkgs, the caller's
+// cluster-wide Package snapshot. The snapshot is supplied rather than fetched
+// here so that applyResources performs one Package enumeration rather than two;
+// callers with no snapshot in hand (spec destroy) obtain one from
+// listAllPackages. See applyResources for how stale the snapshot can be by the
+// time the diff below reads it.
+func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, livePkgs []fv1.Package, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	packages := func(ns string) typedv1.PackageInterface {
 		return fclient.FissionClientSet.CoreV1().Packages(ns)
 	}
 	return applyResourceType(ctx, fr, resourceOps[fv1.Package, *fv1.Package]{
 		items: func(fr *FissionResources) []fv1.Package { return fr.Packages },
-		list: func(ctx context.Context) ([]fv1.Package, error) {
-			l, err := packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
-			if err != nil {
-				return nil, err
-			}
-			return l.Items, nil
-		},
+		// The snapshot is already in hand, so this needs no context.
+		list: func(context.Context) ([]fv1.Package, error) { return livePkgs, nil },
 		meta: func(p *fv1.Package) *metav1.ObjectMeta { return &p.ObjectMeta },
 		// A package is up to date when its spec matches (or its env + non-empty
 		// source + build command match), its metadata matches, and its last
