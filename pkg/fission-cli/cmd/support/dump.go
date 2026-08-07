@@ -98,6 +98,11 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"fission-crd-mqtriggers":    resources.NewCrdDumper(opts.Client(), resources.CrdMessageQueueTrigger),
 		"fission-crd-timetriggers":  resources.NewCrdDumper(opts.Client(), resources.CrdTimeTrigger),
 		"fission-crd-canaryconfigs": resources.NewCrdDumper(opts.Client(), resources.CrdCanaryConfig),
+
+		// KEDA objects created by the mqt-keda scaler for MessageQueueTriggers.
+		// Skipped quietly when KEDA is not installed.
+		"fission-keda-scaledobjects":          resources.NewKedaDumper(opts.Client(), resources.KedaScaledObject),
+		"fission-keda-triggerauthentications": resources.NewKedaDumper(opts.Client(), resources.KedaTriggerAuthentication),
 	}
 
 	dumpName := fmt.Sprintf("%v_%v", DUMP_ARCHIVE_PREFIX, time.Now().Unix())
