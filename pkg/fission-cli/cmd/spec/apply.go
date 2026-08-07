@@ -357,11 +357,15 @@ func pluralize(num int, word string) string {
 
 // listAllPackages enumerates every Package in every namespace.
 //
-// This is the single cluster-wide Package enumeration an apply performs: the
-// resulting snapshot is threaded to both consumers that need it (archive
+// This is the single cluster-wide Package enumeration applyResources performs:
+// the resulting snapshot is threaded to both consumers that need it (archive
 // de-duplication in applyArchives and the create/update/delete diff in
 // applyPackages) rather than each listing for itself. See applyResources for
-// why one snapshot is safe to share across both.
+// what sharing one snapshot across both costs.
+//
+// It is not the only Package listing a `spec apply` command makes: validation
+// lists them too (getAllPackages, in validate.go), as does the build watch
+// under --wait.
 func listAllPackages(ctx context.Context, fclient cmd.Client) ([]fv1.Package, error) {
 	l, err := fclient.FissionClientSet.CoreV1().Packages(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -468,14 +472,24 @@ func applyResources(input cli.Input, fclient cmd.Client, specDir string, fr *Fis
 	// re-uploading bytes already on the cluster, and applyPackages diffs the spec
 	// against it.
 	//
-	// Sharing one snapshot across both is safe because nothing between them
-	// mutates Packages: applyArchives only uploads archive bytes to storagesvc
-	// (pkgutil.UploadArchiveFile writes no Package), and applyEnvironments touches
-	// only Environments. The snapshot is therefore stale only with respect to a
-	// *concurrent external writer*, and within a single apply the CLI is the only
-	// writer of the Packages this spec owns. A second List here would not close
-	// that window either — it would merely move it — so the assumption is pinned
-	// here rather than paid for with a second full cluster-wide enumeration.
+	// Nothing the CLI itself does between the two consumers writes a Package:
+	// pkgutil.UploadArchiveFile only pushes archive bytes to storagesvc, and
+	// applyEnvironments touches only Environments.
+	//
+	// The buildermgr, though, is a genuine concurrent writer of these same
+	// objects — updatePackage sets spec.Deployment, and the status write that
+	// follows it sets status.BuildStatus — and those are exactly the fields the
+	// equal() closure in applyPackages reads. So sharing one snapshot does not
+	// merely move the staleness window, it widens it: the second List this
+	// replaces ran *after* the archive uploads, this one runs before them, so
+	// the diff can now be reading a package set that is stale by the whole
+	// upload duration.
+	//
+	// That is accepted deliberately. A build landing inside the window makes its
+	// package read not-ready, so it takes the update path and gets retriggered:
+	// redundant work that converges on the next reconcile, not lost data. The
+	// alternative is the second full cluster-wide enumeration on every apply
+	// that issue #3664 was filed to remove.
 	livePkgs, err := listAllPackages(input.Context(), fclient)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list packages: %w", err)
@@ -754,8 +768,10 @@ func waitForPackageBuild(ctx context.Context, fclient cmd.Client, pkg *fv1.Packa
 
 // applyPackages reconciles the spec's Packages against livePkgs, the caller's
 // cluster-wide Package snapshot. The snapshot is supplied rather than fetched
-// here so a single apply performs one Package enumeration; callers with no
-// snapshot in hand (spec destroy) obtain one from listAllPackages.
+// here so that applyResources performs one Package enumeration rather than two;
+// callers with no snapshot in hand (spec destroy) obtain one from
+// listAllPackages. See applyResources for how stale the snapshot can be by the
+// time the diff below reads it.
 func applyPackages(ctx context.Context, fclient cmd.Client, fr *FissionResources, livePkgs []fv1.Package, delete bool, specAllowConflicts bool, dryRun bool) (map[string]metav1.ObjectMeta, *ResourceApplyStatus, error) {
 	packages := func(ns string) typedv1.PackageInterface {
 		return fclient.FissionClientSet.CoreV1().Packages(ns)
