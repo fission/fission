@@ -148,9 +148,11 @@ func TestVerifierSpoolCleansUpOnBadSignature(t *testing.T) {
 
 // TestVerifierSpoolIOFailureIs500 pins the fault classification: when the
 // spool cannot write its temp file (read-only temp dir — the shape of a
-// full disk or readOnlyRootFilesystem), a correctly signed request must be
-// answered 500, not 401, so operators chase the disk fault rather than
-// HMAC configuration.
+// full disk or readOnlyRootFilesystem), the request is answered 500, not
+// 401, so operators chase the disk fault rather than HMAC configuration.
+// The classification happens during the pre-verification drain, so it
+// applies regardless of the signature's validity; this test signs honestly
+// only so a fixed 401 could not pass for the wrong reason.
 func TestVerifierSpoolIOFailureIs500(t *testing.T) {
 	roDir := t.TempDir()
 	require.NoError(t, os.Chmod(roDir, 0o500))

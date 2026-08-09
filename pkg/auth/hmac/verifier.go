@@ -88,10 +88,9 @@ type VerifierOpts struct {
 	// must finish reading the body synchronously — retaining it for a
 	// goroutine that outlives ServeHTTP reads a closed file. (The in-memory
 	// path hands out a detached reader with no such bound, so code must not
-	// rely on that leniency.) Spool files go to os.TempDir; a service that
-	// also materializes the body itself (storagesvc's multipart parsing)
-	// transiently holds two on-disk copies per request — size ephemeral
-	// storage accordingly.
+	// rely on that leniency.) Spool files go to os.TempDir; for the on-disk
+	// footprint and ephemeral-storage sizing rule, see the "Maximum body
+	// size" section of docs/internal-auth/00-design.md.
 	SpoolThresholdBytes int64
 	// Logger receives V(1) messages on each rejection. The zero value is
 	// substituted with logr.Discard() at construction so callers that don't
