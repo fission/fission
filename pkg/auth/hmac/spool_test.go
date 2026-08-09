@@ -146,6 +146,51 @@ func TestVerifierSpoolCleansUpOnBadSignature(t *testing.T) {
 	requireEmptyDir(t, dir, "a rejected request's spool file must be removed")
 }
 
+// TestVerifierSpoolIOFailureIs500 pins the fault classification: when the
+// spool cannot write its temp file (read-only temp dir — the shape of a
+// full disk or readOnlyRootFilesystem), the request is answered 500, not
+// 401, so operators chase the disk fault rather than HMAC configuration.
+// The classification happens during the pre-verification drain, so it
+// applies regardless of the signature's validity; this test signs honestly
+// only so a fixed 401 could not pass for the wrong reason.
+func TestVerifierSpoolIOFailureIs500(t *testing.T) {
+	roDir := spoolTempDir(t)
+	require.NoError(t, os.Chmod(roDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(roDir, 0o700) })
+	// Probe with the exact call spoolBody makes: if temp-file creation
+	// still succeeds, this environment cannot inject the write fault (root
+	// ignores directory permission bits; Windows ignores TMPDIR), so the
+	// test would assert a 500 the server rightly never produces.
+	if f, err := os.CreateTemp("", "fault-probe-*"); err == nil {
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		t.Skip("environment does not enforce the read-only spool dir (running as root, or TMPDIR not honored)")
+	}
+
+	secret := []byte("test-secret-must-be-32-bytes-min")
+	now := func() time.Time { return time.Unix(1715000000, 0) }
+	body := bytes.Repeat([]byte("D"), 64)
+
+	called := false
+	h := Verifier(VerifierOpts{Secret: secret, SkewSec: 60, Now: now, SpoolThresholdBytes: 8})(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			w.WriteHeader(200)
+		}))
+
+	sig := Sign(secret, "POST", "/v1/archive", body, 1715000000)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/archive", bytes.NewReader(body))
+	req.Header.Set(HeaderTimestamp, "1715000000")
+	req.Header.Set(HeaderSignature, sig)
+	h.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusInternalServerError, rr.Code,
+		"a spool-storage fault is the server's problem, not an auth failure")
+	assert.False(t, called, "the handler must not run when the body could not be spooled")
+}
+
 // TestVerifierSpoolRejectsOversize: MaxBodyBytes still caps the request when
 // spooling — the drain hits the MaxBytesReader limit mid-spool, rejects with
 // 413, and leaves no temp file behind.

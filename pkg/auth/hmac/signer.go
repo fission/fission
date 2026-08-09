@@ -72,6 +72,10 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 	if len(s.secret) == 0 {
 		return s.rt.RoundTrip(r)
 	}
+	// On error the request body has already been closed (exactly once) by
+	// bodyHashForRequest — the inner transport never runs for the request,
+	// so the RoundTripper close-even-on-error contract is honored there,
+	// where each path knows whether the body is still open.
 	bodyHash, err := bodyHashForRequest(r)
 	if err != nil {
 		return nil, err
@@ -90,6 +94,15 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 // bodyHashForRequest returns hex(SHA256(body)) for the request's body,
 // preferring a streaming read over buffering.
 //
+// Contract: the streaming path signs the bytes GetBody yields while the
+// transport streams r.Body — it relies on the http.Request invariant that
+// GetBody returns a fresh copy of the same content as Body. A caller that
+// breaks that invariant (hand-built request with divergent hooks, or a body
+// partially consumed after construction) produces a signature over bytes
+// that never hit the wire; the verifier rejects it with 401 on every attempt
+// including rewound retries. Divergence fails closed — it can never get
+// unsigned bytes accepted.
+//
 // When GetBody is set (net/http populates it automatically for requests
 // built from *bytes.Buffer / *bytes.Reader / *strings.Reader, and
 // file-backed callers can set it themselves), the hash is streamed from a
@@ -106,19 +119,29 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 // reader and send — re-signed on the second pass — an EMPTY body, which the
 // verifier happily accepts: silent success with an empty payload rather
 // than a 401).
+//
+// On error the request body (if any) has been closed EXACTLY once: the
+// streaming branch closes it before returning (the transport will never run
+// to close it), and the buffering branch has already closed the original as
+// part of draining it. Callers must not close again — io.Closer declares
+// behavior after the first Close undefined, and a caller-supplied body with
+// a non-idempotent Close (pooled buffers, refcounts) must not see two.
 func bodyHashForRequest(r *http.Request) (string, error) {
 	if r.GetBody != nil {
 		fresh, err := r.GetBody()
 		if err != nil {
+			closeRequestBody(r)
 			return "", err
 		}
 		h := sha256.New()
 		_, err = io.Copy(h, fresh)
 		closeErr := fresh.Close()
 		if err != nil {
+			closeRequestBody(r)
 			return "", err
 		}
 		if closeErr != nil {
+			closeRequestBody(r)
 			return "", closeErr
 		}
 		return hex.EncodeToString(h.Sum(nil)), nil
@@ -143,4 +166,13 @@ func bodyHashForRequest(r *http.Request) (string, error) {
 		return io.NopCloser(bytes.NewReader(body)), nil
 	}
 	return BodyHashHex(body), nil
+}
+
+// closeRequestBody closes r.Body if present, ignoring the result — used on
+// error paths where the read/hash error (not a close error) is what the
+// caller needs to see.
+func closeRequestBody(r *http.Request) {
+	if r.Body != nil {
+		_ = r.Body.Close()
+	}
 }
