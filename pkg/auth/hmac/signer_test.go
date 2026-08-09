@@ -162,17 +162,23 @@ func TestSignerStreamsHashViaGetBody(t *testing.T) {
 	assert.True(t, req.Body == origBody, "the signer must not replace a rewindable request's Body")
 }
 
-// closeTrackingBody records whether Close was called, for pinning the
-// RoundTripper close-on-error contract.
+// closeTrackingBody counts Close calls, for pinning the close-exactly-once
+// contract on the signer's error paths (io.Closer declares behavior after
+// the first Close undefined, so a double-close is as much a bug as a leak).
 type closeTrackingBody struct {
 	io.Reader
-	closed *bool
+	closes *int
 }
 
 func (b *closeTrackingBody) Close() error {
-	*b.closed = true
+	*b.closes++
 	return nil
 }
+
+// errReader fails every Read, to force the buffering fallback's error path.
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
 
 // roundTripperFunc adapts a func to http.RoundTripper.
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -182,14 +188,15 @@ func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { r
 // TestSignerClosesBodyOnHashError pins the RoundTripper contract on the
 // streaming branch's error path: when GetBody fails, the inner transport
 // never runs, so the signer itself must close the request body — otherwise
-// a retry loop against a failing GetBody leaks one fd per attempt.
+// a retry loop against a failing GetBody leaks one fd per attempt. Exactly
+// one Close: a second would be undefined for non-idempotent closers.
 func TestSignerClosesBodyOnHashError(t *testing.T) {
 	secret := []byte("test-secret-must-be-32-bytes-min")
 
-	closed := false
+	closes := 0
 	req, err := http.NewRequest(http.MethodPost, "http://router.invalid/fission-function/f", nil)
 	require.NoError(t, err)
-	req.Body = &closeTrackingBody{Reader: strings.NewReader("payload"), closed: &closed}
+	req.Body = &closeTrackingBody{Reader: strings.NewReader("payload"), closes: &closes}
 	req.GetBody = func() (io.ReadCloser, error) {
 		return nil, errors.New("getbody failed")
 	}
@@ -201,7 +208,29 @@ func TestSignerClosesBodyOnHashError(t *testing.T) {
 
 	_, err = signer.RoundTrip(req)
 	require.Error(t, err)
-	assert.True(t, closed, "the signer must close the body when it errors before the transport runs")
+	assert.Equal(t, 1, closes, "the signer must close the body exactly once when it errors before the transport runs")
+}
+
+// TestSignerClosesBodyExactlyOnceOnReadError pins the same contract on the
+// buffering fallback: draining a failing body already closes the original,
+// and no layer above may close it a second time.
+func TestSignerClosesBodyExactlyOnceOnReadError(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+
+	closes := 0
+	req, err := http.NewRequest(http.MethodPost, "http://router.invalid/fission-function/f", nil)
+	require.NoError(t, err)
+	req.Body = &closeTrackingBody{Reader: errReader{err: errors.New("read failed")}, closes: &closes}
+	require.Nil(t, req.GetBody, "precondition: the buffering fallback must be exercised")
+
+	signer := NewSigner(secret, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("the inner transport must not run when draining fails")
+		return nil, nil
+	}), time.Now)
+
+	_, err = signer.RoundTrip(req)
+	require.Error(t, err)
+	assert.Equal(t, 1, closes, "a failed drain must close the original body exactly once, never twice")
 }
 
 // TestSignerBindsQueryParameter pins the security-critical contract from

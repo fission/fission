@@ -154,10 +154,19 @@ func TestVerifierSpoolCleansUpOnBadSignature(t *testing.T) {
 // applies regardless of the signature's validity; this test signs honestly
 // only so a fixed 401 could not pass for the wrong reason.
 func TestVerifierSpoolIOFailureIs500(t *testing.T) {
-	roDir := t.TempDir()
+	roDir := spoolTempDir(t)
 	require.NoError(t, os.Chmod(roDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(roDir, 0o700) })
-	t.Setenv("TMPDIR", roDir)
+	// Probe with the exact call spoolBody makes: if temp-file creation
+	// still succeeds, this environment cannot inject the write fault (root
+	// ignores directory permission bits; Windows ignores TMPDIR), so the
+	// test would assert a 500 the server rightly never produces.
+	if f, err := os.CreateTemp("", "fault-probe-*"); err == nil {
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		t.Skip("environment does not enforce the read-only spool dir (running as root, or TMPDIR not honored)")
+	}
 
 	secret := []byte("test-secret-must-be-32-bytes-min")
 	now := func() time.Time { return time.Unix(1715000000, 0) }

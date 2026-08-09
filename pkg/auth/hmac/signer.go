@@ -72,16 +72,12 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 	if len(s.secret) == 0 {
 		return s.rt.RoundTrip(r)
 	}
+	// On error the request body has already been closed (exactly once) by
+	// bodyHashForRequest — the inner transport never runs for the request,
+	// so the RoundTripper close-even-on-error contract is honored there,
+	// where each path knows whether the body is still open.
 	bodyHash, err := bodyHashForRequest(r)
 	if err != nil {
-		// The inner transport will never run for this request, so honor the
-		// RoundTripper contract ourselves: the request body must be closed
-		// even on error, or a retry loop against a failing GetBody leaks one
-		// fd per attempt. (The buffering fallback closes the original before
-		// erroring; closing an already-closed body here is harmless.)
-		if r.Body != nil {
-			_ = r.Body.Close()
-		}
 		return nil, err
 	}
 	ts := s.now().Unix()
@@ -123,19 +119,29 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 // reader and send — re-signed on the second pass — an EMPTY body, which the
 // verifier happily accepts: silent success with an empty payload rather
 // than a 401).
+//
+// On error the request body (if any) has been closed EXACTLY once: the
+// streaming branch closes it before returning (the transport will never run
+// to close it), and the buffering branch has already closed the original as
+// part of draining it. Callers must not close again — io.Closer declares
+// behavior after the first Close undefined, and a caller-supplied body with
+// a non-idempotent Close (pooled buffers, refcounts) must not see two.
 func bodyHashForRequest(r *http.Request) (string, error) {
 	if r.GetBody != nil {
 		fresh, err := r.GetBody()
 		if err != nil {
+			closeRequestBody(r)
 			return "", err
 		}
 		h := sha256.New()
 		_, err = io.Copy(h, fresh)
 		closeErr := fresh.Close()
 		if err != nil {
+			closeRequestBody(r)
 			return "", err
 		}
 		if closeErr != nil {
+			closeRequestBody(r)
 			return "", closeErr
 		}
 		return hex.EncodeToString(h.Sum(nil)), nil
@@ -160,4 +166,13 @@ func bodyHashForRequest(r *http.Request) (string, error) {
 		return io.NopCloser(bytes.NewReader(body)), nil
 	}
 	return BodyHashHex(body), nil
+}
+
+// closeRequestBody closes r.Body if present, ignoring the result — used on
+// error paths where the read/hash error (not a close error) is what the
+// caller needs to see.
+func closeRequestBody(r *http.Request) {
+	if r.Body != nil {
+		_ = r.Body.Close()
+	}
 }

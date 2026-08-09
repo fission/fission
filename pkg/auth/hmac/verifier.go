@@ -95,7 +95,14 @@ type VerifierOpts struct {
 	// Logger receives V(1) messages on each rejection. The zero value is
 	// substituted with logr.Discard() at construction so callers that don't
 	// care about audit logs don't crash. Rejection log lines deliberately
-	// omit the signature and timestamp values to avoid log poisoning.
+	// omit the signature and timestamp values to avoid log poisoning;
+	// body-read rejections do include the I/O error string (which for
+	// malformed client framing can quote escaped client-chosen bytes) —
+	// that is the debugging signal, and the logr encoder bounds it.
+	// Spool-storage faults log at error level, not V(1): they fire during
+	// the pre-verification drain, so during a disk fault expect one
+	// error-level line per over-threshold request from any allowlisted
+	// peer, signed or not — the loud signal a broken disk should produce.
 	Logger logr.Logger
 	// KeysFromRequestLabeled, when set, supplies the ordered candidate keys to try
 	// for each request, each tagged with the principal namespace recorded (via
