@@ -33,23 +33,57 @@ import (
 	"fmt"
 )
 
+// BodyHashHex returns hex(SHA256(body)) — the body component of the
+// canonical string. A nil body hashes identically to an empty one, so
+// bodiless requests (GETs) canonicalize the same whether the caller
+// passes nil or []byte{}.
+func BodyHashHex(body []byte) string {
+	bodyHash := sha256.Sum256(body)
+	return hex.EncodeToString(bodyHash[:])
+}
+
+// emptyBodyHashHex is the canonical body component for bodiless requests,
+// precomputed once so signer and verifier don't rehash emptiness per request.
+var emptyBodyHashHex = BodyHashHex(nil)
+
+// CanonicalFromHash is Canonical for callers that already hold the body's
+// SHA-256 (hex) — computed once across several Verify candidates, or
+// streamed without buffering the body. bodyHashHex MUST be hex(SHA256(body))
+// for the exact bytes on the wire.
+func CanonicalFromHash(method, requestURI, bodyHashHex string, timestampSec int64) string {
+	minute := timestampSec - (timestampSec % 60)
+	return fmt.Sprintf("%s\n%s\n%s\n%d", method, requestURI, bodyHashHex, minute)
+}
+
 // Canonical returns the canonical string that is fed into HMAC-SHA256.
 // timestampSec is rounded down to the nearest minute. The `requestURI`
 // argument should be path + raw query (e.g. r.URL.RequestURI()), not
 // just the path — query parameters MUST be bound to the signature for
 // services like storagesvc that key on `?id=`.
 func Canonical(method, requestURI string, body []byte, timestampSec int64) string {
-	bodyHash := sha256.Sum256(body)
-	minute := timestampSec - (timestampSec % 60)
-	return fmt.Sprintf("%s\n%s\n%s\n%d", method, requestURI, hex.EncodeToString(bodyHash[:]), minute)
+	return CanonicalFromHash(method, requestURI, BodyHashHex(body), timestampSec)
+}
+
+// SignFromHash is Sign for callers that already hold hex(SHA256(body))
+// (see CanonicalFromHash).
+func SignFromHash(secret []byte, method, requestURI, bodyHashHex string, timestampSec int64) string {
+	mac := cryptohmac.New(sha256.New, secret)
+	mac.Write([]byte(CanonicalFromHash(method, requestURI, bodyHashHex, timestampSec)))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // Sign returns hex(HMAC-SHA256(secret, Canonical(...))). `requestURI`
 // is path + raw query (see Canonical).
 func Sign(secret []byte, method, requestURI string, body []byte, timestampSec int64) string {
-	mac := cryptohmac.New(sha256.New, secret)
-	mac.Write([]byte(Canonical(method, requestURI, body, timestampSec)))
-	return hex.EncodeToString(mac.Sum(nil))
+	return SignFromHash(secret, method, requestURI, BodyHashHex(body), timestampSec)
+}
+
+// VerifyFromHash is Verify for callers that already hold hex(SHA256(body)) —
+// the verifier middleware hashes the body once and reuses it across candidate
+// keys (active, rotation, per-namespace) instead of rehashing per candidate.
+func VerifyFromHash(secret []byte, method, requestURI, bodyHashHex string, timestampSec int64, sig string) bool {
+	want := SignFromHash(secret, method, requestURI, bodyHashHex, timestampSec)
+	return cryptohmac.Equal([]byte(want), []byte(sig))
 }
 
 // Verify is a constant-time signature check at the request's own timestamp.
@@ -57,8 +91,7 @@ func Sign(secret []byte, method, requestURI string, body []byte, timestampSec in
 // callers that have already validated freshness (e.g. unit tests).
 // `requestURI` is path + raw query (see Canonical).
 func Verify(secret []byte, method, requestURI string, body []byte, timestampSec int64, sig string) bool {
-	want := Sign(secret, method, requestURI, body, timestampSec)
-	return cryptohmac.Equal([]byte(want), []byte(sig))
+	return VerifyFromHash(secret, method, requestURI, BodyHashHex(body), timestampSec, sig)
 }
 
 // VerifyWithSkew accepts the signature if the request timestamp is within

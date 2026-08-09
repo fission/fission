@@ -27,7 +27,18 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/storagesvc"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
+
+// storagesvcIdleConnsPerHost sizes the shared transport's idle pool for the
+// single storagesvc upstream; the stdlib default of 2 idle conns per host
+// churns connections when archive fetches and uploads overlap.
+const storagesvcIdleConnsPerHost = 16
+
+// storagesvcBaseTransport is shared by every storagesvc client in the process
+// so repeated MakeClient* calls reuse one idle pool instead of growing a fresh
+// one each time. The per-client otel/signer wrappers layer on top.
+var storagesvcBaseTransport = httpx.PooledTransport(storagesvcIdleConnsPerHost)
 
 // internalAuthSecretKey is the data key inside that Secret.
 const internalAuthSecretKey = "secret"
@@ -70,7 +81,7 @@ type (
 // HMACSecretFromCluster() so they read the same Secret the cluster
 // uses.
 func MakeClient(url string, masterSecret []byte) ClientInterface {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	var rt http.RoundTripper = otelhttp.NewTransport(storagesvcBaseTransport)
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceStoragesvc, rt, time.Now)
 	}
@@ -115,7 +126,7 @@ func MakeClientNS(url string, masterSecret []byte, namespace string) ClientInter
 		return MakeClient(url, masterSecret)
 	}
 	rt := hmacauth.ServiceSignerNS(masterSecret, hmacauth.ServiceStoragesvc, namespace,
-		otelhttp.NewTransport(http.DefaultTransport), time.Now)
+		otelhttp.NewTransport(storagesvcBaseTransport), time.Now)
 	return MakeClientWithTransport(url, &namespaceHeaderRoundTripper{namespace: namespace, next: rt})
 }
 

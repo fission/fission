@@ -23,7 +23,22 @@ import (
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/fetcher"
 	"github.com/fission/fission/pkg/utils/correlation"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
+
+// fetcherIdleConnsPerHost sizes the shared transport's idle pool per target
+// fetcher. Specialization fans out across pods (one host each), but buildermgr
+// runs concurrent builds of the same environment against a single builder
+// pod's fetcher — the stdlib default of 2 idle conns per host churns
+// connections there.
+const fetcherIdleConnsPerHost = 16
+
+// fetcherBaseTransport is shared by every fetcher client in the process. A
+// client is constructed per specialization (see poolmgr's gp_specialize), so
+// the underlying transport must be package-level: a per-client transport
+// would grow a fresh idle pool on every specialization and reuse nothing. The
+// per-client otel/signer wrappers are cheap and layer on top.
+var fetcherBaseTransport = httpx.PooledTransport(fetcherIdleConnsPerHost)
 
 type (
 	ClientInterface interface {
@@ -54,7 +69,7 @@ type (
 // (FISSION_INTERNAL_AUTH_SECRET) backs every internal channel's
 // signing/verification.
 func MakeClient(logger logr.Logger, fetcherUrl string, masterSecret []byte) ClientInterface {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	var rt http.RoundTripper = otelhttp.NewTransport(fetcherBaseTransport)
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSigner(masterSecret, hmacauth.ServiceFetcher, rt, time.Now)
 	}
@@ -68,7 +83,7 @@ func MakeClient(logger logr.Logger, fetcherUrl string, masterSecret []byte) Clie
 // used to specialize another tenant's pod. An empty master yields an unsigned
 // client (pass-through), matching MakeClient.
 func MakeClientNS(logger logr.Logger, fetcherUrl string, masterSecret []byte, namespace string) ClientInterface {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	var rt http.RoundTripper = otelhttp.NewTransport(fetcherBaseTransport)
 	if len(masterSecret) > 0 {
 		rt = hmacauth.ServiceSignerNS(masterSecret, hmacauth.ServiceFetcher, namespace, rt, time.Now)
 	}

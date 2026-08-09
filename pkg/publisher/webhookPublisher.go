@@ -21,8 +21,23 @@ import (
 	"github.com/go-logr/logr"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
+
+// webhookIdleConnsPerHost sizes the publisher transport's idle pool for its
+// single hot upstream, the router internal listener. Each publisher's send
+// loop is serialized (see svc), so this is not a concurrency bound — the
+// dedicated pool exists so the publisher's keep-alive connection is not
+// evicted by unrelated traffic sharing http.DefaultTransport's process-wide
+// 2-per-host pool, and a process running several publishers (mqtrigger) still
+// has headroom.
+const webhookIdleConnsPerHost = 8
+
+// webhookBaseTransport is shared by every publisher in the process so
+// per-publisher construction does not grow a fresh idle pool each time; the
+// per-publisher signer/otel wrappers are cheap and layer on top of it.
+var webhookBaseTransport = httpx.PooledTransport(webhookIdleConnsPerHost)
 
 type (
 	// WebhookPublisher for a single URL. Satisfies the Publisher interface.
@@ -90,7 +105,7 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 // newWebhookHTTPClient constructs the HTTP client used to invoke
 // /fission-function/<ns>/<name> on the router's internal listener.
 // The transport stack is hmacauth (outermost, when secret set) ->
-// otelhttp -> http.DefaultTransport: the signer runs first and
+// otelhttp -> webhookBaseTransport: the signer runs first and
 // computes the canonical form over (method, path, body, timestamp);
 // otelhttp then injects trace headers on the inner transport. OTEL
 // trace headers are intentionally NOT part of the signed canonical
@@ -103,7 +118,7 @@ func MakeWebhookPublisher(logger logr.Logger, baseURL string) *WebhookPublisher 
 // (storagesvc, fetcher, builder, executor). See
 // docs/internal-auth/00-design.md.
 func newWebhookHTTPClient() *http.Client {
-	var rt http.RoundTripper = otelhttp.NewTransport(http.DefaultTransport)
+	var rt http.RoundTripper = otelhttp.NewTransport(webhookBaseTransport)
 	if master := os.Getenv("FISSION_INTERNAL_AUTH_SECRET"); master != "" {
 		rt = hmacauth.ServiceSigner([]byte(master), hmacauth.ServiceRouterInternal, rt, time.Now)
 	}

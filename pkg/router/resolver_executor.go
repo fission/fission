@@ -24,12 +24,16 @@ import (
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
-// executorResolver is the executor-RPC AddressResolver — today's address
-// source, retained as the cold-start path, the strict-mode path, and the
-// universal fallback. Poolmgr lookups always RPC the executor (its PoolCache
-// does per-request concurrency-aware dispatch); newdeploy/container lookups
-// hit the router-side address cache first, coalescing misses through the
-// throttler.
+// executorResolver is the executor-RPC AddressResolver, retained as the
+// cold-start path, the strict-mode path, and the universal fallback. With the
+// EndpointSlice data plane on (the default; RFC-0002), warm poolmgr traffic is
+// admitted from the router's slice-fed endpoint index and never reaches this
+// resolver — poolmgr lookups RPC the executor only on cold start, on
+// saturation (ensureCapacity), and for strict-concurrency/OnceOnly functions
+// (the executor's PoolCache does per-request concurrency-aware dispatch
+// there). With the gate off (legacy mode) every poolmgr lookup takes this RPC.
+// newdeploy/container lookups hit the router-side address cache first,
+// coalescing misses through the throttler.
 type executorResolver struct {
 	logger logr.Logger
 	fmap   *functionServiceMap

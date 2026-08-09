@@ -115,6 +115,52 @@ func TestSignerRepopulatesGetBody(t *testing.T) {
 		"the retried attempt must re-send (and re-sign) the original body, never an empty one")
 }
 
+// TestSignerStreamsHashViaGetBody pins the no-buffer contract: when a
+// request is rewindable (GetBody set — net/http populates it for requests
+// built from bytes/strings readers, which covers every JSON client and the
+// storagesvc archive upload), the signer must stream the body hash from a
+// fresh GetBody reader and leave Body/GetBody untouched, rather than
+// buffering a second full copy of the body just to hash it.
+func TestSignerStreamsHashViaGetBody(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		ts, err := strconv.ParseInt(r.Header.Get(HeaderTimestamp), 10, 64)
+		require.NoError(t, err)
+		require.True(t, Verify(secret, r.Method, r.URL.Path, body, ts, r.Header.Get(HeaderSignature)),
+			"the streamed hash must sign the exact bytes on the wire")
+		gotBody = string(body)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/v1/archive", strings.NewReader("payload"))
+	require.NoError(t, err)
+	require.NotNil(t, req.GetBody, "precondition: net/http must have made the request rewindable")
+
+	// Count GetBody calls and remember the original hooks so we can assert
+	// the signer read a fresh reader once and replaced nothing.
+	origBody := req.Body
+	origGetBody := req.GetBody
+	getBodyCalls := 0
+	req.GetBody = func() (io.ReadCloser, error) {
+		getBodyCalls++
+		return origGetBody()
+	}
+
+	signer := NewSigner(secret, http.DefaultTransport, time.Now)
+	resp, err := signer.RoundTrip(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "payload", gotBody, "the transport must still stream the original body")
+	assert.Equal(t, 1, getBodyCalls, "the hash must be streamed from exactly one fresh GetBody reader")
+	assert.True(t, req.Body == origBody, "the signer must not replace a rewindable request's Body")
+}
+
 // TestSignerBindsQueryParameter pins the security-critical contract from
 // the design doc (docs/internal-auth/00-design.md): a captured signature
 // for /v1/archive?id=A must NOT verify against /v1/archive?id=B within

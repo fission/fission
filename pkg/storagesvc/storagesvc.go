@@ -62,6 +62,13 @@ type (
 	}
 )
 
+// uploadSpoolThresholdBytes bounds the memory the HMAC verifier spends per
+// archive upload: bodies up to this size are hashed in memory, larger ones
+// spool to a temp file (see hmacauth.VerifierOpts.SpoolThresholdBytes). 4 MiB
+// keeps typical source archives fully in memory while capping what a burst of
+// maximum-size uploads can pin.
+const uploadSpoolThresholdBytes int64 = 4 << 20
+
 // Functions handling storage interface
 func getStorageType(storage Storage) string {
 	return string(storage.getStorageType())
@@ -351,11 +358,17 @@ func (ss *StorageService) makeHandler() http.Handler {
 		opts = append(opts, httpmux.WithMiddleware(hmacauth.ServiceVerifierNamespaceFromHeader(ss.authSecret, ss.authSecretOld, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{
 			SkewSec: 60,
 			Bypass:  []string{"/healthz"},
-			// Caps the body the verifier buffers to check its signature; the
-			// verifier resolves 0 to 256 MiB. Operator-tunable via
+			// Caps the body the verifier accepts while checking its signature;
+			// the verifier resolves 0 to 256 MiB. Operator-tunable via
 			// STORAGE_MAX_ARCHIVE_SIZE_MIB — see the maxUploadBytes field and values.yaml.
 			MaxBodyBytes: ss.maxUploadBytes,
-			Logger:       ss.logger.WithName("hmac"),
+			// Spool over-threshold archive bodies to disk while hashing, so a
+			// concurrent burst of large uploads costs the verifier at most the
+			// threshold in memory each — not MaxBodyBytes each. Storagesvc
+			// writes accepted archives to its backing store anyway, so the
+			// extra disk round-trip is the right trade on this listener.
+			SpoolThresholdBytes: uploadSpoolThresholdBytes,
+			Logger:              ss.logger.WithName("hmac"),
 		})))
 	}
 	m := httpmux.New(opts...)
