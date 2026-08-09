@@ -57,15 +57,11 @@ func spoolBody(src io.Reader, threshold int64) (*bodySpool, error) {
 	return sp, nil
 }
 
-// nopCloseReader lets the spool hand out an io.ReadCloser whose Close does
-// not close the underlying temp file — cleanup owns the file's lifecycle, so
-// a handler's defer r.Body.Close() cannot break a later cleanup.
-type nopCloseReader struct{ io.Reader }
-
-func (nopCloseReader) Close() error { return nil }
-
 // reader returns the spooled body, rewound, for re-injection as r.Body.
-// Call it once; Close on the result is a no-op (see cleanup).
+// Call it once. Both arms wrap with io.NopCloser so a handler's deferred
+// r.Body.Close() cannot close the temp file out from under cleanup, which
+// owns the file's lifecycle (io.NopCloser also forwards WriterTo, keeping
+// *os.File's copy fast path available to whoever drains the body).
 func (s *bodySpool) reader() (io.ReadCloser, error) {
 	if s.file == nil {
 		return io.NopCloser(bytes.NewReader(s.mem)), nil
@@ -73,7 +69,7 @@ func (s *bodySpool) reader() (io.ReadCloser, error) {
 	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
-	return nopCloseReader{s.file}, nil
+	return io.NopCloser(s.file), nil
 }
 
 // cleanup closes and removes the temp file, if any. Idempotent; call it

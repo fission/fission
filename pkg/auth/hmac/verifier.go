@@ -5,10 +5,9 @@
 package hmac
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -186,37 +185,34 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				return
 			}
 
-			bodyHash := BodyHashHex(nil)
+			bodyHash := emptyBodyHashHex
 			if r.Body != nil {
 				if opts.MaxBodyBytes > 0 {
 					r.Body = http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes)
 				}
-				if opts.SpoolThresholdBytes > 0 {
-					spool, spoolErr := spoolBody(r.Body, opts.SpoolThresholdBytes)
-					if spoolErr != nil {
-						rejectBodyReadError(w, r, opts.Logger, spoolErr)
-						return
-					}
-					// The temp file (if the body spilled) must outlive the
-					// downstream handler, which reads the re-injected body
-					// from it; remove it once the handler returns.
-					defer spool.cleanup()
-					body, readerErr := spool.reader()
-					if readerErr != nil {
-						rejectBodyReadError(w, r, opts.Logger, readerErr)
-						return
-					}
-					bodyHash = spool.hashHex
-					r.Body = body
-				} else {
-					body, readErr := io.ReadAll(r.Body)
-					if readErr != nil {
-						rejectBodyReadError(w, r, opts.Logger, readErr)
-						return
-					}
-					bodyHash = BodyHashHex(body)
-					r.Body = io.NopCloser(bytes.NewReader(body))
+				// Spooling disabled resolves to an effectively-infinite
+				// threshold: the single drain path below then keeps every
+				// body in memory, which is the historical behavior.
+				spoolAt := opts.SpoolThresholdBytes
+				if spoolAt <= 0 {
+					spoolAt = math.MaxInt64 - 1
 				}
+				spool, spoolErr := spoolBody(r.Body, spoolAt)
+				if spoolErr != nil {
+					rejectBodyReadError(w, r, opts.Logger, spoolErr)
+					return
+				}
+				// The temp file (if the body spilled) must outlive the
+				// downstream handler, which reads the re-injected body
+				// from it; remove it once the handler returns.
+				defer spool.cleanup()
+				body, readerErr := spool.reader()
+				if readerErr != nil {
+					rejectBodyReadError(w, r, opts.Logger, readerErr)
+					return
+				}
+				bodyHash = spool.hashHex
+				r.Body = body
 			}
 
 			// Sign over RequestURI (path + raw query) so query parameters

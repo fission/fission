@@ -42,6 +42,10 @@ func BodyHashHex(body []byte) string {
 	return hex.EncodeToString(bodyHash[:])
 }
 
+// emptyBodyHashHex is the canonical body component for bodiless requests,
+// precomputed once so signer and verifier don't rehash emptiness per request.
+var emptyBodyHashHex = BodyHashHex(nil)
+
 // CanonicalFromHash is Canonical for callers that already hold the body's
 // SHA-256 (hex) — computed once across several Verify candidates, or
 // streamed without buffering the body. bodyHashHex MUST be hex(SHA256(body))

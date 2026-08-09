@@ -124,7 +124,7 @@ func bodyHashForRequest(r *http.Request) (string, error) {
 		return hex.EncodeToString(h.Sum(nil)), nil
 	}
 	if r.Body == nil {
-		return BodyHashHex(nil), nil
+		return emptyBodyHashHex, nil
 	}
 	original := r.Body
 	body, err := io.ReadAll(original)
