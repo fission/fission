@@ -23,6 +23,29 @@ const (
 	DEFAULT_OUTPUT_DIR  = "fission-dump"
 )
 
+// Label selectors for the workloads a support bundle collects. Hoisted into
+// constants because each is used by three or four dumpers, and when the list
+// was repeated inline it drifted: eight of the components the chart ships were
+// missing from every bundle, mqt-keda among them.
+const (
+	// componentSelector matches the control-plane Deployments. Keep in sync
+	// with the svc: labels in charts/fission-all/templates/*/deployment.yaml —
+	// a component absent here has no spec and no logs in the bundle at all.
+	componentSelector = "svc in (buildermgr, canaryconfig, executor, kubewatcher, mcp, mqtrigger, " +
+		"mqtrigger-keda, router, statestore, statesvc, storagesvc, tenantcontroller, timer, " +
+		"webhook-service, workflow)"
+
+	builderSelector = "owner=buildermgr"
+
+	// functionSelector covers all three execution backends. container was
+	// missing, so container-executor functions had no spec, pods or logs.
+	functionSelector = "executorType in (poolmgr, newdeploy, container)"
+
+	// functionSvcSelector is narrower: poolmgr serves from the shared pool and
+	// creates no per-function Service, while newdeploy and container both do.
+	functionSvcSelector = "executorType in (newdeploy, container)"
+)
+
 type DumpSubCommand struct {
 	cmd.CommandActioner
 }
@@ -72,31 +95,31 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-daemonset-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDaemonSet,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-log": resources.NewKubernetesPodLogDumper(k8sClient,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-events": resources.NewKubernetesPodEventDumper(k8sClient,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)", podEvents),
+			componentSelector, podEvents),
 
 		// fission builder logs & spec
-		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "owner=buildermgr"),
-		"fission-builder-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "owner=buildermgr"),
-		"fission-builder-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "owner=buildermgr"),
-		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "owner=buildermgr"),
-		"fission-builder-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "owner=buildermgr", podEvents),
+		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, builderSelector),
+		"fission-builder-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, builderSelector),
+		"fission-builder-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, builderSelector),
+		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, builderSelector),
+		"fission-builder-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, builderSelector, podEvents),
 
 		// fission function logs & spec
-		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "executorType=newdeploy"),
-		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "executorType in (poolmgr, newdeploy)", podEvents),
+		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, functionSvcSelector),
+		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, functionSelector),
+		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, functionSelector),
+		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, functionSelector),
+		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, functionSelector, podEvents),
 
 		// CRD resources
 		"fission-crd-packages":      resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
