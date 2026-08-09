@@ -204,12 +204,14 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			}
 
 			// Sign over RequestURI (path + raw query) so query parameters
-			// like ?id= are bound to the signature. Try each candidate key in
-			// order (active, then rotation, or the per-request namespace keys);
-			// constant-time compare happens inside Verify per candidate.
+			// like ?id= are bound to the signature. Hash the body ONCE and
+			// try each candidate key in order (active, then rotation, or the
+			// per-request namespace keys) against the same hash; constant-time
+			// compare happens inside VerifyFromHash per candidate.
+			bodyHash := BodyHashHex(body)
 			ru := r.URL.RequestURI()
 			for _, c := range opts.labeledCandidates(r) {
-				if len(c.Key) > 0 && Verify(c.Key, r.Method, ru, body, tsNum, sig) {
+				if len(c.Key) > 0 && VerifyFromHash(c.Key, r.Method, ru, bodyHash, tsNum, sig) {
 					// Record the principal whose key matched so downstream
 					// handlers authorize on the authenticated namespace rather
 					// than a caller-controlled header.
