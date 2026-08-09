@@ -32,7 +32,7 @@ const (
 	// with the svc: labels in charts/fission-all/templates/*/deployment.yaml —
 	// a component absent here has no spec and no logs in the bundle at all.
 	componentSelector = "svc in (buildermgr, canaryconfig, executor, kubewatcher, mcp, mqtrigger, " +
-		"mqtrigger-keda, router, statestore, statesvc, storagesvc, tenantcontroller, timer, " +
+		"mqtrigger-keda, router, router-internal, statestore, statesvc, storagesvc, tenantcontroller, timer, " +
 		"webhook-service, workflow)"
 
 	builderSelector = "owner=buildermgr"

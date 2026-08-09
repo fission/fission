@@ -30,7 +30,9 @@ func TestComponentSelectorCoversEveryChartComponent(t *testing.T) {
 	require.NoError(t, err)
 
 	root := filepath.Join("..", "..", "..", "..", "charts", "fission-all", "templates")
-	files, err := filepath.Glob(filepath.Join(root, "*", "deployment.yaml"))
+	// Every template, not just deployment.yaml: router-internal is a
+	// Service-only component, and globbing deployments alone could not see it.
+	files, err := filepath.Glob(filepath.Join(root, "*", "*.yaml"))
 	require.NoError(t, err)
 	require.NotEmpty(t, files, "chart templates not found under %v", root)
 
@@ -46,7 +48,8 @@ func TestComponentSelectorCoversEveryChartComponent(t *testing.T) {
 					"spec and logs would be missing from every support bundle", f, m[1])
 		}
 	}
-	require.NotZero(t, seen, "found no svc: labels; the regex or the chart layout changed")
+	require.GreaterOrEqual(t, seen, 16,
+		"found only %v svc: labels; the regex or the chart layout changed and this guard has stopped guarding", seen)
 }
 
 // The three execution backends must all be collectable. container was missing
