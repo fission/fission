@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -196,48 +197,52 @@ func (res KubernetesPodLogDumper) Dump(ctx context.Context, dumpDir string) {
 
 	for _, p := range l.Items {
 		wg.Go(func() {
-			func(pod corev1.Pod) {
-				// dump logs from each containers
-				for _, container := range append(pod.Spec.Containers, pod.Spec.InitContainers...) {
-					req := res.client.CoreV1().Pods(pod.Namespace).
-						GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name})
-
-					stream, err := req.Stream(ctx)
-					if err != nil {
-						console.Error(fmt.Sprintf("Error streaming logs for pod %v: %v", pod.Name, err))
-						return
-					}
-
-					reader := bufio.NewReader(stream)
-					var buffer bytes.Buffer
-
-					for {
-						line, _, err := reader.ReadLine()
-						if err != nil {
-							if err == io.EOF {
-								stream.Close()
-								break
-							}
-							console.Error(fmt.Sprintf("Error reading logs from buffer: %v", err))
-							return
-						}
-
-						_, err = buffer.WriteString(string(line) + "\n")
-						if err != nil {
-							console.Error(fmt.Sprintf("Error writing bytes to buffer: %v", err))
-							return
-						}
-					}
-
-					f := getPodFileName(dumpDir, pod.ObjectMeta, container.Name)
-					writeToFile(f, buffer.String())
-
-					stream.Close()
-				}
-			}(p)
+			dumpPodContainerLogs(ctx, res.client, p, dumpDir)
 		})
-
 	}
 
 	wg.Wait()
+}
+
+// dumpPodContainerLogs writes one file per container in pod.
+func dumpPodContainerLogs(ctx context.Context, client kubernetes.Interface, pod corev1.Pod, dumpDir string) {
+	// slices.Concat rather than append(Containers, InitContainers...): append
+	// would write into Containers' spare capacity when it has any, editing the
+	// pod object this function was handed.
+	for _, container := range slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers) {
+		req := client.CoreV1().Pods(pod.Namespace).
+			GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name})
+
+		stream, err := req.Stream(ctx)
+		if err != nil {
+			console.Error(fmt.Sprintf("Error streaming logs for pod %v: %v", pod.Name, err))
+			return
+		}
+
+		reader := bufio.NewReader(stream)
+		var buffer bytes.Buffer
+
+		for {
+			line, _, err := reader.ReadLine()
+			if err != nil {
+				if err == io.EOF {
+					stream.Close()
+					break
+				}
+				console.Error(fmt.Sprintf("Error reading logs from buffer: %v", err))
+				return
+			}
+
+			_, err = buffer.WriteString(string(line) + "\n")
+			if err != nil {
+				console.Error(fmt.Sprintf("Error writing bytes to buffer: %v", err))
+				return
+			}
+		}
+
+		f := getPodFileName(dumpDir, pod.ObjectMeta, container.Name)
+		writeToFile(f, buffer.String())
+
+		stream.Close()
+	}
 }

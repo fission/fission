@@ -12,7 +12,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -42,10 +41,6 @@ func NewKubernetesPodEventDumper(clientset kubernetes.Interface, selector string
 	}
 }
 
-// eventPageSize bounds how many events one request pulls. Unpaged, a cluster
-// with a large event backlog is an unbounded read into CLI memory.
-const eventPageSize = 500
-
 // PodEventIndex holds the cluster's pod events, keyed by the UID of the pod
 // each was recorded against and sorted oldest first.
 //
@@ -70,48 +65,33 @@ func NewPodEventIndex(clientset kubernetes.Interface) *PodEventIndex {
 // handed out are read-only and concurrent dumpers cannot race sorting one.
 func (idx *PodEventIndex) get(ctx context.Context) (map[types.UID][]corev1.Event, error) {
 	idx.once.Do(func() {
-		byPod := make(map[types.UID][]corev1.Event)
-
-		var cont string
-		for page := 0; ; page++ {
-			// involvedObject.kind is a server-side selectable field on core/v1
-			// events, so the apiserver drops non-Pod events rather than sending
-			// them. The client-side check below stays regardless: the fake
-			// clientset used in tests applies label selectors but ignores field
-			// selectors, so it is what keeps the tests honest.
-			events, err := idx.client.CoreV1().Events(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		// involvedObject.kind is a server-side selectable field on core/v1
+		// events, so the apiserver drops non-Pod events rather than sending
+		// them. The client-side check below stays regardless: the fake clientset
+		// used in tests applies label selectors but ignores field selectors, so
+		// it is what keeps the tests honest.
+		events, err := listAllPages("event", func(cont string) ([]corev1.Event, string, error) {
+			list, err := idx.client.CoreV1().Events(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 				FieldSelector: "involvedObject.kind=Pod",
-				Limit:         eventPageSize,
+				Limit:         listPageSize,
 				Continue:      cont,
 			})
 			if err != nil {
-				// Keep whatever was already collected. A watch cache that ages
-				// out mid-pagination returns 410 Gone, and a partial event
-				// history is worth more in a bundle than none — but say so,
-				// because silently short files would read as "no more events".
-				if page > 0 && apierrors.IsResourceExpired(err) {
-					console.Error(fmt.Sprintf(
-						"Event list expired after %v pages; the dump has a partial event history: %v", page, err))
-					break
-				}
-				idx.err = err
-				return
+				return nil, "", err
 			}
+			return list.Items, list.Continue, nil
+		})
+		if err != nil {
+			idx.err = err
+			return
+		}
 
-			for _, e := range events.Items {
-				if e.InvolvedObject.Kind != "Pod" {
-					continue
-				}
-				byPod[e.InvolvedObject.UID] = append(byPod[e.InvolvedObject.UID], e)
+		byPod := make(map[types.UID][]corev1.Event)
+		for _, e := range events {
+			if e.InvolvedObject.Kind != "Pod" {
+				continue
 			}
-
-			next := events.Continue
-			// Termination guard: an apiserver that returns the token it was
-			// given, or a fresh token with nothing in it, would loop forever.
-			if next == "" || next == cont || len(events.Items) == 0 {
-				break
-			}
-			cont = next
+			byPod[e.InvolvedObject.UID] = append(byPod[e.InvolvedObject.UID], e)
 		}
 
 		for _, evs := range byPod {
