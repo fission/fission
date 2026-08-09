@@ -74,6 +74,16 @@ type VerifierOpts struct {
 	// The cap is only applied when enforcement is on (Secret non-empty); the
 	// pass-through short-circuit deliberately leaves the body untouched.
 	MaxBodyBytes int64
+	// SpoolThresholdBytes, when positive, bounds how much of the request body
+	// the verifier holds in memory while hashing: bodies up to the threshold
+	// stay in memory as before, larger ones spool to a temp file that the
+	// re-injected r.Body reads back from — so verifier memory is bounded by
+	// the threshold (not MaxBodyBytes) per request. Zero or negative keeps
+	// the fully in-memory behavior. The trade is a disk write+read for
+	// spooled bodies: set it on listeners where large bodies are real
+	// (storagesvc archive uploads) and leave it off on latency-sensitive
+	// ones (the router internal listener).
+	SpoolThresholdBytes int64
 	// Logger receives V(1) messages on each rejection. The zero value is
 	// substituted with logr.Discard() at construction so callers that don't
 	// care about audit logs don't crash. Rejection log lines deliberately
@@ -176,39 +186,45 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 				return
 			}
 
-			var body []byte
+			bodyHash := BodyHashHex(nil)
 			if r.Body != nil {
 				if opts.MaxBodyBytes > 0 {
 					r.Body = http.MaxBytesReader(w, r.Body, opts.MaxBodyBytes)
 				}
-				body, err = io.ReadAll(r.Body)
-				if err != nil {
-					var maxErr *http.MaxBytesError
-					if errors.As(err, &maxErr) {
-						opts.Logger.V(1).Info("HMAC verification failed",
-							"reason", "body exceeds MaxBodyBytes",
-							"method", r.Method, "path", r.URL.Path,
-							"remoteAddr", r.RemoteAddr,
-							"limit", maxErr.Limit)
-						w.WriteHeader(http.StatusRequestEntityTooLarge)
+				if opts.SpoolThresholdBytes > 0 {
+					spool, spoolErr := spoolBody(r.Body, opts.SpoolThresholdBytes)
+					if spoolErr != nil {
+						rejectBodyReadError(w, r, opts.Logger, spoolErr)
 						return
 					}
-					opts.Logger.V(1).Info("HMAC verification failed",
-						"reason", "body read error",
-						"method", r.Method, "path", r.URL.Path,
-						"remoteAddr", r.RemoteAddr)
-					w.WriteHeader(http.StatusUnauthorized)
-					return
+					// The temp file (if the body spilled) must outlive the
+					// downstream handler, which reads the re-injected body
+					// from it; remove it once the handler returns.
+					defer spool.cleanup()
+					body, readerErr := spool.reader()
+					if readerErr != nil {
+						rejectBodyReadError(w, r, opts.Logger, readerErr)
+						return
+					}
+					bodyHash = spool.hashHex
+					r.Body = body
+				} else {
+					body, readErr := io.ReadAll(r.Body)
+					if readErr != nil {
+						rejectBodyReadError(w, r, opts.Logger, readErr)
+						return
+					}
+					bodyHash = BodyHashHex(body)
+					r.Body = io.NopCloser(bytes.NewReader(body))
 				}
-				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
 
 			// Sign over RequestURI (path + raw query) so query parameters
-			// like ?id= are bound to the signature. Hash the body ONCE and
-			// try each candidate key in order (active, then rotation, or the
-			// per-request namespace keys) against the same hash; constant-time
-			// compare happens inside VerifyFromHash per candidate.
-			bodyHash := BodyHashHex(body)
+			// like ?id= are bound to the signature. The body was hashed ONCE
+			// while draining it; try each candidate key in order (active,
+			// then rotation, or the per-request namespace keys) against the
+			// same hash; constant-time compare happens inside VerifyFromHash
+			// per candidate.
 			ru := r.URL.RequestURI()
 			for _, c := range opts.labeledCandidates(r) {
 				if len(c.Key) > 0 && VerifyFromHash(c.Key, r.Method, ru, bodyHash, tsNum, sig) {
@@ -227,4 +243,25 @@ func Verifier(opts VerifierOpts) func(http.Handler) http.Handler {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
 	}
+}
+
+// rejectBodyReadError writes the response for a body the verifier could not
+// drain: an *http.MaxBytesError means the body exceeded MaxBodyBytes (413);
+// anything else is a read error (401). Shared by the in-memory and spooling
+// body paths so both reject identically.
+func rejectBodyReadError(w http.ResponseWriter, r *http.Request, logger logr.Logger, err error) {
+	if maxErr, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		logger.V(1).Info("HMAC verification failed",
+			"reason", "body exceeds MaxBodyBytes",
+			"method", r.Method, "path", r.URL.Path,
+			"remoteAddr", r.RemoteAddr,
+			"limit", maxErr.Limit)
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		return
+	}
+	logger.V(1).Info("HMAC verification failed",
+		"reason", "body read error",
+		"method", r.Method, "path", r.URL.Path,
+		"remoteAddr", r.RemoteAddr)
+	w.WriteHeader(http.StatusUnauthorized)
 }
