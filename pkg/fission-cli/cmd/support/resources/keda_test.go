@@ -86,15 +86,29 @@ func TestKedaDumperMasksVaultToken(t *testing.T) {
 		},
 	}
 
+	// Not ours. The ownership filter is what keeps another team's Vault address
+	// and secret names out of a bundle that gets sent to a third party, and it
+	// is applied on this branch too — not only to ScaledObjects.
+	theirs := &kedav1alpha1.TriggerAuthentication{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "other-teams-auth", Namespace: "other", ResourceVersion: "1",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
+		},
+		Spec: kedav1alpha1.TriggerAuthenticationSpec{
+			HashiCorpVault: &kedav1alpha1.HashiCorpVault{Address: "https://vault.other.example.com"},
+		},
+	}
+
 	dir := t.TempDir()
 	d := KedaDumper{
-		client:   kedafake.NewSimpleClientset(ta),
+		client:   kedafake.NewSimpleClientset(ta, theirs),
 		kedaType: KedaTriggerAuthentication,
 	}
 	d.Dump(t.Context(), dir)
 
 	files := dumpedFiles(t, dir)
-	require.Len(t, files, 1)
+	require.Len(t, files, 1, "only the MessageQueueTrigger-owned TriggerAuthentication should be dumped")
+	assert.Contains(t, files[0], "my-mqt-auth")
 
 	content, err := os.ReadFile(filepath.Join(dir, files[0]))
 	require.NoError(t, err)
@@ -131,8 +145,22 @@ func TestKedaDumperLeavesTheListedObjectUnmutated(t *testing.T) {
 func TestKedaDumperUnknownTypeWritesNothing(t *testing.T) {
 	t.Parallel()
 
+	// Seed both kinds, owned, so the assertion discriminates: with an empty
+	// clientset "wrote nothing" would hold however the default branch behaved.
 	dir := t.TempDir()
-	d := KedaDumper{client: kedafake.NewSimpleClientset(), kedaType: "NotAKedaKind"}
+	d := KedaDumper{
+		client: kedafake.NewSimpleClientset(
+			&kedav1alpha1.ScaledObject{ObjectMeta: metav1.ObjectMeta{
+				Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
+				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
+			}},
+			&kedav1alpha1.TriggerAuthentication{ObjectMeta: metav1.ObjectMeta{
+				Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
+				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
+			}},
+		),
+		kedaType: "NotAKedaKind",
+	}
 	d.Dump(t.Context(), dir)
 
 	assert.Empty(t, dumpedFiles(t, dir))
