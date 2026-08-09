@@ -272,21 +272,23 @@ func TestNewKedaDumperWithoutRestConfigDoesNotPanic(t *testing.T) {
 	assert.Empty(t, dumpedFiles(t, dir))
 }
 
-func TestKedaDumperListErrorsWriteNothing(t *testing.T) {
+func TestKedaDumperListErrorBranches(t *testing.T) {
 	t.Parallel()
 
 	gr := schema.GroupResource{Group: "keda.sh", Resource: "scaledobjects"}
 
-	// Both branches of the kedaAbsent split must leave the bundle intact. The
-	// branches differ only in console output, which this package cannot capture
-	// without swapping a global that t.Parallel would race — so this pins the
-	// half that is observable: neither aborts, neither writes.
+	// The two kedaAbsent branches are now observably different in the bundle
+	// itself: a missing CRD leaves a marker naming the reason, a real failure
+	// leaves nothing (it was warned about on the console instead). An empty
+	// directory alone could not tell those apart, which is the whole point of
+	// the marker. Neither branch may abort the dump.
 	tests := []struct {
-		name string
-		err  error
+		name       string
+		err        error
+		wantMarker bool
 	}{
-		{"keda not installed", apierrors.NewNotFound(gr, "scaledobjects")},
-		{"forbidden is a real error", apierrors.NewForbidden(gr, "scaledobjects", assert.AnError)},
+		{"keda not installed leaves a marker", apierrors.NewNotFound(gr, "scaledobjects"), true},
+		{"forbidden is a real error, not an absent CRD", apierrors.NewForbidden(gr, "scaledobjects", assert.AnError), false},
 	}
 
 	for _, tc := range tests {
@@ -301,7 +303,18 @@ func TestKedaDumperListErrorsWriteNothing(t *testing.T) {
 			dir := t.TempDir()
 			d := KedaDumper{client: c, kedaType: KedaScaledObject}
 			require.NotPanics(t, func() { d.Dump(t.Context(), dir) })
-			assert.Empty(t, dumpedFiles(t, dir))
+
+			files := dumpedFiles(t, dir)
+			if !tc.wantMarker {
+				assert.Empty(t, files, "a real error must not be recorded as an absent CRD")
+				return
+			}
+
+			require.Equal(t, []string{"keda-not-installed.txt"}, files)
+			content, err := os.ReadFile(filepath.Join(dir, files[0]))
+			require.NoError(t, err)
+			assert.Contains(t, string(content), KedaScaledObject,
+				"the marker should name which kind was skipped")
 		})
 	}
 }

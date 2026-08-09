@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
@@ -94,6 +95,24 @@ func kedaAbsent(err error) bool {
 	return apimeta.IsNoMatchError(err) || apierrors.IsNotFound(err)
 }
 
+// noteListErr records a failed KEDA list.
+//
+// A missing CRD is the normal case for anyone not using mqt of type keda, so it
+// is a verbose note rather than a warning that would appear in every bundle
+// from every non-KEDA install — plus a marker file, because an empty directory
+// on its own cannot be told apart from a list that failed, and whoever reads
+// the tarball weeks later has no other way to know which happened. Anything
+// else is a real problem and stays a warning.
+func noteListErr(kedaType, dumpDir string, err error) {
+	if kedaAbsent(err) {
+		console.Verbose(2, "KEDA %v not available in this cluster, skipping", kedaType)
+		writeToFile(filepath.Join(dumpDir, "keda-not-installed.txt"),
+			fmt.Sprintf("no %v dumped: the KEDA CRDs are not installed in this cluster (%v)", kedaType, err))
+		return
+	}
+	console.Warn(fmt.Sprintf("Error getting %v list: %v", kedaType, err))
+}
+
 func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	if res.clientErr != nil {
 		console.Warn(fmt.Sprintf("Error creating keda client for %v: %v", res.kedaType, res.clientErr))
@@ -104,11 +123,7 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	case KedaScaledObject:
 		items, err := res.client.KedaV1alpha1().ScaledObjects(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			if kedaAbsent(err) {
-				console.Verbose(2, "KEDA ScaledObjects not available in this cluster, skipping")
-				return
-			}
-			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.kedaType, err))
+			noteListErr(res.kedaType, dumpDir, err)
 			return
 		}
 
@@ -123,11 +138,7 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	case KedaTriggerAuthentication:
 		items, err := res.client.KedaV1alpha1().TriggerAuthentications(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			if kedaAbsent(err) {
-				console.Verbose(2, "KEDA TriggerAuthentications not available in this cluster, skipping")
-				return
-			}
-			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.kedaType, err))
+			noteListErr(res.kedaType, dumpDir, err)
 			return
 		}
 
