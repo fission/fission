@@ -65,6 +65,9 @@ require (
 	k8s.io/apiextensions-apiserver v0.36.3
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
+	k8s.io/code-generator v0.36.3
+	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b
+	k8s.io/klog/v2 v2.140.0
 	k8s.io/metrics v0.36.3
 	modernc.org/sqlite v1.55.0
 	pgregory.net/rapid v1.3.0
@@ -238,9 +241,6 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/code-generator v0.36.3 // indirect
-	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b // indirect
-	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260501160325-927ab1f70cd6 // indirect
 	k8s.io/streaming v0.36.3 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
@@ -260,8 +260,6 @@ tool (
 	sigs.k8s.io/controller-runtime/tools/setup-envtest
 	sigs.k8s.io/controller-tools/cmd/controller-gen
 )
-
-replace k8s.io/code-generator => github.com/fission/code-generator v0.30.0-alpha.3.0.20260602173520-ce5e06198af6
 
 // github.com/prometheus/common carries a retracted/bogus high-semver tag (v1.20.99)
 // on what is really the v0.x line; `go get` picks it as "latest" for our direct

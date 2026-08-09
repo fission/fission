@@ -7,21 +7,33 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-CODEGEN_PKG_VERSION=$(go list -m -f '{{.Replace.Version}}' k8s.io/code-generator)
-if [ -z "$CODEGEN_PKG_VERSION" ]; then
-	echo "Error: could not determine code-generator version from go.mod"
-	echo "Received output: '$CODEGEN_PKG_VERSION'"
+SCRIPT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+
+# Upstream client-gen cannot generate a client for the Package CRD: gengo's
+# "private" name system lowercases the type to "package", a Go keyword.
+#
+# Rather than fork k8s.io/code-generator, copy the module out of the read-only
+# module cache and swap in our own client-gen entrypoint, which wraps the
+# namer. kube_codegen.sh sets KUBE_CODEGEN_ROOT to its own directory and runs
+# `go install` from there, so the copy is what gets built -- no `replace`
+# directive is involved. See hack/codegen/clientgen/main.go.
+UPSTREAM_PKG=$(go list -m -f '{{.Dir}}' k8s.io/code-generator)
+if [ -z "${UPSTREAM_PKG}" ] || [ ! -d "${UPSTREAM_PKG}" ]; then
+	echo "Error: could not locate the k8s.io/code-generator module directory"
+	echo "Received output: '${UPSTREAM_PKG}'"
 	exit 1
 fi
-GOPATH=$(go env GOPATH)
-GOMODCACHEPATH=$(go env GOMODCACHE)
-SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
-CODEGEN_PKG=${CODEGEN_PKG:-$(
-	cd "${SCRIPT_ROOT}"
-	echo ${GOMODCACHEPATH}/github.com/fission/code-generator@${CODEGEN_PKG_VERSION}
-)}
 
-echo "Generating code under ${SCRIPT_ROOT}/pkg/generated using ${CODEGEN_PKG} ..."
+CODEGEN_PKG=$(mktemp -d)
+# Module cache files are read-only; make the copy writable so it can be patched
+# and so the trap can remove it.
+trap 'chmod -R u+w "${CODEGEN_PKG}" 2>/dev/null || true; rm -rf "${CODEGEN_PKG}"' EXIT
+
+cp -R "${UPSTREAM_PKG}/." "${CODEGEN_PKG}/"
+chmod -R u+w "${CODEGEN_PKG}"
+cp "${SCRIPT_ROOT}/hack/codegen/clientgen/main.go" "${CODEGEN_PKG}/cmd/client-gen/main.go"
+
+echo "Generating code under ${SCRIPT_ROOT}/pkg/generated using ${UPSTREAM_PKG} ..."
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 

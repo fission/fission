@@ -26,19 +26,19 @@ type FunctionAliasesGetter interface {
 
 // FunctionAliasInterface has methods to work with FunctionAlias resources.
 type FunctionAliasInterface interface {
-	Create(ctx context.Context, _functionAlias *corev1.FunctionAlias, opts metav1.CreateOptions) (*corev1.FunctionAlias, error)
-	Update(ctx context.Context, _functionAlias *corev1.FunctionAlias, opts metav1.UpdateOptions) (*corev1.FunctionAlias, error)
+	Create(ctx context.Context, functionAlias *corev1.FunctionAlias, opts metav1.CreateOptions) (*corev1.FunctionAlias, error)
+	Update(ctx context.Context, functionAlias *corev1.FunctionAlias, opts metav1.UpdateOptions) (*corev1.FunctionAlias, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _functionAlias *corev1.FunctionAlias, opts metav1.UpdateOptions) (*corev1.FunctionAlias, error)
+	UpdateStatus(ctx context.Context, functionAlias *corev1.FunctionAlias, opts metav1.UpdateOptions) (*corev1.FunctionAlias, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.FunctionAlias, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.FunctionAliasList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.FunctionAlias, err error)
-	Apply(ctx context.Context, _functionAlias *applyconfigurationcorev1.FunctionAliasApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionAlias, err error)
+	Apply(ctx context.Context, functionAlias *applyconfigurationcorev1.FunctionAliasApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionAlias, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _functionAlias *applyconfigurationcorev1.FunctionAliasApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionAlias, err error)
+	ApplyStatus(ctx context.Context, functionAlias *applyconfigurationcorev1.FunctionAliasApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionAlias, err error)
 	FunctionAliasExpansion
 }
 

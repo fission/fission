@@ -26,19 +26,19 @@ type WorkflowsGetter interface {
 
 // WorkflowInterface has methods to work with Workflow resources.
 type WorkflowInterface interface {
-	Create(ctx context.Context, _workflow *corev1.Workflow, opts metav1.CreateOptions) (*corev1.Workflow, error)
-	Update(ctx context.Context, _workflow *corev1.Workflow, opts metav1.UpdateOptions) (*corev1.Workflow, error)
+	Create(ctx context.Context, workflow *corev1.Workflow, opts metav1.CreateOptions) (*corev1.Workflow, error)
+	Update(ctx context.Context, workflow *corev1.Workflow, opts metav1.UpdateOptions) (*corev1.Workflow, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _workflow *corev1.Workflow, opts metav1.UpdateOptions) (*corev1.Workflow, error)
+	UpdateStatus(ctx context.Context, workflow *corev1.Workflow, opts metav1.UpdateOptions) (*corev1.Workflow, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Workflow, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.WorkflowList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Workflow, err error)
-	Apply(ctx context.Context, _workflow *applyconfigurationcorev1.WorkflowApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Workflow, err error)
+	Apply(ctx context.Context, workflow *applyconfigurationcorev1.WorkflowApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Workflow, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _workflow *applyconfigurationcorev1.WorkflowApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Workflow, err error)
+	ApplyStatus(ctx context.Context, workflow *applyconfigurationcorev1.WorkflowApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Workflow, err error)
 	WorkflowExpansion
 }
 

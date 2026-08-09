@@ -26,19 +26,19 @@ type EnvironmentsGetter interface {
 
 // EnvironmentInterface has methods to work with Environment resources.
 type EnvironmentInterface interface {
-	Create(ctx context.Context, _environment *corev1.Environment, opts metav1.CreateOptions) (*corev1.Environment, error)
-	Update(ctx context.Context, _environment *corev1.Environment, opts metav1.UpdateOptions) (*corev1.Environment, error)
+	Create(ctx context.Context, environment *corev1.Environment, opts metav1.CreateOptions) (*corev1.Environment, error)
+	Update(ctx context.Context, environment *corev1.Environment, opts metav1.UpdateOptions) (*corev1.Environment, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _environment *corev1.Environment, opts metav1.UpdateOptions) (*corev1.Environment, error)
+	UpdateStatus(ctx context.Context, environment *corev1.Environment, opts metav1.UpdateOptions) (*corev1.Environment, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Environment, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.EnvironmentList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Environment, err error)
-	Apply(ctx context.Context, _environment *applyconfigurationcorev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Environment, err error)
+	Apply(ctx context.Context, environment *applyconfigurationcorev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Environment, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _environment *applyconfigurationcorev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Environment, err error)
+	ApplyStatus(ctx context.Context, environment *applyconfigurationcorev1.EnvironmentApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Environment, err error)
 	EnvironmentExpansion
 }
 

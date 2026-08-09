@@ -26,19 +26,19 @@ type CanaryConfigsGetter interface {
 
 // CanaryConfigInterface has methods to work with CanaryConfig resources.
 type CanaryConfigInterface interface {
-	Create(ctx context.Context, _canaryConfig *corev1.CanaryConfig, opts metav1.CreateOptions) (*corev1.CanaryConfig, error)
-	Update(ctx context.Context, _canaryConfig *corev1.CanaryConfig, opts metav1.UpdateOptions) (*corev1.CanaryConfig, error)
+	Create(ctx context.Context, canaryConfig *corev1.CanaryConfig, opts metav1.CreateOptions) (*corev1.CanaryConfig, error)
+	Update(ctx context.Context, canaryConfig *corev1.CanaryConfig, opts metav1.UpdateOptions) (*corev1.CanaryConfig, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _canaryConfig *corev1.CanaryConfig, opts metav1.UpdateOptions) (*corev1.CanaryConfig, error)
+	UpdateStatus(ctx context.Context, canaryConfig *corev1.CanaryConfig, opts metav1.UpdateOptions) (*corev1.CanaryConfig, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.CanaryConfig, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.CanaryConfigList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.CanaryConfig, err error)
-	Apply(ctx context.Context, _canaryConfig *applyconfigurationcorev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.CanaryConfig, err error)
+	Apply(ctx context.Context, canaryConfig *applyconfigurationcorev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.CanaryConfig, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _canaryConfig *applyconfigurationcorev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.CanaryConfig, err error)
+	ApplyStatus(ctx context.Context, canaryConfig *applyconfigurationcorev1.CanaryConfigApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.CanaryConfig, err error)
 	CanaryConfigExpansion
 }
 

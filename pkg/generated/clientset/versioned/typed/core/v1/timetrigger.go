@@ -26,19 +26,19 @@ type TimeTriggersGetter interface {
 
 // TimeTriggerInterface has methods to work with TimeTrigger resources.
 type TimeTriggerInterface interface {
-	Create(ctx context.Context, _timeTrigger *corev1.TimeTrigger, opts metav1.CreateOptions) (*corev1.TimeTrigger, error)
-	Update(ctx context.Context, _timeTrigger *corev1.TimeTrigger, opts metav1.UpdateOptions) (*corev1.TimeTrigger, error)
+	Create(ctx context.Context, timeTrigger *corev1.TimeTrigger, opts metav1.CreateOptions) (*corev1.TimeTrigger, error)
+	Update(ctx context.Context, timeTrigger *corev1.TimeTrigger, opts metav1.UpdateOptions) (*corev1.TimeTrigger, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _timeTrigger *corev1.TimeTrigger, opts metav1.UpdateOptions) (*corev1.TimeTrigger, error)
+	UpdateStatus(ctx context.Context, timeTrigger *corev1.TimeTrigger, opts metav1.UpdateOptions) (*corev1.TimeTrigger, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.TimeTrigger, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.TimeTriggerList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.TimeTrigger, err error)
-	Apply(ctx context.Context, _timeTrigger *applyconfigurationcorev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.TimeTrigger, err error)
+	Apply(ctx context.Context, timeTrigger *applyconfigurationcorev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.TimeTrigger, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _timeTrigger *applyconfigurationcorev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.TimeTrigger, err error)
+	ApplyStatus(ctx context.Context, timeTrigger *applyconfigurationcorev1.TimeTriggerApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.TimeTrigger, err error)
 	TimeTriggerExpansion
 }
 

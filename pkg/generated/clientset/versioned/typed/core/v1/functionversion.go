@@ -26,15 +26,15 @@ type FunctionVersionsGetter interface {
 
 // FunctionVersionInterface has methods to work with FunctionVersion resources.
 type FunctionVersionInterface interface {
-	Create(ctx context.Context, _functionVersion *corev1.FunctionVersion, opts metav1.CreateOptions) (*corev1.FunctionVersion, error)
-	Update(ctx context.Context, _functionVersion *corev1.FunctionVersion, opts metav1.UpdateOptions) (*corev1.FunctionVersion, error)
+	Create(ctx context.Context, functionVersion *corev1.FunctionVersion, opts metav1.CreateOptions) (*corev1.FunctionVersion, error)
+	Update(ctx context.Context, functionVersion *corev1.FunctionVersion, opts metav1.UpdateOptions) (*corev1.FunctionVersion, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.FunctionVersion, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.FunctionVersionList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.FunctionVersion, err error)
-	Apply(ctx context.Context, _functionVersion *applyconfigurationcorev1.FunctionVersionApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionVersion, err error)
+	Apply(ctx context.Context, functionVersion *applyconfigurationcorev1.FunctionVersionApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FunctionVersion, err error)
 	FunctionVersionExpansion
 }
 

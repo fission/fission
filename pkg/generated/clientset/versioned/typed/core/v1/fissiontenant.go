@@ -26,19 +26,19 @@ type FissionTenantsGetter interface {
 
 // FissionTenantInterface has methods to work with FissionTenant resources.
 type FissionTenantInterface interface {
-	Create(ctx context.Context, _fissionTenant *corev1.FissionTenant, opts metav1.CreateOptions) (*corev1.FissionTenant, error)
-	Update(ctx context.Context, _fissionTenant *corev1.FissionTenant, opts metav1.UpdateOptions) (*corev1.FissionTenant, error)
+	Create(ctx context.Context, fissionTenant *corev1.FissionTenant, opts metav1.CreateOptions) (*corev1.FissionTenant, error)
+	Update(ctx context.Context, fissionTenant *corev1.FissionTenant, opts metav1.UpdateOptions) (*corev1.FissionTenant, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _fissionTenant *corev1.FissionTenant, opts metav1.UpdateOptions) (*corev1.FissionTenant, error)
+	UpdateStatus(ctx context.Context, fissionTenant *corev1.FissionTenant, opts metav1.UpdateOptions) (*corev1.FissionTenant, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.FissionTenant, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.FissionTenantList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.FissionTenant, err error)
-	Apply(ctx context.Context, _fissionTenant *applyconfigurationcorev1.FissionTenantApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FissionTenant, err error)
+	Apply(ctx context.Context, fissionTenant *applyconfigurationcorev1.FissionTenantApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FissionTenant, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _fissionTenant *applyconfigurationcorev1.FissionTenantApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FissionTenant, err error)
+	ApplyStatus(ctx context.Context, fissionTenant *applyconfigurationcorev1.FissionTenantApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.FissionTenant, err error)
 	FissionTenantExpansion
 }
 
