@@ -8,15 +8,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 )
 
 func fissionPod(name string, uid types.UID) *corev1.Pod {
@@ -81,7 +87,7 @@ func TestPodEventDumperWritesEventsForMatchingPods(t *testing.T) {
 	)
 
 	dir := t.TempDir()
-	NewKubernetesPodEventDumper(client, "svc in (router)").Dump(t.Context(), dir)
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
@@ -109,7 +115,7 @@ func TestPodEventDumperSkipsPodsWithNoEvents(t *testing.T) {
 	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
 
 	dir := t.TempDir()
-	NewKubernetesPodEventDumper(client, "svc in (router)").Dump(t.Context(), dir)
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
@@ -134,9 +140,113 @@ func TestPodEventDumperIgnoresNonPodEvents(t *testing.T) {
 	client := k8sfake.NewClientset(pod, deployEvent)
 
 	dir := t.TempDir()
-	NewKubernetesPodEventDumper(client, "svc in (router)").Dump(t.Context(), dir)
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "non-Pod events must not be attributed to a pod")
+}
+
+func TestPodEventDumperAttributesEventsByUIDNotName(t *testing.T) {
+	t.Parallel()
+
+	// Pool and function pods are recreated under recycled names, so a stale
+	// event from a dead pod must not be attributed to its replacement. Both
+	// events below name "router-abc"; only one carries the live pod's UID.
+	pod := fissionPod("router-abc", "uid-live")
+
+	stale := podEvent("router-abc", "uid-dead", "StaleFromDeadPod", time.Now())
+
+	client := k8sfake.NewClientset(
+		pod, stale,
+		podEvent("router-abc", "uid-live", "LiveEvent", time.Now()),
+	)
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	content, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(content), "LiveEvent")
+	assert.NotContains(t, string(content), "StaleFromDeadPod",
+		"an event naming the pod but carrying another UID belongs to a different pod")
+}
+
+func TestPodEventIndexListsOnceAcrossDumpers(t *testing.T) {
+	t.Parallel()
+
+	// The three registrations in dump.go run concurrently; without a shared
+	// index that is three unfiltered full-cluster Event LISTs at once.
+	client := k8sfake.NewClientset(
+		fissionPod("router-abc", "uid-router"),
+		podEvent("router-abc", "uid-router", "Pulled", time.Now()),
+	)
+
+	var lists atomic.Int32
+	client.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		lists.Add(1)
+		return false, nil, nil // fall through to the tracker
+	})
+
+	// Concurrently, as dump.go runs them — so under -race this also guards the
+	// claim that the slices the index hands out are read-only.
+	idx := NewPodEventIndex(client)
+	wg := &sync.WaitGroup{}
+	for range 3 {
+		dir := t.TempDir()
+		wg.Go(func() {
+			NewKubernetesPodEventDumper(client, "svc in (router)", idx).Dump(t.Context(), dir)
+		})
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), lists.Load(), "the event list must be fetched once for the whole dump")
+}
+
+func TestPodEventDumperReportsEventListFailure(t *testing.T) {
+	t.Parallel()
+
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+	client.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Resource: "events"}, "", assert.AnError)
+	})
+
+	dir := t.TempDir()
+	// Must degrade to "no event files" rather than aborting the bundle.
+	require.NotPanics(t, func() {
+		NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+	})
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestPodEventIndexFiltersServerSide(t *testing.T) {
+	t.Parallel()
+
+	// The fake clientset applies label selectors but ignores field selectors,
+	// so a behavioural assertion cannot see this. Inspect the action instead.
+	client := k8sfake.NewClientset(
+		fissionPod("router-abc", "uid-router"),
+		podEvent("router-abc", "uid-router", "Pulled", time.Now()),
+	)
+
+	var fields string
+	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		fields = a.(clienttesting.ListAction).GetListRestrictions().Fields.String()
+		return false, nil, nil // fall through to the tracker
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	assert.Equal(t, "involvedObject.kind=Pod", fields,
+		"non-Pod events must be dropped by the apiserver, not shipped and discarded client-side")
 }
