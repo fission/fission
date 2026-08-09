@@ -53,7 +53,10 @@ type PodEventIndex struct {
 	client kubernetes.Interface
 	once   sync.Once
 	byPod  map[types.UID][]corev1.Event
-	err    error
+	// partial records that the walk ended with events left uncollected, so a
+	// pod with no file cannot be read as "nothing was recorded".
+	partial bool
+	err     error
 }
 
 func NewPodEventIndex(clientset kubernetes.Interface) *PodEventIndex {
@@ -63,14 +66,14 @@ func NewPodEventIndex(clientset kubernetes.Interface) *PodEventIndex {
 // get builds the index on first call and hands the same result to every later
 // caller. Sorting happens here rather than at the point of use, so the slices
 // handed out are read-only and concurrent dumpers cannot race sorting one.
-func (idx *PodEventIndex) get(ctx context.Context) (map[types.UID][]corev1.Event, error) {
+func (idx *PodEventIndex) get(ctx context.Context) (map[types.UID][]corev1.Event, bool, error) {
 	idx.once.Do(func() {
 		// involvedObject.kind is a server-side selectable field on core/v1
 		// events, so the apiserver drops non-Pod events rather than sending
 		// them. The client-side check below stays regardless: the fake clientset
 		// used in tests applies label selectors but ignores field selectors, so
 		// it is what keeps the tests honest.
-		events, err := listAllPages("event", func(cont string) ([]corev1.Event, string, error) {
+		events, partial, err := listAllPages("event", func(cont string) ([]corev1.Event, string, error) {
 			list, err := idx.client.CoreV1().Events(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 				FieldSelector: "involvedObject.kind=Pod",
 				Limit:         listPageSize,
@@ -85,6 +88,7 @@ func (idx *PodEventIndex) get(ctx context.Context) (map[types.UID][]corev1.Event
 			idx.err = err
 			return
 		}
+		idx.partial = partial
 
 		byPod := make(map[types.UID][]corev1.Event)
 		for _, e := range events {
@@ -104,7 +108,7 @@ func (idx *PodEventIndex) get(ctx context.Context) (map[types.UID][]corev1.Event
 		}
 		idx.byPod = byPod
 	})
-	return idx.byPod, idx.err
+	return idx.byPod, idx.partial, idx.err
 }
 
 // eventTime is the effective time of an event, whichever API recorded it.
@@ -144,10 +148,16 @@ func (res KubernetesPodEventDumper) Dump(ctx context.Context, dumpDir string) {
 	// and events are short-lived and numerous; one list keeps the dump from
 	// hammering an apiserver that may already be struggling — which is, after
 	// all, why someone is collecting a support bundle.
-	byPod, err := res.events.get(ctx)
+	byPod, partial, err := res.events.get(ctx)
 	if err != nil {
-		console.Error(fmt.Sprintf("Error getting event list: %v", err))
+		console.Error(fmt.Sprintf("Error getting event list for %v: %v", res.labelSelector, err))
+		writeNote(dumpDir, "_event-list-failed.txt",
+			"no events dumped for %v: %v", res.labelSelector, err)
 		return
+	}
+	if partial {
+		writeNote(dumpDir, "_partial-event-list.txt",
+			"the cluster event list did not complete; a pod with no file here may still have had events")
 	}
 
 	for _, pod := range pods.Items {

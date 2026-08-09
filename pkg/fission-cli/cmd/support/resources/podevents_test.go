@@ -218,14 +218,17 @@ func TestPodEventDumperReportsEventListFailure(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	// Must degrade to "no event files" rather than aborting the bundle.
+	// Must degrade to "no event files" rather than aborting the bundle — and
+	// must say so in the bundle, because an empty directory alone reads as
+	// "these pods had no events".
 	require.NotPanics(t, func() {
 		NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
 	})
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	assert.Empty(t, entries)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "_event-list-failed.txt", entries[0].Name())
 }
 
 func TestPodEventIndexFiltersServerSide(t *testing.T) {
@@ -351,9 +354,110 @@ func TestPodEventIndexKeepsPagesCollectedBeforeAnExpiry(t *testing.T) {
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Len(t, entries, 1, "the pages collected before the expiry must still be written")
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Contains(t, names, "_partial-event-list.txt",
+		"a short event list must not read as a pod that had no events")
 
-	content, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
-	require.NoError(t, err)
+	content, err := os.ReadFile(filepath.Join(dir, "fission_router-abc_1.txt"))
+	require.NoError(t, err, "the pages collected before the expiry must still be written")
 	assert.Contains(t, string(content), "Kept")
+}
+
+func TestPodEventIndexKeepsPagesAfterANonExpiryFailure(t *testing.T) {
+	t.Parallel()
+
+	// Throwing away thousands of collected events because one late page timed
+	// out is the wrong default for a best-effort dumper — but the shortfall has
+	// to be visible, or a short file reads as a complete history.
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+
+	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
+			return true, &corev1.EventList{
+				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Kept", base)},
+			}, nil
+		}
+		return true, nil, apierrors.NewInternalError(assert.AnError)
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Contains(t, names, "fission_router-abc_1.txt", "collected pages must survive a late failure")
+	assert.Contains(t, names, "_partial-event-list.txt", "and the shortfall must be recorded")
+}
+
+func TestPodEventIndexFailsHardWhenTheFirstPageFails(t *testing.T) {
+	t.Parallel()
+
+	// Nothing was collected, so there is no partial result to hand back — this
+	// must stay an error rather than an empty success.
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+	client.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewResourceExpired("too old resource version")
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "_event-list-failed.txt", entries[0].Name())
+}
+
+func TestPodEventIndexKeepsWalkingPastAnEmptyPage(t *testing.T) {
+	t.Parallel()
+
+	// A server filtering a page away may return zero items with a live continue
+	// token. Stopping there would silently drop everything after it.
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+
+	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		switch a.(clienttesting.ListActionImpl).GetListOptions().Continue {
+		case "":
+			return true, &corev1.EventList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
+		case "page-2":
+			return true, &corev1.EventList{
+				Items: []corev1.Event{*podEvent("router-abc", "uid-router", "AfterTheGap", base)},
+			}, nil
+		}
+		return true, nil, assert.AnError
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	content, err := os.ReadFile(filepath.Join(dir, "fission_router-abc_1.txt"))
+	require.NoError(t, err, "events after an empty page must not be dropped")
+	assert.Contains(t, string(content), "AfterTheGap")
+}
+
+func TestEventTimePrefersTheSeriesObservationForRepeatedEvents(t *testing.T) {
+	t.Parallel()
+
+	// An aggregated event keeps its original EventTime and records the latest
+	// occurrence on Series, so Series is what places it in a pod's history.
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	e := *podEvent("router-abc", "uid-router", "BackOff", base)
+	e.LastTimestamp = metav1.Time{}
+	e.EventTime = metav1.NewMicroTime(base)
+	e.Series = &corev1.EventSeries{
+		Count:            5,
+		LastObservedTime: metav1.NewMicroTime(base.Add(time.Hour)),
+	}
+
+	assert.Equal(t, base.Add(time.Hour), eventTime(e))
 }
