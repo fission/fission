@@ -26,19 +26,19 @@ type PackagesGetter interface {
 
 // PackageInterface has methods to work with Package resources.
 type PackageInterface interface {
-	Create(ctx context.Context, _package *corev1.Package, opts metav1.CreateOptions) (*corev1.Package, error)
-	Update(ctx context.Context, _package *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
+	Create(ctx context.Context, package_ *corev1.Package, opts metav1.CreateOptions) (*corev1.Package, error)
+	Update(ctx context.Context, package_ *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _package *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
+	UpdateStatus(ctx context.Context, package_ *corev1.Package, opts metav1.UpdateOptions) (*corev1.Package, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.Package, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.PackageList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.Package, err error)
-	Apply(ctx context.Context, _package *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
+	Apply(ctx context.Context, package_ *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _package *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
+	ApplyStatus(ctx context.Context, package_ *applyconfigurationcorev1.PackageApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.Package, err error)
 	PackageExpansion
 }
 

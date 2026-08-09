@@ -26,19 +26,19 @@ type WorkflowRunsGetter interface {
 
 // WorkflowRunInterface has methods to work with WorkflowRun resources.
 type WorkflowRunInterface interface {
-	Create(ctx context.Context, _workflowRun *corev1.WorkflowRun, opts metav1.CreateOptions) (*corev1.WorkflowRun, error)
-	Update(ctx context.Context, _workflowRun *corev1.WorkflowRun, opts metav1.UpdateOptions) (*corev1.WorkflowRun, error)
+	Create(ctx context.Context, workflowRun *corev1.WorkflowRun, opts metav1.CreateOptions) (*corev1.WorkflowRun, error)
+	Update(ctx context.Context, workflowRun *corev1.WorkflowRun, opts metav1.UpdateOptions) (*corev1.WorkflowRun, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, _workflowRun *corev1.WorkflowRun, opts metav1.UpdateOptions) (*corev1.WorkflowRun, error)
+	UpdateStatus(ctx context.Context, workflowRun *corev1.WorkflowRun, opts metav1.UpdateOptions) (*corev1.WorkflowRun, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
 	Get(ctx context.Context, name string, opts metav1.GetOptions) (*corev1.WorkflowRun, error)
 	List(ctx context.Context, opts metav1.ListOptions) (*corev1.WorkflowRunList, error)
 	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
 	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *corev1.WorkflowRun, err error)
-	Apply(ctx context.Context, _workflowRun *applyconfigurationcorev1.WorkflowRunApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.WorkflowRun, err error)
+	Apply(ctx context.Context, workflowRun *applyconfigurationcorev1.WorkflowRunApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.WorkflowRun, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, _workflowRun *applyconfigurationcorev1.WorkflowRunApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.WorkflowRun, err error)
+	ApplyStatus(ctx context.Context, workflowRun *applyconfigurationcorev1.WorkflowRunApplyConfiguration, opts metav1.ApplyOptions) (result *corev1.WorkflowRun, err error)
 	WorkflowRunExpansion
 }
 

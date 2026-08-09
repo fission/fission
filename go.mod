@@ -261,8 +261,6 @@ tool (
 	sigs.k8s.io/controller-tools/cmd/controller-gen
 )
 
-replace k8s.io/code-generator => github.com/fission/code-generator v0.30.0-alpha.3.0.20260602173520-ce5e06198af6
-
 // github.com/prometheus/common carries a retracted/bogus high-semver tag (v1.20.99)
 // on what is really the v0.x line; `go get` picks it as "latest" for our direct
 // require. Exclude it so MVS falls back to our real require (v0.68.0).
