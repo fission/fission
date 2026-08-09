@@ -318,3 +318,58 @@ func TestKedaDumperListErrorBranches(t *testing.T) {
 		})
 	}
 }
+
+func TestKedaDumperMasksTriggerMetadataCredentials(t *testing.T) {
+	t.Parallel()
+
+	so := &kedav1alpha1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
+			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
+		},
+		Spec: kedav1alpha1.ScaledObjectSpec{
+			Triggers: []kedav1alpha1.ScaleTriggers{{
+				Type: "rabbitmq",
+				Metadata: map[string]string{
+					"host":       "amqp://user:hunter2@rabbit:5672/",
+					"queueName":  "orders",
+					"queueLengt": "5",
+				},
+			}},
+		},
+	}
+
+	dir := t.TempDir()
+	d := KedaDumper{client: kedafake.NewSimpleClientset(so), kedaType: KedaScaledObject}
+	d.Dump(t.Context(), dir)
+
+	files := dumpedFiles(t, dir)
+	require.Len(t, files, 1)
+	content, err := os.ReadFile(filepath.Join(dir, files[0]))
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(content), "hunter2",
+		"an inline connection string must not reach a support bundle")
+	assert.Contains(t, string(content), "queueName", "non-credential metadata stays diagnostic")
+	assert.Contains(t, string(content), "orders")
+}
+
+func TestScaledObjectCleanLeavesTheListedObjectUnmutated(t *testing.T) {
+	t.Parallel()
+
+	// Spec.Triggers is a slice, so writing through it would edit the backing
+	// array shared with the List result.
+	so := &kedav1alpha1.ScaledObject{
+		Spec: kedav1alpha1.ScaledObjectSpec{
+			Triggers: []kedav1alpha1.ScaleTriggers{{
+				Metadata: map[string]string{"password": "hunter2"},
+			}},
+		},
+	}
+
+	cleaned := scaledObjectClean(so)
+
+	assert.Equal(t, "-", cleaned.Spec.Triggers[0].Metadata["password"])
+	assert.Equal(t, "hunter2", so.Spec.Triggers[0].Metadata["password"],
+		"the input object must not be modified in place")
+}

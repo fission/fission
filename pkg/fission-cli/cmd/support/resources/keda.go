@@ -131,8 +131,9 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 			if !ownedByMessageQueueTrigger(item.ObjectMeta) {
 				continue
 			}
-			f := getFileName(dumpDir, item.ObjectMeta)
-			writeToFile(f, item)
+			cleaned := scaledObjectClean(&item)
+			f := getFileName(dumpDir, cleaned.ObjectMeta)
+			writeToFile(f, cleaned)
 		}
 
 	case KedaTriggerAuthentication:
@@ -154,6 +155,33 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	default:
 		console.Warn(fmt.Sprintf("Unknown keda type: %v", res.kedaType))
 	}
+}
+
+// scaledObjectClean masks credential-bearing values in the scaler's trigger
+// metadata. That map is mqt.Spec.Metadata copied verbatim (see
+// pkg/mqtrigger/scalermanager.go), and for several KEDA scalers it is the
+// documented place to put an inline connection string — rabbitmq's host, redis'
+// address — so it can hold a password even though fission's own path routes
+// credentials through Spec.Secret into a TriggerAuthentication instead.
+//
+// Spec.Triggers is a slice, so writing through it would mutate the backing
+// array shared with the List result. Copy first.
+func scaledObjectClean(so *kedav1alpha1.ScaledObject) *kedav1alpha1.ScaledObject {
+	var out *kedav1alpha1.ScaledObject
+	for i := range so.Spec.Triggers {
+		masked, changed := maskCredentialValues(so.Spec.Triggers[i].Metadata)
+		if !changed {
+			continue
+		}
+		if out == nil {
+			out = so.DeepCopy()
+		}
+		out.Spec.Triggers[i].Metadata = masked
+	}
+	if out == nil {
+		return so
+	}
+	return out
 }
 
 // triggerAuthClean masks the one field of a TriggerAuthentication that holds a
