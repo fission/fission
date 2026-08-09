@@ -74,6 +74,14 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	bodyHash, err := bodyHashForRequest(r)
 	if err != nil {
+		// The inner transport will never run for this request, so honor the
+		// RoundTripper contract ourselves: the request body must be closed
+		// even on error, or a retry loop against a failing GetBody leaks one
+		// fd per attempt. (The buffering fallback closes the original before
+		// erroring; closing an already-closed body here is harmless.)
+		if r.Body != nil {
+			_ = r.Body.Close()
+		}
 		return nil, err
 	}
 	ts := s.now().Unix()
@@ -89,6 +97,15 @@ func (s *Signer) RoundTrip(r *http.Request) (*http.Response, error) {
 
 // bodyHashForRequest returns hex(SHA256(body)) for the request's body,
 // preferring a streaming read over buffering.
+//
+// Contract: the streaming path signs the bytes GetBody yields while the
+// transport streams r.Body — it relies on the http.Request invariant that
+// GetBody returns a fresh copy of the same content as Body. A caller that
+// breaks that invariant (hand-built request with divergent hooks, or a body
+// partially consumed after construction) produces a signature over bytes
+// that never hit the wire; the verifier rejects it with 401 on every attempt
+// including rewound retries. Divergence fails closed — it can never get
+// unsigned bytes accepted.
 //
 // When GetBody is set (net/http populates it automatically for requests
 // built from *bytes.Buffer / *bytes.Reader / *strings.Reader, and

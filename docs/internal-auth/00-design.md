@@ -296,10 +296,13 @@ The scheme has known limitations operators should plan around.
 **Maximum body size.**
 The verifier must drain the entire request body before computing the signature so the body bytes can be re-injected for downstream handlers (multipart parsers, etc.).
 The size of a body it accepts is bounded by `VerifierOpts.MaxBodyBytes` (default 256 MiB, set on each registration).
-Bodies that exceed the cap are rejected with `413 Request Entity Too Large` *before* signature verification — i.e. an unauthenticated attacker cannot use a giant unsigned body to DoS a signed service.
+Bodies that exceed the cap are rejected with `413 Request Entity Too Large` *before* signature verification, so an unauthenticated sender cannot push more than the cap through a signed service per request.
+Bodies *under* the cap are still drained in full before the signature check — the hash needs every byte — so an unauthenticated sender with a fresh timestamp can spend up to the cap of transient resource (memory, or ephemeral disk where spooling is enabled) per in-flight request before its 401; the NetworkPolicy fencing of the internal listeners is what bounds who can spend it.
 Operators that legitimately need to upload archives larger than 256 MiB should bump the cap rather than disable enforcement; the cap is the largest archive size we expect to see in practice.
 For the one bulk-data endpoint, `storagesvc /v1/archive`, the cap is operator-tunable: set the Helm value `storagesvc.maxArchiveSizeMib` (env var `STORAGE_MAX_ARCHIVE_SIZE_MIB`).
 Whether the drained body is *held in memory* is a separate knob: with `VerifierOpts.SpoolThresholdBytes` set (storagesvc sets 4 MiB), over-threshold bodies are hashed while streaming to a temp file and re-read from it, so verifier memory is bounded by the threshold — raising the archive cap no longer requires raising the storagesvc memory request/limit to match.
+Spool files go to the container's temp dir, and storagesvc's multipart parsing writes its own temp copy of the same body, so a max-size upload transiently occupies up to ~2× the cap on the node's ephemeral storage; size the pod's ephemeral-storage request for `2 × cap × expected concurrent uploads`.
+A spool failure (full or read-only temp dir) is answered `500`, never `401`, so a disk fault is distinguishable from an auth failure in both status codes and logs.
 The other registrations (fetcher, builder, executor, router-internal) carry small or latency-sensitive payloads and stay fully in-memory with the 256 MiB default cap (the router internal listener caps at 64 MiB).
 For very large packages, OCI-native delivery (`packageRegistry`) is the better-managed alternative to raising the cap — the code is pulled and mounted from a registry rather than buffered through storagesvc.
 

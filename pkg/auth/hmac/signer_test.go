@@ -5,6 +5,7 @@
 package hmac
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -159,6 +160,48 @@ func TestSignerStreamsHashViaGetBody(t *testing.T) {
 	assert.Equal(t, "payload", gotBody, "the transport must still stream the original body")
 	assert.Equal(t, 1, getBodyCalls, "the hash must be streamed from exactly one fresh GetBody reader")
 	assert.True(t, req.Body == origBody, "the signer must not replace a rewindable request's Body")
+}
+
+// closeTrackingBody records whether Close was called, for pinning the
+// RoundTripper close-on-error contract.
+type closeTrackingBody struct {
+	io.Reader
+	closed *bool
+}
+
+func (b *closeTrackingBody) Close() error {
+	*b.closed = true
+	return nil
+}
+
+// roundTripperFunc adapts a func to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestSignerClosesBodyOnHashError pins the RoundTripper contract on the
+// streaming branch's error path: when GetBody fails, the inner transport
+// never runs, so the signer itself must close the request body — otherwise
+// a retry loop against a failing GetBody leaks one fd per attempt.
+func TestSignerClosesBodyOnHashError(t *testing.T) {
+	secret := []byte("test-secret-must-be-32-bytes-min")
+
+	closed := false
+	req, err := http.NewRequest(http.MethodPost, "http://router.invalid/fission-function/f", nil)
+	require.NoError(t, err)
+	req.Body = &closeTrackingBody{Reader: strings.NewReader("payload"), closed: &closed}
+	req.GetBody = func() (io.ReadCloser, error) {
+		return nil, errors.New("getbody failed")
+	}
+
+	signer := NewSigner(secret, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("the inner transport must not run when hashing fails")
+		return nil, nil
+	}), time.Now)
+
+	_, err = signer.RoundTrip(req)
+	require.Error(t, err)
+	assert.True(t, closed, "the signer must close the body when it errors before the transport runs")
 }
 
 // TestSignerBindsQueryParameter pins the security-critical contract from

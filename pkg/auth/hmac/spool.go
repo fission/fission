@@ -22,6 +22,31 @@ type bodySpool struct {
 	file    *os.File
 }
 
+// spoolIOError marks a failure of the spool's OWN storage — temp-file
+// create/write/seek — as opposed to a failure reading the request body from
+// the client. The distinction decides the response class: the verifier maps
+// it to 500 (the server's disk is broken, e.g. full or read-only /tmp),
+// where a client-read failure stays 401. Without it, a node-level disk fault
+// would reject every correctly signed over-threshold upload as Unauthorized
+// and send operators debugging HMAC configuration instead of storage.
+type spoolIOError struct{ err error }
+
+func (e *spoolIOError) Error() string { return "hmac body spool: " + e.err.Error() }
+func (e *spoolIOError) Unwrap() error { return e.err }
+
+// spoolFileWriter tags write-side errors during the spill copy as
+// spoolIOError so they are distinguishable from read-side (client) errors
+// coming out of the same io.Copy.
+type spoolFileWriter struct{ f *os.File }
+
+func (w spoolFileWriter) Write(p []byte) (int, error) {
+	n, err := w.f.Write(p)
+	if err != nil {
+		return n, &spoolIOError{err: err}
+	}
+	return n, nil
+}
+
 // spoolBody drains src, hashing as it reads. Bodies up to threshold bytes
 // stay in memory (the historical behavior); anything larger spills to a
 // temp file, so the caller's memory stays bounded by the threshold no
@@ -42,14 +67,14 @@ func spoolBody(src io.Reader, threshold int64) (*bodySpool, error) {
 	}
 	f, err := os.CreateTemp("", "fission-hmac-body-*")
 	if err != nil {
-		return nil, err
+		return nil, &spoolIOError{err: err}
 	}
 	sp := &bodySpool{file: f}
 	if _, err := f.Write(buf.Bytes()); err != nil {
 		sp.cleanup()
-		return nil, err
+		return nil, &spoolIOError{err: err}
 	}
-	if _, err := io.Copy(f, tee); err != nil {
+	if _, err := io.Copy(spoolFileWriter{f: f}, tee); err != nil {
 		sp.cleanup()
 		return nil, err
 	}
@@ -67,7 +92,7 @@ func (s *bodySpool) reader() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(s.mem)), nil
 	}
 	if _, err := s.file.Seek(0, io.SeekStart); err != nil {
-		return nil, err
+		return nil, &spoolIOError{err: err}
 	}
 	return io.NopCloser(s.file), nil
 }
