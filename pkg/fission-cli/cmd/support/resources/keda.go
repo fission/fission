@@ -6,6 +6,7 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
@@ -23,11 +24,18 @@ const (
 	KedaTriggerAuthentication = "TriggerAuthentication"
 )
 
-// mqtKind mirrors mqtrigger.MqtKind, the Kind the mqt-keda scaler stamps into
-// the OwnerReferences of every KEDA object it creates. Duplicated rather than
-// imported because pkg/mqtrigger would pull the controller-runtime scaler
-// machinery into the CLI binary.
-const mqtKind = "MessageQueueTrigger"
+// The Kind and APIVersion the mqt-keda scaler stamps into the OwnerReferences
+// of every KEDA object it creates, mirroring mqtrigger.MqtKind and
+// mqtrigger.MqtAPIVersion.
+//
+// Kept local rather than imported so this leaf CLI package does not pull the
+// controller-runtime scaler machinery into its build for two string constants.
+// TestMqtOwnerConstantsMatchScaler pins them to the originals, so the copies
+// cannot drift silently.
+const (
+	mqtKind       = "MessageQueueTrigger"
+	mqtAPIVersion = "fission.io/v1"
+)
 
 // KedaDumper dumps the KEDA objects that fission's mqt-keda scaler manager
 // creates for MessageQueueTriggers (see pkg/mqtrigger/scalermanager.go).
@@ -47,15 +55,26 @@ type KedaDumper struct {
 }
 
 func NewKedaDumper(client cmd.Client, kedaType string) Resource {
+	if client.RestConfig == nil {
+		// kedaClient.NewForConfig dereferences its argument, so a nil config
+		// panics rather than returning an error — and the dumpers are built in
+		// a map literal, so that panic would take the whole support bundle down
+		// before any dumper runs. Route it through clientErr, which exists
+		// precisely so one unavailable client cannot abort the bundle.
+		return KedaDumper{kedaType: kedaType, clientErr: errors.New("no kubernetes rest config available")}
+	}
 	kc, err := kedaClient.NewForConfig(client.RestConfig)
 	return KedaDumper{client: kc, kedaType: kedaType, clientErr: err}
 }
 
 // ownedByMessageQueueTrigger reports whether obj was created by fission's
-// mqt-keda scaler for a MessageQueueTrigger.
+// mqt-keda scaler for a MessageQueueTrigger. The APIVersion is checked as well
+// as the Kind: this filter is what keeps an unrelated team's objects out of a
+// bundle that gets sent to a third party, and "MessageQueueTrigger" is not a
+// name fission owns across every API group.
 func ownedByMessageQueueTrigger(meta metav1.ObjectMeta) bool {
 	for _, ref := range meta.OwnerReferences {
-		if ref.Kind == mqtKind {
+		if ref.Kind == mqtKind && ref.APIVersion == mqtAPIVersion {
 			return true
 		}
 	}
@@ -66,6 +85,11 @@ func ownedByMessageQueueTrigger(meta metav1.ObjectMeta) bool {
 // opposed to a real failure. A cluster with no KEDA is the normal case for
 // anyone not using mqt of type keda, so it is reported as a verbose note
 // rather than a warning that would look like a problem in every bundle.
+//
+// IsNotFound is the branch that actually fires: the typed KEDA clientset issues
+// REST calls directly, and a missing CRD comes back from the apiserver as a
+// plain 404. IsNoMatchError is defensive breadth for a RESTMapper-backed client
+// (dynamic or controller-runtime) and is unreachable through this one.
 func kedaAbsent(err error) bool {
 	return apimeta.IsNoMatchError(err) || apierrors.IsNotFound(err)
 }
