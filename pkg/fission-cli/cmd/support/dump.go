@@ -125,6 +125,9 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, functionSelector),
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, functionSelector),
 		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, functionSelector, podEvents),
+		// The HPA is what decides whether a function scales at all, and the
+		// dumper for it existed but was never registered.
+		"fission-function-hpa": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesHPA, functionSelector),
 
 		// Events of fission pods that no longer exist — the OOMKilled or evicted
 		// pod is usually the one being investigated.
