@@ -250,3 +250,110 @@ func TestPodEventIndexFiltersServerSide(t *testing.T) {
 	assert.Equal(t, "involvedObject.kind=Pod", fields,
 		"non-Pod events must be dropped by the apiserver, not shipped and discarded client-side")
 }
+
+func TestPodEventIndexPagesThroughEveryEvent(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+
+	// The fake's object tracker ignores Limit and Continue entirely, so paging
+	// can only be exercised by serving the pages from a reactor. A test that
+	// seeds N events and expects N/pageSize requests would pass against an
+	// unpaged implementation.
+	var seenTokens []string
+	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		la, ok := a.(clienttesting.ListActionImpl)
+		require.True(t, ok, "expected a ListActionImpl to read the continue token from")
+		token := la.GetListOptions().Continue
+		seenTokens = append(seenTokens, token)
+
+		switch token {
+		case "":
+			return true, &corev1.EventList{
+				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Alpha", base)},
+			}, nil
+		case "page-2":
+			return true, &corev1.EventList{
+				Items: []corev1.Event{*podEvent("router-abc", "uid-router", "Bravo", base.Add(time.Minute))},
+			}, nil
+		}
+		return true, nil, assert.AnError
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	content, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"", "page-2"}, seenTokens, "the continue token must be fed back")
+	assert.Contains(t, string(content), "Alpha")
+	assert.Contains(t, string(content), "Bravo", "events past the first page must not be dropped")
+}
+
+func TestPodEventIndexStopsOnARepeatedContinueToken(t *testing.T) {
+	t.Parallel()
+
+	// An apiserver that echoes back the token it was given would otherwise
+	// loop forever, holding the whole dump open.
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+
+	var calls atomic.Int32
+	client.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
+		calls.Add(1)
+		return true, &corev1.EventList{
+			ListMeta: metav1.ListMeta{Continue: "stuck"},
+			Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Looping", time.Now())},
+		}, nil
+	})
+
+	dir := t.TempDir()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("pagination did not terminate on a repeated continue token")
+	}
+	assert.LessOrEqual(t, calls.Load(), int32(2), "a repeated token must stop the loop immediately")
+}
+
+func TestPodEventIndexKeepsPagesCollectedBeforeAnExpiry(t *testing.T) {
+	t.Parallel()
+
+	// A watch cache ageing out mid-pagination returns 410 Gone. A partial event
+	// history is worth more in a bundle than none.
+	base := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
+
+	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
+			return true, &corev1.EventList{
+				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Kept", base)},
+			}, nil
+		}
+		return true, nil, apierrors.NewResourceExpired("too old resource version")
+	})
+
+	dir := t.TempDir()
+	NewKubernetesPodEventDumper(client, "svc in (router)", NewPodEventIndex(client)).Dump(t.Context(), dir)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "the pages collected before the expiry must still be written")
+
+	content, err := os.ReadFile(filepath.Join(dir, entries[0].Name()))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "Kept")
+}
