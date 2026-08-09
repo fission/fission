@@ -33,8 +33,40 @@ func TestMaskCredentialValues(t *testing.T) {
 		},
 		{
 			name: "a url with no password is configuration, not a secret",
-			in:   map[string]string{"host": "amqp://rabbit:5672/", "address": "redis:6379"},
-			want: map[string]string{"host": "amqp://rabbit:5672/", "address": "redis:6379"},
+			in: map[string]string{
+				"host": "amqp://rabbit:5672/", "address": "redis:6379",
+				// userinfo present but no password — still not a secret.
+				"broker": "amqp://user@rabbit:5672/",
+			},
+			want: map[string]string{
+				"host": "amqp://rabbit:5672/", "address": "redis:6379",
+				"broker": "amqp://user@rabbit:5672/",
+			},
+		},
+		{
+			// url.Parse reads this as scheme "user" with an opaque body, so
+			// u.User is nil and the parse-based check alone would miss it.
+			name:   "a schemeless connection string is still masked",
+			in:     map[string]string{"host": "user:hunter2@rabbit:5672"},
+			want:   map[string]string{"host": "-"},
+			masked: true,
+		},
+		{
+			// An unencoded character in the password makes url.Parse fail
+			// outright, while the client library still accepts the string.
+			name:   "an unparseable connection string is masked rather than trusted",
+			in:     map[string]string{"host": "amqp://user:hun[ter2@rabbit:5672/"},
+			want:   map[string]string{"host": "-"},
+			masked: true,
+		},
+		{
+			name: "a *FromEnv value names an env var, not a secret",
+			in: map[string]string{
+				"passwordFromEnv": "RABBIT_PASSWORD", "PASSWORD_FROM_ENV": "RABBIT_PASSWORD",
+			},
+			want: map[string]string{
+				"passwordFromEnv": "RABBIT_PASSWORD", "PASSWORD_FROM_ENV": "RABBIT_PASSWORD",
+			},
 		},
 		{
 			name: "sasl names a mechanism, not a secret",
