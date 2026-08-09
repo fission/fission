@@ -28,6 +28,8 @@ func fissionPod(name string, uid types.UID) *corev1.Pod {
 	}
 }
 
+// podEvent builds a legacy core/v1 event, as k8s.io/client-go/tools/record
+// writes them — kubelet's Pulled, Unhealthy, OOMKilled and friends.
 func podEvent(name string, uid types.UID, reason string, at time.Time) *corev1.Event {
 	return &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{Name: name + "." + reason, Namespace: "fission"},
@@ -38,6 +40,17 @@ func podEvent(name string, uid types.UID, reason string, at time.Time) *corev1.E
 		Message:       reason + " happened",
 		LastTimestamp: metav1.NewTime(at),
 	}
+}
+
+// schedulerEvent builds an events.k8s.io/v1 event as it reads back through the
+// core/v1 endpoint: EventTime set, LastTimestamp zero. This is what
+// k8s.io/client-go/tools/events produces, and therefore what kube-scheduler's
+// FailedScheduling looks like to this dumper.
+func schedulerEvent(name string, uid types.UID, reason string, at time.Time) *corev1.Event {
+	e := podEvent(name, uid, reason, at)
+	e.LastTimestamp = metav1.Time{}
+	e.EventTime = metav1.NewMicroTime(at)
+	return e
 }
 
 func TestPodEventDumperWritesEventsForMatchingPods(t *testing.T) {
@@ -54,10 +67,16 @@ func TestPodEventDumperWritesEventsForMatchingPods(t *testing.T) {
 		},
 	}
 
+	// Reasons are named so that alphabetical order is the exact reverse of
+	// chronological order. The fake clientset returns list results name-sorted,
+	// so with chronological names an absent sort would still look correct.
+	// FailedScheduling sits in the middle and carries only EventTime, so a
+	// comparator that reads LastTimestamp alone drops it to the front.
 	client := k8sfake.NewClientset(
 		pod, other,
-		podEvent("router-abc", "uid-router", "Pulled", base.Add(time.Minute)),
-		podEvent("router-abc", "uid-router", "FailedScheduling", base),
+		podEvent("router-abc", "uid-router", "Zulu", base),
+		schedulerEvent("router-abc", "uid-router", "FailedScheduling", base.Add(time.Minute)),
+		podEvent("router-abc", "uid-router", "Alpha", base.Add(2*time.Minute)),
 		podEvent("unrelated", "uid-other", "Started", base),
 	)
 
@@ -73,12 +92,15 @@ func TestPodEventDumperWritesEventsForMatchingPods(t *testing.T) {
 	body := string(content)
 
 	assert.Contains(t, body, "FailedScheduling")
-	assert.Contains(t, body, "Pulled")
+	assert.Contains(t, body, "Zulu")
+	assert.Contains(t, body, "Alpha")
 	assert.NotContains(t, body, "Started", "events of a non-matching pod must not be dumped")
 
 	// Oldest first, so the file reads as the pod's history.
-	assert.Less(t, strings.Index(body, "FailedScheduling"), strings.Index(body, "Pulled"),
-		"events should be ordered oldest first")
+	assert.Less(t, strings.Index(body, "Zulu"), strings.Index(body, "FailedScheduling"),
+		"a legacy event older than an events.k8s.io event must come first")
+	assert.Less(t, strings.Index(body, "FailedScheduling"), strings.Index(body, "Alpha"),
+		"an EventTime-only event must be placed by EventTime, not sorted to the front")
 }
 
 func TestPodEventDumperSkipsPodsWithNoEvents(t *testing.T) {

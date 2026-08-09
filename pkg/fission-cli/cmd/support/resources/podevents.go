@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +36,26 @@ func NewKubernetesPodEventDumper(clientset kubernetes.Interface, selector string
 		client:        clientset,
 		labelSelector: selector,
 	}
+}
+
+// eventTime is the effective time of an event, whichever API recorded it.
+// Sorting on LastTimestamp alone is wrong: an event written through
+// events.k8s.io/v1 carries only EventTime, so it reads back through the core/v1
+// endpoint with a zero LastTimestamp and sorts ahead of everything else. That
+// hits FailedScheduling in particular — kube-scheduler has used the newer
+// recorder since 1.19, while kubelet still uses the legacy one — which is the
+// event most worth placing correctly in a pod's history.
+func eventTime(e corev1.Event) time.Time {
+	if e.Series != nil && !e.Series.LastObservedTime.IsZero() {
+		return e.Series.LastObservedTime.Time
+	}
+	if !e.LastTimestamp.IsZero() {
+		return e.LastTimestamp.Time
+	}
+	if !e.EventTime.IsZero() {
+		return e.EventTime.Time
+	}
+	return e.FirstTimestamp.Time
 }
 
 func (res KubernetesPodEventDumper) Dump(ctx context.Context, dumpDir string) {
@@ -77,9 +98,10 @@ func (res KubernetesPodEventDumper) Dump(ctx context.Context, dumpDir string) {
 		}
 
 		// Oldest first, so the file reads as the pod's history. Events are
-		// returned in no guaranteed order.
-		sort.Slice(podEvents, func(i, j int) bool {
-			return podEvents[i].LastTimestamp.Before(&podEvents[j].LastTimestamp)
+		// returned in no guaranteed order. Stable, so events sharing a
+		// timestamp keep the order the apiserver returned them in.
+		sort.SliceStable(podEvents, func(i, j int) bool {
+			return eventTime(podEvents[i]).Before(eventTime(podEvents[j]))
 		})
 
 		f := getFileName(dumpDir, pod.ObjectMeta)
