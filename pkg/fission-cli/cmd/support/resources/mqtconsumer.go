@@ -23,19 +23,20 @@ import (
 // consumers, found by owner reference, and orphaned pod events, which attribute
 // a pod that no longer exists to the Deployment its name derives from.
 type DeploymentIndex struct {
-	client kubernetes.Interface
-	once   sync.Once
-	items  []appsv1.Deployment
-	err    error
+	client  kubernetes.Interface
+	once    sync.Once
+	items   []appsv1.Deployment
+	partial bool
+	err     error
 }
 
 func NewDeploymentIndex(clientset kubernetes.Interface) *DeploymentIndex {
 	return &DeploymentIndex{client: clientset}
 }
 
-func (idx *DeploymentIndex) get(ctx context.Context) ([]appsv1.Deployment, error) {
+func (idx *DeploymentIndex) get(ctx context.Context) ([]appsv1.Deployment, bool, error) {
 	idx.once.Do(func() {
-		idx.items, idx.err = listAllPages("deployment", func(cont string) ([]appsv1.Deployment, string, error) {
+		idx.items, idx.partial, idx.err = listAllPages("deployment", func(cont string) ([]appsv1.Deployment, string, error) {
 			list, err := idx.client.AppsV1().Deployments(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 				Limit:    listPageSize,
 				Continue: cont,
@@ -46,7 +47,7 @@ func (idx *DeploymentIndex) get(ctx context.Context) ([]appsv1.Deployment, error
 			return list.Items, list.Continue, nil
 		})
 	})
-	return idx.items, idx.err
+	return idx.items, idx.partial, idx.err
 }
 
 // What an MqtConsumerDumper collects.
@@ -80,10 +81,22 @@ func NewMqtConsumerDumper(clientset kubernetes.Interface, deployments *Deploymen
 }
 
 func (res MqtConsumerDumper) Dump(ctx context.Context, dumpDir string) {
-	deployments, err := res.deployments.get(ctx)
+	// Validated before anything else: an unknown mode must be reported on every
+	// cluster, not only on one that happens to run keda triggers.
+	if res.mode != MqtConsumerDeployment && res.mode != MqtConsumerPod && res.mode != MqtConsumerLog {
+		console.Error(fmt.Sprintf("Unknown mqt consumer dump mode: %v", res.mode))
+		return
+	}
+
+	deployments, partial, err := res.deployments.get(ctx)
 	if err != nil {
 		console.Error(fmt.Sprintf("Error getting deployment list: %v", err))
+		writeNote(dumpDir, "_deployment-list-failed.txt", "no mqt consumers dumped: %v", err)
 		return
+	}
+	if partial {
+		writeNote(dumpDir, "_partial-deployment-list.txt",
+			"the cluster deployment list did not complete; some mqt consumers may be missing here")
 	}
 
 	var owned []appsv1.Deployment
@@ -98,23 +111,59 @@ func (res MqtConsumerDumper) Dump(ctx context.Context, dumpDir string) {
 
 	if res.mode == MqtConsumerDeployment {
 		for _, d := range owned {
-			writeToFile(getFileName(dumpDir, d.ObjectMeta), d)
+			cleaned := mqtConsumerDeploymentClean(d)
+			writeToFile(getFileName(dumpDir, cleaned.ObjectMeta), cleaned)
 		}
-		return
-	}
-
-	if res.mode != MqtConsumerPod && res.mode != MqtConsumerLog {
-		console.Error(fmt.Sprintf("Unknown mqt consumer dump mode: %v", res.mode))
 		return
 	}
 
 	for _, d := range owned {
 		for _, pod := range res.podsFor(ctx, d) {
 			if res.mode == MqtConsumerPod {
-				writeToFile(getFileName(dumpDir, pod.ObjectMeta), pod)
+				cleaned := mqtConsumerPodClean(pod)
+				writeToFile(getFileName(dumpDir, cleaned.ObjectMeta), cleaned)
 				continue
 			}
 			dumpPodContainerLogs(ctx, res.client, pod, dumpDir)
+		}
+	}
+}
+
+// The scaler inlines every mqt.Spec.Metadata value as a literal env var on the
+// consumer (pkg/mqtrigger/scalermanager.go), so the map masked on the
+// MessageQueueTrigger and on the ScaledObject arrives here a third way — and
+// this is the one path where the workload itself, not just its config, is being
+// written out. Secret-derived vars use ValueFrom and carry no value, so they
+// are already safe and are left alone.
+func mqtConsumerDeploymentClean(d appsv1.Deployment) appsv1.Deployment {
+	out := d.DeepCopy()
+	maskPodSpecEnv(&out.Spec.Template.Spec)
+	return *out
+}
+
+func mqtConsumerPodClean(p corev1.Pod) corev1.Pod {
+	out := p.DeepCopy()
+	maskPodSpecEnv(&out.Spec)
+	return *out
+}
+
+func maskPodSpecEnv(spec *corev1.PodSpec) {
+	for i := range spec.Containers {
+		maskContainerEnv(&spec.Containers[i])
+	}
+	for i := range spec.InitContainers {
+		maskContainerEnv(&spec.InitContainers[i])
+	}
+}
+
+func maskContainerEnv(c *corev1.Container) {
+	for i := range c.Env {
+		env := &c.Env[i]
+		if env.Value == "" {
+			continue
+		}
+		if isCredentialKey(env.Name) || hasURLPassword(env.Value) {
+			env.Value = "-"
 		}
 	}
 }
