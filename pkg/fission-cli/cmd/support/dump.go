@@ -85,6 +85,11 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 	// flight at once.
 	podEvents := resources.NewPodEventIndex(k8sClient)
 
+	// Likewise for the Deployment list: the mqt-consumer dumpers select on owner
+	// reference rather than a label, and the orphaned-event dumper needs the
+	// same list to attribute a pod that no longer exists.
+	deployments := resources.NewDeploymentIndex(k8sClient)
+
 	ress := map[string]resources.Resource{
 		// kubernetes info
 		"kubernetes-version": resources.NewKubernetesVersion(k8sClient),
@@ -120,6 +125,20 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, functionSelector),
 		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, functionSelector),
 		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, functionSelector, podEvents),
+
+		// Events of fission pods that no longer exist — the OOMKilled or evicted
+		// pod is usually the one being investigated.
+		"fission-orphaned-pod-events": resources.NewOrphanedPodEventDumper(k8sClient, podEvents, deployments,
+			componentSelector, builderSelector, functionSelector),
+
+		// The workload a keda MessageQueueTrigger scales. Selected by owner
+		// reference: the scaler labels it app=<mqt name> and nothing else.
+		"fission-mqt-consumer-deployment-spec": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerDeployment),
+		"fission-mqt-consumer-pod-spec": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerPod),
+		"fission-mqt-consumer-pod-log": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerLog),
 
 		// CRD resources
 		"fission-crd-packages":      resources.NewCrdDumper(opts.Client(), resources.CrdPackage),
