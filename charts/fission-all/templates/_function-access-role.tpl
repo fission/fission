@@ -49,6 +49,15 @@ rules:
   - secrets
   verbs:
   - get
+# The OCI source-archive keychain (RFC-0031) reads the builder SA's
+# imagePullSecrets to resolve registry credentials — same need as the
+# fetcher rules above.
+- apiGroups:
+  - ""
+  resources:
+  - serviceaccounts
+  verbs:
+  - get
 {{- end -}}
 
 {{- define "fissionFunction.fetcherWebsocketRules" }}
