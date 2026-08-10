@@ -90,6 +90,13 @@ func ExtractImage(ctx context.Context, imageRef, destRoot, destDir string, opts 
 	if err := extractTar(flattened, destRoot, destDir, opts.SubPath, maxBytes); err != nil {
 		return fmt.Errorf("extracting image %q: %w", imageRef, err)
 	}
+	// mutate.Extract's deferred tar.Writer.Close writes a valid tar footer
+	// even when flattening failed, so its error (e.g. "unsafe tar path") is
+	// only observable by reading past the footer; the stream would otherwise
+	// pass for a complete, truncated image.
+	if _, err := io.Copy(io.Discard, flattened); err != nil {
+		return fmt.Errorf("flattening image %q: %w", imageRef, err)
+	}
 	return nil
 }
 
@@ -173,7 +180,9 @@ func extractTar(r io.Reader, destRoot, destDir, subPath string, maxBytes int64) 
 				return fmt.Errorf("creating directory %q: %w", clean, err)
 			}
 		case tar.TypeReg:
-			if written+hdr.Size > maxBytes {
+			// Written as a subtraction: written+hdr.Size overflows int64 for
+			// a crafted header size, passing the check with a negative sum.
+			if hdr.Size > maxBytes-written {
 				return fmt.Errorf("image content exceeds the %d-byte extraction limit", maxBytes)
 			}
 			if dir := filepath.Dir(dest); dir != "." {
