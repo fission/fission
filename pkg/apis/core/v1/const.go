@@ -111,11 +111,11 @@ const (
 )
 
 const (
-	BuildStatusPending   = "pending"
-	BuildStatusRunning   = "running"
-	BuildStatusSucceeded = "succeeded"
-	BuildStatusFailed    = "failed"
-	BuildStatusNone      = "none"
+	BuildStatusPending   BuildStatus = "pending"
+	BuildStatusRunning   BuildStatus = "running"
+	BuildStatusSucceeded BuildStatus = "succeeded"
+	BuildStatusFailed    BuildStatus = "failed"
+	BuildStatusNone      BuildStatus = "none"
 )
 
 const (
