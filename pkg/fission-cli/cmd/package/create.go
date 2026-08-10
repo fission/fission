@@ -177,6 +177,8 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	insecure := input.Bool(flagkey.PkgInsecure)
 	deployChecksum := input.String(flagkey.PkgDeployChecksum)
 	srcChecksum := input.String(flagkey.PkgSrcChecksum)
+	deploySecret := input.String(flagkey.PkgDeploySecret)
+	srcSecret := input.String(flagkey.PkgSrcSecret)
 
 	pkgSpec := fv1.PackageSpec{
 		Environment: fv1.EnvironmentReference{
@@ -223,9 +225,17 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		if len(specFile) > 0 { // we should do this in all cases, i think
 			pkgStatus = fv1.BuildStatusNone
 		}
-		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, specDir, specFile, pkgNamespace)
+		if deploySecret != "" {
+			if err := secretFlagRequiresURL(flagkey.PkgDeploySecret, flagkey.PkgDeployArchive, deployArchiveFiles); err != nil {
+				return nil, err
+			}
+		}
+		deployment, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure || deploySecret != "", deployChecksum, specDir, specFile, pkgNamespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating deploy archive: %w", err)
+		}
+		if deploySecret != "" {
+			attachArchiveSecret(deployment, deploySecret, deployChecksum)
 		}
 		pkgSpec.Deployment = *deployment
 		if len(pkgName) == 0 {
@@ -233,9 +243,17 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 	}
 	if len(srcArchiveFiles) > 0 {
-		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure, srcChecksum, specDir, specFile, pkgNamespace)
+		if srcSecret != "" {
+			if err := secretFlagRequiresURL(flagkey.PkgSrcSecret, flagkey.PkgSrcArchive, srcArchiveFiles); err != nil {
+				return nil, err
+			}
+		}
+		source, err := CreateArchive(client, input, srcArchiveFiles, false, insecure || srcSecret != "", srcChecksum, specDir, specFile, pkgNamespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating source archive: %w", err)
+		}
+		if srcSecret != "" {
+			attachArchiveSecret(source, srcSecret, srcChecksum)
 		}
 		pkgSpec.Source = *source
 		pkgStatus = fv1.BuildStatusPending // set package build status to pending

@@ -18,7 +18,8 @@ func Commands() *cobra.Command {
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd,
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgSrcSecret, flag.PkgDeploySecret,
+			flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd,
 			flag.SpecSave, flag.SpecDry, flag.PkgWatch, flag.PkgWatchTimeout},
 	})
 
@@ -44,7 +45,8 @@ func Commands() *cobra.Command {
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
 		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce,
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgSrcSecret, flag.PkgDeploySecret,
+			flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce,
 			flag.PkgWatch, flag.PkgWatchTimeout},
 	})
 

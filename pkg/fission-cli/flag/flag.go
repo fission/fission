@@ -316,6 +316,8 @@ var (
 	PkgDeployChecksum = Flag{Type: String, Name: flagkey.PkgDeployChecksum, Usage: "SHA256 checksum of deploy archive when providing URL"}
 	PkgSrcArchive     = Flag{Type: StringSlice, Name: flagkey.PkgSrcArchive, Aliases: []string{"source", "src"}, Usage: "URL or local paths for source archive"}
 	PkgSrcChecksum    = Flag{Type: String, Name: flagkey.PkgSrcChecksum, Usage: "SHA256 checksum of source archive when providing URL"}
+	PkgSrcSecret      = Flag{Type: String, Name: flagkey.PkgSrcSecret, Usage: "Name of a Secret with credentials for fetching the source archive URL (keys: username+password, token, or headers); checksum generation is skipped — pass --srcchecksum to pin one"}
+	PkgDeploySecret   = Flag{Type: String, Name: flagkey.PkgDeploySecret, Usage: "Name of a Secret with credentials for fetching the deploy archive URL (keys: username+password, token, or headers); checksum generation is skipped — pass --deploychecksum to pin one"}
 	PkgInsecure       = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
 	PkgOCI            = Flag{Type: String, Name: flagkey.PkgOCI, Usage: "Pre-built OCI image reference containing the deployment code (registry/repo:tag[@digest])"}
 	PkgWatch          = Flag{Type: Bool, Name: flagkey.PkgWatch, Short: "w", Aliases: []string{"follow"}, Usage: "Wait for the package build to finish, streaming builder logs while it runs; exits non-zero if the build fails"}

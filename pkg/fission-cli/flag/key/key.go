@@ -241,6 +241,8 @@ const (
 	PkgDeployArchive  = "deployarchive"
 	PkgSrcChecksum    = "srcchecksum"
 	PkgDeployChecksum = "deploychecksum"
+	PkgSrcSecret      = "srcsecret"
+	PkgDeploySecret   = "deploysecret"
 	PkgInsecure       = "insecure"
 	PkgOCI            = "oci"
 	PkgBuildCmd       = "buildcmd"

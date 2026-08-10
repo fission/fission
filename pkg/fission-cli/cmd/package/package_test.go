@@ -5,10 +5,12 @@
 package _package
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -199,4 +201,108 @@ func TestSplitImageDigest(t *testing.T) {
 			t.Errorf("splitImageDigest(%q) = (%q,%q), want (%q,%q)", tc.in, image, digest, tc.image, tc.digest)
 		}
 	}
+}
+
+// TestCreatePackageDeploySecret proves --deploysecret attaches the RFC-0031
+// SecretRef to a URL deploy archive WITHOUT the anonymous checksum-generation
+// download (the URL here resolves nowhere, so any download attempt would
+// fail the create).
+func TestCreatePackageDeploySecret(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "artifactory-creds")
+
+	_, err := CreatePackage(in, client, "auth-pkg", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeUrl, pkg.Spec.Deployment.Type)
+	require.NotNil(t, pkg.Spec.Deployment.SecretRef)
+	assert.Equal(t, "artifactory-creds", pkg.Spec.Deployment.SecretRef.Name)
+	assert.Empty(t, pkg.Spec.Deployment.Checksum.Sum, "no anonymous checksum download for credentialed URLs")
+}
+
+// TestCreatePackageDeploySecretExplicitChecksum keeps a user-pinned checksum.
+func TestCreatePackageDeploySecretExplicitChecksum(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds")
+	sum := strings.Repeat("a", 64)
+	in.Set(flagkey.PkgDeployChecksum, sum)
+
+	_, err := CreatePackage(in, client, "auth-pkg2", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-pkg2", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, sum, pkg.Spec.Deployment.Checksum.Sum)
+	require.NotNil(t, pkg.Spec.Deployment.SecretRef)
+}
+
+// TestCreatePackageSecretRequiresURL pins that credential flags refuse local
+// files: those upload to storagesvc, whose internal HMAC transport must never
+// mix with external credentials.
+func TestCreatePackageSecretRequiresURL(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds")
+
+	_, err := CreatePackage(in, client, "auth-pkg3", "default", "node-env",
+		nil, []string{"local.zip"}, "", "", "", false, "default", "")
+	require.ErrorContains(t, err, flagkey.PkgDeploySecret)
+}
+
+// TestCreatePackageSrcSecret covers the source-archive variant (builder path).
+func TestCreatePackageSrcSecret(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcSecret, "src-creds")
+
+	_, err := CreatePackage(in, client, "auth-src-pkg", "default", "node-env",
+		[]string{"https://repo.example.invalid/src.zip"}, nil, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-src-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, pkg.Spec.Source.SecretRef)
+	assert.Equal(t, "src-creds", pkg.Spec.Source.SecretRef.Name)
+	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus)
+}
+
+// TestUpdatePackageDeploySecretRotate rotates the credential on an existing
+// url package without re-specifying the archive.
+func TestUpdatePackageDeploySecretRotate(t *testing.T) {
+	pkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "rot-pkg", Namespace: "default"},
+		Spec: fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
+			Deployment: fv1.Archive{
+				Type:      fv1.ArchiveTypeUrl,
+				URL:       "https://repo.example.invalid/a.zip",
+				SecretRef: &apiv1.LocalObjectReference{Name: "creds-v1"},
+			},
+		},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},
+	}
+	fc := fissionfake.NewSimpleClientset(pkg) //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds-v2")
+
+	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
+	require.NoError(t, err)
+
+	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "rot-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, got.Spec.Deployment.SecretRef)
+	assert.Equal(t, "creds-v2", got.Spec.Deployment.SecretRef.Name)
+	assert.Equal(t, "https://repo.example.invalid/a.zip", got.Spec.Deployment.URL, "url untouched")
 }
