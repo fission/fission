@@ -17,8 +17,8 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.7
-	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260731000824-ec2e58687793
+	github.com/google/go-containerregistry v0.21.9
+	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260805202503-7b32099eb119
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kedacore/keda/v2 v2.20.2
@@ -27,7 +27,7 @@ require (
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
-	github.com/ohler55/ojg v1.28.2
+	github.com/ohler55/ojg v1.28.4
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
@@ -69,7 +69,7 @@ require (
 	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/metrics v0.36.3
-	modernc.org/sqlite v1.55.0
+	modernc.org/sqlite v1.56.0
 	pgregory.net/rapid v1.3.0
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/gateway-api v1.6.1
@@ -169,7 +169,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/maruel/natural v1.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mikelolasagasti/xz v1.0.1 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
@@ -225,12 +225,12 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
@@ -244,7 +244,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260501160325-927ab1f70cd6 // indirect
 	k8s.io/streaming v0.36.3 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
-	modernc.org/libc v1.74.1 // indirect
+	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	sigs.k8s.io/controller-runtime/tools/setup-envtest v0.24.1 // indirect
