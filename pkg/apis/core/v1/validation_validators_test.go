@@ -142,21 +142,29 @@ func TestOCIArchiveValidate(t *testing.T) {
 	require.Error(t, OCIArchive{Image: "ghcr.io/x/y:v1", SubPath: "a/../b"}.Validate(), "unclean sub-path")
 }
 
-func TestPackageSpecValidateRejectsOCISource(t *testing.T) {
+// TestPackageSpecValidateAllowsOCISource pins RFC-0031 phase 2: source
+// archives may be OCI — the builder pod's fetcher pulls them with the same
+// keychain as deployment archives. The one-content-source rule still holds.
+func TestPackageSpecValidateAllowsOCISource(t *testing.T) {
 	t.Parallel()
 	spec := PackageSpec{
 		Environment: EnvironmentReference{Name: "env", Namespace: "ns"},
 		Source:      Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}},
 	}
-	err := spec.Validate()
-	require.Error(t, err, "oci on the source archive must be rejected")
-	require.Contains(t, err.Error(), "deployment archive only")
+	require.NoError(t, spec.Validate(), "oci on the source archive is allowed (RFC-0031 phase 2)")
 
 	spec = PackageSpec{
 		Environment: EnvironmentReference{Name: "env", Namespace: "ns"},
 		Deployment:  Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"}},
 	}
 	require.NoError(t, spec.Validate())
+
+	spec = PackageSpec{
+		Environment: EnvironmentReference{Name: "env", Namespace: "ns"},
+		Source: Archive{Type: ArchiveTypeOCI, OCI: &OCIArchive{Image: "ghcr.io/x/y:v1"},
+			URL: "http://example.com/src.zip"},
+	}
+	require.Error(t, spec.Validate(), "oci+url on one archive must still be rejected")
 }
 
 func TestArchiveIsEmptyOCI(t *testing.T) {

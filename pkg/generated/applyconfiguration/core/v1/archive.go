@@ -37,10 +37,12 @@ type ArchiveApplyConfiguration struct {
 	// Checksum ensures the integrity of packages
 	// referenced by URL. Ignored for literals.
 	Checksum *ChecksumApplyConfiguration `json:"checksum,omitempty"`
-	// OCI references an OCI image holding the deployment code.
-	// Mutually exclusive with Literal and URL. Supported only on
-	// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
-	// (source archives feed the builder, which has no OCI pull path).
+	// OCI references an OCI image holding the archive contents.
+	// Mutually exclusive with Literal and URL. Valid on both
+	// PackageSpec.Deployment and PackageSpec.Source (RFC-0031): a
+	// source OCI archive is pulled by the builder pod's fetcher, whose
+	// keychain resolves the builder pod's ServiceAccount
+	// imagePullSecrets plus the archive's ImagePullSecrets.
 	OCI *OCIArchiveApplyConfiguration `json:"oci,omitempty"`
 	// SecretRef names a Secret holding credentials for fetching URL.
 	// Keys: username+password (basic auth), token (bearer), headers

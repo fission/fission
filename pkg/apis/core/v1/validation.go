@@ -325,12 +325,6 @@ func (spec PackageSpec) Validate() error {
 		}
 	}
 
-	// OCI delivery applies to deployment archives only: source archives feed
-	// the builder, which has no OCI pull path.
-	if spec.Source.OCI != nil {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "PackageSpec.Source", spec.Source.Type, "oci archives are supported on the deployment archive only"))
-	}
-
 	return errs
 }
 

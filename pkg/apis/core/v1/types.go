@@ -937,10 +937,12 @@ type (
 		// +kubebuilder:validation:XValidation:rule="((!has(self.type) || self.type == '') && (!has(self.sum) || self.sum == '')) || self.type == 'sha256'",message="checksum must be empty, or its type must be 'sha256' (the only supported checksum type)"
 		Checksum Checksum `json:"checksum,omitempty"`
 
-		// OCI references an OCI image holding the deployment code.
-		// Mutually exclusive with Literal and URL. Supported only on
-		// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
-		// (source archives feed the builder, which has no OCI pull path).
+		// OCI references an OCI image holding the archive contents.
+		// Mutually exclusive with Literal and URL. Valid on both
+		// PackageSpec.Deployment and PackageSpec.Source (RFC-0031): a
+		// source OCI archive is pulled by the builder pod's fetcher, whose
+		// keychain resolves the builder pod's ServiceAccount
+		// imagePullSecrets plus the archive's ImagePullSecrets.
 		// +optional
 		OCI *OCIArchive `json:"oci,omitempty"`
 
