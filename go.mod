@@ -66,7 +66,7 @@ require (
 	k8s.io/apimachinery v0.36.3
 	k8s.io/client-go v0.36.3
 	k8s.io/code-generator v0.36.3
-	k8s.io/gengo/v2 v2.0.0-20250922181213-ec3ebc5fd46b
+	k8s.io/gengo/v2 v2.0.0-20260408192533-25e2208e0dc3
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/metrics v0.36.3
 	modernc.org/sqlite v1.56.0
