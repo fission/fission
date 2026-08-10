@@ -74,6 +74,14 @@ func (opts *GetSubCommand) run(input cli.Input) error {
 	case fv1.ArchiveTypeLiteral:
 		reader = bytes.NewReader(archive.Literal)
 	case fv1.ArchiveTypeUrl:
+		if archive.SecretRef != nil {
+			// The archive is behind authentication (RFC-0031); the CLI holds
+			// no credentials by design (they live only in the cluster Secret,
+			// read by the fetcher). Fail with a clear reason instead of a bare
+			// 401 from the anonymous download below.
+			return fmt.Errorf("package %s archive at %s requires credentials (secret %q) and cannot be downloaded through the CLI; fetch it directly with those credentials",
+				opts.name, archive.URL, archive.SecretRef.Name)
+		}
 		readCloser, err := pkgutil.DownloadStrorageURL(input.Context(), opts.Client(), archive.URL)
 		if err != nil {
 			return fmt.Errorf("error downloading from storage service url: %s: %w", archive.URL, err)

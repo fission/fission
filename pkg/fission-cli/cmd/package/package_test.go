@@ -303,6 +303,60 @@ func TestCreatePackageSrcOCI(t *testing.T) {
 	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus, "a source archive means the builder must run")
 }
 
+// TestCreatePackageSrcOCIWithDeployIsPending pins RFC-0031 phase 2 + review
+// finding #6: a package with both a registry source (--srcoci) and a deploy
+// archive must record BuildStatusPending — a source means the builder runs,
+// and the deploy block must not overwrite that with None.
+func TestCreatePackageSrcOCIWithDeployIsPending(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+	in.Set(flagkey.PkgInsecure, true) // skip the anonymous checksum download for the deploy URL
+
+	_, err := CreatePackage(in, client, "srcoci-deploy-pkg", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "srcoci-deploy-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Source.Type)
+	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus,
+		"a source archive means the builder must run; the deploy block must not force None")
+}
+
+// TestUpdatePackageSrcSecretRequeuesBuild pins review finding #4: rotating the
+// source credential re-queues a failed build (SecretRef is excluded from the
+// content hash, so nothing else would).
+func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
+	pkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "reb-pkg", Namespace: "default"},
+		Spec: fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
+			Source: fv1.Archive{
+				Type:      fv1.ArchiveTypeUrl,
+				URL:       "https://repo.example.invalid/src.zip",
+				SecretRef: &apiv1.LocalObjectReference{Name: "wrong-creds"},
+			},
+		},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusFailed, BuildLog: "401"},
+	}
+	fc := fissionfake.NewSimpleClientset(pkg) //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcSecret, "correct-creds")
+
+	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
+	require.NoError(t, err)
+
+	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "reb-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "correct-creds", got.Spec.Source.SecretRef.Name)
+	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), got.Status.BuildStatus,
+		"rotating the source credential must re-queue the failed build")
+}
+
 // TestUpdatePackageDeploySecretRotate rotates the credential on an existing
 // url package without re-specifying the archive.
 func TestUpdatePackageDeploySecretRotate(t *testing.T) {

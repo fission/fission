@@ -188,7 +188,9 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgSrcSecret) {
 		// Attach, rotate, or (with an empty value) detach the credential on
-		// the existing url source archive without re-specifying it.
+		// the existing url source archive without re-specifying it. A
+		// checksum passed in the same command is applied too (the else-if
+		// with PkgSrcChecksum below would otherwise be shadowed).
 		if pkg.Spec.Source.URL == "" {
 			return nil, fmt.Errorf("--%v: package has no url source archive to attach credentials to", flagkey.PkgSrcSecret)
 		}
@@ -197,6 +199,13 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		} else {
 			pkg.Spec.Source.SecretRef = &apiv1.LocalObjectReference{Name: srcSecret}
 		}
+		if input.IsSet(flagkey.PkgSrcChecksum) {
+			pkg.Spec.Source.Checksum = fv1.Checksum{Type: fv1.ChecksumTypeSHA256, Sum: srcChecksum}
+		}
+		// Rotating the source credential is the documented way to fix a build
+		// that failed on a 401: re-queue it, since SecretRef is (by design)
+		// excluded from the content hash so nothing else would.
+		needToRebuild = true
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgSrcChecksum) {
 		pkg.Spec.Source.Checksum = fv1.Checksum{
@@ -226,7 +235,9 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgDeploySecret) {
 		// Attach, rotate, or (with an empty value) detach the credential on
-		// the existing url deploy archive without re-specifying it.
+		// the existing url deploy archive without re-specifying it. A
+		// checksum passed in the same command is applied too (the else-if
+		// with PkgDeployChecksum below would otherwise be shadowed).
 		if pkg.Spec.Deployment.URL == "" {
 			return nil, fmt.Errorf("--%v: package has no url deploy archive to attach credentials to", flagkey.PkgDeploySecret)
 		}
@@ -234,6 +245,9 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 			pkg.Spec.Deployment.SecretRef = nil
 		} else {
 			pkg.Spec.Deployment.SecretRef = &apiv1.LocalObjectReference{Name: deploySecret}
+		}
+		if input.IsSet(flagkey.PkgDeployChecksum) {
+			pkg.Spec.Deployment.Checksum = fv1.Checksum{Type: fv1.ChecksumTypeSHA256, Sum: deployChecksum}
 		}
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgDeployChecksum) {
