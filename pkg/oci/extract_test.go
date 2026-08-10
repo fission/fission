@@ -180,6 +180,11 @@ func TestExtractImageRejectsTraversal(t *testing.T) {
 		"dotdot":   {"../evil": file("e")},
 		"absolute": {"/abs/path": file("a")},
 		"nested":   {"ok/../../evil": file("e")},
+		// A traversal entry alongside good files must still fail loudly:
+		// go-containerregistry >= v0.21.8 stops the flattened stream at the
+		// unsafe entry, which without the post-EOF drain in extractTar would
+		// pass for a complete image with the remaining files silently missing.
+		"mixed": {"app/ok.js": file("code"), "../evil": file("e"), "app/more.js": file("code2")},
 	}
 	for tname, entries := range cases {
 		t.Run(tname, func(t *testing.T) {

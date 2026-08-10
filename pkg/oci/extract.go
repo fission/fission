@@ -135,6 +135,13 @@ func extractTar(r io.Reader, destRoot, destDir, subPath string, maxBytes int64) 
 	for {
 		hdr, err := tr.Next()
 		if errors.Is(err, io.EOF) {
+			// mutate.Extract's deferred tar.Writer.Close writes a valid tar
+			// footer even when flattening failed, so its error (e.g. "unsafe
+			// tar path") is only observable by reading past the footer; the
+			// stream would otherwise pass for a complete, truncated image.
+			if _, derr := io.Copy(io.Discard, r); derr != nil {
+				return fmt.Errorf("reading image tar: %w", derr)
+			}
 			return nil
 		}
 		if err != nil {
