@@ -21,7 +21,7 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260731000824-ec2e58687793
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
-	github.com/kedacore/keda/v2 v2.20.1
+	github.com/kedacore/keda/v2 v2.20.2
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/moby/moby/api v1.55.0

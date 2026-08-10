@@ -208,8 +208,8 @@ github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHm
 github.com/jstemmer/go-junit-report v0.0.0-20190106144839-af01ea7f8024/go.mod h1:6v2b51hI/fHJwM22ozAgKL4VKDeJcHhJFhtBdhmNjmU=
 github.com/jstemmer/go-junit-report v0.9.1/go.mod h1:Brl9GWCQeLvo8nXZwPNNblvFj/XSXhF0NWZEnDohbsk=
 github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+r32jIOes=
-github.com/kedacore/keda/v2 v2.20.1 h1:0Bb2zX/s+RSPtU2W+/Jk24A/aFl8MO79UuU0C4lA8ts=
-github.com/kedacore/keda/v2 v2.20.1/go.mod h1:wrV1MP6buZQ1S5/J/R7UyBeJr857x92E43LADVoSajs=
+github.com/kedacore/keda/v2 v2.20.2 h1:SR60v8uIcelbveS8n/1jcl8tLdBBIbHMxmdOHw8tKqA=
+github.com/kedacore/keda/v2 v2.20.2/go.mod h1:wrV1MP6buZQ1S5/J/R7UyBeJr857x92E43LADVoSajs=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.4.1/go.mod h1:RyIbtBH6LamlWaDj8nUwkbUhJ87Yi3uG0guNDohfE1A=
 github.com/klauspost/compress v1.19.1 h1:VsB4HPswih7mmZ8WleSFQ75c/Ui1M4trX5oAsJnhSlk=
