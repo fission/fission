@@ -247,6 +247,7 @@ const (
 	PkgOutput         = Output
 	PkgStatus         = "status"
 	PkgOrphan         = "orphan"
+	PkgWatch          = "watch"
 
 	SpecSave             = "spec"
 	SpecDir              = "specdir"

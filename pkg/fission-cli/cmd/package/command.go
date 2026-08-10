@@ -19,7 +19,7 @@ func Commands() *cobra.Command {
 		Required: []flag.Flag{flag.PkgEnvironment},
 		Optional: []flag.Flag{flag.PkgName, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd,
-			flag.SpecSave, flag.SpecDry},
+			flag.SpecSave, flag.SpecDry, flag.PkgWatch, flag.PkgWatchTimeout},
 	})
 
 	getSrcCmd := wrapper.SubCommand(&cobra.Command{
@@ -44,7 +44,8 @@ func Commands() *cobra.Command {
 	}, Update, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
 		Optional: []flag.Flag{flag.PkgEnvironment, flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
-			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce},
+			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure, flag.PkgOCI, flag.PkgBuildCmd, flag.PkgForce,
+			flag.PkgWatch, flag.PkgWatchTimeout},
 	})
 
 	deleteCmd := wrapper.SubCommand(&cobra.Command{
@@ -75,7 +76,7 @@ func Commands() *cobra.Command {
 		Short: "Rebuild a failed package",
 	}, Rebuild, flag.FlagSet{
 		Required: []flag.Flag{flag.PkgName},
-		Optional: []flag.Flag{},
+		Optional: []flag.Flag{flag.PkgWatch, flag.PkgWatchTimeout},
 	})
 
 	command := &cobra.Command{

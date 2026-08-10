@@ -58,6 +58,11 @@ func (opts *RebuildSubCommand) run(input cli.Input) error {
 		return fmt.Errorf("update package status: %w", err)
 	}
 
+	if input.Bool(flagkey.PkgWatch) {
+		fmt.Fprintf(input.Stdout(), "Retrying build for pkg %v\n", pkg.Name)
+		return WatchPackageBuild(input, opts.Client(), opts.namespace, opts.name)
+	}
+
 	fmt.Printf("Retrying build for pkg %v. Use \"fission pkg info --name %v\" to view status\n", pkg.Name, pkg.Name)
 
 	return nil

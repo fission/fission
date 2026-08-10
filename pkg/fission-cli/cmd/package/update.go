@@ -81,6 +81,22 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		}
 	}
 
+	if input.Bool(flagkey.PkgWatch) {
+		// UpdatePackage sets BuildStatusPending synchronously (via UpdateStatus)
+		// whenever the update triggers a rebuild, so a fresh read reliably
+		// tells whether there is a build to watch.
+		fresh, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), newPkgMeta.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting package after update: %w", err)
+		}
+		switch fresh.Status.BuildStatus {
+		case "", fv1.BuildStatusPending, fv1.BuildStatusRunning:
+			return WatchPackageBuild(input, opts.Client(), fresh.Namespace, fresh.Name)
+		default:
+			fmt.Fprintf(input.Stdout(), "Update of package '%v' did not trigger a build; nothing to watch\n", fresh.Name)
+		}
+	}
+
 	return nil
 }
 
