@@ -10,10 +10,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
+	"math"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -48,9 +51,17 @@ func dir() tarEntry {
 // does not matter).
 func makeLayer(t *testing.T, entries map[string]tarEntry) v1.Layer {
 	t.Helper()
+	return makeLayerOrdered(t, slices.Collect(maps.Keys(entries)), entries)
+}
+
+// makeLayerOrdered builds a tar layer whose entries appear in exactly the
+// given order, for cases where an entry's stream position matters.
+func makeLayerOrdered(t *testing.T, names []string, entries map[string]tarEntry) v1.Layer {
+	t.Helper()
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	for name, e := range entries {
+	for _, name := range names {
+		e := entries[name]
 		hdr := &tar.Header{
 			Name:     name,
 			Typeflag: e.typeflag,
@@ -180,11 +191,6 @@ func TestExtractImageRejectsTraversal(t *testing.T) {
 		"dotdot":   {"../evil": file("e")},
 		"absolute": {"/abs/path": file("a")},
 		"nested":   {"ok/../../evil": file("e")},
-		// A traversal entry alongside good files must still fail loudly:
-		// go-containerregistry >= v0.21.8 stops the flattened stream at the
-		// unsafe entry, which without the post-EOF drain in extractTar would
-		// pass for a complete image with the remaining files silently missing.
-		"mixed": {"app/ok.js": file("code"), "../evil": file("e"), "app/more.js": file("code2")},
 	}
 	for tname, entries := range cases {
 		t.Run(tname, func(t *testing.T) {
@@ -205,6 +211,79 @@ func TestExtractImageRejectsTraversal(t *testing.T) {
 			assert.Empty(t, glob, "traversal entry escaped the destination root")
 		})
 	}
+
+	// A traversal entry AFTER good files must still fail loudly:
+	// go-containerregistry >= v0.21.8 stops the flattened stream at the
+	// unsafe entry, which without the post-EOF drain in ExtractImage would
+	// pass for a complete image with the remaining files silently missing.
+	// The order is load-bearing, so the layer is built ordered.
+	t.Run("mixed", func(t *testing.T) {
+		t.Parallel()
+		entries := map[string]tarEntry{
+			"app/ok.js":   file("code"),
+			"../evil":     file("e"),
+			"app/more.js": file("code2"),
+		}
+		img := makeImage(t, makeLayerOrdered(t, []string{"app/ok.js", "../evil", "app/more.js"}, entries))
+		host, ref := pushImage(t, img, "code/trav-mixed", "v1")
+
+		destRoot := t.TempDir()
+		err := ExtractImage(t.Context(), ref, destRoot, "pkg", ExtractOptions{
+			InsecureRegistries: []string{host},
+		})
+		require.Error(t, err)
+	})
+}
+
+// TestExtractImageOpaqueWhiteout locks in the go-containerregistry >= v0.21.8
+// flatten semantics: an opaque whiteout marker in an upper layer hides all
+// lower-layer entries under its directory (before v0.21.8 they leaked through).
+func TestExtractImageOpaqueWhiteout(t *testing.T) {
+	t.Parallel()
+	lower := makeLayer(t, map[string]tarEntry{
+		"dir":         dir(),
+		"dir/old.txt": file("old"),
+		"keep.txt":    file("keep"),
+	})
+	upper := makeLayer(t, map[string]tarEntry{
+		"dir":              dir(),
+		"dir/.wh..wh..opq": file(""),
+		"dir/new.txt":      file("new"),
+	})
+	img := makeImage(t, lower, upper)
+	host, ref := pushImage(t, img, "code/opq", "v1")
+
+	destRoot := t.TempDir()
+	err := ExtractImage(t.Context(), ref, destRoot, "pkg", ExtractOptions{
+		InsecureRegistries: []string{host},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "new", readExtracted(t, destRoot, "pkg", "dir/new.txt"))
+	assert.Equal(t, "keep", readExtracted(t, destRoot, "pkg", "keep.txt"))
+	_, err = os.Stat(filepath.Join(destRoot, "pkg", "dir", "old.txt"))
+	assert.True(t, os.IsNotExist(err), "opaque whiteout must hide lower-layer files")
+}
+
+// TestExtractTarSizeCapOverflow feeds extractTar a header whose claimed size
+// would wrap written+hdr.Size past MaxInt64; the size cap, not a downstream
+// stream error, must reject it.
+func TestExtractTarSizeCapOverflow(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "a", Typeflag: tar.TypeReg, Mode: 0o644, Size: 5}))
+	_, err := tw.Write([]byte("hello"))
+	require.NoError(t, err)
+	require.NoError(t, tw.Flush())
+	require.NoError(t, tw.WriteHeader(&tar.Header{
+		Name: "b", Typeflag: tar.TypeReg, Mode: 0o644,
+		Size: math.MaxInt64 - 1, Format: tar.FormatPAX,
+	}))
+
+	err = extractTar(&buf, t.TempDir(), "pkg", "", DefaultMaxBytes)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "extraction limit")
 }
 
 func TestExtractImageRejectsSymlinkAndHardlink(t *testing.T) {
