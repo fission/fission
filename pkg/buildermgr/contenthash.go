@@ -30,9 +30,9 @@ import (
 // the delivered bytes could differ: the OCI image reference and digest, the
 // URL and its checksum, or the literal bytes. What stays out matters as much.
 // ResourceVersion is excluded because it changes on every write including
-// status updates. ImagePullSecrets is excluded because it alters how the same
-// content is reached, not what it is — rotating a pull secret must not rebuild
-// the world. SubPath is NOT excluded: it selects which subtree of the image
+// status updates. ImagePullSecrets and SecretRef are excluded because they
+// alter how the same content is reached, not what it is — rotating a pull or
+// download credential must not rebuild the world. SubPath is NOT excluded: it selects which subtree of the image
 // becomes the deployment root, so it genuinely changes the delivered bytes.
 //
 // The empty package hashes to a stable non-empty value, so "no content" is
