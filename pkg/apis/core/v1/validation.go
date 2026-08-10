@@ -294,7 +294,7 @@ func (archive Archive) validateSecretRef() error {
 	errs = errors.Join(errs, ValidateKubeName("Archive.SecretRef.Name", archive.SecretRef.Name))
 	if len(archive.URL) == 0 || archive.OCI != nil {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive.SecretRef", archive.SecretRef.Name, "secretref requires a url archive"))
-	} else if parsed, err := url.Parse(archive.URL); err == nil && strings.HasPrefix(parsed.Path, "/v1/archive") {
+	} else if IsStorageServiceURL(archive.URL) {
 		// Internal HMAC and external credentials must never mix on one
 		// request; storagesvc URLs are signed, not credentialed.
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive.SecretRef", archive.SecretRef.Name, "secretref cannot be used with internal storage service URLs"))

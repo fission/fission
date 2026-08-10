@@ -6,12 +6,14 @@ package fetcher
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -52,15 +54,13 @@ func parseArchiveCredentials(data map[string][]byte) (http.Header, error) {
 
 	h := http.Header{}
 	if hasUser {
-		// Reuse net/http's canonical basic-auth encoding.
-		r, _ := http.NewRequest(http.MethodGet, "http://placeholder.invalid", nil)
-		r.SetBasicAuth(string(user), string(pass))
-		h.Set("Authorization", r.Header.Get("Authorization"))
+		h.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(string(user)+":"+string(pass))))
 	}
 	if hasToken {
 		h.Set("Authorization", "Bearer "+string(token))
 	}
 	if hasHeaders {
+		parsedAny := false
 		for line := range strings.SplitSeq(strings.ReplaceAll(string(headersBlock), "\r\n", "\n"), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" {
@@ -75,10 +75,13 @@ func parseArchiveCredentials(data map[string][]byte) (http.Header, error) {
 				return nil, fmt.Errorf("headers block must not set Authorization when %s/%s or %s is present", credKeyUsername, credKeyPassword, credKeyToken)
 			}
 			h.Add(name, strings.TrimSpace(value))
+			parsedAny = true
 		}
-		if len(h) == 0 {
-			return nil, fmt.Errorf("credential secret has no recognized credential keys (want %s+%s, %s, or %s)",
-				credKeyUsername, credKeyPassword, credKeyToken, credKeyHeaders)
+		// The headers key was present but contained nothing usable — point
+		// at that, not at the "no keys at all" case which is misleading when
+		// the user can plainly see the headers key in their Secret.
+		if !parsedAny && !hasUser && !hasToken {
+			return nil, fmt.Errorf("credential secret %q key is empty (no non-blank \"Name: Value\" lines)", credKeyHeaders)
 		}
 	}
 	return h, nil
@@ -154,22 +157,38 @@ func newCredentialClient(archiveURL string, creds http.Header) (*http.Client, er
 // Secret is read from the FETCHING POD's namespace — function-pod namespace
 // for deployment archives, builder-pod namespace for source archives —
 // mirroring OCIArchive.ImagePullSecrets, and never written to disk.
-func (fetcher *Fetcher) clientForArchive(ctx context.Context, archive *fv1.Archive) (*http.Client, error) {
+//
+// The returned status code lets the caller distinguish a spec/config problem
+// (400 — bad combination, unusable secret) from a transient infrastructure
+// failure (500 — the apiserver Secret Get), so a throttled apiserver during
+// specialization is not reported to the user as a bad Package spec.
+func (fetcher *Fetcher) clientForArchive(ctx context.Context, archive *fv1.Archive) (*http.Client, int, error) {
 	if archive.SecretRef == nil {
-		return fetcher.httpClientForURL(archive.URL), nil
+		return fetcher.httpClientForURL(archive.URL), http.StatusOK, nil
 	}
-	if parsed, err := url.Parse(archive.URL); err == nil && strings.HasPrefix(parsed.Path, "/v1/archive") {
+	if fv1.IsStorageServiceURL(archive.URL) {
 		// Admission forbids this combination; refuse here too so a stale
 		// or hand-crafted object can never mix HMAC and external creds.
-		return nil, fmt.Errorf("secretref cannot be used with internal storage service URLs")
+		return nil, http.StatusBadRequest, fmt.Errorf("secretref cannot be used with internal storage service URLs")
 	}
 	secret, err := fetcher.kubeClient.CoreV1().Secrets(fetcher.Info.Namespace).Get(ctx, archive.SecretRef.Name, metav1.GetOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("reading archive credential secret %s/%s: %w", fetcher.Info.Namespace, archive.SecretRef.Name, err)
+		// Reading the Secret is an infrastructure call: a missing secret is
+		// a 404 (spec problem) but a timeout/throttle is a 5xx — surface
+		// the apiserver's own classification rather than flattening to 400.
+		code := http.StatusInternalServerError
+		if apierrors.IsNotFound(err) {
+			code = http.StatusBadRequest
+		}
+		return nil, code, fmt.Errorf("reading archive credential secret %s/%s: %w", fetcher.Info.Namespace, archive.SecretRef.Name, err)
 	}
 	creds, err := parseArchiveCredentials(secret.Data)
 	if err != nil {
-		return nil, fmt.Errorf("archive credential secret %s/%s: %w", fetcher.Info.Namespace, archive.SecretRef.Name, err)
+		return nil, http.StatusBadRequest, fmt.Errorf("archive credential secret %s/%s: %w", fetcher.Info.Namespace, archive.SecretRef.Name, err)
 	}
-	return newCredentialClient(archive.URL, creds)
+	client, err := newCredentialClient(archive.URL, creds)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	return client, http.StatusOK, nil
 }

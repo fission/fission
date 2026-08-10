@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -40,6 +41,7 @@ func TestParseArchiveCredentials(t *testing.T) {
 			http.Header{"Authorization": {"Basic " + base64.StdEncoding.EncodeToString([]byte("a:b"))}, "X-K": {"v"}}, ""},
 		{"empty secret", map[string][]byte{}, nil, "no recognized credential keys"},
 		{"unknown keys only", map[string][]byte{"junk": []byte("x")}, nil, "no recognized credential keys"},
+		{"headers key present but blank", map[string][]byte{"headers": []byte("  \n\r\n  ")}, nil, "\"headers\" key is empty"},
 		{"basic and token conflict", map[string][]byte{"username": []byte("a"), "password": []byte("b"), "token": []byte("t")}, nil, "at most one of"},
 		{"username without password", map[string][]byte{"username": []byte("a")}, nil, "username and password"},
 		{"password without username", map[string][]byte{"password": []byte("b")}, nil, "username and password"},
@@ -78,23 +80,31 @@ func FuzzParseArchiveCredentialHeaders(f *testing.F) {
 
 func TestOriginBoundTransport(t *testing.T) {
 	t.Parallel()
-	// evil records what a cross-origin redirect target receives.
+	// The handler goroutines and the test goroutine touch these captured
+	// values concurrently; the only ordering is a TCP socket the race
+	// detector cannot see, so guard them with a mutex.
+	var mu sync.Mutex
 	var evilGotAuth, evilGotAPIKey bool
+	var originSawAuth string
+
 	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		evilGotAuth = r.Header.Get("Authorization") != ""
 		evilGotAPIKey = r.Header.Get("X-Api-Key") != ""
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer evil.Close()
 
 	// origin serves /direct with creds required, /redirect bounces cross-origin.
-	var originSawAuth string
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/redirect":
 			http.Redirect(w, r, evil.URL+"/stolen", http.StatusFound)
 		default:
+			mu.Lock()
 			originSawAuth = r.Header.Get("Authorization")
+			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 		}
 	}))
@@ -109,15 +119,19 @@ func TestOriginBoundTransport(t *testing.T) {
 	resp, err := client.Get(origin.URL + "/direct")
 	require.NoError(t, err)
 	resp.Body.Close()
+	mu.Lock()
 	assert.Equal(t, "Bearer tok", originSawAuth)
+	mu.Unlock()
 
 	// Cross-origin redirect target receives NO credential headers —
 	// including the custom one net/http would forward by itself.
 	resp, err = client.Get(origin.URL + "/redirect")
 	require.NoError(t, err)
 	resp.Body.Close()
+	mu.Lock()
 	assert.False(t, evilGotAuth, "Authorization leaked cross-origin")
 	assert.False(t, evilGotAPIKey, "custom header leaked cross-origin")
+	mu.Unlock()
 }
 
 func TestSameOriginDefaultPorts(t *testing.T) {
@@ -145,9 +159,12 @@ func TestSameOriginDefaultPorts(t *testing.T) {
 
 func TestClientForArchiveUsesSecretRef(t *testing.T) {
 	t.Parallel()
+	var mu sync.Mutex
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		gotAuth = r.Header.Get("Authorization")
+		mu.Unlock()
 		_, _ = w.Write([]byte("zipbytes"))
 	}))
 	defer srv.Close()
@@ -165,28 +182,35 @@ func TestClientForArchiveUsesSecretRef(t *testing.T) {
 
 	archive := &fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: srv.URL + "/a.zip",
 		SecretRef: &apiv1.LocalObjectReference{Name: "creds"}}
-	client, err := f.clientForArchive(t.Context(), archive)
+	client, code, err := f.clientForArchive(t.Context(), archive)
 	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, code)
 	resp, err := client.Get(srv.URL + "/a.zip")
 	require.NoError(t, err)
 	resp.Body.Close()
+	mu.Lock()
 	assert.Equal(t, "Bearer tok", gotAuth)
+	mu.Unlock()
 
-	// Missing secret is a visible error, not an anonymous fetch.
+	// Missing secret is a visible error (a 400 spec problem, not 500), not
+	// an anonymous fetch.
 	archive.SecretRef = &apiv1.LocalObjectReference{Name: "absent"}
-	_, err = f.clientForArchive(t.Context(), archive)
+	_, code, err = f.clientForArchive(t.Context(), archive)
 	assert.Error(t, err)
+	assert.Equal(t, http.StatusBadRequest, code, "a missing secret is a spec problem")
 
 	// No SecretRef → the shared unsigned client, untouched behavior.
 	archive.SecretRef = nil
-	client, err = f.clientForArchive(t.Context(), archive)
+	client, code, err = f.clientForArchive(t.Context(), archive)
 	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, code)
 	assert.Same(t, f.httpClient, client)
 
 	// Defense in depth: a storagesvc URL with a SecretRef is refused at
 	// fetch time even though admission already forbids it.
 	archive = &fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storagesvc/v1/archive?id=1",
 		SecretRef: &apiv1.LocalObjectReference{Name: "creds"}}
-	_, err = f.clientForArchive(t.Context(), archive)
+	_, code, err = f.clientForArchive(t.Context(), archive)
 	assert.ErrorContains(t, err, "storage service")
+	assert.Equal(t, http.StatusBadRequest, code)
 }

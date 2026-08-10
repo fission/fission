@@ -66,3 +66,23 @@ func TestPackageValidateForAdmissionSecretRef(t *testing.T) {
 	plain.Spec.Deployment = Archive{Type: ArchiveTypeUrl, URL: "https://repo.example.com/a.zip"}
 	assert.NoError(t, plain.ValidateForAdmission())
 }
+
+func TestIsStorageServiceURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"http://storagesvc.fission/v1/archive?id=abc", true},
+		{"https://storage.fission.svc:8000/v1/archive", true},
+		{"https://repo.example.com/repo/archive.zip", false},
+		{"https://repo.example.com/v1/archive/app.zip", false}, // external server, longer path — must NOT match
+		{"https://repo.example.com/v1/archivex", false},        // exact-match: no false positive
+		{"https://repo.example.com/v2/archive", false},
+		{"://bad-url", false}, // unparseable → treated as external
+		{"", false},
+	}
+	for _, tt := range tests {
+		assert.Equalf(t, tt.want, IsStorageServiceURL(tt.url), "url=%q", tt.url)
+	}
+}

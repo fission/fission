@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -195,11 +193,7 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 // exfiltration via headers); failing the download with a clearer error
 // from the inner transport is fine.
 func (fetcher *Fetcher) httpClientForURL(rawURL string) *http.Client {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return fetcher.httpClient
-	}
-	if strings.HasPrefix(parsed.Path, "/v1/archive") {
+	if fv1.IsStorageServiceURL(rawURL) {
 		return fetcher.storageHTTPClient
 	}
 	return fetcher.httpClient
@@ -452,11 +446,11 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			// or an external storage backend (S3, GCS, etc.). Sign only
 			// when the URL targets storagesvc; a SecretRef archive gets a
 			// per-fetch client with origin-bound credentials (RFC-0031).
-			client, err := fetcher.clientForArchive(ctx, archive)
+			client, code, err := fetcher.clientForArchive(ctx, archive)
 			if err != nil {
 				e := "failed to prepare archive download client"
 				logger.Error(err, e, "url", archive.URL)
-				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, archive.URL, err)
+				return code, fmt.Errorf("%s %s: %w", e, archive.URL, err)
 			}
 			err = utils.DownloadUrlToRoot(ctx, client, archive.URL, fetcher.sharedVolumePath, tmpPath)
 			if err != nil {
