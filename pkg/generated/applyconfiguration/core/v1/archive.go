@@ -8,6 +8,7 @@ package v1
 
 import (
 	corev1 "github.com/fission/fission/pkg/apis/core/v1"
+	apicorev1 "k8s.io/api/core/v1"
 )
 
 // ArchiveApplyConfiguration represents a declarative configuration of the Archive type for use
@@ -41,6 +42,16 @@ type ArchiveApplyConfiguration struct {
 	// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
 	// (source archives feed the builder, which has no OCI pull path).
 	OCI *OCIArchiveApplyConfiguration `json:"oci,omitempty"`
+	// SecretRef names a Secret holding credentials for fetching URL.
+	// Keys: username+password (basic auth), token (bearer), headers
+	// (extra headers, one "Name: Value" per line). Like
+	// OCIArchive.ImagePullSecrets it is resolved in the namespace of
+	// the pod that performs the fetch: the function pod's namespace
+	// for deployment archives, the builder pod's namespace for source
+	// archives. Valid only for a url archive whose URL is not a
+	// storagesvc archive URL; credentials are attached only to
+	// requests to the URL's exact origin.
+	SecretRef *apicorev1.LocalObjectReference `json:"secretref,omitempty"`
 }
 
 // ArchiveApplyConfiguration constructs a declarative configuration of the Archive type for use with
@@ -88,5 +99,13 @@ func (b *ArchiveApplyConfiguration) WithChecksum(value *ChecksumApplyConfigurati
 // If called multiple times, the OCI field is set to the value of the last call.
 func (b *ArchiveApplyConfiguration) WithOCI(value *OCIArchiveApplyConfiguration) *ArchiveApplyConfiguration {
 	b.OCI = value
+	return b
+}
+
+// WithSecretRef sets the SecretRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SecretRef field is set to the value of the last call.
+func (b *ArchiveApplyConfiguration) WithSecretRef(value apicorev1.LocalObjectReference) *ArchiveApplyConfiguration {
+	b.SecretRef = &value
 	return b
 }

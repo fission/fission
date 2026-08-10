@@ -126,6 +126,29 @@ spec:
                     required:
                     - image
                     type: object
+                  secretref:
+                    description: |-
+                      SecretRef names a Secret holding credentials for fetching URL.
+                      Keys: username+password (basic auth), token (bearer), headers
+                      (extra headers, one "Name: Value" per line). Like
+                      OCIArchive.ImagePullSecrets it is resolved in the namespace of
+                      the pod that performs the fetch: the function pod's namespace
+                      for deployment archives, the builder pod's namespace for source
+                      archives. Valid only for a url archive whose URL is not a
+                      storagesvc archive URL; credentials are attached only to
+                      requests to the URL's exact origin.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   type:
                     description: |-
                       Type defines how the package is specified: literal, URL, or OCI.
@@ -146,6 +169,9 @@ spec:
                 x-kubernetes-validations:
                 - message: at most one of literal, url, or oci may be set
                   rule: '!has(self.oci) || !has(self.url) || self.url == '''''
+                - message: secretref requires a url archive
+                  rule: '!has(self.secretref) || (has(self.url) && self.url != ''''
+                    && !has(self.oci))'
               environment:
                 description: Environment is a reference to the environment for building
                   source archive.
@@ -247,6 +273,29 @@ spec:
                     required:
                     - image
                     type: object
+                  secretref:
+                    description: |-
+                      SecretRef names a Secret holding credentials for fetching URL.
+                      Keys: username+password (basic auth), token (bearer), headers
+                      (extra headers, one "Name: Value" per line). Like
+                      OCIArchive.ImagePullSecrets it is resolved in the namespace of
+                      the pod that performs the fetch: the function pod's namespace
+                      for deployment archives, the builder pod's namespace for source
+                      archives. Valid only for a url archive whose URL is not a
+                      storagesvc archive URL; credentials are attached only to
+                      requests to the URL's exact origin.
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
                   type:
                     description: |-
                       Type defines how the package is specified: literal, URL, or OCI.
@@ -267,6 +316,9 @@ spec:
                 x-kubernetes-validations:
                 - message: at most one of literal, url, or oci may be set
                   rule: '!has(self.oci) || !has(self.url) || self.url == '''''
+                - message: secretref requires a url archive
+                  rule: '!has(self.secretref) || (has(self.url) && self.url != ''''
+                    && !has(self.oci))'
             required:
             - environment
             type: object
