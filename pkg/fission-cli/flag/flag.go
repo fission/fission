@@ -321,7 +321,8 @@ var (
 	PkgWatch          = Flag{Type: Bool, Name: flagkey.PkgWatch, Short: "w", Aliases: []string{"follow"}, Usage: "Wait for the package build to finish, streaming builder logs while it runs; exits non-zero if the build fails"}
 	// PkgWatchTimeout shares --timeout's key but defaults to 0 (wait
 	// indefinitely, like `kubectl logs -f`) instead of WaitTimeout's 60s —
-	// a build has no natural upper bound.
+	// a build has no natural upper bound. Never list it in the same
+	// command's flag set as WaitTimeout: they register the same pflag name.
 	PkgWatchTimeout = Flag{Type: Duration, Name: flagkey.WaitTimeout, DefaultValue: time.Duration(0), Usage: "Maximum time to wait for the build with --watch; 0 waits indefinitely"}
 
 	SpecSave             = Flag{Type: Bool, Name: flagkey.SpecSave, Usage: "Save to the spec directory instead of creating on cluster"}

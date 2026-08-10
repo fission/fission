@@ -49,9 +49,8 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		}
 	}
 
-	if input.Bool(flagkey.PkgWatch) && (input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry)) {
-		return fmt.Errorf("--%v cannot be combined with --%v or --%v: a spec file does not trigger a build",
-			flagkey.PkgWatch, flagkey.SpecSave, flagkey.SpecDry)
+	if err := ValidateWatchNotSpecMode(input); err != nil {
+		return err
 	}
 
 	envName := input.String(flagkey.PkgEnvironment)
@@ -147,6 +146,18 @@ func splitImageDigest(ref string) (image, digest string) {
 		return ref[:i], ref[i+1:]
 	}
 	return ref, ""
+}
+
+// ValidateWatchNotSpecMode rejects --watch combined with --spec-save or
+// --spec-dry: a spec file does not trigger a build, so there is nothing to
+// watch. Shared by `package create` and `fn create`, like
+// ValidateArchiveSources.
+func ValidateWatchNotSpecMode(input cli.Input) error {
+	if input.Bool(flagkey.PkgWatch) && (input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry)) {
+		return fmt.Errorf("--%v cannot be combined with --%v or --%v: a spec file does not trigger a build",
+			flagkey.PkgWatch, flagkey.SpecSave, flagkey.SpecDry)
+	}
+	return nil
 }
 
 func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {

@@ -22,6 +22,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/logdb"
 	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/utils"
 )
@@ -57,29 +58,45 @@ func WatchPackageBuild(input cli.Input, client cmd.Client, namespace, name strin
 // cross-namespace pod list) silently degrades to "wait and print the final
 // log", never to a hang or a spurious command failure.
 func watchPackageBuild(ctx context.Context, client cmd.Client, out io.Writer, namespace, name string) error {
-	// Fail fast on an environment that can never run this build — otherwise a
-	// source package against a builder-less env stays pending and a default
-	// (no-timeout) watch would wait forever.
-	if err := refuseBuilderlessEnv(ctx, client, namespace, name); err != nil {
-		return err
+	// One startup read fails fast on an environment that can never run this
+	// build (otherwise a source package against a builder-less env stays
+	// pending and a default no-timeout watch would wait forever) and seeds
+	// the log stream's env identity so it needn't re-derive it every tick. A
+	// transient read error here is not terminal — the poll's error budget
+	// below decides.
+	var envName, envNamespace string
+	if initial, err := client.FissionClientSet.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if err := refuseBuilderlessEnv(ctx, client, namespace, initial); err != nil {
+			return err
+		}
+		envName = initial.Spec.Environment.Name
+		envNamespace = initial.Spec.Environment.Namespace
+		if envNamespace == "" {
+			envNamespace = namespace
+		}
+	} else if util.IsNotFound(err) {
+		return fmt.Errorf("package %s/%s not found: %w", namespace, name, err)
 	}
 
-	lw := &lockedWriter{w: out}
+	lw := logdb.NewLockedWriter(out)
 
 	streamCtx, stopStream := context.WithCancel(ctx)
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		streamBuilderLogs(streamCtx, client, lw, namespace, name)
+		streamBuilderLogs(streamCtx, client, lw, namespace, name, envName, envNamespace)
 	})
 	// Stop the log stream before the final build-log print regardless of how
 	// the poll ends, so stream lines can't interleave into the final report.
-	defer wg.Wait()
-	defer stopStream()
+	stopAndWait := sync.OnceFunc(func() {
+		stopStream()
+		wg.Wait()
+	})
+	defer stopAndWait()
 
 	var pkg *fv1.Package
-	// Sentinel that matches no real status, so the very first poll announces
-	// the current state.
-	lastStatus := fv1.BuildStatus("\x00")
+	// Zero value matches no status the poll can observe (an empty status is
+	// normalized to pending below), so the first poll announces the state.
+	var lastStatus fv1.BuildStatus
 	consecutiveGetErrors := 0
 	check := func(ctx context.Context) (bool, error) {
 		p, err := client.FissionClientSet.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -132,8 +149,7 @@ func watchPackageBuild(ctx context.Context, client cmd.Client, out io.Writer, na
 	}
 
 	// Silence the live stream before printing the authoritative report.
-	stopStream()
-	wg.Wait()
+	stopAndWait()
 
 	switch pkg.Status.BuildStatus {
 	case fv1.BuildStatusNone:
@@ -163,15 +179,25 @@ func printFinalBuildLog(out io.Writer, pkg *fv1.Package) {
 	fmt.Fprintf(out, "\n========= build log =========\n%s========= end build log =========\n", log)
 }
 
+// IsBuildInFlight reports whether the status means a build is coming or
+// running: an empty status is a fresh create the buildermgr has not
+// classified yet. Shared by the `pkg update` and `fn create` watch gates.
+func IsBuildInFlight(status fv1.BuildStatus) bool {
+	switch status {
+	case "", fv1.BuildStatusPending, fv1.BuildStatusRunning:
+		return true
+	}
+	return false
+}
+
 // refuseBuilderlessEnv returns an error when the package has a source archive
-// to build but its Environment can never build it (no builder image, or a v1
-// env — the same predicate EnvironmentReconciler uses to skip builder
-// creation). Such a package stays pending forever, so a no-timeout watch
-// must refuse up front rather than hang. Lookup failures (RBAC, env not yet
-// created) are NOT terminal — the watch proceeds and the status decides.
-func refuseBuilderlessEnv(ctx context.Context, client cmd.Client, namespace, name string) error {
-	pkg, err := client.FissionClientSet.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil || pkg.Spec.Source.IsEmpty() {
+// to build but its Environment can never build it (fv1.Environment.HasBuilder
+// — the same predicate EnvironmentReconciler uses to skip builder creation).
+// Such a package stays pending forever, so a no-timeout watch must refuse up
+// front rather than hang. Env lookup failures (RBAC, env not yet created) are
+// NOT terminal — the watch proceeds and the status decides.
+func refuseBuilderlessEnv(ctx context.Context, client cmd.Client, namespace string, pkg *fv1.Package) error {
+	if pkg.Spec.Source.IsEmpty() {
 		return nil
 	}
 	switch pkg.Status.BuildStatus {
@@ -189,7 +215,7 @@ func refuseBuilderlessEnv(ctx context.Context, client cmd.Client, namespace, nam
 	if err != nil {
 		return nil
 	}
-	if env.Spec.Version == 1 || len(env.Spec.Builder.Image) == 0 {
+	if !env.HasBuilder() {
 		return fmt.Errorf("environment %s/%s has no builder (builder image unset or v1 env): the source package can never be built, so there is no build to watch",
 			envNamespace, env.Name)
 	}
@@ -200,11 +226,22 @@ func refuseBuilderlessEnv(ctx context.Context, client cmd.Client, namespace, nam
 // builder pod onto out until ctx is cancelled. Purely best-effort: every
 // failure path retries after a poll interval and nothing is ever reported as
 // an error. SinceTime advances across reconnects so a re-established stream
-// does not re-dump lines already printed.
-func streamBuilderLogs(ctx context.Context, client cmd.Client, out io.Writer, namespace, name string) {
+// does not re-dump lines already printed. The env identity is normally seeded
+// by the caller's startup read; when that read failed, it is resolved here
+// once (per tick until it succeeds) rather than on every reconnect.
+func streamBuilderLogs(ctx context.Context, client cmd.Client, out io.Writer, pkgNamespace, pkgName, envName, envNamespace string) {
 	since := metav1.Now()
 	for {
-		if pod := findBuilderPod(ctx, client, namespace, name); pod != nil {
+		if envName == "" {
+			if pkg, err := client.FissionClientSet.CoreV1().Packages(pkgNamespace).Get(ctx, pkgName, metav1.GetOptions{}); err == nil {
+				envName = pkg.Spec.Environment.Name
+				envNamespace = pkg.Spec.Environment.Namespace
+				if envNamespace == "" {
+					envNamespace = pkgNamespace
+				}
+			}
+		}
+		if pod := findBuilderPod(ctx, client, envName, envNamespace); pod != nil {
 			sinceCopy := since
 			opts := &corev1.PodLogOptions{
 				Container: fv1.BuilderContainerName,
@@ -250,25 +287,19 @@ func copyLogLines(out io.Writer, stream io.Reader) {
 	}
 }
 
-// findBuilderPod locates the newest ready builder pod for the package's
-// environment, or nil if none can be found right now. Primary lookup is in
-// the Environment's own namespace. When that yields nothing AND the env lives
-// in `default` — the only namespace the server's GetBuilderNS remap moves
-// builder pods out of (pkg/utils/namespace.go) — it falls back to a
-// cluster-wide list; because the builder labels carry no env-namespace
-// identity, that fallback additionally requires the envResourceVersion label
-// to match the live Environment, so a same-named env in another namespace
-// can't be picked. All lookups may fail for RBAC or availability reasons —
-// that only degrades the live stream, so errors just yield nil.
-func findBuilderPod(ctx context.Context, client cmd.Client, namespace, name string) *corev1.Pod {
-	pkg, err := client.FissionClientSet.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
+// findBuilderPod locates the newest ready builder pod for the environment, or
+// nil if none can be found right now. Primary lookup is in the Environment's
+// own namespace. When that yields nothing AND the env lives in `default` —
+// the only namespace the server's GetBuilderNS remap moves builder pods out
+// of (pkg/utils/namespace.go) — it falls back to a cluster-wide list; because
+// the builder labels carry no env-namespace identity, that fallback
+// additionally requires the envResourceVersion label to match the live
+// Environment, so a same-named env in another namespace can't be picked. All
+// lookups may fail for RBAC or availability reasons — that only degrades the
+// live stream, so errors just yield nil.
+func findBuilderPod(ctx context.Context, client cmd.Client, envName, envNamespace string) *corev1.Pod {
+	if envName == "" {
 		return nil
-	}
-	envName := pkg.Spec.Environment.Name
-	envNamespace := pkg.Spec.Environment.Namespace
-	if envNamespace == "" {
-		envNamespace = namespace
 	}
 
 	// In the primary (namespace-scoped) lookup the Environment's current
@@ -327,17 +358,4 @@ func pickBuilderPod(pods []corev1.Pod, envResourceVersion string) *corev1.Pod {
 		return pods[j].CreationTimestamp.Before(&pods[i].CreationTimestamp)
 	})
 	return &pods[0]
-}
-
-// lockedWriter serializes concurrent writes (status breadcrumbs vs. streamed
-// log lines) onto one writer, same as logdb's.
-type lockedWriter struct {
-	mu sync.Mutex
-	w  io.Writer
-}
-
-func (l *lockedWriter) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.w.Write(p)
 }

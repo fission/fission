@@ -126,7 +126,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// builder is not supported with the v1 interface; ignore envs without a
 	// builder image.
-	if env.Spec.Version == 1 || len(env.Spec.Builder.Image) == 0 {
+	if !env.HasBuilder() {
 		return ctrl.Result{}, nil
 	}
 

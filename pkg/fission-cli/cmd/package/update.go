@@ -94,11 +94,8 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		if err != nil {
 			return fmt.Errorf("error getting package after update: %w", err)
 		}
-		buildTriggered := !fresh.Status.LastUpdateTimestamp.Equal(&pkg.Status.LastUpdateTimestamp)
-		switch fresh.Status.BuildStatus {
-		case "", fv1.BuildStatusPending, fv1.BuildStatusRunning:
-			buildTriggered = true
-		}
+		buildTriggered := IsBuildInFlight(fresh.Status.BuildStatus) ||
+			!fresh.Status.LastUpdateTimestamp.Equal(&pkg.Status.LastUpdateTimestamp)
 		if !buildTriggered {
 			fmt.Fprintf(input.Stdout(), "Update of package '%v' did not trigger a build; nothing to watch\n", fresh.Name)
 			return nil

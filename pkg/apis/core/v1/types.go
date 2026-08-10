@@ -2455,6 +2455,15 @@ func (a Archive) IsEmpty() bool {
 	return len(a.Literal) == 0 && len(a.URL) == 0 && a.OCI == nil
 }
 
+// HasBuilder reports whether this environment can run package builds: v1
+// environments predate builders, and without a builder image there is nothing
+// to run one in. Shared by buildermgr's EnvironmentReconciler (which skips
+// builder creation on !HasBuilder) and the CLI's build watch (which refuses
+// to wait on a build that can never start).
+func (env Environment) HasBuilder() bool {
+	return env.Spec.Version != 1 && len(env.Spec.Builder.Image) > 0
+}
+
 func (fn Function) GetConcurrency() int {
 	if fn.Spec.Concurrency == 0 {
 		return DefaultConcurrency
