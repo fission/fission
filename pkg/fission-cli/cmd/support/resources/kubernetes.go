@@ -8,9 +8,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -196,48 +198,61 @@ func (res KubernetesPodLogDumper) Dump(ctx context.Context, dumpDir string) {
 
 	for _, p := range l.Items {
 		wg.Go(func() {
-			func(pod corev1.Pod) {
-				// dump logs from each containers
-				for _, container := range append(pod.Spec.Containers, pod.Spec.InitContainers...) {
-					req := res.client.CoreV1().Pods(pod.Namespace).
-						GetLogs(pod.Name, &corev1.PodLogOptions{Container: container.Name})
-
-					stream, err := req.Stream(ctx)
-					if err != nil {
-						console.Error(fmt.Sprintf("Error streaming logs for pod %v: %v", pod.Name, err))
-						return
-					}
-
-					reader := bufio.NewReader(stream)
-					var buffer bytes.Buffer
-
-					for {
-						line, _, err := reader.ReadLine()
-						if err != nil {
-							if err == io.EOF {
-								stream.Close()
-								break
-							}
-							console.Error(fmt.Sprintf("Error reading logs from buffer: %v", err))
-							return
-						}
-
-						_, err = buffer.WriteString(string(line) + "\n")
-						if err != nil {
-							console.Error(fmt.Sprintf("Error writing bytes to buffer: %v", err))
-							return
-						}
-					}
-
-					f := getPodFileName(dumpDir, pod.ObjectMeta, container.Name)
-					writeToFile(f, buffer.String())
-
-					stream.Close()
-				}
-			}(p)
+			dumpPodContainerLogs(ctx, res.client, p, dumpDir)
 		})
-
 	}
 
 	wg.Wait()
+}
+
+// dumpPodContainerLogs writes one file per container in pod.
+func dumpPodContainerLogs(ctx context.Context, client kubernetes.Interface, pod corev1.Pod, dumpDir string) {
+	// slices.Concat rather than append(Containers, InitContainers...): append
+	// would write into Containers' spare capacity when it has any, editing the
+	// pod object this function was handed.
+	for _, container := range slices.Concat(pod.Spec.Containers, pod.Spec.InitContainers) {
+		dumpOneContainerLog(ctx, client, pod, container.Name, dumpDir)
+	}
+}
+
+// dumpOneContainerLog writes a single container's log.
+//
+// Every failure here is per-container. The common one is a container still
+// PodInitializing, and since regular containers are streamed before init
+// containers, aborting the pod on the first failure would leave the stuck pod —
+// the one someone is collecting a bundle about — with no log files at all, which
+// reads exactly like a pod that logged nothing.
+func dumpOneContainerLog(ctx context.Context, client kubernetes.Interface,
+	pod corev1.Pod, container, dumpDir string) {
+	req := client.CoreV1().Pods(pod.Namespace).
+		GetLogs(pod.Name, &corev1.PodLogOptions{Container: container})
+
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		console.Error(fmt.Sprintf("Error streaming logs for pod %v container %v: %v", pod.Name, container, err))
+		return
+	}
+	defer stream.Close()
+
+	reader := bufio.NewReader(stream)
+	var buffer bytes.Buffer
+
+	for {
+		line, _, err := reader.ReadLine()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			// Keep what was read. A truncated log still shows how far the
+			// container got, and the trailer keeps the reader from mistaking
+			// the cut for the end of the container's output.
+			console.Error(fmt.Sprintf("Error reading logs for pod %v container %v: %v", pod.Name, container, err))
+			fmt.Fprintf(&buffer, "\n--- log collection failed after %v bytes: %v ---\n", buffer.Len(), err)
+			break
+		}
+		buffer.Write(line)
+		buffer.WriteByte('\n')
+	}
+
+	writeToFile(getPodFileName(dumpDir, pod.ObjectMeta, container), buffer.String())
 }

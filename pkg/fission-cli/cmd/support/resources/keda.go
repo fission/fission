@@ -6,7 +6,9 @@ package resources
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 
 	kedav1alpha1 "github.com/kedacore/keda/v2/apis/keda/v1alpha1"
 	kedaClient "github.com/kedacore/keda/v2/pkg/generated/clientset/versioned"
@@ -23,11 +25,18 @@ const (
 	KedaTriggerAuthentication = "TriggerAuthentication"
 )
 
-// mqtKind mirrors mqtrigger.MqtKind, the Kind the mqt-keda scaler stamps into
-// the OwnerReferences of every KEDA object it creates. Duplicated rather than
-// imported because pkg/mqtrigger would pull the controller-runtime scaler
-// machinery into the CLI binary.
-const mqtKind = "MessageQueueTrigger"
+// The Kind and APIVersion the mqt-keda scaler stamps into the OwnerReferences
+// of every KEDA object it creates, mirroring mqtrigger.MqtKind and
+// mqtrigger.MqtAPIVersion.
+//
+// Kept local rather than imported so this leaf CLI package does not pull the
+// controller-runtime scaler machinery into its build for two string constants.
+// TestMqtOwnerConstantsMatchScaler pins them to the originals, so the copies
+// cannot drift silently.
+const (
+	mqtKind       = "MessageQueueTrigger"
+	mqtAPIVersion = "fission.io/v1"
+)
 
 // KedaDumper dumps the KEDA objects that fission's mqt-keda scaler manager
 // creates for MessageQueueTriggers (see pkg/mqtrigger/scalermanager.go).
@@ -47,15 +56,26 @@ type KedaDumper struct {
 }
 
 func NewKedaDumper(client cmd.Client, kedaType string) Resource {
+	if client.RestConfig == nil {
+		// kedaClient.NewForConfig dereferences its argument, so a nil config
+		// panics rather than returning an error — and the dumpers are built in
+		// a map literal, so that panic would take the whole support bundle down
+		// before any dumper runs. Route it through clientErr, which exists
+		// precisely so one unavailable client cannot abort the bundle.
+		return KedaDumper{kedaType: kedaType, clientErr: errors.New("no kubernetes rest config available")}
+	}
 	kc, err := kedaClient.NewForConfig(client.RestConfig)
 	return KedaDumper{client: kc, kedaType: kedaType, clientErr: err}
 }
 
 // ownedByMessageQueueTrigger reports whether obj was created by fission's
-// mqt-keda scaler for a MessageQueueTrigger.
+// mqt-keda scaler for a MessageQueueTrigger. The APIVersion is checked as well
+// as the Kind: this filter is what keeps an unrelated team's objects out of a
+// bundle that gets sent to a third party, and "MessageQueueTrigger" is not a
+// name fission owns across every API group.
 func ownedByMessageQueueTrigger(meta metav1.ObjectMeta) bool {
 	for _, ref := range meta.OwnerReferences {
-		if ref.Kind == mqtKind {
+		if ref.Kind == mqtKind && ref.APIVersion == mqtAPIVersion {
 			return true
 		}
 	}
@@ -66,8 +86,31 @@ func ownedByMessageQueueTrigger(meta metav1.ObjectMeta) bool {
 // opposed to a real failure. A cluster with no KEDA is the normal case for
 // anyone not using mqt of type keda, so it is reported as a verbose note
 // rather than a warning that would look like a problem in every bundle.
+//
+// IsNotFound is the branch that actually fires: the typed KEDA clientset issues
+// REST calls directly, and a missing CRD comes back from the apiserver as a
+// plain 404. IsNoMatchError is defensive breadth for a RESTMapper-backed client
+// (dynamic or controller-runtime) and is unreachable through this one.
 func kedaAbsent(err error) bool {
 	return apimeta.IsNoMatchError(err) || apierrors.IsNotFound(err)
+}
+
+// noteListErr records a failed KEDA list.
+//
+// A missing CRD is the normal case for anyone not using mqt of type keda, so it
+// is a verbose note rather than a warning that would appear in every bundle
+// from every non-KEDA install — plus a marker file, because an empty directory
+// on its own cannot be told apart from a list that failed, and whoever reads
+// the tarball weeks later has no other way to know which happened. Anything
+// else is a real problem and stays a warning.
+func noteListErr(kedaType, dumpDir string, err error) {
+	if kedaAbsent(err) {
+		console.Verbose(2, "KEDA %v not available in this cluster, skipping", kedaType)
+		writeToFile(filepath.Join(dumpDir, "keda-not-installed.txt"),
+			fmt.Sprintf("no %v dumped: the KEDA CRDs are not installed in this cluster (%v)", kedaType, err))
+		return
+	}
+	console.Warn(fmt.Sprintf("Error getting %v list: %v", kedaType, err))
 }
 
 func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
@@ -80,11 +123,7 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	case KedaScaledObject:
 		items, err := res.client.KedaV1alpha1().ScaledObjects(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			if kedaAbsent(err) {
-				console.Verbose(2, "KEDA ScaledObjects not available in this cluster, skipping")
-				return
-			}
-			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.kedaType, err))
+			noteListErr(res.kedaType, dumpDir, err)
 			return
 		}
 
@@ -92,18 +131,15 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 			if !ownedByMessageQueueTrigger(item.ObjectMeta) {
 				continue
 			}
-			f := getFileName(dumpDir, item.ObjectMeta)
-			writeToFile(f, item)
+			cleaned := scaledObjectClean(&item)
+			f := getFileName(dumpDir, cleaned.ObjectMeta)
+			writeToFile(f, cleaned)
 		}
 
 	case KedaTriggerAuthentication:
 		items, err := res.client.KedaV1alpha1().TriggerAuthentications(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			if kedaAbsent(err) {
-				console.Verbose(2, "KEDA TriggerAuthentications not available in this cluster, skipping")
-				return
-			}
-			console.Warn(fmt.Sprintf("Error getting %v list: %v", res.kedaType, err))
+			noteListErr(res.kedaType, dumpDir, err)
 			return
 		}
 
@@ -119,6 +155,33 @@ func (res KedaDumper) Dump(ctx context.Context, dumpDir string) {
 	default:
 		console.Warn(fmt.Sprintf("Unknown keda type: %v", res.kedaType))
 	}
+}
+
+// scaledObjectClean masks credential-bearing values in the scaler's trigger
+// metadata. That map is mqt.Spec.Metadata copied verbatim (see
+// pkg/mqtrigger/scalermanager.go), and for several KEDA scalers it is the
+// documented place to put an inline connection string — rabbitmq's host, redis'
+// address — so it can hold a password even though fission's own path routes
+// credentials through Spec.Secret into a TriggerAuthentication instead.
+//
+// Spec.Triggers is a slice, so writing through it would mutate the backing
+// array shared with the List result. Copy first.
+func scaledObjectClean(so *kedav1alpha1.ScaledObject) *kedav1alpha1.ScaledObject {
+	var out *kedav1alpha1.ScaledObject
+	for i := range so.Spec.Triggers {
+		masked, changed := maskCredentialValues(so.Spec.Triggers[i].Metadata)
+		if !changed {
+			continue
+		}
+		if out == nil {
+			out = so.DeepCopy()
+		}
+		out.Spec.Triggers[i].Metadata = masked
+	}
+	if out == nil {
+		return so
+	}
+	return out
 }
 
 // triggerAuthClean masks the one field of a TriggerAuthentication that holds a

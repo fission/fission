@@ -16,7 +16,12 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	clienttesting "k8s.io/client-go/testing"
+
+	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/mqtrigger"
 )
 
 func mqtOwnerRef() metav1.OwnerReference {
@@ -207,4 +212,164 @@ func TestKedaAbsent(t *testing.T) {
 			assert.Equal(t, tc.want, kedaAbsent(tc.err))
 		})
 	}
+}
+
+func TestMqtOwnerConstantsMatchScaler(t *testing.T) {
+	t.Parallel()
+
+	// The constants are copied rather than imported so this package does not
+	// pull the scaler machinery into its build. This test is what makes that
+	// trade safe: it fails the moment the originals move.
+	assert.Equal(t, mqtrigger.MqtKind, mqtKind)
+	assert.Equal(t, mqtrigger.MqtAPIVersion, mqtAPIVersion)
+}
+
+func TestKedaDumperIgnoresSameKindFromAnotherGroup(t *testing.T) {
+	t.Parallel()
+
+	// "MessageQueueTrigger" is not a Kind fission owns across every API group,
+	// and this filter decides what reaches a third party.
+	impostor := &kedav1alpha1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "someone-elses-mqt", Namespace: "other", ResourceVersion: "1",
+			OwnerReferences: []metav1.OwnerReference{
+				{Kind: mqtKind, Name: "their-mqt", APIVersion: "queues.example.com/v1"},
+			},
+		},
+	}
+
+	dir := t.TempDir()
+	d := KedaDumper{client: kedafake.NewSimpleClientset(impostor), kedaType: KedaScaledObject}
+	d.Dump(t.Context(), dir)
+
+	assert.Empty(t, dumpedFiles(t, dir),
+		"a same-named Kind from another API group is not fission's")
+}
+
+func TestKedaDumperWithUnusableClientWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	// The deferred-error design exists so a bad RestConfig cannot abort the
+	// whole bundle. Without the guard this dereferences a nil client.
+	dir := t.TempDir()
+	d := KedaDumper{client: nil, kedaType: KedaScaledObject, clientErr: assert.AnError}
+
+	require.NotPanics(t, func() { d.Dump(t.Context(), dir) })
+	assert.Empty(t, dumpedFiles(t, dir))
+}
+
+func TestNewKedaDumperWithoutRestConfigDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	// kedaClient.NewForConfig dereferences its argument, and the dumpers are
+	// built in a map literal, so a panic here would take the whole dump down
+	// before any dumper runs.
+	var d Resource
+	require.NotPanics(t, func() { d = NewKedaDumper(cmd.Client{}, KedaScaledObject) })
+
+	dir := t.TempDir()
+	require.NotPanics(t, func() { d.Dump(t.Context(), dir) })
+	assert.Empty(t, dumpedFiles(t, dir))
+}
+
+func TestKedaDumperListErrorBranches(t *testing.T) {
+	t.Parallel()
+
+	gr := schema.GroupResource{Group: "keda.sh", Resource: "scaledobjects"}
+
+	// The two kedaAbsent branches are now observably different in the bundle
+	// itself: a missing CRD leaves a marker naming the reason, a real failure
+	// leaves nothing (it was warned about on the console instead). An empty
+	// directory alone could not tell those apart, which is the whole point of
+	// the marker. Neither branch may abort the dump.
+	tests := []struct {
+		name       string
+		err        error
+		wantMarker bool
+	}{
+		{"keda not installed leaves a marker", apierrors.NewNotFound(gr, "scaledobjects"), true},
+		{"forbidden is a real error, not an absent CRD", apierrors.NewForbidden(gr, "scaledobjects", assert.AnError), false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			c := kedafake.NewSimpleClientset()
+			c.PrependReactor("list", "scaledobjects", func(clienttesting.Action) (bool, runtime.Object, error) {
+				return true, nil, tc.err
+			})
+
+			dir := t.TempDir()
+			d := KedaDumper{client: c, kedaType: KedaScaledObject}
+			require.NotPanics(t, func() { d.Dump(t.Context(), dir) })
+
+			files := dumpedFiles(t, dir)
+			if !tc.wantMarker {
+				assert.Empty(t, files, "a real error must not be recorded as an absent CRD")
+				return
+			}
+
+			require.Equal(t, []string{"keda-not-installed.txt"}, files)
+			content, err := os.ReadFile(filepath.Join(dir, files[0]))
+			require.NoError(t, err)
+			assert.Contains(t, string(content), KedaScaledObject,
+				"the marker should name which kind was skipped")
+		})
+	}
+}
+
+func TestKedaDumperMasksTriggerMetadataCredentials(t *testing.T) {
+	t.Parallel()
+
+	so := &kedav1alpha1.ScaledObject{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
+			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
+		},
+		Spec: kedav1alpha1.ScaledObjectSpec{
+			Triggers: []kedav1alpha1.ScaleTriggers{{
+				Type: "rabbitmq",
+				Metadata: map[string]string{
+					"host":       "amqp://user:hunter2@rabbit:5672/",
+					"queueName":  "orders",
+					"queueLengt": "5",
+				},
+			}},
+		},
+	}
+
+	dir := t.TempDir()
+	d := KedaDumper{client: kedafake.NewSimpleClientset(so), kedaType: KedaScaledObject}
+	d.Dump(t.Context(), dir)
+
+	files := dumpedFiles(t, dir)
+	require.Len(t, files, 1)
+	content, err := os.ReadFile(filepath.Join(dir, files[0]))
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(content), "hunter2",
+		"an inline connection string must not reach a support bundle")
+	assert.Contains(t, string(content), "queueName", "non-credential metadata stays diagnostic")
+	assert.Contains(t, string(content), "orders")
+}
+
+func TestScaledObjectCleanLeavesTheListedObjectUnmutated(t *testing.T) {
+	t.Parallel()
+
+	// Spec.Triggers is a slice, so writing through it would edit the backing
+	// array shared with the List result.
+	so := &kedav1alpha1.ScaledObject{
+		Spec: kedav1alpha1.ScaledObjectSpec{
+			Triggers: []kedav1alpha1.ScaleTriggers{{
+				Metadata: map[string]string{"password": "hunter2"},
+			}},
+		},
+	}
+
+	cleaned := scaledObjectClean(so)
+
+	assert.Equal(t, "-", cleaned.Spec.Triggers[0].Metadata["password"])
+	assert.Equal(t, "hunter2", so.Spec.Triggers[0].Metadata["password"],
+		"the input object must not be modified in place")
 }

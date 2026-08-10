@@ -23,6 +23,29 @@ const (
 	DEFAULT_OUTPUT_DIR  = "fission-dump"
 )
 
+// Label selectors for the workloads a support bundle collects. Hoisted into
+// constants because each is used by three or four dumpers, and when the list
+// was repeated inline it drifted: eight of the components the chart ships were
+// missing from every bundle, mqt-keda among them.
+const (
+	// componentSelector matches the control-plane Deployments. Keep in sync
+	// with the svc: labels in charts/fission-all/templates/*/deployment.yaml —
+	// a component absent here has no spec and no logs in the bundle at all.
+	componentSelector = "svc in (buildermgr, canaryconfig, executor, kubewatcher, mcp, mqtrigger, " +
+		"mqtrigger-keda, router, router-internal, statestore, statesvc, storagesvc, tenantcontroller, timer, " +
+		"webhook-service, workflow)"
+
+	builderSelector = "owner=buildermgr"
+
+	// functionSelector covers all three execution backends. container was
+	// missing, so container-executor functions had no spec, pods or logs.
+	functionSelector = "executorType in (poolmgr, newdeploy, container)"
+
+	// functionSvcSelector is narrower: poolmgr serves from the shared pool and
+	// creates no per-function Service, while newdeploy and container both do.
+	functionSvcSelector = "executorType in (newdeploy, container)"
+)
+
 type DumpSubCommand struct {
 	cmd.CommandActioner
 }
@@ -57,6 +80,16 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 	k8sClient := opts.Client().KubernetesClient
 
+	// Every pod-event dumper shares one index. The dumpers below run
+	// concurrently, so a list each would mean three full-cluster Event LISTs in
+	// flight at once.
+	podEvents := resources.NewPodEventIndex(k8sClient)
+
+	// Likewise for the Deployment list: the mqt-consumer dumpers select on owner
+	// reference rather than a label, and the orphaned-event dumper needs the
+	// same list to attribute a pod that no longer exists.
+	deployments := resources.NewDeploymentIndex(k8sClient)
+
 	ress := map[string]resources.Resource{
 		// kubernetes info
 		"kubernetes-version": resources.NewKubernetesVersion(k8sClient),
@@ -67,31 +100,48 @@ func (opts *DumpSubCommand) do(input cli.Input) error {
 
 		// fission component logs & spec
 		"fission-components-svc-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-daemonset-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDaemonSet,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-log": resources.NewKubernetesPodLogDumper(k8sClient,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector),
 		"fission-components-pod-events": resources.NewKubernetesPodEventDumper(k8sClient,
-			"svc in (buildermgr, executor, kubewatcher, mqtrigger, router, storagesvc, timer)"),
+			componentSelector, podEvents),
 
 		// fission builder logs & spec
-		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "owner=buildermgr"),
-		"fission-builder-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "owner=buildermgr"),
-		"fission-builder-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "owner=buildermgr"),
-		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "owner=buildermgr"),
-		"fission-builder-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "owner=buildermgr"),
+		"fission-builder-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, builderSelector),
+		"fission-builder-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, builderSelector),
+		"fission-builder-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, builderSelector),
+		"fission-builder-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, builderSelector),
+		"fission-builder-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, builderSelector, podEvents),
 
 		// fission function logs & spec
-		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, "executorType=newdeploy"),
-		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
-		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, "executorType in (poolmgr, newdeploy)"),
+		"fission-function-svc-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesService, functionSvcSelector),
+		"fission-function-deployment-spec": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesDeployment, functionSelector),
+		"fission-function-pod-spec":        resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesPod, functionSelector),
+		"fission-function-pod-log":         resources.NewKubernetesPodLogDumper(k8sClient, functionSelector),
+		"fission-function-pod-events":      resources.NewKubernetesPodEventDumper(k8sClient, functionSelector, podEvents),
+		// The HPA is what decides whether a function scales at all, and the
+		// dumper for it existed but was never registered.
+		"fission-function-hpa": resources.NewKubernetesObjectDumper(k8sClient, resources.KubernetesHPA, functionSelector),
+
+		// Events of fission pods that no longer exist — the OOMKilled or evicted
+		// pod is usually the one being investigated.
+		"fission-orphaned-pod-events": resources.NewOrphanedPodEventDumper(k8sClient, podEvents, deployments,
+			componentSelector, builderSelector, functionSelector),
+
+		// The workload a keda MessageQueueTrigger scales. Selected by owner
+		// reference: the scaler labels it app=<mqt name> and nothing else.
+		"fission-mqt-consumer-deployment-spec": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerDeployment),
+		"fission-mqt-consumer-pod-spec": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerPod),
+		"fission-mqt-consumer-pod-log": resources.NewMqtConsumerDumper(k8sClient, deployments,
+			resources.MqtConsumerLog),
 
 		// CRD resources
 		"fission-crd-packages":      resources.NewCrdDumper(opts.Client(), resources.CrdPackage),

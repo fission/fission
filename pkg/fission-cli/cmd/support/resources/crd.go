@@ -112,6 +112,7 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 		triggers = append(triggers, l.Items...)
 
 		for _, item := range triggers {
+			item = mqtClean(item)
 			f := getFileName(dumpDir, item.ObjectMeta)
 			writeToFile(f, item)
 		}
@@ -143,6 +144,21 @@ func (res CrdDumper) Dump(ctx context.Context, dumpDir string) {
 	default:
 		console.Warn(fmt.Sprintf("Unknown type: %v", res.crdType))
 	}
+}
+
+// mqtClean masks credential-bearing values in a MessageQueueTrigger's metadata.
+//
+// This is the same map the keda scaler copies into ScaledObject.spec.triggers,
+// so masking only there would leave the values in the bundle anyway via this
+// dumper. Both call sites have to agree or neither is worth doing.
+//
+// mqt is a value copy, and maskCredentialValues returns a new map, so assigning
+// the result cannot reach the List-owned object — no DeepCopy needed here.
+func mqtClean(mqt fv1.MessageQueueTrigger) fv1.MessageQueueTrigger {
+	if masked, changed := maskCredentialValues(mqt.Spec.Metadata); changed {
+		mqt.Spec.Metadata = masked
+	}
+	return mqt
 }
 
 func pkgClean(pkg fv1.Package) fv1.Package {
