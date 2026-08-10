@@ -41,7 +41,7 @@ on:
       - ".github/workflows/upgrade_test.yaml"
 
 env:
-  HELM_VERSION: v4.2.2
+  HELM_VERSION: v4.2.3
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   FISSION_NAMESPACE: fission

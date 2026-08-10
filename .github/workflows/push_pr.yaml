@@ -28,7 +28,7 @@ on:
       - kind.yaml
 
 env:
-  HELM_VERSION: v4.2.2
+  HELM_VERSION: v4.2.3
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.22.0
