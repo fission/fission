@@ -637,6 +637,11 @@ func generatePackageName(fnName string, id string) string {
 // run write the resource to a spec file or create a fission CRD with remote fission server.
 // It also prints warning/error if necessary.
 func (opts *CreateSubCommand) run(input cli.Input) error {
+	if input.Bool(flagkey.PkgWatch) && (input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry)) {
+		return fmt.Errorf("--%v cannot be combined with --%v or --%v: a spec file does not trigger a build",
+			flagkey.PkgWatch, flagkey.SpecSave, flagkey.SpecDry)
+	}
+
 	// if we're writing a spec, don't create the function; save/print and return.
 	if handled, err := spec.SaveOrDry(input, *opts.function, opts.specFile); handled {
 		return err
@@ -653,7 +658,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	triggerUrl := input.String(flagkey.HtUrl)
 	prefix := input.String(flagkey.HtPrefix)
 	if len(triggerUrl) == 0 && len(prefix) == 0 {
-		return nil
+		return opts.watchBuildIfRequested(input)
 	}
 	if len(prefix) != 0 && len(triggerUrl) > 0 {
 		console.Warn("Prefix will take precedence over URL/RelativeURL")
@@ -693,7 +698,20 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	fmt.Printf("route created: %s %s -> %s\n", methods, triggerUrl, opts.function.Name)
-	return nil
+	return opts.watchBuildIfRequested(input)
+}
+
+// watchBuildIfRequested follows the referenced package's build to completion
+// when --watch was given — `fn create --src` is the most common way users
+// trigger a build (issue #3676). It runs after function/trigger creation so a
+// failed build never blocks those; the non-nil error on a failed build only
+// sets the exit code.
+func (opts *CreateSubCommand) watchBuildIfRequested(input cli.Input) error {
+	if !input.Bool(flagkey.PkgWatch) {
+		return nil
+	}
+	ref := opts.function.Spec.Package.PackageRef
+	return _package.WatchPackageBuild(input, opts.Client(), ref.Namespace, ref.Name)
 }
 
 func getInvokeStrategy(input cli.Input, existingInvokeStrategy *fv1.InvokeStrategy) (strategy *fv1.InvokeStrategy, err error) {
