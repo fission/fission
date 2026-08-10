@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,8 +53,15 @@ func PushCodeImage(t *testing.T, hostAddr, inclusterAddr, repo, tag string, file
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	for fname, body := range files {
+		// *.sh keeps the exec bit (same rationale as ZipTestDataDir): a
+		// SOURCE image's build.sh must survive extraction runnable, or the
+		// builder's `fork/exec ./build.sh` fails (RFC-0031 phase 2).
+		mode := int64(0o644)
+		if strings.HasSuffix(fname, ".sh") {
+			mode = 0o755
+		}
 		require.NoError(t, tw.WriteHeader(&tar.Header{
-			Name: fname, Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(body)),
+			Name: fname, Typeflag: tar.TypeReg, Mode: mode, Size: int64(len(body)),
 		}))
 		_, err := tw.Write([]byte(body))
 		require.NoError(t, err)
