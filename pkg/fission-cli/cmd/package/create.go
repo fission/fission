@@ -193,7 +193,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 	}
 
-	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
+	pkgStatus := fv1.BuildStatusSucceeded
 
 	if len(ociImage) > 0 {
 		// The OCI archive is built inline: no file globbing, zipping, or
