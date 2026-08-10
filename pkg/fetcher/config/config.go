@@ -392,6 +392,18 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 		})
 	}
 
+	// The OCI keychain must resolve the ACTUAL pod identity: in a builder
+	// pod this sidecar runs as fission-builder, not fission-fetcher, and
+	// resolving the wrong SA either Forbiddens (no RBAC) or reads the wrong
+	// imagePullSecrets. The downward API keeps it correct regardless of who
+	// set podSpec.ServiceAccountName, before or after this call.
+	c.Env = append(c.Env, apiv1.EnvVar{
+		Name: "POD_SERVICE_ACCOUNT",
+		ValueFrom: &apiv1.EnvVarSource{
+			FieldRef: &apiv1.ObjectFieldSelector{FieldPath: "spec.serviceAccountName"},
+		},
+	})
+
 	// Connection-draining preStop hook; see utils.DrainLifecycle. Must be
 	// the kubelet-native sleep action — the fetcher image is distroless
 	// (chainguard/static) and has no /bin/sleep to exec.

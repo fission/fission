@@ -111,3 +111,42 @@ func TestAddFetcherToPodSpecPreStopLifecycle(t *testing.T) {
 			"fetcher Lifecycle must be nil when TerminationGracePeriodSeconds is nil")
 	})
 }
+
+// TestAddFetcherToPodSpecPodServiceAccountEnv pins the RFC-0031 keychain
+// identity fix: the fetcher container carries a downward-API env var with
+// the pod's ACTUAL ServiceAccount, so the OCI keychain resolves the builder
+// SA in builder pods instead of hardcoding fission-fetcher.
+func TestAddFetcherToPodSpecPodServiceAccountEnv(t *testing.T) {
+	t.Parallel()
+	cfg, err := MakeFetcherConfig("/userfunc")
+	require.NoError(t, err)
+
+	podSpec := &apiv1.PodSpec{
+		Containers:         []apiv1.Container{{Name: "user"}},
+		ServiceAccountName: "fission-builder",
+	}
+	require.NoError(t, cfg.AddFetcherToPodSpec(podSpec, "user", "test-ns"))
+
+	var fetcherContainer *apiv1.Container
+	for i := range podSpec.Containers {
+		if podSpec.Containers[i].Name == "fetcher" {
+			fetcherContainer = &podSpec.Containers[i]
+			break
+		}
+	}
+	require.NotNil(t, fetcherContainer)
+	var found *apiv1.EnvVar
+	for i := range fetcherContainer.Env {
+		if fetcherContainer.Env[i].Name == "POD_SERVICE_ACCOUNT" {
+			found = &fetcherContainer.Env[i]
+			break
+		}
+	}
+	require.NotNil(t, found, "POD_SERVICE_ACCOUNT env var must be set on the fetcher container")
+	require.NotNil(t, found.ValueFrom, "must come from the downward API, not a literal")
+	require.NotNil(t, found.ValueFrom.FieldRef)
+	assert.Equal(t, "spec.serviceAccountName", found.ValueFrom.FieldRef.FieldPath,
+		"downward API stays correct regardless of who sets the SA, before or after this call")
+	// The pre-set SA must survive (config only defaults an empty one).
+	assert.Equal(t, "fission-builder", podSpec.ServiceAccountName)
+}

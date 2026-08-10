@@ -63,6 +63,12 @@ type (
 		// boundary and would otherwise reject the extra headers (or be
 		// confused by the body buffering that signing requires).
 		storageHTTPClient *http.Client
+		// podServiceAccount is the pod's actual ServiceAccount name
+		// (downward API via POD_SERVICE_ACCOUNT), used for OCI keychain
+		// resolution — a builder-pod sidecar runs as fission-builder,
+		// not fission-fetcher. Empty on pods created before the env var
+		// existed (upgrade skew); keychainServiceAccount falls back.
+		podServiceAccount string
 		Info              PodInfo
 	}
 	PodInfo struct {
@@ -141,6 +147,10 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// POD_SERVICE_ACCOUNT is set by AddFetcherToPodSpec via the downward
+	// API: the OCI keychain must resolve the ACTUAL pod identity — in a
+	// builder pod this sidecar runs as fission-builder, not fission-fetcher.
+	podServiceAccount := os.Getenv("POD_SERVICE_ACCOUNT")
 	// storageHTTPClient signs requests to storagesvc with the HMAC
 	// scheme described in docs/internal-auth/00-design.md when the
 	// chart's internal-auth master secret is mounted. The signer uses
@@ -162,6 +172,7 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 		},
 		httpClient:        hc,
 		storageHTTPClient: storageHC,
+		podServiceAccount: podServiceAccount,
 	}, nil
 }
 

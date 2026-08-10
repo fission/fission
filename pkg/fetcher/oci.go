@@ -32,7 +32,7 @@ func (fetcher *Fetcher) fetchOCI(ctx context.Context, pkg *fv1.Package, oa *fv1.
 	logger := otelUtils.LoggerWithTraceID(ctx, fetcher.logger)
 	otelUtils.SpanTrackEvent(ctx, "fetchOCIImage", otelUtils.GetAttributesForPackage(pkg)...)
 
-	keychain, err := oci.Keychain(ctx, fetcher.kubeClient, fetcher.Info.Namespace, fv1.FissionFetcherSA, oa.ImagePullSecrets)
+	keychain, err := oci.Keychain(ctx, fetcher.kubeClient, fetcher.Info.Namespace, fetcher.keychainServiceAccount(), oa.ImagePullSecrets)
 	if err != nil {
 		logger.Error(err, "error building registry keychain", "image", oa.Image)
 		return http.StatusInternalServerError, err
@@ -63,6 +63,19 @@ func (fetcher *Fetcher) fetchOCI(ctx context.Context, pkg *fv1.Package, oa *fv1.
 	otelUtils.SpanTrackEvent(ctx, "packageFetched", otelUtils.GetAttributesForPackage(pkg)...)
 	logger.Info("successfully placed OCI image contents", "image", oa.Image, "location", storePath)
 	return http.StatusOK, nil
+}
+
+// keychainServiceAccount is the SA whose imagePullSecrets the OCI keychain
+// resolves: the pod's actual SA (downward API via POD_SERVICE_ACCOUNT),
+// falling back to the static fetcher SA for pods created before that env
+// var existed (upgrade skew). In a builder pod this returns fission-builder
+// — resolving the fetcher SA there would be Forbidden (no RBAC) and would
+// read the wrong imagePullSecrets anyway.
+func (fetcher *Fetcher) keychainServiceAccount() string {
+	if fetcher.podServiceAccount != "" {
+		return fetcher.podServiceAccount
+	}
+	return fv1.FissionFetcherSA
 }
 
 // insecureRegistriesFromEnv parses the FETCHER_ALLOW_INSECURE_REGISTRIES
