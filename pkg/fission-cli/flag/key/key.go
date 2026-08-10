@@ -245,6 +245,7 @@ const (
 	PkgDeploySecret   = "deploysecret"
 	PkgInsecure       = "insecure"
 	PkgOCI            = "oci"
+	PkgSrcOCI         = "srcoci"
 	PkgBuildCmd       = "buildcmd"
 	PkgOutput         = Output
 	PkgStatus         = "status"

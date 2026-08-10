@@ -320,6 +320,7 @@ var (
 	PkgDeploySecret   = Flag{Type: String, Name: flagkey.PkgDeploySecret, Usage: "Name of a Secret with credentials for fetching the deploy archive URL (keys: username+password, token, or headers); checksum generation is skipped — pass --deploychecksum to pin one"}
 	PkgInsecure       = Flag{Type: Bool, Name: flagkey.PkgInsecure, Usage: "Skip generating SHA256 checksum for file integrity validation"}
 	PkgOCI            = Flag{Type: String, Name: flagkey.PkgOCI, Usage: "Pre-built OCI image reference containing the deployment code (registry/repo:tag[@digest])"}
+	PkgSrcOCI         = Flag{Type: String, Name: flagkey.PkgSrcOCI, Usage: "OCI image reference containing the SOURCE tree (registry/repo:tag[@digest]); the environment's builder pulls and builds it"}
 	PkgWatch          = Flag{Type: Bool, Name: flagkey.PkgWatch, Short: "w", Aliases: []string{"follow"}, Usage: "Wait for the package build to finish, streaming builder logs while it runs; exits non-zero if the build fails"}
 	// PkgWatchTimeout shares --timeout's key but defaults to 0 (wait
 	// indefinitely, like `kubectl logs -f`) instead of WaitTimeout's 60s —

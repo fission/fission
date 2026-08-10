@@ -47,6 +47,18 @@ type PackageOptions struct {
 	// (RFC-0001). Mutually exclusive with Src and Deploy; bypasses the
 	// builder like Deploy does.
 	OCI string
+	// SrcOCI is a pre-built OCI image reference holding the SOURCE tree
+	// (RFC-0031 phase 2); the env's builder pulls and builds it. Mutually
+	// exclusive with Src, Deploy, and OCI.
+	SrcOCI string
+	// SrcSecret is the name of the credential Secret for a URL source
+	// archive (RFC-0031); passed as --srcsecret. The Secret must live in
+	// the namespace the builder pod runs in.
+	SrcSecret string
+	// DeploySecret is the name of the credential Secret for a URL deploy
+	// archive (RFC-0031); passed as --deploysecret. The Secret must live
+	// in the namespace the function pods run in.
+	DeploySecret string
 }
 
 // CreatePackage creates a Package via `fission package create` and registers
@@ -58,13 +70,13 @@ func (ns *TestNamespace) CreatePackage(t *testing.T, ctx context.Context, opts P
 	require.NotEmpty(t, opts.Name, "PackageOptions.Name")
 	require.NotEmpty(t, opts.Env, "PackageOptions.Env")
 	set := 0
-	for _, s := range []string{opts.Src, opts.Deploy, opts.OCI} {
+	for _, s := range []string{opts.Src, opts.Deploy, opts.OCI, opts.SrcOCI} {
 		if s != "" {
 			set++
 		}
 	}
 	require.Equalf(t, 1, set,
-		"PackageOptions: exactly one of Src, Deploy, or OCI must be set (got %+v)", opts)
+		"PackageOptions: exactly one of Src, Deploy, OCI, or SrcOCI must be set (got %+v)", opts)
 
 	args := []string{"package", "create", "--name", opts.Name, "--env", opts.Env}
 	switch {
@@ -75,8 +87,19 @@ func (ns *TestNamespace) CreatePackage(t *testing.T, ctx context.Context, opts P
 		}
 	case opts.OCI != "":
 		args = append(args, "--oci", opts.OCI)
+	case opts.SrcOCI != "":
+		args = append(args, "--srcoci", opts.SrcOCI)
+		if opts.BuildCmd != "" {
+			args = append(args, "--buildcmd", opts.BuildCmd)
+		}
 	default:
 		args = append(args, "--deploy", opts.Deploy)
+	}
+	if opts.SrcSecret != "" {
+		args = append(args, "--srcsecret", opts.SrcSecret)
+	}
+	if opts.DeploySecret != "" {
+		args = append(args, "--deploysecret", opts.DeploySecret)
 	}
 	if opts.DeployChecksum != "" {
 		args = append(args, "--deploychecksum", opts.DeployChecksum)

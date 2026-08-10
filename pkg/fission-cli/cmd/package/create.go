@@ -74,7 +74,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		noZip = true
 	}
 
-	if err := ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
+	if err := ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage, input.String(flagkey.PkgSrcOCI)); err != nil {
 		return err
 	}
 
@@ -160,12 +160,17 @@ func ValidateWatchNotSpecMode(input cli.Input) error {
 	return nil
 }
 
-func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {
-	if len(ociImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0 || len(deployArchiveFiles) > 0) {
-		return fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive)
+func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string, srcOCIImage string) error {
+	if len(ociImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0 || len(deployArchiveFiles) > 0 || len(srcOCIImage) > 0) {
+		return fmt.Errorf("--%v cannot be combined with --%v, --%v, --%v, or --%v", flagkey.PkgOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive, flagkey.PkgSrcOCI)
 	}
-	if len(code) == 0 && len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 && len(ociImage) == 0 {
-		return fmt.Errorf("need --%v or --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive, flagkey.PkgOCI)
+	// A source OCI image IS the source tree: it excludes the other source
+	// forms but may ride with --deploy (same as --src + --deploy today).
+	if len(srcOCIImage) > 0 && (len(code) > 0 || len(srcArchiveFiles) > 0) {
+		return fmt.Errorf("--%v cannot be combined with --%v or --%v", flagkey.PkgSrcOCI, flagkey.PkgCode, flagkey.PkgSrcArchive)
+	}
+	if len(code) == 0 && len(srcArchiveFiles) == 0 && len(deployArchiveFiles) == 0 && len(ociImage) == 0 && len(srcOCIImage) == 0 {
+		return fmt.Errorf("need --%v or --%v or --%v or --%v or --%v argument", flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgDeployArchive, flagkey.PkgOCI, flagkey.PkgSrcOCI)
 	}
 	return nil
 }
@@ -218,6 +223,22 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		pkgStatus = fv1.BuildStatusNone
 		if len(pkgName) == 0 {
 			pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(ociImage), uniuri.NewLen(4)))
+		}
+	}
+
+	if srcOCI := input.String(flagkey.PkgSrcOCI); len(srcOCI) > 0 {
+		// The source tree comes from a registry (RFC-0031 phase 2): the
+		// builder pod's fetcher pulls it with the keychain, then the
+		// builder runs as usual. No cluster-DNS warning here — source
+		// pulls always go through the fetcher (a pod), never the kubelet.
+		image, digest := splitImageDigest(srcOCI)
+		pkgSpec.Source = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  &fv1.OCIArchive{Image: image, Digest: digest},
+		}
+		pkgStatus = fv1.BuildStatusPending
+		if len(pkgName) == 0 {
+			pkgName = util.KubifyName(fmt.Sprintf("%v-%v", path.Base(srcOCI), uniuri.NewLen(4)))
 		}
 	}
 

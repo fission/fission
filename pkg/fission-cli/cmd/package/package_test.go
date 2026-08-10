@@ -28,6 +28,7 @@ func TestValidateArchiveSources(t *testing.T) {
 		srcFiles    []string
 		deployFiles []string
 		ociImage    string
+		srcOCI      string
 		wantErr     bool
 	}{
 		{name: "oci only", ociImage: "ghcr.io/x/y:v1"},
@@ -38,11 +39,16 @@ func TestValidateArchiveSources(t *testing.T) {
 		{name: "oci plus code", code: "hello.js", ociImage: "ghcr.io/x/y:v1", wantErr: true},
 		{name: "oci plus deploy", deployFiles: []string{"a.zip"}, ociImage: "ghcr.io/x/y:v1", wantErr: true},
 		{name: "oci plus src", srcFiles: []string{"src.zip"}, ociImage: "ghcr.io/x/y:v1", wantErr: true},
+		{name: "srcoci only", srcOCI: "ghcr.io/x/src:v1"},
+		{name: "srcoci plus deploy", deployFiles: []string{"a.zip"}, srcOCI: "ghcr.io/x/src:v1"},
+		{name: "srcoci plus src", srcFiles: []string{"src.zip"}, srcOCI: "ghcr.io/x/src:v1", wantErr: true},
+		{name: "srcoci plus code", code: "hello.js", srcOCI: "ghcr.io/x/src:v1", wantErr: true},
+		{name: "srcoci plus oci", ociImage: "ghcr.io/x/y:v1", srcOCI: "ghcr.io/x/src:v1", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := ValidateArchiveSources(tc.code, tc.srcFiles, tc.deployFiles, tc.ociImage)
+			err := ValidateArchiveSources(tc.code, tc.srcFiles, tc.deployFiles, tc.ociImage, tc.srcOCI)
 			if tc.wantErr {
 				require.Error(t, err)
 			} else {
@@ -274,6 +280,27 @@ func TestCreatePackageSrcSecret(t *testing.T) {
 	require.NotNil(t, pkg.Spec.Source.SecretRef)
 	assert.Equal(t, "src-creds", pkg.Spec.Source.SecretRef.Name)
 	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus)
+}
+
+// TestCreatePackageSrcOCI proves --srcoci builds a Source OCI archive and
+// queues a build (RFC-0031 phase 2).
+func TestCreatePackageSrcOCI(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+
+	_, err := CreatePackage(in, client, "srcoci-pkg", "default", "node-env",
+		nil, nil, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "srcoci-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Source.Type)
+	require.NotNil(t, pkg.Spec.Source.OCI)
+	assert.Equal(t, "ghcr.io/example/hello-src:v1", pkg.Spec.Source.OCI.Image)
+	assert.True(t, pkg.Spec.Deployment.IsEmpty(), "deployment stays empty until the builder writes it")
+	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus, "a source archive means the builder must run")
 }
 
 // TestUpdatePackageDeploySecretRotate rotates the credential on an existing

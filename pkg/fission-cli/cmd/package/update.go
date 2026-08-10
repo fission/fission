@@ -137,6 +137,21 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 		needToUpdate = true
 	}
 
+	if input.IsSet(flagkey.PkgSrcOCI) {
+		if input.IsSet(flagkey.PkgCode) || input.IsSet(flagkey.PkgSrcArchive) || input.IsSet(flagkey.PkgOCI) {
+			return nil, fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgSrcOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgOCI)
+		}
+		// Replace the source archive wholesale (RFC-0031 phase 2): an OCI
+		// source carries no literal, URL, checksum, or SecretRef.
+		image, digest := splitImageDigest(input.String(flagkey.PkgSrcOCI))
+		pkg.Spec.Source = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  &fv1.OCIArchive{Image: image, Digest: digest},
+		}
+		needToRebuild = true
+		needToUpdate = true
+	}
+
 	if input.IsSet(flagkey.PkgCode) {
 		deployArchiveFiles = append(deployArchiveFiles, code)
 		noZip = true
