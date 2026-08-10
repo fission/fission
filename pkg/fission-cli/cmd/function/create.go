@@ -41,6 +41,10 @@ type CreateSubCommand struct {
 	cmd.CommandActioner
 	function *fv1.Function
 	specFile string
+	// createdPackage records that THIS command created the function's package
+	// (vs. --pkg pointing at an existing one), so --watch knows whether a
+	// terminal build status is this command's outcome or stale history.
+	createdPackage bool
 }
 
 func Create(input cli.Input) error {
@@ -526,6 +530,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		if err != nil {
 			return fmt.Errorf("error creating package: %w", err)
 		}
+		opts.createdPackage = true
 	}
 
 	// Secret/configmap references point at the function namespace when creating
@@ -706,11 +711,30 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 // trigger a build (issue #3676). It runs after function/trigger creation so a
 // failed build never blocks those; the non-nil error on a failed build only
 // sets the exit code.
+//
+// For a package THIS command created, any state — including an already
+// terminal one — is this command's own build outcome, so the watch always
+// runs. For `--pkg <existing>`, fn create triggers no build: only a build
+// already in flight is worth attaching to, and a terminal status is stale
+// history that must not be replayed as if it were this command's result.
 func (opts *CreateSubCommand) watchBuildIfRequested(input cli.Input) error {
 	if !input.Bool(flagkey.PkgWatch) {
 		return nil
 	}
 	ref := opts.function.Spec.Package.PackageRef
+	if !opts.createdPackage {
+		pkg, err := opts.Client().FissionClientSet.CoreV1().Packages(ref.Namespace).Get(input.Context(), ref.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("error getting package for --%v: %w", flagkey.PkgWatch, err)
+		}
+		switch pkg.Status.BuildStatus {
+		case "", fv1.BuildStatusPending, fv1.BuildStatusRunning:
+			// in-flight build: attach to it
+		default:
+			fmt.Fprintf(input.Stdout(), "Package '%v' already exists and no build was triggered; nothing to watch\n", ref.Name)
+			return nil
+		}
+	}
 	return _package.WatchPackageBuild(input, opts.Client(), ref.Namespace, ref.Name)
 }
 

@@ -82,19 +82,28 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 	}
 
 	if input.Bool(flagkey.PkgWatch) {
-		// UpdatePackage sets BuildStatusPending synchronously (via UpdateStatus)
-		// whenever the update triggers a rebuild, so a fresh read reliably
-		// tells whether there is a build to watch.
+		// UpdatePackage sets BuildStatusPending synchronously (via
+		// UpdateStatus, which also stamps LastUpdateTimestamp) whenever the
+		// update triggers a rebuild. A fresh read that is still non-terminal
+		// obviously needs watching; a fresh read that is ALREADY terminal is
+		// only "nothing to watch" when the status timestamp did not move —
+		// an advanced timestamp means this update did trigger a build and
+		// buildermgr merely finished (or failed) it before our read, so the
+		// watch must still run to report the outcome and set the exit code.
 		fresh, err := opts.Client().FissionClientSet.CoreV1().Packages(opts.pkgNamespace).Get(input.Context(), newPkgMeta.Name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("error getting package after update: %w", err)
 		}
+		buildTriggered := !fresh.Status.LastUpdateTimestamp.Equal(&pkg.Status.LastUpdateTimestamp)
 		switch fresh.Status.BuildStatus {
 		case "", fv1.BuildStatusPending, fv1.BuildStatusRunning:
-			return WatchPackageBuild(input, opts.Client(), fresh.Namespace, fresh.Name)
-		default:
-			fmt.Fprintf(input.Stdout(), "Update of package '%v' did not trigger a build; nothing to watch\n", fresh.Name)
+			buildTriggered = true
 		}
+		if !buildTriggered {
+			fmt.Fprintf(input.Stdout(), "Update of package '%v' did not trigger a build; nothing to watch\n", fresh.Name)
+			return nil
+		}
+		return WatchPackageBuild(input, opts.Client(), fresh.Namespace, fresh.Name)
 	}
 
 	return nil

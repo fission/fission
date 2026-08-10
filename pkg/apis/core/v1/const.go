@@ -416,3 +416,16 @@ const (
 const (
 	BuilderContainerName = "builder"
 )
+
+// Labels buildermgr's EnvironmentReconciler stamps on every environment
+// builder Service/Deployment/pod. Shared here so the CLI's build watch can
+// select builder pods without importing pkg/buildermgr. Note the
+// BuilderLabelEnvNamespace value is the BUILDER namespace (where the pod
+// runs), not the Environment's own namespace.
+const (
+	BuilderLabelEnvName            = "envName"
+	BuilderLabelEnvNamespace       = "envNamespace"
+	BuilderLabelEnvResourceVersion = "envResourceVersion"
+	BuilderLabelOwner              = "owner"
+	BuilderOwnerBuilderMgr         = "buildermgr"
+)

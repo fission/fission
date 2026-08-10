@@ -7,6 +7,7 @@ package _package
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -15,7 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -44,12 +47,13 @@ func watchTestBuilderPod() *corev1.Pod {
 			Name:      watchTestEnv + "-1234-abc",
 			Namespace: watchTestNS,
 			Labels: map[string]string{
-				builderLabelOwner:   builderOwnerBuilderMgr,
-				builderLabelEnvName: watchTestEnv,
+				fv1.BuilderLabelOwner:   fv1.BuilderOwnerBuilderMgr,
+				fv1.BuilderLabelEnvName: watchTestEnv,
 			},
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: fv1.BuilderContainerName}}},
 		Status: corev1.PodStatus{
+			PodIP:             "10.1.2.3",
 			ContainerStatuses: []corev1.ContainerStatus{{Name: fv1.BuilderContainerName, Ready: true}},
 		},
 	}
@@ -57,15 +61,19 @@ func watchTestBuilderPod() *corev1.Pod {
 
 // setBuildStatus flips the package's build status (and optionally the build
 // log) through the fake clientset's status subresource, the way buildermgr
-// does.
+// does. It is called from spawned goroutines, so it must not use require
+// (t.FailNow is only legal on the test goroutine); assert's t.Errorf is safe
+// and still fails the test with the real error.
 func setBuildStatus(t *testing.T, client cmd.Client, status fv1.BuildStatus, buildLog string) {
 	t.Helper()
 	pkg, err := client.FissionClientSet.CoreV1().Packages(watchTestNS).Get(t.Context(), watchTestPkg, metav1.GetOptions{})
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 	pkg.Status.BuildStatus = status
 	pkg.Status.BuildLog = buildLog
 	_, err = client.FissionClientSet.CoreV1().Packages(watchTestNS).UpdateStatus(t.Context(), pkg, metav1.UpdateOptions{})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 }
 
 func TestWatchPackageBuildSucceeds(t *testing.T) {
@@ -163,13 +171,49 @@ func TestWatchPackageBuildPackageDeleted(t *testing.T) {
 		go func() {
 			time.Sleep(2 * time.Second)
 			err := client.FissionClientSet.CoreV1().Packages(watchTestNS).Delete(t.Context(), watchTestPkg, metav1.DeleteOptions{})
-			require.NoError(t, err)
+			assert.NoError(t, err) // not require: FailNow is illegal off the test goroutine
 		}()
 
 		var out bytes.Buffer
 		err := watchPackageBuild(t.Context(), client, &out, watchTestNS, watchTestPkg)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no longer exists")
+	})
+}
+
+func TestWatchPackageBuildSurfacesPersistentAPIErrors(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fc := fissionfake.NewSimpleClientset(watchTestPackage(fv1.BuildStatusPending))
+		fc.PrependReactor("get", "packages", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("the server has asked for the client to provide credentials")
+		})
+		client := cmd.Client{FissionClientSet: fc, KubernetesClient: k8sfake.NewSimpleClientset()}
+
+		var out bytes.Buffer
+		err := watchPackageBuild(t.Context(), client, &out, watchTestNS, watchTestPkg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "repeatedly failed")
+		assert.Contains(t, err.Error(), "provide credentials")
+	})
+}
+
+func TestWatchPackageBuildRefusesBuilderlessEnv(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		pkg := watchTestPackage(fv1.BuildStatusPending)
+		pkg.Spec.Source = fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/src.zip"}
+		env := &fv1.Environment{
+			ObjectMeta: metav1.ObjectMeta{Name: watchTestEnv, Namespace: watchTestNS},
+			// No Builder.Image: this env can never run a build.
+		}
+		client := cmd.Client{
+			FissionClientSet: fissionfake.NewSimpleClientset(pkg, env),
+			KubernetesClient: k8sfake.NewSimpleClientset(),
+		}
+
+		var out bytes.Buffer
+		err := watchPackageBuild(t.Context(), client, &out, watchTestNS, watchTestPkg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no builder")
 	})
 }
 
@@ -182,12 +226,13 @@ func TestPickBuilderPod(t *testing.T) {
 				Name:              name,
 				CreationTimestamp: metav1.NewTime(time.Now().Add(-age)),
 				Labels: map[string]string{
-					builderLabelOwner:              builderOwnerBuilderMgr,
-					builderLabelEnvName:            watchTestEnv,
-					builderLabelEnvResourceVersion: rv,
+					fv1.BuilderLabelOwner:              fv1.BuilderOwnerBuilderMgr,
+					fv1.BuilderLabelEnvName:            watchTestEnv,
+					fv1.BuilderLabelEnvResourceVersion: rv,
 				},
 			},
 			Status: corev1.PodStatus{
+				PodIP:             "10.1.2.3",
 				ContainerStatuses: []corev1.ContainerStatus{{Ready: ready}},
 			},
 		}

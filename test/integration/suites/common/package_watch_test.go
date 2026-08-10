@@ -28,7 +28,7 @@ import (
 func TestPackageBuildWatch(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
@@ -73,6 +73,11 @@ func TestPackageBuildWatch(t *testing.T) {
 		// The builder container prints its START/END markers to stdout only —
 		// they never land in Status.BuildLog — so seeing one proves the live
 		// stream from the builder pod worked, not just the final log print.
+		// This is safe to assert even though streaming is best-effort:
+		// SinceTime is captured at watch start, so a stream that attaches
+		// late still receives every line logged since then; the marker could
+		// only be missed if the whole build finished within the first ~1s
+		// poll, and a pip build (fetch + install + archive + upload) cannot.
 		assert.Contains(t, out, "========= START =========")
 		// The final report is the authoritative Status.BuildLog.
 		assert.Contains(t, out, "========= build log =========")
