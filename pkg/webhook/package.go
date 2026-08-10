@@ -55,8 +55,9 @@ func (r *Package) ApplyDefaults(new *v1.Package) error {
 func (r *Package) Validate(new *v1.Package) error {
 	// Field rules (archive/checksum/build-status enums, environment-name DNS)
 	// are enforced by the API server via CEL; the webhook runs only the non-CEL
-	// checks: the archive literal-size limit and the cross-namespace environment
-	// check below. (ValidateForAdmission is currently a no-op for Package.)
+	// checks: the RFC-0031 archive SecretRef rules (ValidateForAdmission), plus
+	// the archive literal-size limit and the cross-namespace environment
+	// check below.
 	if err := new.ValidateForAdmission(); err != nil {
 		return v1.AggregateValidationErrors("Package", err)
 	}

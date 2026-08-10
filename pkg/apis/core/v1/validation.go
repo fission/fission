@@ -274,6 +274,31 @@ func (archive Archive) Validate() error {
 		errs = errors.Join(errs, archive.Checksum.Validate())
 	}
 
+	errs = errors.Join(errs, archive.validateSecretRef())
+
+	return errs
+}
+
+// validateSecretRef enforces the RFC-0031 credential rules. Keyed on CONTENT,
+// not the Type string: the enum allows an empty Type, and type/content
+// agreement is not otherwise enforced for url archives. The literal
+// combination is excluded transitively by the one-content-source rule.
+// Narrow on purpose: Package.ValidateForAdmission runs exactly this (and not
+// the full historic Validate, which existing stored objects have never been
+// held to), so the storagesvc exclusion holds for hand-authored objects too.
+func (archive Archive) validateSecretRef() error {
+	if archive.SecretRef == nil {
+		return nil
+	}
+	var errs error
+	errs = errors.Join(errs, ValidateKubeName("Archive.SecretRef.Name", archive.SecretRef.Name))
+	if len(archive.URL) == 0 || archive.OCI != nil {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive.SecretRef", archive.SecretRef.Name, "secretref requires a url archive"))
+	} else if parsed, err := url.Parse(archive.URL); err == nil && strings.HasPrefix(parsed.Path, "/v1/archive") {
+		// Internal HMAC and external credentials must never mix on one
+		// request; storagesvc URLs are signed, not credentialed.
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "Archive.SecretRef", archive.SecretRef.Name, "secretref cannot be used with internal storage service URLs"))
+	}
 	return errs
 }
 
@@ -1263,12 +1288,16 @@ func (p *Package) Validate() error {
 }
 
 // ValidateForAdmission runs the Package checks the API server cannot enforce
-// via CEL. There are none on the spec itself (archive/checksum/build-status are
-// CEL-covered, reference names are CEL-covered); the webhook additionally
-// enforces the archive literal-size limit and the cross-namespace environment
-// check inline. Defined for a uniform webhook switch.
+// via CEL. Archive/checksum/build-status enums and reference names are
+// CEL-covered, and the webhook enforces the archive literal-size limit and
+// the cross-namespace environment check inline; what remains here is the
+// RFC-0031 SecretRef rule set — its storagesvc-path exclusion needs URL
+// parsing, which CEL cannot do.
 func (p *Package) ValidateForAdmission() error {
-	return nil
+	return errors.Join(
+		p.Spec.Source.validateSecretRef(),
+		p.Spec.Deployment.validateSecretRef(),
+	)
 }
 
 func (pl *PackageList) Validate() error {
