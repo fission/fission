@@ -439,8 +439,15 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			})...)
 			// archive.URL may resolve to storagesvc (/v1/archive?id=...)
 			// or an external storage backend (S3, GCS, etc.). Sign only
-			// when the URL targets storagesvc.
-			err := utils.DownloadUrlToRoot(ctx, fetcher.httpClientForURL(archive.URL), archive.URL, fetcher.sharedVolumePath, tmpPath)
+			// when the URL targets storagesvc; a SecretRef archive gets a
+			// per-fetch client with origin-bound credentials (RFC-0031).
+			client, err := fetcher.clientForArchive(ctx, archive)
+			if err != nil {
+				e := "failed to prepare archive download client"
+				logger.Error(err, e, "url", archive.URL)
+				return http.StatusBadRequest, fmt.Errorf("%s %s: %w", e, archive.URL, err)
+			}
+			err = utils.DownloadUrlToRoot(ctx, client, archive.URL, fetcher.sharedVolumePath, tmpPath)
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)
