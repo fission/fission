@@ -160,7 +160,7 @@ func TestPackageReconcileGate(t *testing.T) {
 
 		got, err := fc.CoreV1().Packages("default").Get(t.Context(), "init", metav1.GetOptions{})
 		require.NoError(t, err)
-		assert.Equal(t, fv1.BuildStatusPending, string(got.Status.BuildStatus),
+		assert.Equal(t, fv1.BuildStatusPending, got.Status.BuildStatus,
 			"empty-status source package must be initialised to pending")
 	})
 
@@ -175,7 +175,7 @@ func TestPackageReconcileGate(t *testing.T) {
 
 		got, err := fc.CoreV1().Packages("default").Get(t.Context(), "done", metav1.GetOptions{})
 		require.NoError(t, err)
-		assert.Equal(t, fv1.BuildStatusSucceeded, string(got.Status.BuildStatus), "terminal status must be left untouched")
+		assert.Equal(t, fv1.BuildStatusSucceeded, got.Status.BuildStatus, "terminal status must be left untouched")
 	})
 
 	t.Run("pending with missing environment fails terminally", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestPackageReconcileGate(t *testing.T) {
 
 		got, err := fc.CoreV1().Packages("default").Get(t.Context(), "noenv", metav1.GetOptions{})
 		require.NoError(t, err)
-		assert.Equal(t, fv1.BuildStatusFailed, string(got.Status.BuildStatus))
+		assert.Equal(t, fv1.BuildStatusFailed, got.Status.BuildStatus)
 		assert.Contains(t, got.Status.BuildLog, "environment does not exist")
 	})
 
