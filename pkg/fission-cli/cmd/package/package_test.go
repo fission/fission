@@ -279,7 +279,7 @@ func TestCreatePackageSrcSecret(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, pkg.Spec.Source.SecretRef)
 	assert.Equal(t, "src-creds", pkg.Spec.Source.SecretRef.Name)
-	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus)
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus)
 }
 
 // TestCreatePackageSrcOCI proves --srcoci builds a Source OCI archive and
@@ -300,7 +300,7 @@ func TestCreatePackageSrcOCI(t *testing.T) {
 	require.NotNil(t, pkg.Spec.Source.OCI)
 	assert.Equal(t, "ghcr.io/example/hello-src:v1", pkg.Spec.Source.OCI.Image)
 	assert.True(t, pkg.Spec.Deployment.IsEmpty(), "deployment stays empty until the builder writes it")
-	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus, "a source archive means the builder must run")
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus, "a source archive means the builder must run")
 }
 
 // TestCreatePackageSrcOCIWithDeployIsPending pins RFC-0031 phase 2 + review
@@ -321,7 +321,7 @@ func TestCreatePackageSrcOCIWithDeployIsPending(t *testing.T) {
 	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "srcoci-deploy-pkg", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Source.Type)
-	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), pkg.Status.BuildStatus,
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus,
 		"a source archive means the builder must run; the deploy block must not force None")
 }
 
@@ -353,7 +353,7 @@ func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
 	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "reb-pkg", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "correct-creds", got.Spec.Source.SecretRef.Name)
-	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusPending), got.Status.BuildStatus,
+	assert.Equal(t, fv1.BuildStatusPending, got.Status.BuildStatus,
 		"rotating the source credential must re-queue the failed build")
 }
 
