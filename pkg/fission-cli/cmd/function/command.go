@@ -42,7 +42,7 @@ func Commands() *cobra.Command {
 			// TODO retired pkg & trigger related flags from function cmd
 			flag.PkgCode, flag.PkgSrcArchive, flag.PkgDeployArchive,
 			flag.PkgSrcChecksum, flag.PkgDeployChecksum, flag.PkgInsecure,
-			flag.PkgOCI, flag.FnBuildCmd,
+			flag.PkgOCI, flag.FnBuildCmd, flag.PkgWatch, flag.PkgWatchTimeout,
 
 			flag.HtUrl, flag.HtPrefix, flag.HtMethod,
 

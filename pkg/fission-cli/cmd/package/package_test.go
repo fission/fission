@@ -150,7 +150,7 @@ func TestUpdatePackageOCI(t *testing.T) {
 	assert.Empty(t, got.Spec.Deployment.URL, "the old deploy URL must be cleared")
 	assert.Empty(t, got.Spec.Deployment.Checksum.Sum, "the old checksum must be cleared")
 	assert.Equal(t, "http://storage/src.zip", got.Spec.Source.URL, "the source archive must survive")
-	assert.Equal(t, fv1.BuildStatus(fv1.BuildStatusNone), got.Status.BuildStatus,
+	assert.Equal(t, fv1.BuildStatusNone, got.Status.BuildStatus,
 		"a stale failed status must reset so the fetcher serves the OCI package")
 }
 

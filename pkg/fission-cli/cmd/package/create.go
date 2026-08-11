@@ -49,6 +49,10 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		}
 	}
 
+	if err := ValidateWatchNotSpecMode(input); err != nil {
+		return err
+	}
+
 	envName := input.String(flagkey.PkgEnvironment)
 
 	userProvidedNS, pkgNamespace, err := opts.GetResourceNamespace(input)
@@ -106,10 +110,16 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		specFile = fmt.Sprintf("package-%s.yaml", pkgName)
 	}
 
-	_, err = CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
+	pkgMeta, err := CreatePackage(input, opts.Client(), pkgName, pkgNamespace, envName,
 		srcArchiveFiles, deployArchiveFiles, buildcmd, specDir, specFile, noZip, userProvidedNS, ociImage)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if input.Bool(flagkey.PkgWatch) {
+		return WatchPackageBuild(input, opts.Client(), pkgMeta.Namespace, pkgMeta.Name)
+	}
+	return nil
 }
 
 // ValidateArchiveSources enforces that --oci is not combined with
@@ -136,6 +146,18 @@ func splitImageDigest(ref string) (image, digest string) {
 		return ref[:i], ref[i+1:]
 	}
 	return ref, ""
+}
+
+// ValidateWatchNotSpecMode rejects --watch combined with --spec-save or
+// --spec-dry: a spec file does not trigger a build, so there is nothing to
+// watch. Shared by `package create` and `fn create`, like
+// ValidateArchiveSources.
+func ValidateWatchNotSpecMode(input cli.Input) error {
+	if input.Bool(flagkey.PkgWatch) && (input.Bool(flagkey.SpecSave) || input.Bool(flagkey.SpecDry)) {
+		return fmt.Errorf("--%v cannot be combined with --%v or --%v: a spec file does not trigger a build",
+			flagkey.PkgWatch, flagkey.SpecSave, flagkey.SpecDry)
+	}
+	return nil
 }
 
 func ValidateArchiveSources(code string, srcArchiveFiles, deployArchiveFiles []string, ociImage string) error {
@@ -171,7 +193,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 		}
 	}
 
-	var pkgStatus fv1.BuildStatus = fv1.BuildStatusSucceeded
+	pkgStatus := fv1.BuildStatusSucceeded
 
 	if len(ociImage) > 0 {
 		// The OCI archive is built inline: no file globbing, zipping, or

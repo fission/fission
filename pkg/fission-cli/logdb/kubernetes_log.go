@@ -135,7 +135,7 @@ func (k kubernetesLogs) StreamLogs(ctx context.Context, filter LogFilter, out io
 	if err != nil {
 		return err
 	}
-	lw := &lockedWriter{w: out}
+	lw := NewLockedWriter(out)
 	multi := len(pods) > 1
 	g, gctx := errgroup.WithContext(ctx)
 	for i := range pods {
@@ -201,14 +201,17 @@ func followContainer(ctx context.Context, kc kubernetes.Interface, ns, podName, 
 	}
 }
 
-// lockedWriter serializes concurrent writes from multiple pod-log streams onto
-// one writer, so whole lines from different pods don't interleave mid-line.
-type lockedWriter struct {
+// LockedWriter serializes concurrent writes from multiple pod-log streams onto
+// one writer, so whole lines from different streams don't interleave mid-line.
+// Exported: the package build watch (cmd/package) shares it for the same job.
+type LockedWriter struct {
 	mu sync.Mutex
 	w  io.Writer
 }
 
-func (l *lockedWriter) Write(p []byte) (int, error) {
+func NewLockedWriter(w io.Writer) *LockedWriter { return &LockedWriter{w: w} }
+
+func (l *LockedWriter) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.w.Write(p)

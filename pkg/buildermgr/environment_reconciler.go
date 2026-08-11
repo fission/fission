@@ -33,11 +33,13 @@ import (
 )
 
 const (
-	LABEL_ENV_NAME            = "envName"
-	LABEL_ENV_NAMESPACE       = "envNamespace"
-	LABEL_ENV_RESOURCEVERSION = "envResourceVersion"
-	LABEL_DEPLOYMENT_OWNER    = "owner"
-	BUILDER_MGR               = "buildermgr"
+	// Aliases of the shared fv1.BuilderLabel* constants (the CLI's build
+	// watch selects builder pods by the same labels).
+	LABEL_ENV_NAME            = fv1.BuilderLabelEnvName
+	LABEL_ENV_NAMESPACE       = fv1.BuilderLabelEnvNamespace
+	LABEL_ENV_RESOURCEVERSION = fv1.BuilderLabelEnvResourceVersion
+	LABEL_DEPLOYMENT_OWNER    = fv1.BuilderLabelOwner
+	BUILDER_MGR               = fv1.BuilderOwnerBuilderMgr
 
 	// builderSpecHashAnnotation carries a hash of the builder pod template the
 	// reconciler last applied, so drift that does NOT bump the Environment's
@@ -124,7 +126,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// builder is not supported with the v1 interface; ignore envs without a
 	// builder image.
-	if env.Spec.Version == 1 || len(env.Spec.Builder.Image) == 0 {
+	if !env.HasBuilder() {
 		return ctrl.Result{}, nil
 	}
 
