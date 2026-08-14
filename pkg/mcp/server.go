@@ -167,6 +167,26 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 	if !found || !scope.Allows(entry.Namespace) {
 		return nil, errToolNotFound
 	}
+	// Streaming needs BOTH sides opted in: the function declares Streaming,
+	// and the caller sent a progress token (the MCP spec permits progress
+	// notifications only for requests that carried one). Everything else
+	// takes the buffered path unchanged.
+	if token := req.Params.GetProgressToken(); entry.Streaming && token != nil {
+		session := req.Session
+		notify := func(ctx context.Context, chunk string, progressBytes int64) {
+			// Best-effort: a failed notification (client gone mid-stream)
+			// must not fail the call — the final result still returns.
+			err := session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+				ProgressToken: token,
+				Progress:      float64(progressBytes),
+				Message:       chunk,
+			})
+			if err != nil {
+				s.logger.V(1).Info("progress notify failed", "tool", entry.ToolName, "error", err)
+			}
+		}
+		return s.proxy.InvokeStreaming(ctx, entry, req.Params.Arguments, notify)
+	}
 	return s.proxy.Invoke(ctx, entry, req.Params.Arguments)
 }
 
