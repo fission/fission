@@ -5,10 +5,12 @@
 package _package
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -26,6 +28,7 @@ func TestValidateArchiveSources(t *testing.T) {
 		srcFiles    []string
 		deployFiles []string
 		ociImage    string
+		srcOCI      string
 		wantErr     bool
 	}{
 		{name: "oci only", ociImage: "ghcr.io/x/y:v1"},
@@ -36,11 +39,16 @@ func TestValidateArchiveSources(t *testing.T) {
 		{name: "oci plus code", code: "hello.js", ociImage: "ghcr.io/x/y:v1", wantErr: true},
 		{name: "oci plus deploy", deployFiles: []string{"a.zip"}, ociImage: "ghcr.io/x/y:v1", wantErr: true},
 		{name: "oci plus src", srcFiles: []string{"src.zip"}, ociImage: "ghcr.io/x/y:v1", wantErr: true},
+		{name: "srcoci only", srcOCI: "ghcr.io/x/src:v1"},
+		{name: "srcoci plus deploy", deployFiles: []string{"a.zip"}, srcOCI: "ghcr.io/x/src:v1"},
+		{name: "srcoci plus src", srcFiles: []string{"src.zip"}, srcOCI: "ghcr.io/x/src:v1", wantErr: true},
+		{name: "srcoci plus code", code: "hello.js", srcOCI: "ghcr.io/x/src:v1", wantErr: true},
+		{name: "srcoci plus oci", ociImage: "ghcr.io/x/y:v1", srcOCI: "ghcr.io/x/src:v1", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := ValidateArchiveSources(tc.code, tc.srcFiles, tc.deployFiles, tc.ociImage)
+			err := ValidateArchiveSources(tc.code, tc.srcFiles, tc.deployFiles, tc.ociImage, tc.srcOCI)
 			if tc.wantErr {
 				require.Error(t, err)
 			} else {
@@ -199,4 +207,183 @@ func TestSplitImageDigest(t *testing.T) {
 			t.Errorf("splitImageDigest(%q) = (%q,%q), want (%q,%q)", tc.in, image, digest, tc.image, tc.digest)
 		}
 	}
+}
+
+// TestCreatePackageDeploySecret proves --deploysecret attaches the RFC-0031
+// SecretRef to a URL deploy archive WITHOUT the anonymous checksum-generation
+// download (the URL here resolves nowhere, so any download attempt would
+// fail the create).
+func TestCreatePackageDeploySecret(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "artifactory-creds")
+
+	_, err := CreatePackage(in, client, "auth-pkg", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeUrl, pkg.Spec.Deployment.Type)
+	require.NotNil(t, pkg.Spec.Deployment.SecretRef)
+	assert.Equal(t, "artifactory-creds", pkg.Spec.Deployment.SecretRef.Name)
+	assert.Empty(t, pkg.Spec.Deployment.Checksum.Sum, "no anonymous checksum download for credentialed URLs")
+}
+
+// TestCreatePackageDeploySecretExplicitChecksum keeps a user-pinned checksum.
+func TestCreatePackageDeploySecretExplicitChecksum(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds")
+	sum := strings.Repeat("a", 64)
+	in.Set(flagkey.PkgDeployChecksum, sum)
+
+	_, err := CreatePackage(in, client, "auth-pkg2", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-pkg2", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, sum, pkg.Spec.Deployment.Checksum.Sum)
+	require.NotNil(t, pkg.Spec.Deployment.SecretRef)
+}
+
+// TestCreatePackageSecretRequiresURL pins that credential flags refuse local
+// files: those upload to storagesvc, whose internal HMAC transport must never
+// mix with external credentials.
+func TestCreatePackageSecretRequiresURL(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds")
+
+	_, err := CreatePackage(in, client, "auth-pkg3", "default", "node-env",
+		nil, []string{"local.zip"}, "", "", "", false, "default", "")
+	require.ErrorContains(t, err, flagkey.PkgDeploySecret)
+}
+
+// TestCreatePackageSrcSecret covers the source-archive variant (builder path).
+func TestCreatePackageSrcSecret(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcSecret, "src-creds")
+
+	_, err := CreatePackage(in, client, "auth-src-pkg", "default", "node-env",
+		[]string{"https://repo.example.invalid/src.zip"}, nil, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "auth-src-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, pkg.Spec.Source.SecretRef)
+	assert.Equal(t, "src-creds", pkg.Spec.Source.SecretRef.Name)
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus)
+}
+
+// TestCreatePackageSrcOCI proves --srcoci builds a Source OCI archive and
+// queues a build (RFC-0031 phase 2).
+func TestCreatePackageSrcOCI(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+
+	_, err := CreatePackage(in, client, "srcoci-pkg", "default", "node-env",
+		nil, nil, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "srcoci-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Source.Type)
+	require.NotNil(t, pkg.Spec.Source.OCI)
+	assert.Equal(t, "ghcr.io/example/hello-src:v1", pkg.Spec.Source.OCI.Image)
+	assert.True(t, pkg.Spec.Deployment.IsEmpty(), "deployment stays empty until the builder writes it")
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus, "a source archive means the builder must run")
+}
+
+// TestCreatePackageSrcOCIWithDeployIsPending pins RFC-0031 phase 2 + review
+// finding #6: a package with both a registry source (--srcoci) and a deploy
+// archive must record BuildStatusPending — a source means the builder runs,
+// and the deploy block must not overwrite that with None.
+func TestCreatePackageSrcOCIWithDeployIsPending(t *testing.T) {
+	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+	in.Set(flagkey.PkgInsecure, true) // skip the anonymous checksum download for the deploy URL
+
+	_, err := CreatePackage(in, client, "srcoci-deploy-pkg", "default", "node-env",
+		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
+	require.NoError(t, err)
+
+	pkg, err := fc.CoreV1().Packages("default").Get(t.Context(), "srcoci-deploy-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, fv1.ArchiveTypeOCI, pkg.Spec.Source.Type)
+	assert.Equal(t, fv1.BuildStatusPending, pkg.Status.BuildStatus,
+		"a source archive means the builder must run; the deploy block must not force None")
+}
+
+// TestUpdatePackageSrcSecretRequeuesBuild pins review finding #4: rotating the
+// source credential re-queues a failed build (SecretRef is excluded from the
+// content hash, so nothing else would).
+func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
+	pkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "reb-pkg", Namespace: "default"},
+		Spec: fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
+			Source: fv1.Archive{
+				Type:      fv1.ArchiveTypeUrl,
+				URL:       "https://repo.example.invalid/src.zip",
+				SecretRef: &apiv1.LocalObjectReference{Name: "wrong-creds"},
+			},
+		},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusFailed, BuildLog: "401"},
+	}
+	fc := fissionfake.NewSimpleClientset(pkg) //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgSrcSecret, "correct-creds")
+
+	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
+	require.NoError(t, err)
+
+	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "reb-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "correct-creds", got.Spec.Source.SecretRef.Name)
+	assert.Equal(t, fv1.BuildStatusPending, got.Status.BuildStatus,
+		"rotating the source credential must re-queue the failed build")
+}
+
+// TestUpdatePackageDeploySecretRotate rotates the credential on an existing
+// url package without re-specifying the archive.
+func TestUpdatePackageDeploySecretRotate(t *testing.T) {
+	pkg := &fv1.Package{
+		ObjectMeta: metav1.ObjectMeta{Name: "rot-pkg", Namespace: "default"},
+		Spec: fv1.PackageSpec{
+			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
+			Deployment: fv1.Archive{
+				Type:      fv1.ArchiveTypeUrl,
+				URL:       "https://repo.example.invalid/a.zip",
+				SecretRef: &apiv1.LocalObjectReference{Name: "creds-v1"},
+			},
+		},
+		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},
+	}
+	fc := fissionfake.NewSimpleClientset(pkg) //nolint:staticcheck
+	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
+
+	in := dummy.TestFlagSet()
+	in.Set(flagkey.PkgDeploySecret, "creds-v2")
+
+	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
+	require.NoError(t, err)
+
+	got, err := fc.CoreV1().Packages("default").Get(t.Context(), "rot-pkg", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, got.Spec.Deployment.SecretRef)
+	assert.Equal(t, "creds-v2", got.Spec.Deployment.SecretRef.Name)
+	assert.Equal(t, "https://repo.example.invalid/a.zip", got.Spec.Deployment.URL, "url untouched")
 }

@@ -11,6 +11,7 @@ import (
 
 	"errors"
 
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 
@@ -114,6 +115,8 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	insecure := input.Bool(flagkey.PkgInsecure)
 	deployChecksum := input.String(flagkey.PkgDeployChecksum)
 	srcChecksum := input.String(flagkey.PkgSrcChecksum)
+	deploySecret := input.String(flagkey.PkgDeploySecret)
+	srcSecret := input.String(flagkey.PkgSrcSecret)
 	code := input.String(flagkey.PkgCode)
 
 	noZip := false
@@ -131,6 +134,21 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 			Type: fv1.ArchiveTypeOCI,
 			OCI:  &fv1.OCIArchive{Image: ociImage},
 		}
+		needToUpdate = true
+	}
+
+	if input.IsSet(flagkey.PkgSrcOCI) {
+		if input.IsSet(flagkey.PkgCode) || input.IsSet(flagkey.PkgSrcArchive) || input.IsSet(flagkey.PkgOCI) {
+			return nil, fmt.Errorf("--%v cannot be combined with --%v, --%v, or --%v", flagkey.PkgSrcOCI, flagkey.PkgCode, flagkey.PkgSrcArchive, flagkey.PkgOCI)
+		}
+		// Replace the source archive wholesale (RFC-0031 phase 2): an OCI
+		// source carries no literal, URL, checksum, or SecretRef.
+		image, digest := splitImageDigest(input.String(flagkey.PkgSrcOCI))
+		pkg.Spec.Source = fv1.Archive{
+			Type: fv1.ArchiveTypeOCI,
+			OCI:  &fv1.OCIArchive{Image: image, Digest: digest},
+		}
+		needToRebuild = true
 		needToUpdate = true
 	}
 
@@ -153,11 +171,40 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	}
 
 	if input.IsSet(flagkey.PkgSrcArchive) {
-		srcArchive, err := CreateArchive(client, input, srcArchiveFiles, noZip, insecure, srcChecksum, "", "", pkg.Namespace)
+		if srcSecret != "" {
+			if err := secretFlagRequiresURL(flagkey.PkgSrcSecret, flagkey.PkgSrcArchive, srcArchiveFiles); err != nil {
+				return nil, err
+			}
+		}
+		srcArchive, err := CreateArchive(client, input, srcArchiveFiles, noZip, insecure || srcSecret != "", srcChecksum, "", "", pkg.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating source archive: %w", err)
 		}
+		if srcSecret != "" {
+			attachArchiveSecret(srcArchive, srcSecret, srcChecksum)
+		}
 		pkg.Spec.Source = *srcArchive
+		needToRebuild = true
+		needToUpdate = true
+	} else if input.IsSet(flagkey.PkgSrcSecret) {
+		// Attach, rotate, or (with an empty value) detach the credential on
+		// the existing url source archive without re-specifying it. A
+		// checksum passed in the same command is applied too (the else-if
+		// with PkgSrcChecksum below would otherwise be shadowed).
+		if pkg.Spec.Source.URL == "" {
+			return nil, fmt.Errorf("--%v: package has no url source archive to attach credentials to", flagkey.PkgSrcSecret)
+		}
+		if srcSecret == "" {
+			pkg.Spec.Source.SecretRef = nil
+		} else {
+			pkg.Spec.Source.SecretRef = &apiv1.LocalObjectReference{Name: srcSecret}
+		}
+		if input.IsSet(flagkey.PkgSrcChecksum) {
+			pkg.Spec.Source.Checksum = fv1.Checksum{Type: fv1.ChecksumTypeSHA256, Sum: srcChecksum}
+		}
+		// Rotating the source credential is the documented way to fix a build
+		// that failed on a 401: re-queue it, since SecretRef is (by design)
+		// excluded from the content hash so nothing else would.
 		needToRebuild = true
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgSrcChecksum) {
@@ -169,14 +216,39 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 	}
 
 	if input.IsSet(flagkey.PkgDeployArchive) || input.IsSet(flagkey.PkgCode) {
-		deployArchive, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure, deployChecksum, "", "", pkg.Namespace)
+		if deploySecret != "" {
+			if err := secretFlagRequiresURL(flagkey.PkgDeploySecret, flagkey.PkgDeployArchive, deployArchiveFiles); err != nil {
+				return nil, err
+			}
+		}
+		deployArchive, err := CreateArchive(client, input, deployArchiveFiles, noZip, insecure || deploySecret != "", deployChecksum, "", "", pkg.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("error creating deploy archive: %w", err)
+		}
+		if deploySecret != "" {
+			attachArchiveSecret(deployArchive, deploySecret, deployChecksum)
 		}
 		pkg.Spec.Deployment = *deployArchive
 		// Users may update the env, envNS and deploy archive at the same time,
 		// but without the source archive. In this case, we should set needToBuild to false
 		needToRebuild = false
+		needToUpdate = true
+	} else if input.IsSet(flagkey.PkgDeploySecret) {
+		// Attach, rotate, or (with an empty value) detach the credential on
+		// the existing url deploy archive without re-specifying it. A
+		// checksum passed in the same command is applied too (the else-if
+		// with PkgDeployChecksum below would otherwise be shadowed).
+		if pkg.Spec.Deployment.URL == "" {
+			return nil, fmt.Errorf("--%v: package has no url deploy archive to attach credentials to", flagkey.PkgDeploySecret)
+		}
+		if deploySecret == "" {
+			pkg.Spec.Deployment.SecretRef = nil
+		} else {
+			pkg.Spec.Deployment.SecretRef = &apiv1.LocalObjectReference{Name: deploySecret}
+		}
+		if input.IsSet(flagkey.PkgDeployChecksum) {
+			pkg.Spec.Deployment.Checksum = fv1.Checksum{Type: fv1.ChecksumTypeSHA256, Sum: deployChecksum}
+		}
 		needToUpdate = true
 	} else if input.IsSet(flagkey.PkgDeployChecksum) {
 		pkg.Spec.Deployment.Checksum = fv1.Checksum{

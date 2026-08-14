@@ -96,6 +96,17 @@ func ociPackage(image, digest string) *fv1.Package {
 	}
 }
 
+// TestKeychainServiceAccount pins the RFC-0031 identity fix: the keychain
+// resolves the pod's ACTUAL SA (downward API), falling back to the static
+// fetcher SA only for pods created before POD_SERVICE_ACCOUNT existed.
+func TestKeychainServiceAccount(t *testing.T) {
+	t.Parallel()
+	f := newOCITestFetcher(t)
+	assert.Equal(t, fv1.FissionFetcherSA, f.keychainServiceAccount(), "empty pod SA falls back (upgrade skew)")
+	f.podServiceAccount = "fission-builder"
+	assert.Equal(t, "fission-builder", f.keychainServiceAccount(), "builder pods must resolve the builder SA")
+}
+
 func TestFetchOCIDeployment(t *testing.T) {
 	host, ref, _ := pushTestCodeImage(t, map[string]string{
 		"hello.js": "module.exports = 'hi'",

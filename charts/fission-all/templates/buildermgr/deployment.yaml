@@ -56,6 +56,13 @@ spec:
         {{- end }}
         - name: FETCHER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
+        {{- /* buildermgr's fetcherConfig forwards this to builder-pod fetcher
+        sidecars (RFC-0031 OCI source pulls); mirrors executor/deployment.yaml. */}}
+        {{- $insecure := compact (list .Values.fetcher.allowInsecureRegistries .Values.packageRegistry.insecureHosts) }}
+        {{- if $insecure }}
+        - name: FETCHER_ALLOW_INSECURE_REGISTRIES
+          value: {{ join "," $insecure | quote }}
+        {{- end }}
         - name: BUILDER_IMAGE_PULL_POLICY
           value: "{{ .Values.pullPolicy }}"
         - name: ENABLE_ISTIO

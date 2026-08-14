@@ -17,6 +17,19 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
+// TestContentHashExcludesSecretRef pins RFC-0031's rebuild invariant:
+// SecretRef changes how content is REACHED, not what it is — exactly like
+// ImagePullSecrets — so rotating a credential must not re-queue builds.
+func TestContentHashExcludesSecretRef(t *testing.T) {
+	t.Parallel()
+	spec := fv1.PackageSpec{Source: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "https://repo.example.com/src.zip"}}
+	base := PackageContentHash(spec)
+	spec.Source.SecretRef = &apiv1.LocalObjectReference{Name: "creds-v1"}
+	assert.Equal(t, base, PackageContentHash(spec), "adding a SecretRef must not change the content hash")
+	spec.Source.SecretRef = &apiv1.LocalObjectReference{Name: "creds-v2"}
+	assert.Equal(t, base, PackageContentHash(spec), "rotating a SecretRef must not change the content hash")
+}
+
 func TestPackageContentHash(t *testing.T) {
 	t.Parallel()
 

@@ -911,6 +911,7 @@ type (
 	// zipped literal archive. The literal/oci combination is instead
 	// rejected by the webhook (Archive.Validate), with the same message.
 	// +kubebuilder:validation:XValidation:rule="!has(self.oci) || !has(self.url) || self.url == ''",message="at most one of literal, url, or oci may be set"
+	// +kubebuilder:validation:XValidation:rule="!has(self.secretref) || (has(self.url) && self.url != '' && !has(self.oci))",message="secretref requires a url archive"
 	Archive struct {
 		// Type defines how the package is specified: literal, URL, or OCI.
 		// Available value:
@@ -936,12 +937,26 @@ type (
 		// +kubebuilder:validation:XValidation:rule="((!has(self.type) || self.type == '') && (!has(self.sum) || self.sum == '')) || self.type == 'sha256'",message="checksum must be empty, or its type must be 'sha256' (the only supported checksum type)"
 		Checksum Checksum `json:"checksum,omitempty"`
 
-		// OCI references an OCI image holding the deployment code.
-		// Mutually exclusive with Literal and URL. Supported only on
-		// PackageSpec.Deployment; PackageSpec.Validate rejects it on Source
-		// (source archives feed the builder, which has no OCI pull path).
+		// OCI references an OCI image holding the archive contents.
+		// Mutually exclusive with Literal and URL. Valid on both
+		// PackageSpec.Deployment and PackageSpec.Source (RFC-0031): a
+		// source OCI archive is pulled by the builder pod's fetcher, whose
+		// keychain resolves the builder pod's ServiceAccount
+		// imagePullSecrets plus the archive's ImagePullSecrets.
 		// +optional
 		OCI *OCIArchive `json:"oci,omitempty"`
+
+		// SecretRef names a Secret holding credentials for fetching URL.
+		// Keys: username+password (basic auth), token (bearer), headers
+		// (extra headers, one "Name: Value" per line). Like
+		// OCIArchive.ImagePullSecrets it is resolved in the namespace of
+		// the pod that performs the fetch: the function pod's namespace
+		// for deployment archives, the builder pod's namespace for source
+		// archives. Valid only for a url archive whose URL is not a
+		// storagesvc archive URL; credentials are attached only to
+		// requests to the URL's exact origin.
+		// +optional
+		SecretRef *apiv1.LocalObjectReference `json:"secretref,omitempty"`
 	}
 
 	// OCIArchive references an OCI image whose flattened filesystem

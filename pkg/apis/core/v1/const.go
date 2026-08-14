@@ -4,6 +4,10 @@
 
 package v1
 
+import (
+	"net/url"
+)
+
 var (
 	MinimumKubernetesVersion = [3]int{1, 32, 0}
 )
@@ -109,6 +113,32 @@ const (
 	// OCI image referenced in the OCI field of the resource.
 	ArchiveTypeOCI ArchiveType = "oci"
 )
+
+// StorageServiceArchivePath is the exact URL path at which storagesvc serves
+// archives (the archive id travels as the `id` query param, so the path never
+// has a sub-segment). It is the single classifier for "this URL targets our
+// own storage service" — the fetcher signs those requests with internal HMAC
+// and admission forbids attaching external SecretRef credentials to them.
+// Kept in one place so the runtime and admission classifications cannot drift.
+const StorageServiceArchivePath = "/v1/archive"
+
+// IsStorageServiceURL reports whether rawURL targets the internal storage
+// service. The host is deliberately not matched — it depends on service name,
+// namespace, and port-forwarding — so the path is the classifier, and it is
+// matched EXACTLY: storagesvc registers only `/v1/archive` (id as a query
+// param), so a legitimate external artifact server whose path merely begins
+// with that (e.g. https://repo.example.com/v1/archive/app.zip) is correctly
+// treated as external. An unparseable URL is treated as NOT storagesvc:
+// signing an external/garbage URL with internal credentials is the worse
+// failure (exfiltration), so both the fetcher's client selection and
+// admission fail open to "external, unsigned" here.
+func IsStorageServiceURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return parsed.Path == StorageServiceArchivePath
+}
 
 const (
 	BuildStatusPending   BuildStatus = "pending"

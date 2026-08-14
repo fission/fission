@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -63,6 +61,12 @@ type (
 		// boundary and would otherwise reject the extra headers (or be
 		// confused by the body buffering that signing requires).
 		storageHTTPClient *http.Client
+		// podServiceAccount is the pod's actual ServiceAccount name
+		// (downward API via POD_SERVICE_ACCOUNT), used for OCI keychain
+		// resolution — a builder-pod sidecar runs as fission-builder,
+		// not fission-fetcher. Empty on pods created before the env var
+		// existed (upgrade skew); keychainServiceAccount falls back.
+		podServiceAccount string
 		Info              PodInfo
 	}
 	PodInfo struct {
@@ -141,6 +145,10 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 	}
 
 	hc := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	// POD_SERVICE_ACCOUNT is set by AddFetcherToPodSpec via the downward
+	// API: the OCI keychain must resolve the ACTUAL pod identity — in a
+	// builder pod this sidecar runs as fission-builder, not fission-fetcher.
+	podServiceAccount := os.Getenv("POD_SERVICE_ACCOUNT")
 	// storageHTTPClient signs requests to storagesvc with the HMAC
 	// scheme described in docs/internal-auth/00-design.md when the
 	// chart's internal-auth master secret is mounted. The signer uses
@@ -162,6 +170,7 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 		},
 		httpClient:        hc,
 		storageHTTPClient: storageHC,
+		podServiceAccount: podServiceAccount,
 	}, nil
 }
 
@@ -184,11 +193,7 @@ func MakeFetcher(logger logr.Logger, clientGen crd.ClientGeneratorInterface, sha
 // exfiltration via headers); failing the download with a clearer error
 // from the inner transport is fine.
 func (fetcher *Fetcher) httpClientForURL(rawURL string) *http.Client {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return fetcher.httpClient
-	}
-	if strings.HasPrefix(parsed.Path, "/v1/archive") {
+	if fv1.IsStorageServiceURL(rawURL) {
 		return fetcher.storageHTTPClient
 	}
 	return fetcher.httpClient
@@ -439,8 +444,15 @@ func (fetcher *Fetcher) Fetch(ctx context.Context, pkg *fv1.Package, req Functio
 			})...)
 			// archive.URL may resolve to storagesvc (/v1/archive?id=...)
 			// or an external storage backend (S3, GCS, etc.). Sign only
-			// when the URL targets storagesvc.
-			err := utils.DownloadUrlToRoot(ctx, fetcher.httpClientForURL(archive.URL), archive.URL, fetcher.sharedVolumePath, tmpPath)
+			// when the URL targets storagesvc; a SecretRef archive gets a
+			// per-fetch client with origin-bound credentials (RFC-0031).
+			client, code, err := fetcher.clientForArchive(ctx, archive)
+			if err != nil {
+				e := "failed to prepare archive download client"
+				logger.Error(err, e, "url", archive.URL)
+				return code, fmt.Errorf("%s %s: %w", e, archive.URL, err)
+			}
+			err = utils.DownloadUrlToRoot(ctx, client, archive.URL, fetcher.sharedVolumePath, tmpPath)
 			if err != nil {
 				e := "failed to download url from archive"
 				logger.Error(err, e, "url", req.URL)

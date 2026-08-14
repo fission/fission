@@ -25,6 +25,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/test/integration/framework"
+	"github.com/fission/fission/test/integration/testdata"
 )
 
 // TestOCIPackageReconciles covers RFC-0001 Phase 1: an OCI package is a
@@ -696,5 +697,54 @@ func TestOCIProducerBuild(t *testing.T) {
 	// And the built function actually serves (image-volume delivery on this
 	// leg; the executor's gate handles the rest).
 	body := f.Router(t).GetEventually(t, ctx, routePath, framework.BodyContains("a: 1"))
+	assert.Contains(t, body, "a: 1")
+}
+
+// TestOCISourcePackageBuild covers RFC-0031 phase 2 end to end: the SOURCE
+// tree comes from the in-cluster registry (--srcoci), the builder-pod fetcher
+// pulls it with the keychain under the BUILDER ServiceAccount, the builder
+// runs, and the built function serves. This exercises the three phase-2
+// fixes together: builder RBAC (serviceaccounts get), the keychain pod-SA
+// identity fix, and buildermgr's FETCHER_ALLOW_INSECURE_REGISTRIES parity.
+// No image-volume-leg skip: source pulls always go through the fetcher (a
+// pod, which resolves the registry's cluster-DNS name), never the kubelet.
+func TestOCISourcePackageBuild(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	hostAddr, inclusterAddr := framework.RequireRegistry(t)
+	runtime := f.Images().RequirePython(t)
+	builderImage := f.Images().RequirePythonBuilder(t)
+
+	ns := f.NewTestNamespace(t)
+	envName := "py-srcoci-" + ns.ID
+	pkgName := "srcoci-pkg-" + ns.ID
+	fnName := "fn-srcoci-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: runtime, Builder: builderImage})
+	ns.WaitForBuilderReady(t, ctx, envName)
+
+	// The source image carries the same tree ZipTestDataDir would zip; the
+	// builder consumes the extracted directory either way.
+	files := map[string]string{}
+	for _, fname := range []string{"__init__.py", "build.sh", "requirements.txt", "user.py"} {
+		b, err := testdata.FS.ReadFile("python/sourcepkg/" + fname)
+		require.NoError(t, err)
+		files[fname] = string(b)
+	}
+	ref, _ := framework.PushCodeImage(t, hostAddr, inclusterAddr,
+		"fission-test/src-"+ns.ID, "v1", files)
+
+	ns.CreatePackage(t, ctx, framework.PackageOptions{
+		Name: pkgName, Env: envName, SrcOCI: ref, BuildCmd: "./build.sh",
+	})
+	ns.WaitForPackageBuildSucceeded(t, ctx, pkgName)
+
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{Name: fnName, Pkg: pkgName, Entrypoint: "user.main"})
+	ns.CreateRoute(t, ctx, framework.RouteOptions{Function: fnName, URL: "/" + fnName, Method: "GET"})
+	body := f.Router(t).GetEventually(t, ctx, "/"+fnName, framework.BodyContains("a: 1"))
 	assert.Contains(t, body, "a: 1")
 }

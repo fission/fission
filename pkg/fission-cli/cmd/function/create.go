@@ -513,7 +513,9 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			deployArchiveFiles = append(deployArchiveFiles, input.String(flagkey.PkgCode))
 			noZip = true
 		}
-		if err := _package.ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage); err != nil {
+		// fn create has no --srcoci; source OCI packages are created via
+		// `fission package create --srcoci` and referenced with --pkg.
+		if err := _package.ValidateArchiveSources(code, srcArchiveFiles, deployArchiveFiles, ociImage, ""); err != nil {
 			return err
 		}
 
