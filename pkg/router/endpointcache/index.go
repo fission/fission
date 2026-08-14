@@ -125,6 +125,15 @@ type (
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
 		// readers load it without taking mu.
 		eps atomic.Pointer[[]Endpoint]
+		// stickyLast remembers, per sticky-key-hash bucket, a hash of the last
+		// admitted endpoint address, so Admit can count sticky-pick CHANGES
+		// ("teleports") with O(buckets) memory instead of per-key state.
+		// Lazily allocated on the first sticky admit; nil for the (common)
+		// functions that never see a sticky key. Best-effort: two keys sharing
+		// a bucket on different pods alternate-count forever — accepted, the
+		// counter is an approximation (see
+		// fission_router_sticky_teleports_total in metrics.go).
+		stickyLast atomic.Pointer[[stickyBuckets]atomic.Uint64]
 	}
 )
 
@@ -461,6 +470,31 @@ func hrwScore(key, address string) uint64 {
 	return h
 }
 
+// stickyBuckets sizes fnEntry.stickyLast: 256 buckets keeps the per-function
+// memory at 2KiB while making same-bucket key collisions rare enough that the
+// teleport counter tracks real churn, not collision noise.
+const stickyBuckets = 256
+
+// noteStickyPick records the admitted address for the sticky key's bucket and
+// reports whether the bucket's pick changed (a "teleport"). First-ever picks
+// are not teleports. Address hashing reuses hrwScore with an empty key, so no
+// second hash implementation exists to drift.
+func noteStickyPick(e *fnEntry, stickyKey, address string) bool {
+	buckets := e.stickyLast.Load()
+	if buckets == nil {
+		e.stickyLast.CompareAndSwap(nil, &[stickyBuckets]atomic.Uint64{})
+		buckets = e.stickyLast.Load()
+	}
+	// Inline FNV-1a 32 of the key (mirrors shard()): bucket index.
+	h := uint32(2166136261)
+	for i := 0; i < len(stickyKey); i++ {
+		h = (h ^ uint32(stickyKey[i])) * 16777619
+	}
+	addrHash := hrwScore("", address)
+	old := buckets[h%stickyBuckets].Swap(addrHash)
+	return old != 0 && old != addrHash
+}
+
 // Admit picks a ready, non-quarantined endpoint with free capacity (below
 // requestsPerPod), increments its in-flight counter, and returns it with a
 // release func that the caller MUST invoke when the request completes
@@ -555,6 +589,9 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 			}
 		}
 		if best.inflight.CompareAndSwap(bestLoad, bestLoad+1) {
+			if stickyKey != "" && noteStickyPick(e, stickyKey, best.Address) {
+				RecordStickyTeleport(key.Namespace, key.Name)
+			}
 			counter := best.inflight
 			var once sync.Once
 			release := func() { once.Do(func() { counter.Add(-1) }) }

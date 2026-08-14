@@ -66,6 +66,15 @@ var (
 		"fission_router_endpointcache_fallbacks_total",
 		"Warm-path requests routed to the executor instead of the endpoint index, by reason.",
 	)
+	// stickyTeleports counts sticky-keyed admits whose key-hash bucket picked
+	// a different endpoint than its previous admit — the "teleports/sec" an
+	// operator watches during pod churn. Best-effort bucketed approximation
+	// (256 buckets per function): distinct keys sharing a bucket on different
+	// pods overcount; do not read it as exact per-key ownership moves.
+	stickyTeleports = metrics.Int64Counter(
+		"fission_router_sticky_teleports_total",
+		"Sticky-keyed admits whose key-hash bucket changed endpoints since its last admit (best-effort bucketed approximation).",
+	)
 	// modeInfo is the always-1 info gauge whose labels carry the requested and
 	// effective cache modes (see RegisterModeInfo).
 	modeInfo = metrics.Int64Gauge(
@@ -93,6 +102,16 @@ func RecordQuarantine() { quarantines.Add(context.Background(), 1) }
 
 // RecordDialTimeoutStrike counts one soft (timeout) dial-failure strike.
 func RecordDialTimeoutStrike() { dialTimeoutStrikes.Add(context.Background(), 1) }
+
+// RecordStickyTeleport counts one sticky-pick change for a function. Teleports
+// are churn-driven and rare, so the attribute set is built inline rather than
+// cached like the per-request paths.
+func RecordStickyTeleport(namespace, name string) {
+	stickyTeleports.Add(context.Background(), 1, metric.WithAttributes(
+		attribute.String("function_namespace", namespace),
+		attribute.String("function_name", name),
+	))
+}
 
 // RegisterModeInfo publishes the constant info gauge exposing the requested and
 // effective endpointslice cache modes. Recorded for EVERY mode (including off)

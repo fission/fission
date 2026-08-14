@@ -232,6 +232,56 @@ func TestStickySaturationOverflow(t *testing.T) {
 	release3()
 }
 
+// TestNoteStickyPick pins the bucketed teleport detector: the first pick for
+// a bucket is never a teleport, a repeat pick is not, and a changed pick is.
+// Collision inflation (two keys sharing a bucket on different pods) is
+// accepted by design — the metric is a best-effort approximation.
+func TestNoteStickyPick(t *testing.T) {
+	t.Parallel()
+	e := &fnEntry{}
+
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.1:8888"), "first pick is not a teleport")
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.1:8888"), "repeat pick is not a teleport")
+	assert.True(t, noteStickyPick(e, "session-1", "10.0.0.2:8888"), "changed pick is a teleport")
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.2:8888"), "sticky again after the move")
+}
+
+// TestAdmitStickyTeleportOnEndpointLoss drives the detector through Admit:
+// removing the sticky winner moves the key to the survivor, which must
+// register as a pick change in the fnEntry's bucket state.
+func TestAdmitStickyTeleportOnEndpointLoss(t *testing.T) {
+	t.Parallel()
+	ix := NewIndex()
+	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, "10.0.0.1", "10.0.0.2"))
+
+	const key = "session-teleport"
+	ep1, release1, res := ix.Admit("default", "fn-a", "", 1, key)
+	require.Equal(t, Admitted, res)
+	release1()
+
+	fk := FnKey{Namespace: "default", Name: "fn-a"}
+	e := ix.shard(fk).m[fk]
+	require.NotNil(t, e)
+	assert.False(t, noteStickyPick(e, key, ep1.Address),
+		"Admit must have recorded its pick: re-noting the same address is not a teleport")
+
+	// Drop the winner: the key's next admit lands on the survivor and must
+	// register as exactly one pick change in the bucket state.
+	survivor := "10.0.0.1"
+	if ep1.Address == "10.0.0.1:8888" {
+		survivor = "10.0.0.2"
+	}
+	ix.ApplySlice(slice("s1", "fn-a", "default", 8888, survivor))
+	ep2, release2, res := ix.Admit("default", "fn-a", "", 1, key)
+	require.Equal(t, Admitted, res)
+	release2()
+	require.NotEqual(t, ep1.Address, ep2.Address)
+	assert.False(t, noteStickyPick(e, key, ep2.Address),
+		"Admit after the move must have stored the new pick")
+	assert.True(t, noteStickyPick(e, key, ep1.Address),
+		"moving back to the old address is again a change")
+}
+
 // TestStickyEmptyKeyKeepsLeastOutstanding: no key = today's pick, bit for bit.
 func TestStickyEmptyKeyKeepsLeastOutstanding(t *testing.T) {
 	t.Parallel()
