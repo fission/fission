@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -163,4 +166,165 @@ func TestProxyInvokeOversizedResponseCapped(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, resultText(t, res), "exceeded 10 bytes")
+}
+
+// TestProxyInvokeStreamingForwardsChunks: the handler writes two flushed
+// chunks, gated so the second is only written after the first notification
+// arrived — the proxy must observe at least two chunks whose concatenation
+// equals the final result text, with strictly increasing progress bytes.
+func TestProxyInvokeStreamingForwardsChunks(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		f := w.(http.Flusher)
+		_, _ = w.Write([]byte("hello "))
+		f.Flush()
+		<-release
+		_, _ = w.Write([]byte("world"))
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
+	var mu sync.Mutex
+	var chunks []string
+	var progress []int64
+	notify := func(_ context.Context, chunk string, progressBytes int64) {
+		mu.Lock()
+		defer mu.Unlock()
+		chunks = append(chunks, chunk)
+		progress = append(progress, progressBytes)
+		if len(chunks) == 1 {
+			close(release)
+		}
+	}
+	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.False(t, res.IsError)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(chunks), 2, "flushed chunks must arrive incrementally")
+	assert.Equal(t, strings.Join(chunks, ""), resultText(t, res),
+		"progress chunks must concatenate to the final result")
+	for i := 1; i < len(progress); i++ {
+		assert.Greater(t, progress[i], progress[i-1], "progress must be monotonic")
+	}
+}
+
+// TestProxyInvokeStreamingRuneBoundary: a multi-byte rune split across two
+// flushes must never surface as an invalid-UTF-8 progress chunk; the partial
+// rune is held back until its remaining bytes arrive.
+func TestProxyInvokeStreamingRuneBoundary(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		f := w.(http.Flusher)
+		// "ab" + first 2 of the 3 bytes of "€": the emitable prefix is "ab".
+		_, _ = w.Write([]byte("ab\xe2\x82"))
+		f.Flush()
+		<-release
+		// The final byte of "€", then "cd".
+		_, _ = w.Write([]byte("\xaccd"))
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
+	var mu sync.Mutex
+	var chunks []string
+	notify := func(_ context.Context, chunk string, _ int64) {
+		mu.Lock()
+		defer mu.Unlock()
+		chunks = append(chunks, chunk)
+		if len(chunks) == 1 {
+			close(release)
+		}
+	}
+	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, "ab€cd", resultText(t, res))
+
+	mu.Lock()
+	defer mu.Unlock()
+	for _, c := range chunks {
+		assert.True(t, utf8.ValidString(c), "chunk %q must be valid UTF-8", c)
+	}
+	assert.Equal(t, "ab€cd", strings.Join(chunks, ""))
+}
+
+// TestProxyInvokeStreamingCapAborts: a function streaming past maxBody gets
+// the same IsError cap result as the buffered path, and the proxy cancels the
+// upstream read instead of draining an unbounded stream (the handler here
+// streams until the client goes away — the call returning at all proves the
+// cancel).
+func TestProxyInvokeStreamingCapAborts(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f := w.(http.Flusher)
+		for {
+			if _, err := w.Write(make([]byte, 1024)); err != nil {
+				return
+			}
+			f.Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			default:
+			}
+		}
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	p.maxBody = 16
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
+	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, resultText(t, res), "exceeded 16 bytes")
+}
+
+// TestProxyInvokeStreamingIdleTimeout: no bytes within StreamIdleTimeout
+// aborts the stream with the timeout tool error.
+func TestProxyInvokeStreamingIdleTimeout(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f := w.(http.Flusher)
+		_, _ = w.Write([]byte("x"))
+		f.Flush()
+		<-r.Context().Done() // never write again; unblocks when the proxy cancels
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true, StreamIdleTimeout: 50 * time.Millisecond}
+	start := time.Now()
+	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, resultText(t, res), "timed out")
+	assert.Less(t, time.Since(start), 5*time.Second, "idle timeout must fire promptly, not wait for a hard ceiling")
+}
+
+// TestProxyInvokeStreamingNon2xxNoNotify: error statuses take the buffered
+// mapping — nothing is streamed as progress.
+func TestProxyInvokeStreamingNon2xxNoNotify(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("no such route"))
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
+	notified := false
+	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) { notified = true })
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, resultText(t, res), "function returned 404")
+	assert.False(t, notified, "non-2xx must not emit progress")
 }
