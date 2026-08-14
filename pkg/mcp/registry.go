@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"slices"
 	"sync"
+	"time"
 
 	"k8s.io/apimachinery/pkg/types"
 
@@ -33,6 +34,17 @@ type ToolEntry struct {
 	// (utils.UrlForFunctionRef) instead of addressing FnName's live route.
 	// Empty (the default) preserves the pre-RFC-0025 behavior.
 	Alias string
+
+	// Streaming mirrors the function's Spec.Streaming presence: when true,
+	// tools/call MAY stream the function's output to the caller as MCP
+	// progress notifications (only if the caller sent a progress token; see
+	// Server.callTool). The timeouts mirror StreamingConfig semantics:
+	// StreamIdleTimeout 0 means the proxy default, StreamMaxDuration 0 means
+	// no ceiling (idle governs) — a streaming call does NOT inherit the
+	// buffered path's hard call timeout.
+	Streaming         bool
+	StreamIdleTimeout time.Duration
+	StreamMaxDuration time.Duration
 }
 
 // Registry is the in-memory source of truth for the MCP tool set, maintained by
@@ -172,7 +184,7 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {
 		schema = json.RawMessage(slices.Clone(tc.InputSchema.Raw))
 	}
-	return ToolEntry{
+	entry := ToolEntry{
 		ToolName:    name,
 		Namespace:   fn.Namespace,
 		FnName:      fn.Name,
@@ -188,6 +200,12 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 		// snapshot).
 		Alias: tc.Alias,
 	}
+	if sc := fn.Spec.Streaming; sc != nil {
+		entry.Streaming = true
+		entry.StreamIdleTimeout = time.Duration(sc.IdleTimeoutSeconds) * time.Second
+		entry.StreamMaxDuration = time.Duration(sc.MaxDurationSeconds) * time.Second
+	}
+	return entry
 }
 
 func toolEntryEqual(a, b ToolEntry) bool {
@@ -196,5 +214,8 @@ func toolEntryEqual(a, b ToolEntry) bool {
 		a.FnName == b.FnName &&
 		a.Alias == b.Alias &&
 		a.Description == b.Description &&
+		a.Streaming == b.Streaming &&
+		a.StreamIdleTimeout == b.StreamIdleTimeout &&
+		a.StreamMaxDuration == b.StreamMaxDuration &&
 		string(a.InputSchema) == string(b.InputSchema)
 }
