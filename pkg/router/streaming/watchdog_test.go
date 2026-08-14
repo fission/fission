@@ -74,3 +74,31 @@ func TestWatchdogZeroIdleNoOp(t *testing.T) {
 	case <-time.After(80 * time.Millisecond):
 	}
 }
+
+// TestWatchdogDispatchedFireYieldsToFreshReset pins the AfterFunc dispatch
+// race: Timer.Reset cannot retract a callback that has already been
+// dispatched, so a fire racing a fresh Reset must re-arm for the remainder of
+// the window instead of aborting a live stream — and must still fire once the
+// activity genuinely stops.
+func TestWatchdogDispatchedFireYieldsToFreshReset(t *testing.T) {
+	t.Parallel()
+	fired := make(chan struct{}, 1)
+	w := NewWatchdog(60*time.Millisecond, func() { fired <- struct{}{} })
+	w.Start()
+	defer w.Stop()
+
+	w.Reset()
+	w.fire() // simulate the stale dispatched callback arriving after the Reset
+	select {
+	case <-fired:
+		t.Fatal("a fire racing a fresh Reset must re-arm, not abort")
+	default:
+	}
+
+	// No further activity: the re-armed watchdog must still fire exactly once.
+	select {
+	case <-fired:
+	case <-time.After(2 * time.Second):
+		t.Fatal("watchdog never fired after the re-arm")
+	}
+}

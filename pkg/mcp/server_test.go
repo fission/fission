@@ -24,7 +24,7 @@ func testServer(t *testing.T) *Server {
 	reg := NewRegistry()
 	reg.Upsert(entry("ns-a", "fn1", "tool-a"))
 	reg.Upsert(entry("ns-b", "fn2", "tool-b"))
-	return NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer([]byte("k")), logr.Discard())
+	return NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard(), 0), NewAuthorizer([]byte("k")), logr.Discard())
 }
 
 func TestServerToolVisible(t *testing.T) {
@@ -58,7 +58,7 @@ func TestServerFilterTools(t *testing.T) {
 func TestServerHTTPHandlerLoopbackHostOverLoopback(t *testing.T) {
 	t.Parallel()
 	// Pass-through authorizer (nil key): authz is not what's under test.
-	s := NewServer(NewRegistry(), NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
+	s := NewServer(NewRegistry(), NewProxy("http://router-internal", nil, logr.Discard(), 0), NewAuthorizer(nil), logr.Discard())
 	srv := httptest.NewServer(s.HTTPHandler())
 	t.Cleanup(srv.Close)
 
@@ -105,7 +105,7 @@ func TestServerStreamingToolCall(t *testing.T) {
 	e := entry("ns-a", "fn1", "stream-tool")
 	e.Streaming = true
 	reg.Upsert(e)
-	s := NewServer(reg, NewProxy(fnSrv.URL, nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
+	s := NewServer(reg, NewProxy(fnSrv.URL, nil, logr.Discard(), 0), NewAuthorizer(nil), logr.Discard())
 	s.ApplyToolDelta([]ToolEntry{e}, nil) // what the reconciler does on upsert
 	srv := httptest.NewServer(s.HTTPHandler())
 	t.Cleanup(srv.Close)

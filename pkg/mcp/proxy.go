@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -23,6 +22,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/pkg/router/streaming"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpx"
 )
@@ -75,44 +75,53 @@ type Proxy struct {
 	logger            logr.Logger
 }
 
-// ProxyOption customizes NewProxy.
-type ProxyOption func(*Proxy)
-
-// WithStreamIdleDefault overrides the idle timeout applied to streaming calls
-// whose function leaves IdleTimeoutSeconds zero. Non-positive keeps the
-// package default (fv1.DefaultStreamIdleSeconds).
-func WithStreamIdleDefault(d time.Duration) ProxyOption {
-	return func(p *Proxy) {
-		if d > 0 {
-			p.streamIdleDefault = d
-		}
-	}
-}
-
 // NewProxy builds a proxy targeting routerInternalURL. When hmacMaster is
 // non-empty the outbound transport signs requests for ServiceRouterInternal
 // (HKDF-derived key); empty leaves requests unsigned, matching the verifier's
-// pass-through mode.
-func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger, opts ...ProxyOption) *Proxy {
+// pass-through mode. streamIdleDefault <= 0 keeps the package default
+// (fv1.DefaultStreamIdleSeconds); Start passes the operator's
+// ROUTER_STREAM_IDLE_TIMEOUT override.
+func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger, streamIdleDefault time.Duration) *Proxy {
 	// Pooled transport sized to defaultMaxConcurrent in-flight tool calls, all to
 	// the single router-internal host (see httpx.PooledTransport).
 	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(defaultMaxConcurrent))
 	if len(hmacMaster) > 0 {
 		rt = hmacauth.ServiceSigner(hmacMaster, hmacauth.ServiceRouterInternal, rt, time.Now)
 	}
-	p := &Proxy{
+	if streamIdleDefault <= 0 {
+		streamIdleDefault = time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second
+	}
+	return &Proxy{
 		baseURL:           strings.TrimRight(routerInternalURL, "/"),
 		client:            &http.Client{Transport: rt},
 		maxBody:           defaultMaxResponseBytes,
 		timeout:           defaultCallTimeout,
-		streamIdleDefault: time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second,
+		streamIdleDefault: streamIdleDefault,
 		sem:               make(chan struct{}, defaultMaxConcurrent),
 		logger:            logger.WithName("proxy"),
 	}
-	for _, opt := range opts {
-		opt(p)
+}
+
+// acquireSlot takes a concurrency slot, trying without blocking first (the
+// common uncontended case allocates no timer) and otherwise waiting at most
+// defaultCallTimeout — streaming callers carry no context deadline of their
+// own, and in-flight streams can hold slots indefinitely, so an unbounded
+// wait would park queued callers forever. The caller releases with
+// `<-p.sem` on success.
+func (p *Proxy) acquireSlot(ctx context.Context) bool {
+	select {
+	case p.sem <- struct{}{}:
+		return true
+	default:
 	}
-	return p
+	ctx, cancel := context.WithTimeout(ctx, defaultCallTimeout)
+	defer cancel()
+	select {
+	case p.sem <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // Invoke proxies a tool call to the function's internal endpoint and maps the
@@ -125,14 +134,11 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 	defer cancel()
 
 	// Bound concurrent calls so per-call response buffers can't exhaust memory.
-	// Wait for a slot until the context deadline rather than failing immediately.
-	select {
-	case p.sem <- struct{}{}:
-		defer func() { <-p.sem }()
-	case <-ctx.Done():
+	if !p.acquireSlot(ctx) {
 		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
 		return toolError("function invocation failed: server busy"), nil
 	}
+	defer func() { <-p.sem }()
 
 	req, err := p.buildRequest(ctx, e, args)
 	if err != nil {
@@ -221,57 +227,35 @@ type streamNotify func(ctx context.Context, chunk string, progressBytes int64)
 // buffered path (the final result is the content of record; a truncated one
 // would let the agent act on incomplete data).
 func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, notify streamNotify) (*mcp.CallToolResult, error) {
-	var cancel context.CancelFunc
 	if e.StreamMaxDuration > 0 {
-		ctx, cancel = context.WithTimeout(ctx, e.StreamMaxDuration)
-	} else {
-		ctx, cancel = context.WithCancel(ctx)
+		var cancelMax context.CancelFunc
+		ctx, cancelMax = context.WithTimeout(ctx, e.StreamMaxDuration)
+		defer cancelMax()
 	}
-	defer cancel()
+	// Cancel-with-cause so streamAbort can tell a watchdog abort from a
+	// caller cancel — both otherwise surface as context.Canceled. Mirrors
+	// pkg/router/stream.go's errStreamIdleTimeout pattern.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
-	// Same slot accounting as Invoke, but the wait for a slot is bounded at
-	// the buffered path's ceiling: this ctx has no deadline of its own, and
-	// in-flight streams can hold slots indefinitely, so an unbounded wait
-	// here would park queued callers (and their goroutines) forever.
-	acquire := time.NewTimer(defaultCallTimeout)
-	defer acquire.Stop()
-	select {
-	case p.sem <- struct{}{}:
-		defer func() { <-p.sem }()
-	case <-ctx.Done():
-		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
-		return toolError("function invocation failed: server busy"), nil
-	case <-acquire.C:
+	// Same slot accounting as Invoke; the wait is bounded inside acquireSlot.
+	if !p.acquireSlot(ctx) {
 		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
 		return toolError("function invocation failed: server busy"), nil
 	}
+	defer func() { <-p.sem }()
 
 	idle := e.StreamIdleTimeout
 	if idle <= 0 {
 		idle = p.streamIdleDefault
 	}
-	// Idle watchdog: cancels the request context when no upstream bytes flow
-	// for `idle`. The read loop only stamps lastActivity — it never touches
-	// the timer — and the callback re-arms itself when activity happened
-	// since arming. A bare Reset from the loop would race an already
-	// dispatched AfterFunc callback (Go's Timer docs make no suppression
-	// guarantee) and cancel a live stream. idleFired distinguishes a
-	// watchdog abort from a caller cancel, since both surface as
-	// context.Canceled.
-	var idleFired atomic.Bool
-	var lastActivity atomic.Int64
-	lastActivity.Store(time.Now().UnixNano())
-	var idleTimer *time.Timer
-	idleTimer = time.AfterFunc(idle, func() {
-		since := time.Since(time.Unix(0, lastActivity.Load()))
-		if since < idle {
-			idleTimer.Reset(idle - since)
-			return
-		}
-		idleFired.Store(true)
-		cancel()
-	})
-	defer idleTimer.Stop()
+	// Idle watchdog shared with the router's streaming path: re-armed on each
+	// upstream chunk, and safe against the AfterFunc dispatch race (a fire
+	// racing a fresh Reset re-arms instead of aborting; see
+	// streaming.Watchdog).
+	wd := streaming.NewWatchdog(idle, func() { cancel(errStreamIdleTimeout) })
+	wd.Start()
+	defer wd.Stop()
 
 	req, err := p.buildRequest(ctx, e, args)
 	if err != nil {
@@ -279,7 +263,7 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return p.streamAbort(ctx, e, err, &idleFired, "connecting"), nil
+		return p.streamAbort(ctx, e, err, "connecting"), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -301,10 +285,11 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
-			lastActivity.Store(time.Now().UnixNano())
+			wd.Reset()
 			total += int64(n)
 			if total > p.maxBody {
-				cancel() // stop the upstream body, don't drain past the cap
+				// Stop the upstream body, don't drain past the cap.
+				cancel(errResponseCapExceeded)
 				p.logger.V(1).Info("tool response exceeded cap", "tool", e.ToolName, "cap", p.maxBody)
 				return toolError(fmt.Sprintf("function response exceeded %d bytes", p.maxBody)), nil
 			}
@@ -315,7 +300,7 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 			break
 		}
 		if readErr != nil {
-			return p.streamAbort(ctx, e, readErr, &idleFired, "mid-stream"), nil
+			return p.streamAbort(ctx, e, readErr, "mid-stream"), nil
 		}
 	}
 	// Bounded drain so a healthy client sees every notification before the
@@ -325,14 +310,22 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: acc.String()}}}, nil
 }
 
+// Stream-abort causes attached via context.WithCancelCause, so streamAbort
+// can distinguish who ended the stream (mirrors pkg/router/stream.go).
+var (
+	errStreamIdleTimeout   = errors.New("stream aborted: idle timeout")
+	errResponseCapExceeded = errors.New("stream aborted: response cap exceeded")
+)
+
 // streamAbort is the single failure classifier for both streaming failure
 // sites (connect and mid-stream), so the same cause gets the same label
 // wherever it lands: a watchdog or max-duration abort is "timed out", a
 // caller cancel is "canceled", anything else is a generic failure with the
 // detail kept server-side.
-func (p *Proxy) streamAbort(ctx context.Context, e ToolEntry, err error, idleFired *atomic.Bool, phase string) *mcp.CallToolResult {
+func (p *Proxy) streamAbort(ctx context.Context, e ToolEntry, err error, phase string) *mcp.CallToolResult {
+	cause := context.Cause(ctx)
 	switch {
-	case idleFired.Load() || errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(cause, errStreamIdleTimeout) || errors.Is(cause, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded):
 		p.logger.V(1).Info("tool call timed out", "phase", phase, "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
 		return toolError("function invocation timed out")
 	case ctx.Err() != nil:
@@ -429,17 +422,19 @@ func (d *delivery) run() {
 		if len(emit) == 0 && d.done {
 			emit, rest = d.raw, nil
 		}
-		var out []byte
+		var out string
 		if len(emit) > 0 {
-			out = append(out, emit...)
+			// The string conversion copies; take it BEFORE the compaction
+			// below overwrites emit's backing region.
+			out = string(emit)
 			d.raw = append(d.raw[:0], rest...)
 		}
 		done := d.done
 		d.mu.Unlock()
 
-		if len(out) > 0 {
+		if out != "" {
 			delivered += int64(len(out))
-			d.notify(d.ctx, string(out), delivered)
+			d.notify(d.ctx, out, delivered)
 			continue // there may be more already buffered
 		}
 		if done {

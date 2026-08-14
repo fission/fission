@@ -52,7 +52,7 @@ func TestProxyInvokeSignsAndForwards(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, master, logr.Discard())
+	p := NewProxy(srv.URL, master, logr.Discard(), 0)
 	e := ToolEntry{ToolName: "t", Namespace: "ns", FnName: "fn"}
 	res, err := p.Invoke(context.Background(), e, []byte(`{"q":"hi"}`))
 	require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestProxyInvokeFoldsDefaultNamespace(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	_, err := p.Invoke(context.Background(), ToolEntry{Namespace: "default", FnName: "fn"}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "/fission-function/fn", gotPath, "default namespace must be folded out of the path")
@@ -96,7 +96,7 @@ func TestProxyInvokeAliasSuffix(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	_, err := p.Invoke(context.Background(), ToolEntry{Namespace: "ns", FnName: "fn", Alias: "blue"}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "/fission-function/ns/fn:blue", gotPath)
@@ -111,7 +111,7 @@ func TestProxyInvokeUnsignedWhenNoMaster(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	_, err := p.Invoke(context.Background(), ToolEntry{Namespace: "ns", FnName: "fn"}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, gotSig, "no master ⇒ unsigned (pass-through)")
@@ -140,7 +140,7 @@ func TestProxyInvokeStatusMapping(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			p := NewProxy(srv.URL, nil, logr.Discard())
+			p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 			res, err := p.Invoke(context.Background(), ToolEntry{Namespace: "ns", FnName: "fn"}, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantIsError, res.IsError)
@@ -160,7 +160,7 @@ func TestProxyInvokeOversizedResponseCapped(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	p.maxBody = 10 // force the cap
 	res, err := p.Invoke(context.Background(), ToolEntry{Namespace: "ns", FnName: "fn"}, nil)
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestProxyInvokeStreamingForwardsChunks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	var mu sync.Mutex
 	var chunks []string
@@ -230,7 +230,7 @@ func TestProxyInvokeStreamingRuneBoundary(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	var mu sync.Mutex
 	var chunks []string
@@ -278,7 +278,7 @@ func TestProxyInvokeStreamingCapAborts(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	p.maxBody = 16
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
@@ -299,7 +299,7 @@ func TestProxyInvokeStreamingIdleTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true, StreamIdleTimeout: 50 * time.Millisecond}
 	start := time.Now()
 	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
@@ -319,7 +319,7 @@ func TestProxyInvokeStreamingNon2xxNoNotify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	notified := false
 	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) { notified = true })
@@ -345,7 +345,7 @@ func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p := NewProxy(srv.URL, nil, logr.Discard())
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	var mu sync.Mutex
 	var chunks []string

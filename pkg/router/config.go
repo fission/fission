@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/streaming"
 )
 
 // endpointSliceCacheMode selects how the router uses its EndpointSlice-fed
@@ -129,15 +130,11 @@ func loadRouterConfig(logger logr.Logger) (routerConfig, error) {
 	// DefaultStreamIdleSeconds.
 	cfg.streamIdleDefault = time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second
 	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
-		d, perr := time.ParseDuration(v)
+		// Validation shared with the MCP server (streaming.ParseIdleTimeout)
+		// so the same env var can never validate differently per consumer.
+		d, perr := streaming.ParseIdleTimeout("ROUTER_STREAM_IDLE_TIMEOUT", v)
 		if perr != nil {
-			return cfg, fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
-		}
-		// A non-positive idle window would silently disable the streaming idle
-		// watchdog (streams with no max-duration ceiling could then hang forever).
-		// Reject it at startup rather than failing open.
-		if d <= 0 {
-			return cfg, fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
+			return cfg, perr
 		}
 		cfg.streamIdleDefault = d
 	}

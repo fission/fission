@@ -27,7 +27,7 @@ func newAliasReconciler(t *testing.T, objs ...client.Object) (*FunctionAliasTool
 		WithStatusSubresource(&fv1.Function{}, &fv1.FunctionAlias{}).
 		Build()
 	reg := NewRegistry()
-	server := NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
+	server := NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard(), 0), NewAuthorizer(nil), logr.Discard())
 	tool := &FunctionToolReconciler{logger: logr.Discard(), client: c, reg: reg, server: server}
 	ar := &FunctionAliasToolReconciler{logger: logr.Discard(), client: c, tool: tool}
 	return ar, tool, reg, c

@@ -30,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/streaming"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -93,21 +94,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// Honor the same cluster-wide streaming idle-timeout override the router
 	// applies to IdleTimeoutSeconds=0 functions (pkg/router/config.go), with
-	// identical validation — a function must get one idle policy regardless
-	// of whether it is invoked via HTTPTrigger or tools/call. Unset keeps the
-	// fv1.DefaultStreamIdleSeconds package default.
-	var proxyOpts []ProxyOption
+	// the shared validation — a function must get one idle policy regardless
+	// of whether it is invoked via HTTPTrigger or tools/call. Unset (zero)
+	// keeps the fv1.DefaultStreamIdleSeconds package default.
+	var streamIdleDefault time.Duration
 	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
-		d, perr := time.ParseDuration(v)
+		d, perr := streaming.ParseIdleTimeout("ROUTER_STREAM_IDLE_TIMEOUT", v)
 		if perr != nil {
-			return fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
+			return perr
 		}
-		if d <= 0 {
-			return fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
-		}
-		proxyOpts = append(proxyOpts, WithStreamIdleDefault(d))
+		streamIdleDefault = d
 	}
-	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger, proxyOpts...)
+	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger, streamIdleDefault)
 	registry := NewRegistry()
 	server := NewServer(registry, proxy, authz, logger)
 

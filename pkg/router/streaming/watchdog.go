@@ -20,6 +20,11 @@ type Watchdog struct {
 	mu     sync.Mutex
 	timer  *time.Timer
 	dead   bool
+	// lastReset arbitrates the AfterFunc dispatch race: Timer.Reset cannot
+	// retract a callback that was already dispatched, so fire() re-checks
+	// recency under mu and re-arms instead of aborting a stream whose
+	// activity raced the expiry.
+	lastReset time.Time
 }
 
 // NewWatchdog returns a watchdog that calls onIdle once if Reset is not called
@@ -38,6 +43,7 @@ func (w *Watchdog) Start() {
 	if w.dead || w.timer != nil {
 		return
 	}
+	w.lastReset = time.Now()
 	w.timer = time.AfterFunc(w.idle, w.fire)
 }
 
@@ -49,6 +55,7 @@ func (w *Watchdog) Reset() {
 	if w.dead || w.timer == nil {
 		return
 	}
+	w.lastReset = time.Now()
 	w.timer.Reset(w.idle)
 }
 
@@ -66,6 +73,13 @@ func (w *Watchdog) Stop() {
 func (w *Watchdog) fire() {
 	w.mu.Lock()
 	if w.dead {
+		w.mu.Unlock()
+		return
+	}
+	// A Reset that raced this already-dispatched callback means the stream is
+	// live: re-arm for the remainder of the window instead of firing.
+	if since := time.Since(w.lastReset); since < w.idle {
+		w.timer.Reset(w.idle - since)
 		w.mu.Unlock()
 		return
 	}

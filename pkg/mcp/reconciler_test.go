@@ -33,7 +33,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*FunctionToolReconciler
 		WithStatusSubresource(&fv1.Function{}).
 		Build()
 	reg := NewRegistry()
-	server := NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard()), NewAuthorizer(nil), logr.Discard())
+	server := NewServer(reg, NewProxy("http://router-internal", nil, logr.Discard(), 0), NewAuthorizer(nil), logr.Discard())
 	r := &FunctionToolReconciler{
 		logger: logr.Discard(),
 		client: c,
