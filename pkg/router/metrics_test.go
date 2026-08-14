@@ -11,52 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/sdk/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
-	"github.com/fission/fission/pkg/utils/metrics"
+	"github.com/fission/fission/pkg/utils/metrics/metricstest"
 )
-
-// setupRouterMeter installs a MeterProvider backed by a fresh Prometheus
-// registry (mirrors pkg/utils/metrics's own setupMeter test helper): the
-// router's package-level counters/histogram are created against the global
-// MeterProvider delegate at package-init time, so a test-installed provider
-// retroactively wires them to this registry.
-func setupRouterMeter(t *testing.T) *prometheus.Registry {
-	t.Helper()
-	reg := prometheus.NewRegistry()
-	mp, err := metrics.NewMeterProvider(resource.Default(), reg, true)
-	require.NoError(t, err)
-	otel.SetMeterProvider(mp)
-	t.Cleanup(func() { _ = mp.Shutdown(t.Context()) })
-	return reg
-}
-
-func findRouterMetric(fam *dto.MetricFamily, want map[string]string) *dto.Metric {
-	for _, m := range fam.GetMetric() {
-		labels := map[string]string{}
-		for _, l := range m.GetLabel() {
-			labels[l.GetName()] = l.GetValue()
-		}
-		match := true
-		for k, v := range want {
-			if labels[k] != v {
-				match = false
-				break
-			}
-		}
-		if match {
-			return m
-		}
-	}
-	return nil
-}
 
 // TestFunctionCallAttrsCacheKeyIncludesVersion pins the attr-cache key shape
 // (metrics.go: [6]string{namespace,name,version,path,method,code}): two
@@ -88,7 +50,7 @@ func TestFunctionCallAttrsCacheKeyIncludesVersion(t *testing.T) {
 // TestFunctionCallMetrics_VersionLabel drives collectFunctionMetric for both
 // a versioned and an unversioned function against ONE shared registry (the
 // router's counters/histogram bind to the global MeterProvider the first
-// time one is installed in this test binary; a second setupRouterMeter call
+// time one is installed in this test binary; a second metricstest.SetupMeter call
 // in a later test would silently keep recording into the FIRST registry, so
 // both cases share one installation here rather than risking that trap) and
 // asserts:
@@ -100,7 +62,7 @@ func TestFunctionCallAttrsCacheKeyIncludesVersion(t *testing.T) {
 //     treats empty and absent as the same series, so this does not create a
 //     new time series for existing unversioned dashboards/alerts.
 func TestFunctionCallMetrics_VersionLabel(t *testing.T) {
-	reg := setupRouterMeter(t)
+	reg := metricstest.SetupMeter(t)
 
 	call := func(fn *fv1.Function, path string, status int) {
 		fh := functionHandler{function: fn}
@@ -135,7 +97,7 @@ func TestFunctionCallMetrics_VersionLabel(t *testing.T) {
 		for _, name := range []string{"fission_function_calls_total", "fission_function_errors_total", "fission_function_overhead_seconds"} {
 			fam := byName[name]
 			require.NotNil(t, fam, "%s must be exposed", name)
-			m := findRouterMetric(fam, want)
+			m := metricstest.FindMetric(fam, want)
 			require.NotNil(t, m, "%s must carry function_version=hello-v1 (have families: %+v)", name, fam.GetMetric())
 		}
 	})
@@ -143,7 +105,7 @@ func TestFunctionCallMetrics_VersionLabel(t *testing.T) {
 	t.Run("unversioned invocation carries an empty function_version", func(t *testing.T) {
 		fam := byName["fission_function_calls_total"]
 		require.NotNil(t, fam)
-		m := findRouterMetric(fam, map[string]string{
+		m := metricstest.FindMetric(fam, map[string]string{
 			"function_namespace": "default",
 			"function_name":      "classic",
 		})
