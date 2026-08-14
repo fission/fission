@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -20,6 +21,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/httpx"
@@ -32,11 +34,12 @@ const (
 	// bounded by their idle timeout (and optional StreamMaxDuration) instead.
 	defaultCallTimeout = 60 * time.Second
 
-	// defaultStreamIdleTimeout bounds the wait between chunks on the streaming
-	// path when the function's StreamingConfig leaves IdleTimeoutSeconds zero.
-	// Matches the buffered path's ceiling so an idle stream and a slow one-shot
-	// call time out on the same clock.
-	defaultStreamIdleTimeout = 60 * time.Second
+	// streamDrainTimeout bounds how long InvokeStreaming waits after upstream
+	// EOF for the delivery goroutine to flush pending progress notifications
+	// to the client. A healthy client drains instantly (ordering preserved:
+	// notifications before the final result); a stalled one forfeits its tail
+	// notifications — the final buffered result is authoritative either way.
+	streamDrainTimeout = 5 * time.Second
 
 	// defaultMaxResponseBytes caps the function response buffered into the
 	// final CallToolResult — on the streaming path too, where the same bytes
@@ -60,29 +63,56 @@ type Proxy struct {
 	client  *http.Client
 	maxBody int64
 	timeout time.Duration
-	sem     chan struct{} // bounds concurrent in-flight calls
-	logger  logr.Logger
+	// streamIdleDefault is the idle timeout applied to a streaming call whose
+	// function leaves StreamingConfig.IdleTimeoutSeconds zero. It defaults to
+	// fv1.DefaultStreamIdleSeconds and is overridable via
+	// WithStreamIdleDefault so the MCP path honors the same cluster-wide
+	// ROUTER_STREAM_IDLE_TIMEOUT policy the router applies to the identical
+	// IdleTimeoutSeconds=0 case (see Start) — one function, one idle policy,
+	// regardless of entry path.
+	streamIdleDefault time.Duration
+	sem               chan struct{} // bounds concurrent in-flight calls
+	logger            logr.Logger
+}
+
+// ProxyOption customizes NewProxy.
+type ProxyOption func(*Proxy)
+
+// WithStreamIdleDefault overrides the idle timeout applied to streaming calls
+// whose function leaves IdleTimeoutSeconds zero. Non-positive keeps the
+// package default (fv1.DefaultStreamIdleSeconds).
+func WithStreamIdleDefault(d time.Duration) ProxyOption {
+	return func(p *Proxy) {
+		if d > 0 {
+			p.streamIdleDefault = d
+		}
+	}
 }
 
 // NewProxy builds a proxy targeting routerInternalURL. When hmacMaster is
 // non-empty the outbound transport signs requests for ServiceRouterInternal
 // (HKDF-derived key); empty leaves requests unsigned, matching the verifier's
 // pass-through mode.
-func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger) *Proxy {
+func NewProxy(routerInternalURL string, hmacMaster []byte, logger logr.Logger, opts ...ProxyOption) *Proxy {
 	// Pooled transport sized to defaultMaxConcurrent in-flight tool calls, all to
 	// the single router-internal host (see httpx.PooledTransport).
 	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(defaultMaxConcurrent))
 	if len(hmacMaster) > 0 {
 		rt = hmacauth.ServiceSigner(hmacMaster, hmacauth.ServiceRouterInternal, rt, time.Now)
 	}
-	return &Proxy{
-		baseURL: strings.TrimRight(routerInternalURL, "/"),
-		client:  &http.Client{Transport: rt},
-		maxBody: defaultMaxResponseBytes,
-		timeout: defaultCallTimeout,
-		sem:     make(chan struct{}, defaultMaxConcurrent),
-		logger:  logger.WithName("proxy"),
+	p := &Proxy{
+		baseURL:           strings.TrimRight(routerInternalURL, "/"),
+		client:            &http.Client{Transport: rt},
+		maxBody:           defaultMaxResponseBytes,
+		timeout:           defaultCallTimeout,
+		streamIdleDefault: time.Duration(fv1.DefaultStreamIdleSeconds) * time.Second,
+		sem:               make(chan struct{}, defaultMaxConcurrent),
+		logger:            logger.WithName("proxy"),
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 // Invoke proxies a tool call to the function's internal endpoint and maps the
@@ -182,11 +212,14 @@ type streamNotify func(ctx context.Context, chunk string, progressBytes int64)
 // InvokeStreaming proxies a tool call like Invoke but forwards the response
 // body incrementally through notify while accumulating the final
 // CallToolResult. Timeouts mirror StreamingConfig semantics instead of the
-// buffered path's hard ceiling: an idle timer (reset per chunk) governs, and
-// StreamMaxDuration, when non-zero, caps total lifetime. The response cap is
-// unchanged — a body over maxBody cancels the upstream read and returns the
-// same IsError result as the buffered path (the final result is the content
-// of record; a truncated one would let the agent act on incomplete data).
+// buffered path's hard ceiling: an idle watchdog (fed by upstream activity)
+// governs, and StreamMaxDuration, when non-zero, caps total lifetime — an
+// active stream with no ceiling legitimately holds its semaphore slot for its
+// whole lifetime, which is the accepted cost of serving long streams from the
+// shared bounded pool. The response cap is unchanged — a body over maxBody
+// cancels the upstream read and returns the same IsError result as the
+// buffered path (the final result is the content of record; a truncated one
+// would let the agent act on incomplete data).
 func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, notify streamNotify) (*mcp.CallToolResult, error) {
 	var cancel context.CancelFunc
 	if e.StreamMaxDuration > 0 {
@@ -196,25 +229,48 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	}
 	defer cancel()
 
-	// Same slot accounting as Invoke: streaming calls hold their slot for the
-	// stream's lifetime — that is the point of the bound.
+	// Same slot accounting as Invoke, but the wait for a slot is bounded at
+	// the buffered path's ceiling: this ctx has no deadline of its own, and
+	// in-flight streams can hold slots indefinitely, so an unbounded wait
+	// here would park queued callers (and their goroutines) forever.
+	acquire := time.NewTimer(defaultCallTimeout)
+	defer acquire.Stop()
 	select {
 	case p.sem <- struct{}{}:
 		defer func() { <-p.sem }()
 	case <-ctx.Done():
 		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
 		return toolError("function invocation failed: server busy"), nil
+	case <-acquire.C:
+		p.logger.V(1).Info("tool call shed: concurrency limit", "tool", e.ToolName)
+		return toolError("function invocation failed: server busy"), nil
 	}
 
 	idle := e.StreamIdleTimeout
 	if idle <= 0 {
-		idle = defaultStreamIdleTimeout
+		idle = p.streamIdleDefault
 	}
-	// The idle timer cancels the request context when no bytes flow for
-	// `idle`; idleFired distinguishes that from a caller cancel, since both
-	// surface as context.Canceled.
+	// Idle watchdog: cancels the request context when no upstream bytes flow
+	// for `idle`. The read loop only stamps lastActivity — it never touches
+	// the timer — and the callback re-arms itself when activity happened
+	// since arming. A bare Reset from the loop would race an already
+	// dispatched AfterFunc callback (Go's Timer docs make no suppression
+	// guarantee) and cancel a live stream. idleFired distinguishes a
+	// watchdog abort from a caller cancel, since both surface as
+	// context.Canceled.
 	var idleFired atomic.Bool
-	idleTimer := time.AfterFunc(idle, func() { idleFired.Store(true); cancel() })
+	var lastActivity atomic.Int64
+	lastActivity.Store(time.Now().UnixNano())
+	var idleTimer *time.Timer
+	idleTimer = time.AfterFunc(idle, func() {
+		since := time.Since(time.Unix(0, lastActivity.Load()))
+		if since < idle {
+			idleTimer.Reset(idle - since)
+			return
+		}
+		idleFired.Store(true)
+		cancel()
+	})
 	defer idleTimer.Stop()
 
 	req, err := p.buildRequest(ctx, e, args)
@@ -223,12 +279,7 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
-		if idleFired.Load() || errors.Is(err, context.DeadlineExceeded) {
-			p.logger.V(1).Info("tool call timed out", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-			return toolError("function invocation timed out"), nil
-		}
-		p.logger.Error(err, "tool call transport error", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-		return toolError("function invocation failed"), nil
+		return p.streamAbort(ctx, e, err, &idleFired, "connecting"), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -237,14 +288,20 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 		return p.mapResponse(e, resp)
 	}
 
+	// Notification delivery is decoupled from the read loop (see delivery):
+	// NotifyProgress ultimately writes to the client socket with no deadline,
+	// so a slow or stalled client must not stall the upstream read, pin the
+	// semaphore slot at client pace, or trip the idle watchdog for a stream
+	// whose FUNCTION is healthy.
+	d := newDelivery(ctx, notify)
+
 	var acc bytes.Buffer
-	var pending []byte // partial-rune holdback so every chunk is valid UTF-8
 	var total int64
 	buf := make([]byte, 32*1024)
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
-			idleTimer.Reset(idle)
+			lastActivity.Store(time.Now().UnixNano())
 			total += int64(n)
 			if total > p.maxBody {
 				cancel() // stop the upstream body, don't drain past the cap
@@ -252,33 +309,148 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 				return toolError(fmt.Sprintf("function response exceeded %d bytes", p.maxBody)), nil
 			}
 			acc.Write(buf[:n])
-			if notify != nil {
-				pending = append(pending, buf[:n]...)
-				emit, rest := splitRuneBoundary(pending)
-				if len(emit) > 0 {
-					notify(ctx, string(emit), total)
-				}
-				pending = append(pending[:0], rest...)
-			}
+			d.push(buf[:n])
 		}
 		if readErr == io.EOF {
 			break
 		}
 		if readErr != nil {
-			if idleFired.Load() || errors.Is(readErr, context.DeadlineExceeded) || ctx.Err() != nil {
-				p.logger.V(1).Info("tool call timed out mid-stream", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-				return toolError("function invocation timed out"), nil
-			}
-			p.logger.Error(readErr, "reading tool response", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-			return toolError("function invocation failed"), nil
+			return p.streamAbort(ctx, e, readErr, &idleFired, "mid-stream"), nil
 		}
 	}
-	if notify != nil && len(pending) > 0 {
-		// A trailing partial rune at EOF is the function's own invalid UTF-8;
-		// forward it so progress and the final result stay byte-identical.
-		notify(ctx, string(pending), total)
-	}
+	// Bounded drain so a healthy client sees every notification before the
+	// final result; a stalled client forfeits the tail instead of holding
+	// this call's slot open.
+	d.finish(streamDrainTimeout)
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: acc.String()}}}, nil
+}
+
+// streamAbort is the single failure classifier for both streaming failure
+// sites (connect and mid-stream), so the same cause gets the same label
+// wherever it lands: a watchdog or max-duration abort is "timed out", a
+// caller cancel is "canceled", anything else is a generic failure with the
+// detail kept server-side.
+func (p *Proxy) streamAbort(ctx context.Context, e ToolEntry, err error, idleFired *atomic.Bool, phase string) *mcp.CallToolResult {
+	switch {
+	case idleFired.Load() || errors.Is(err, context.DeadlineExceeded):
+		p.logger.V(1).Info("tool call timed out", "phase", phase, "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
+		return toolError("function invocation timed out")
+	case ctx.Err() != nil:
+		// The caller went away (MCP cancellation / client disconnect); the
+		// function did nothing wrong.
+		p.logger.V(1).Info("tool call canceled by caller", "phase", phase, "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
+		return toolError("function invocation canceled")
+	default:
+		p.logger.Error(err, "tool call transport error", "phase", phase, "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
+		return toolError("function invocation failed")
+	}
+}
+
+// delivery decouples progress-notification writes from the upstream read
+// loop. Chunks accumulate under mu while a single sender goroutine drains
+// them; backpressure from a slow client coalesces pending chunks into one
+// larger notification instead of dropping content, so the notified chunks
+// always concatenate to the final result text. progressBytes reported to
+// notify is the cumulative DELIVERED byte count — monotonic by construction,
+// including the EOF flush of a trailing partial rune.
+type delivery struct {
+	notify  streamNotify
+	ctx     context.Context
+	mu      sync.Mutex
+	raw     []byte // bytes pushed but not yet handed to notify
+	done    bool
+	wake    chan struct{}
+	drained chan struct{}
+}
+
+// newDelivery returns nil when notify is nil; a nil *delivery's methods are
+// no-ops, so the read loop calls them unconditionally.
+func newDelivery(ctx context.Context, notify streamNotify) *delivery {
+	if notify == nil {
+		return nil
+	}
+	d := &delivery{
+		notify:  notify,
+		ctx:     ctx,
+		wake:    make(chan struct{}, 1),
+		drained: make(chan struct{}),
+	}
+	go d.run()
+	return d
+}
+
+// push hands bytes to the sender without blocking on the client.
+func (d *delivery) push(b []byte) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.raw = append(d.raw, b...)
+	d.mu.Unlock()
+	select {
+	case d.wake <- struct{}{}:
+	default:
+	}
+}
+
+// finish marks the stream complete and waits up to timeout for the sender to
+// flush what remains.
+func (d *delivery) finish(timeout time.Duration) {
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	d.done = true
+	d.mu.Unlock()
+	select {
+	case d.wake <- struct{}{}:
+	default:
+	}
+	wait := time.NewTimer(timeout)
+	defer wait.Stop()
+	select {
+	case <-d.drained:
+	case <-wait.C:
+	case <-d.ctx.Done():
+	}
+}
+
+// run is the sender goroutine: it emits complete-rune prefixes as they
+// accumulate, holds back a trailing partial rune until its continuation
+// bytes arrive, and flushes any remaining bytes verbatim once the stream is
+// done (a trailing partial rune at EOF is the function's own invalid UTF-8;
+// forwarding it keeps progress and the final result byte-identical).
+func (d *delivery) run() {
+	defer close(d.drained)
+	var delivered int64
+	for {
+		d.mu.Lock()
+		emit, rest := splitRuneBoundary(d.raw)
+		if len(emit) == 0 && d.done {
+			emit, rest = d.raw, nil
+		}
+		var out []byte
+		if len(emit) > 0 {
+			out = append(out, emit...)
+			d.raw = append(d.raw[:0], rest...)
+		}
+		done := d.done
+		d.mu.Unlock()
+
+		if len(out) > 0 {
+			delivered += int64(len(out))
+			d.notify(d.ctx, string(out), delivered)
+			continue // there may be more already buffered
+		}
+		if done {
+			return
+		}
+		select {
+		case <-d.wake:
+		case <-d.ctx.Done():
+			return
+		}
+	}
 }
 
 // splitRuneBoundary splits b so emit ends on a complete UTF-8 rune and rest

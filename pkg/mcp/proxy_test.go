@@ -328,3 +328,48 @@ func TestProxyInvokeStreamingNon2xxNoNotify(t *testing.T) {
 	assert.Contains(t, resultText(t, res), "function returned 404")
 	assert.False(t, notified, "non-2xx must not emit progress")
 }
+
+// TestProxyInvokeStreamingEOFPartialRuneProgress: a body ending mid-rune must
+// still deliver strictly increasing progress — the EOF flush reports
+// cumulative DELIVERED bytes rather than repeating the read-side total that
+// already covered the held-back partial rune.
+func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		f := w.(http.Flusher)
+		// "X" + the first 2 of the 3 bytes of "€", then EOF mid-rune.
+		_, _ = w.Write([]byte("X\xe2\x82"))
+		f.Flush()
+		<-release
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard())
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
+	var mu sync.Mutex
+	var chunks []string
+	var progress []int64
+	notify := func(_ context.Context, chunk string, progressBytes int64) {
+		mu.Lock()
+		defer mu.Unlock()
+		chunks = append(chunks, chunk)
+		progress = append(progress, progressBytes)
+		if len(chunks) == 1 {
+			close(release)
+		}
+	}
+	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	require.NoError(t, err)
+	assert.False(t, res.IsError)
+	assert.Equal(t, "X\xe2\x82", resultText(t, res))
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, len(chunks), 2, "the held-back partial rune must flush at EOF")
+	assert.Equal(t, "X\xe2\x82", strings.Join(chunks, ""))
+	for i := 1; i < len(progress); i++ {
+		assert.Greater(t, progress[i], progress[i-1], "progress must be strictly increasing across the EOF flush")
+	}
+	assert.Equal(t, int64(3), progress[len(progress)-1], "final progress equals total delivered bytes")
+}

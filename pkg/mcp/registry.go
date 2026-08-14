@@ -5,7 +5,9 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -208,14 +210,16 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 	return entry
 }
 
+// toolEntryEqual compares whole entries for Upsert's no-change dedup:
+// InputSchema by bytes, everything else structurally on copies with the
+// schema nilled out. Whole-struct comparison (not a hand-enumerated field
+// list) so a future ToolEntry field can't be forgotten here and leave a spec
+// edit deduped to UpsertNoChange — with tools/list silently stale — and no
+// compiler or test signal.
 func toolEntryEqual(a, b ToolEntry) bool {
-	return a.ToolName == b.ToolName &&
-		a.Namespace == b.Namespace &&
-		a.FnName == b.FnName &&
-		a.Alias == b.Alias &&
-		a.Description == b.Description &&
-		a.Streaming == b.Streaming &&
-		a.StreamIdleTimeout == b.StreamIdleTimeout &&
-		a.StreamMaxDuration == b.StreamMaxDuration &&
-		string(a.InputSchema) == string(b.InputSchema)
+	if !bytes.Equal(a.InputSchema, b.InputSchema) {
+		return false
+	}
+	a.InputSchema, b.InputSchema = nil, nil
+	return reflect.DeepEqual(a, b)
 }

@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -90,7 +91,23 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("refusing to start MCP server without authentication: set JWT_SIGNING_KEY to scope agent access, or %s=true to explicitly run the endpoint unauthenticated (dev only)", envAllowInsecure)
 	}
 
-	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger)
+	// Honor the same cluster-wide streaming idle-timeout override the router
+	// applies to IdleTimeoutSeconds=0 functions (pkg/router/config.go), with
+	// identical validation — a function must get one idle policy regardless
+	// of whether it is invoked via HTTPTrigger or tools/call. Unset keeps the
+	// fv1.DefaultStreamIdleSeconds package default.
+	var proxyOpts []ProxyOption
+	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
+		d, perr := time.ParseDuration(v)
+		if perr != nil {
+			return fmt.Errorf("failed to parse stream idle timeout value('%s') from 'ROUTER_STREAM_IDLE_TIMEOUT': %w", v, perr)
+		}
+		if d <= 0 {
+			return fmt.Errorf("'ROUTER_STREAM_IDLE_TIMEOUT' must be a positive duration, got %q", v)
+		}
+		proxyOpts = append(proxyOpts, WithStreamIdleDefault(d))
+	}
+	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger, proxyOpts...)
 	registry := NewRegistry()
 	server := NewServer(registry, proxy, authz, logger)
 

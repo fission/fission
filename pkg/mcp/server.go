@@ -171,6 +171,13 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 	// and the caller sent a progress token (the MCP spec permits progress
 	// notifications only for requests that carried one). Everything else
 	// takes the buffered path unchanged.
+	//
+	// Contract boundary: the chunks ride ProgressNotificationParams.Message,
+	// which the MCP spec frames as a progress DESCRIPTION — a cooperating
+	// client concatenates the messages for live output, but a conforming
+	// client is free to truncate or ignore them. The final CallToolResult is
+	// authoritative either way; the SDK offers no other server→client
+	// tool-output stream today.
 	if token := req.Params.GetProgressToken(); entry.Streaming && token != nil {
 		session := req.Session
 		notify := func(ctx context.Context, chunk string, progressBytes int64) {
