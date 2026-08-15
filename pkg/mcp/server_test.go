@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,4 +155,106 @@ func TestServerStreamingToolCall(t *testing.T) {
 	mu.Lock()
 	assert.Equal(t, seen, len(msgs), "token-less call must not emit progress")
 	mu.Unlock()
+}
+
+// TestServerHTTPHandlerStateless pins the SEP-2567 stateless transport
+// contract that makes mcp.replicas > 1 behind a plain ClusterIP correct: a
+// legacy initialize gets no Mcp-Session-Id back, and the session-bound
+// standalone GET / DELETE are 405. A future SDK bump that silently flips
+// the transport back to stateful would break the multi-replica story without
+// this test.
+func TestServerHTTPHandlerStateless(t *testing.T) {
+	t.Parallel()
+	s := NewServer(NewRegistry(), NewProxy("http://router-internal", nil, logr.Discard(), 0), NewAuthorizer(nil), logr.Discard())
+	srv := httptest.NewServer(s.HTTPHandler())
+	t.Cleanup(srv.Close)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Empty(t, resp.Header.Get("Mcp-Session-Id"), "stateless transport must not issue session ids")
+
+	for _, method := range []string{http.MethodGet, http.MethodDelete} {
+		req, err := http.NewRequestWithContext(t.Context(), method, srv.URL, nil)
+		require.NoError(t, err)
+		req.Host = "127.0.0.1"
+		req.Header.Set("Accept", "text/event-stream")
+		resp, err := srv.Client().Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode, "%s is session-bound and must be 405 in stateless mode", method)
+	}
+}
+
+// TestServerStreamingToolCallAuthenticated is the authz-enabled twin of the
+// streaming wire test: with a real signing key, the bearer token's TokenInfo
+// must reach callTool on the stateless transport's transient per-request
+// sessions (scope enforcement is the security control; if it silently
+// stopped propagating, every call would 401 — visible, but only if a test
+// exercises JWT over the wire), and an out-of-scope token must be refused.
+func TestServerStreamingToolCallAuthenticated(t *testing.T) {
+	t.Parallel()
+	fnSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("hello world"))
+	}))
+	t.Cleanup(fnSrv.Close)
+
+	key := []byte("wire-test-signing-key")
+	reg := NewRegistry()
+	e := entry("ns-a", "fn1", "auth-stream-tool")
+	e.Streaming = true
+	reg.Upsert(e)
+	s := NewServer(reg, NewProxy(fnSrv.URL, nil, logr.Discard(), 0), NewAuthorizer(key), logr.Discard())
+	s.ApplyToolDelta([]ToolEntry{e}, nil)
+	srv := httptest.NewServer(s.HTTPHandler())
+	t.Cleanup(srv.Close)
+
+	connect := func(t *testing.T, namespaces string) *mcp.ClientSession {
+		t.Helper()
+		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": namespaces, "exp": time.Now().Add(time.Hour).Unix()})
+		client := mcp.NewClient(&mcp.Implementation{Name: "t", Version: "0"}, nil)
+		sess, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+			Endpoint:   srv.URL,
+			HTTPClient: &http.Client{Transport: bearerTransport{token: tok, next: http.DefaultTransport}},
+		}, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = sess.Close() })
+		return sess
+	}
+
+	t.Run("in-scope token streams and returns the result", func(t *testing.T) {
+		sess := connect(t, "ns-a")
+		params := &mcp.CallToolParams{Name: "auth-stream-tool"}
+		params.SetProgressToken("tok-auth")
+		res, err := sess.CallTool(t.Context(), params)
+		require.NoError(t, err)
+		require.False(t, res.IsError)
+		assert.Equal(t, "hello world", res.Content[0].(*mcp.TextContent).Text)
+	})
+
+	t.Run("out-of-scope token is refused as tool-not-found", func(t *testing.T) {
+		sess := connect(t, "ns-other")
+		_, err := sess.CallTool(t.Context(), &mcp.CallToolParams{Name: "auth-stream-tool"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tool not found")
+	})
+}
+
+// bearerTransport attaches a bearer token to every outbound request.
+type bearerTransport struct {
+	token string
+	next  http.RoundTripper
+}
+
+func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", "Bearer "+b.token)
+	return b.next.RoundTrip(r)
 }
