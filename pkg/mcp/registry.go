@@ -5,10 +5,16 @@
 package mcp
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -33,6 +39,17 @@ type ToolEntry struct {
 	// (utils.UrlForFunctionRef) instead of addressing FnName's live route.
 	// Empty (the default) preserves the pre-RFC-0025 behavior.
 	Alias string
+
+	// Streaming mirrors the function's Spec.Streaming presence: when true,
+	// tools/call MAY stream the function's output to the caller as MCP
+	// progress notifications (only if the caller sent a progress token; see
+	// Server.callTool). The timeouts mirror StreamingConfig semantics:
+	// StreamIdleTimeout 0 means the proxy default, StreamMaxDuration 0 means
+	// no ceiling (idle governs) — a streaming call does NOT inherit the
+	// buffered path's hard call timeout.
+	Streaming         bool
+	StreamIdleTimeout time.Duration
+	StreamMaxDuration time.Duration
 }
 
 // Registry is the in-memory source of truth for the MCP tool set, maintained by
@@ -172,7 +189,7 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {
 		schema = json.RawMessage(slices.Clone(tc.InputSchema.Raw))
 	}
-	return ToolEntry{
+	entry := ToolEntry{
 		ToolName:    name,
 		Namespace:   fn.Namespace,
 		FnName:      fn.Name,
@@ -188,13 +205,52 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 		// snapshot).
 		Alias: tc.Alias,
 	}
+	if sc := fn.Spec.Streaming; sc != nil {
+		entry.Streaming = true
+		entry.StreamIdleTimeout = time.Duration(sc.IdleTimeoutSeconds) * time.Second
+		entry.StreamMaxDuration = time.Duration(sc.MaxDurationSeconds) * time.Second
+	}
+	return entry
+}
+
+// toolEntryEqual compares whole entries for Upsert's no-change dedup:
+// InputSchema by bytes, everything else structurally on copies with the
+// schema nilled out. Whole-struct comparison (not a hand-enumerated field
+// list) so a future ToolEntry field can't be forgotten here and leave a spec
+// edit deduped to UpsertNoChange — with tools/list silently stale — and no
+// compiler or test signal.
+// probeServer is a throwaway *mcp.Server used only to ask the SDK "would you
+// accept this tool?" without touching the serving server.
+var probeServer = mcp.NewServer(&mcp.Implementation{Name: "fission-mcp-probe", Version: "0"}, nil)
+
+// validateToolRegistrable reports whether the SDK will accept the entry's
+// tool. AddTool PANICS on anything it dislikes — a non-object input schema,
+// malformed x-mcp-header parameter annotations, and whatever rules future
+// SDK versions add — so rather than replicate its rule set (and drift), the
+// entry is probed against a throwaway server under recover(). Admission
+// (ToolConfig.Validate) refuses the common cases up front for good error
+// messages, but stored objects and FunctionVersion snapshots that predate
+// any admission rule still reach the reconciler, and this is the check that
+// stands between them and every replica's reconcile loop. Callers must run
+// it BEFORE Registry.Upsert: a registry entry whose AddTool never happened
+// is a tool that tools/list omits, tools/call rejects, and the condition
+// still calls exposed.
+func validateToolRegistrable(e ToolEntry) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	probeServer.AddTool(&mcp.Tool{Name: e.ToolName, Description: e.Description, InputSchema: e.InputSchema},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil })
+	probeServer.RemoveTools(e.ToolName)
+	return nil
 }
 
 func toolEntryEqual(a, b ToolEntry) bool {
-	return a.ToolName == b.ToolName &&
-		a.Namespace == b.Namespace &&
-		a.FnName == b.FnName &&
-		a.Alias == b.Alias &&
-		a.Description == b.Description &&
-		string(a.InputSchema) == string(b.InputSchema)
+	if !bytes.Equal(a.InputSchema, b.InputSchema) {
+		return false
+	}
+	a.InputSchema, b.InputSchema = nil, nil
+	return reflect.DeepEqual(a, b)
 }

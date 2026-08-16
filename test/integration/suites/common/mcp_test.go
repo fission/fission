@@ -9,8 +9,10 @@ package common_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -107,6 +109,91 @@ func TestMCPToolsListAndCall(t *testing.T) {
 				"tools/call body should match a direct internal-listener invocation")
 		}, 90*time.Second, 3*time.Second)
 	})
+}
+
+// TestMCPStreamingToolCall exercises the streaming tools/call path end-to-end:
+// a function created with BOTH --streaming and --expose-as-mcp, called with an
+// MCP progress token, must deliver its output as progress notifications whose
+// concatenation equals the final buffered result. (The Node env returns a
+// single body, so this asserts delivery and content equality, not multi-chunk
+// incrementality — that is covered by the pkg/mcp unit and wire tests.)
+func TestMCPStreamingToolCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireMCPReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-mcpstream-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "mcp-stream-" + ns.ID
+	toolName := fnName
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name:            fnName,
+		Env:             envName,
+		Code:            framework.WriteTestData(t, "nodejs/hello/hello.js"),
+		Streaming:       true,
+		ExposeAsMCP:     true,
+		ToolDescription: "greets the caller, streamed",
+		ToolName:        toolName,
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+
+	// Progress notifications are keyed by token so a retried attempt (cold
+	// start, route propagation) can't mix its chunks with a previous one's.
+	var mu sync.Mutex
+	byToken := map[string][]string{}
+	client := mcp.NewClient(&mcp.Implementation{Name: "fission-it", Version: "test"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
+			tok := fmt.Sprint(req.Params.ProgressToken)
+			mu.Lock()
+			defer mu.Unlock()
+			byToken[tok] = append(byToken[tok], req.Params.Message)
+		},
+	})
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:   f.MCPBaseURL() + "/mcp",
+		HTTPClient: f.HTTPClient(),
+	}
+	session, err := client.Connect(ctx, transport, nil)
+	require.NoError(t, err, "connect MCP client to %s", f.MCPBaseURL())
+	defer func() { _ = session.Close() }()
+
+	var final, finalToken string
+	attempt := 0
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attempt++
+		token := fmt.Sprintf("it-progress-%d", attempt)
+		params := &mcp.CallToolParams{Name: toolName, Arguments: map[string]any{"name": "world"}}
+		params.SetProgressToken(token)
+		res, err := session.CallTool(ctx, params)
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.False(c, res.IsError, "tool call should succeed: %s", callText(res)) {
+			return
+		}
+		final, finalToken = callText(res), token
+		assert.Contains(c, final, "hello")
+	}, 90*time.Second, 3*time.Second)
+
+	// Notifications are asynchronous; the tail may land after CallTool returns.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		mu.Lock()
+		defer mu.Unlock()
+		msgs := byToken[finalToken]
+		if !assert.NotEmpty(c, msgs, "streaming tool call with a progress token must emit progress") {
+			return
+		}
+		assert.Equal(c, final, strings.Join(msgs, ""),
+			"progress chunks must concatenate to the final result")
+	}, 30*time.Second, time.Second)
 }
 
 // requireMCPReachable skips the test when the MCP endpoint isn't serving (MCP

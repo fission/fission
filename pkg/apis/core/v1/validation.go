@@ -383,9 +383,9 @@ func (spec FunctionSpec) Validate() error {
 		errs = errors.Join(errs, spec.Streaming.Validate())
 	}
 
-	if spec.Tool != nil {
-		errs = errors.Join(errs, spec.Tool.Validate())
-	}
+	// spec.Tool is validated in validateForAdmission (called below): the MCP
+	// SDK panics on a schema it dislikes, so that check must bind kubectl and
+	// GitOps writers, not only the CLI path.
 
 	if spec.State != nil {
 		errs = errors.Join(errs, spec.State.Validate())
@@ -421,10 +421,16 @@ func (spec FunctionSpec) Validate() error {
 // and the RFC-0030 env rules (iterating env sources likewise exceeds the CEL
 // cost budget; these MUST live here rather than in Validate(), which the
 // webhook does not call — a rule only Validate() runs is enforced on the CLI
-// path alone and bypassed by kubectl/GitOps writers).
+// path alone and bypassed by kubectl/GitOps writers)
+// and the MCP ToolConfig rules (the InputSchema is opaque JSON that CEL
+// cannot parse, and the MCP SDK PANICS on a schema it dislikes, so a
+// GitOps-written Function must be refused here, not only by the CLI).
 func (spec FunctionSpec) validateForAdmission() error {
 	var errs error
 	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
+	if spec.Tool != nil {
+		errs = errors.Join(errs, spec.Tool.Validate())
+	}
 	if spec.Invocation != nil {
 		errs = errors.Join(errs, spec.Invocation.Validate())
 	}
@@ -648,10 +654,12 @@ func (sc *StreamingConfig) Validate() error {
 
 // Validate checks the MCP tool config (only reached when FunctionSpec.Tool is
 // non-nil, i.e. the function is advertised): a description is required, and a
-// supplied InputSchema must parse as a JSON object carrying a "type" key (a
+// supplied InputSchema must parse as a JSON object whose "type" is "object" (a
 // cheap structural check — full JSON-Schema meta-validation is the agent's job,
-// and CEL cannot parse arbitrary schemas). The ToolName pattern is enforced by
-// the CRD kubebuilder marker.
+// and CEL cannot parse arbitrary schemas). The type check is load-bearing, not
+// cosmetic: the MCP SDK's AddTool panics on a non-object input schema, so
+// admitting one would let a single Function crash-loop every MCP replica's
+// reconciler. The ToolName pattern is enforced by the CRD kubebuilder marker.
 func (tc *ToolConfig) Validate() error {
 	var errs error
 
@@ -663,8 +671,10 @@ func (tc *ToolConfig) Validate() error {
 		var obj map[string]json.RawMessage
 		if err := json.Unmarshal(tc.InputSchema.Raw, &obj); err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), "must be a JSON object"))
-		} else if _, ok := obj["type"]; !ok {
+		} else if typRaw, ok := obj["type"]; !ok {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `must be a JSON Schema object with a "type" key`))
+		} else if typ := ""; json.Unmarshal(typRaw, &typ) != nil || typ != "object" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `"type" must be "object" (MCP tool arguments are always an object)`))
 		}
 	}
 

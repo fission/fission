@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
@@ -29,6 +30,7 @@ import (
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/streaming"
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
@@ -90,7 +92,20 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("refusing to start MCP server without authentication: set JWT_SIGNING_KEY to scope agent access, or %s=true to explicitly run the endpoint unauthenticated (dev only)", envAllowInsecure)
 	}
 
-	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger)
+	// Honor the same cluster-wide streaming idle-timeout override the router
+	// applies to IdleTimeoutSeconds=0 functions (pkg/router/config.go), with
+	// the shared validation — a function must get one idle policy regardless
+	// of whether it is invoked via HTTPTrigger or tools/call. Unset (zero)
+	// keeps the fv1.DefaultStreamIdleSeconds package default.
+	var streamIdleDefault time.Duration
+	if v := os.Getenv("ROUTER_STREAM_IDLE_TIMEOUT"); v != "" {
+		d, perr := streaming.ParseIdleTimeout("ROUTER_STREAM_IDLE_TIMEOUT", v)
+		if perr != nil {
+			return perr
+		}
+		streamIdleDefault = d
+	}
+	proxy := NewProxy(routerInternalURL, storagesvcClient.HMACSecretFromEnv(), logger, streamIdleDefault)
 	registry := NewRegistry()
 	server := NewServer(registry, proxy, authz, logger)
 

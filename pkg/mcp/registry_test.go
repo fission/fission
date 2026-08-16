@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,6 +167,42 @@ func TestToolEntryFromFunction(t *testing.T) {
 		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{Description: "d", Alias: "blue"}))
 		assert.Equal(t, "blue", e.Alias)
 	})
+
+	t.Run("carries streaming config", func(t *testing.T) {
+		t.Parallel()
+		fn := mkFn(&fv1.ToolConfig{Description: "d"})
+		fn.Spec.Streaming = &fv1.StreamingConfig{IdleTimeoutSeconds: 45, MaxDurationSeconds: 300}
+		e := toolEntryFromFunction(fn)
+		assert.True(t, e.Streaming)
+		assert.Equal(t, 45*time.Second, e.StreamIdleTimeout)
+		assert.Equal(t, 300*time.Second, e.StreamMaxDuration)
+	})
+
+	t.Run("no streaming config leaves the entry buffered", func(t *testing.T) {
+		t.Parallel()
+		e := toolEntryFromFunction(mkFn(&fv1.ToolConfig{Description: "d"}))
+		assert.False(t, e.Streaming)
+		assert.Zero(t, e.StreamIdleTimeout)
+		assert.Zero(t, e.StreamMaxDuration)
+	})
+}
+
+// A spec.streaming edit alone must reach the registry: toolEntryEqual has to
+// compare the streaming fields or the Upsert dedup swallows the change.
+func TestUpsertAppliesStreamingChange(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	e := entry("default", "fn1", "t1")
+	res, _, _ := r.Upsert(e)
+	require.Equal(t, UpsertApplied, res)
+
+	e.Streaming = true
+	e.StreamIdleTimeout = 30 * time.Second
+	res, _, _ = r.Upsert(e)
+	assert.Equal(t, UpsertApplied, res, "streaming toggle must not dedup to no-change")
+
+	res, _, _ = r.Upsert(e)
+	assert.Equal(t, UpsertNoChange, res)
 }
 
 func TestRegistryHasFunction(t *testing.T) {

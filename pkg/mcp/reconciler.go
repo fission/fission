@@ -101,6 +101,27 @@ func (r *FunctionToolReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
+	// The SDK's AddTool PANICS on a tool it dislikes (non-object input schema,
+	// bad x-mcp-header annotations, ...). Admission refuses the common cases,
+	// but stored objects that predate a check, and FunctionVersion snapshots
+	// frozen from them, still reach here. Probe the SDK BEFORE Upsert: a
+	// recovered panic after Upsert would leave a registry entry with no
+	// AddTool behind it — invisible to tools/list, rejected by tools/call,
+	// yet reported ToolExposed=True on the next requeue. Treated like a name
+	// conflict: not advertised, prior registration dropped, condition says why.
+	if err := validateToolRegistrable(entry); err != nil {
+		r.logger.Info("refusing to advertise tool: SDK rejects it",
+			"function", req.NamespacedName, "tool", entry.ToolName, "reason", err.Error())
+		r.removeTool(req.NamespacedName)
+		controller.SetConditions(ctx, r.logger, r.client, fn, metav1.Condition{
+			Type:    fv1.FunctionConditionToolExposed,
+			Status:  metav1.ConditionFalse,
+			Reason:  fv1.FunctionReasonToolInvalidSchema,
+			Message: "MCP tool input schema is not registrable: " + err.Error(),
+		})
+		return ctrl.Result{}, nil
+	}
+
 	res, oldName, evicted := r.reg.Upsert(entry)
 
 	if res == UpsertConflict {

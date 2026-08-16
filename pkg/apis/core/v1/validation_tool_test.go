@@ -29,6 +29,10 @@ func TestToolConfigValidate(t *testing.T) {
 		{"valid object schema", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"object","properties":{"q":{"type":"string"}}}`)}, false},
 		{"schema not an object", ToolConfig{Description: "d", InputSchema: rawSchema(`["type"]`)}, true},
 		{"schema missing type", ToolConfig{Description: "d", InputSchema: rawSchema(`{"properties":{}}`)}, true},
+		// The MCP SDK's AddTool panics on a non-object schema; admission must
+		// refuse it so one Function can't crash-loop the MCP reconciler.
+		{"schema type not object", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"string"}`)}, true},
+		{"schema type not a string", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":["object","null"]}`)}, true},
 		{"schema not json", ToolConfig{Description: "d", InputSchema: rawSchema(`{bad`)}, true},
 		// RFC-0025: Alias is a format-only kube-name check (no existence check
 		// — aliases are eventually consistent).
@@ -85,4 +89,28 @@ func TestFunctionSpecValidateTool(t *testing.T) {
 			t.Fatalf("expected error for malformed tool alias")
 		}
 	})
+}
+
+// TestToolConfigOnAdmissionPath pins that ToolConfig rules bind kubectl and
+// GitOps writers, not only the CLI: the webhook calls
+// Function.ValidateForAdmission (NOT Validate), and the MCP SDK panics on a
+// schema it dislikes, so a rule reachable only via Validate() would leave the
+// reconciler exposed to any non-CLI writer.
+func TestToolConfigOnAdmissionPath(t *testing.T) {
+	t.Parallel()
+	bad := &Function{Spec: FunctionSpec{Tool: &ToolConfig{
+		Description: "d",
+		InputSchema: rawSchema(`{"type":"string"}`),
+	}}}
+	err := bad.ValidateForAdmission()
+	if err == nil {
+		t.Fatal("ValidateForAdmission must reject a non-object tool input schema (this is the webhook's path)")
+	}
+	good := &Function{Spec: FunctionSpec{Tool: &ToolConfig{
+		Description: "d",
+		InputSchema: rawSchema(`{"type":"object"}`),
+	}}}
+	if err := good.ValidateForAdmission(); err != nil {
+		t.Fatalf("valid tool config must pass admission: %v", err)
+	}
 }
