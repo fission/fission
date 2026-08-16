@@ -10,9 +10,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
+
+	"github.com/fission/fission/pkg/utils/metrics/metricstest"
 )
 
 // RFC-0023 phase-3 sticky-pick properties. S4: the pick is a pure function
@@ -230,6 +233,101 @@ func TestStickySaturationOverflow(t *testing.T) {
 	require.Equal(t, Admitted, res)
 	assert.Equal(t, ep1.Address, ep3.Address, "capacity restored: the key returns to its HRW owner")
 	release3()
+}
+
+// TestNoteStickyPick pins the bucketed teleport detector: the first pick for
+// a key is never a teleport, a repeat pick is not, a changed pick is, and
+// bucket contention with a DIFFERENT key suppresses counting (undercount)
+// instead of fabricating teleports from interleaved overwrites.
+func TestNoteStickyPick(t *testing.T) {
+	t.Parallel()
+	e := &fnEntry{}
+
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.1:8888"), "first pick is not a teleport")
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.1:8888"), "repeat pick is not a teleport")
+	assert.True(t, noteStickyPick(e, "session-1", "10.0.0.2:8888"), "changed pick is a teleport")
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.2:8888"), "sticky again after the move")
+
+	// Find a second key sharing session-1's bucket with a different
+	// fingerprint: the two overwriting each other must count nothing.
+	kh := fnv1a32("session-1")
+	var other string
+	for i := 0; ; i++ {
+		cand := fmt.Sprintf("other-%d", i)
+		if ch := fnv1a32(cand); ch%stickyBuckets == kh%stickyBuckets && ch != kh {
+			other = cand
+			break
+		}
+	}
+	assert.False(t, noteStickyPick(e, other, "10.0.0.3:8888"),
+		"a different key overwriting a contested bucket is not a teleport")
+	assert.False(t, noteStickyPick(e, "session-1", "10.0.0.2:8888"),
+		"the original key after contention is suppressed (undercount), not miscounted")
+}
+
+// teleportCount reads fission_router_sticky_teleports_total for one function
+// (0 when the series does not exist yet).
+func teleportCount(t *testing.T, reg *prometheus.Registry, ns, fn string) float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	for _, fam := range families {
+		if fam.GetName() != "fission_router_sticky_teleports_total" {
+			continue
+		}
+		if m := metricstest.FindMetric(fam, map[string]string{
+			"function_namespace": ns,
+			"function_name":      fn,
+		}); m != nil {
+			return m.GetCounter().GetValue()
+		}
+	}
+	return 0
+}
+
+// TestAdmitStickyTeleportMetric drives the teleport counter through Admit's
+// exported surface end to end: a busy-owner overflow (and its snap-back)
+// counts nothing, an endpoint loss that moves the key counts exactly once,
+// and repeat owner admits stay flat.
+func TestAdmitStickyTeleportMetric(t *testing.T) {
+	reg := metricstest.SetupMeter(t)
+	// Function coordinates unique to this test so concurrent tests recording
+	// other series can't collide with the assertion below.
+	const ns, fn = "default", "fn-teleport-metric"
+	ix := NewIndex()
+	ix.ApplySlice(slice("s1", fn, ns, 8888, "10.0.0.1", "10.0.0.2"))
+
+	const key = "session-teleport"
+	ep1, release1, res := ix.Admit(ns, fn, "", 1, key)
+	require.Equal(t, Admitted, res)
+	assert.Zero(t, teleportCount(t, reg, ns, fn), "first pick is not a teleport")
+
+	// Busy owner: the same key overflows to the other pod — load shedding,
+	// not a teleport — and the snap-back after release isn't one either.
+	_, release2, res := ix.Admit(ns, fn, "", 1, key)
+	require.Equal(t, Admitted, res)
+	release2()
+	release1()
+	_, release3, res := ix.Admit(ns, fn, "", 1, key)
+	require.Equal(t, Admitted, res)
+	release3()
+	assert.Zero(t, teleportCount(t, reg, ns, fn), "saturation overflow and snap-back must not count")
+
+	// Drop the winner: the key's next admit lands on the survivor.
+	survivor := "10.0.0.1"
+	if ep1.Address == "10.0.0.1:8888" {
+		survivor = "10.0.0.2"
+	}
+	ix.ApplySlice(slice("s1", fn, ns, 8888, survivor))
+	_, release4, res := ix.Admit(ns, fn, "", 1, key)
+	require.Equal(t, Admitted, res)
+	release4()
+	assert.Equal(t, float64(1), teleportCount(t, reg, ns, fn), "endpoint loss moves the key: exactly one teleport")
+
+	_, release5, res := ix.Admit(ns, fn, "", 1, key)
+	require.Equal(t, Admitted, res)
+	release5()
+	assert.Equal(t, float64(1), teleportCount(t, reg, ns, fn), "repeat owner admits stay flat")
 }
 
 // TestStickyEmptyKeyKeepsLeastOutstanding: no key = today's pick, bit for bit.

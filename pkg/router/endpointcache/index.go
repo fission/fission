@@ -125,6 +125,12 @@ type (
 		// eps is the merged endpoint list, swapped copy-on-write. Hot-path
 		// readers load it without taking mu.
 		eps atomic.Pointer[[]Endpoint]
+		// stickyLast is the sticky teleport-detection sketch: per key-hash
+		// bucket, the last owner pick as (key fingerprint << 32 | address
+		// hash). O(buckets) memory instead of per-key state; lazily allocated
+		// on the first sticky admit, nil for the (common) functions that
+		// never see a sticky key. Counting semantics live in noteStickyPick.
+		stickyLast atomic.Pointer[[stickyBuckets]atomic.Uint64]
 	}
 )
 
@@ -137,21 +143,26 @@ func NewIndex() *Index {
 	return ix
 }
 
+// fnv1a32 is the 32-bit FNV-1a of s; fnv1a32Add continues an in-progress
+// hash (shard() feeds multiple segments through it). Plain functions over a
+// string instead of hash.Hash32 via fnv.New32a, which would heap-allocate on
+// every call of these per-request paths. Shared by shard() and
+// noteStickyPick so a checksum-sensitive algorithm exists exactly once.
+func fnv1a32(s string) uint32 { return fnv1a32Add(2166136261, s) }
+
+func fnv1a32Add(h uint32, s string) uint32 {
+	for i := 0; i < len(s); i++ {
+		h = (h ^ uint32(s[i])) * 16777619
+	}
+	return h
+}
+
 func (ix *Index) shard(key FnKey) *indexShard {
-	// Inline FNV-1a over the key strings: hash.Hash32 via fnv.New32a would
-	// heap-allocate on every call of this per-request path.
-	h := uint32(2166136261)
-	for i := 0; i < len(key.Namespace); i++ {
-		h = (h ^ uint32(key.Namespace[i])) * 16777619
-	}
+	h := fnv1a32(key.Namespace)
+	h = (h ^ uint32('/')) * 16777619 // one FNV-1a step for the separator byte
+	h = fnv1a32Add(h, key.Name)
 	h = (h ^ uint32('/')) * 16777619
-	for i := 0; i < len(key.Name); i++ {
-		h = (h ^ uint32(key.Name[i])) * 16777619
-	}
-	h = (h ^ uint32('/')) * 16777619
-	for i := 0; i < len(key.Version); i++ {
-		h = (h ^ uint32(key.Version[i])) * 16777619
-	}
+	h = fnv1a32Add(h, key.Version)
 	return &ix.shards[h%shardCount]
 }
 
@@ -461,6 +472,43 @@ func hrwScore(key, address string) uint64 {
 	return h
 }
 
+// stickyBuckets sizes fnEntry.stickyLast: 256 buckets is 2KiB per
+// sticky-using function. The size trades coverage, not accuracy — keys
+// sharing a bucket suppress each other's counting (see noteStickyPick).
+const stickyBuckets = 256
+
+// noteStickyPick records the admitted address for the sticky key's bucket and
+// reports whether THIS key's pick changed (a "teleport"). The bucket stores
+// (key fingerprint << 32 | address hash): a bucket last written by a
+// different key (fingerprint mismatch) or never written reports false, so
+// bucket contention between keys UNDERcounts instead of fabricating
+// teleports from interleaved overwrites. The residual failure odds are two
+// keys colliding in both bucket index AND 32-bit fingerprint — negligible
+// against the churn rates this counter observes.
+func noteStickyPick(e *fnEntry, stickyKey, address string) bool {
+	buckets := e.stickyLast.Load()
+	if buckets == nil {
+		e.stickyLast.CompareAndSwap(nil, &[stickyBuckets]atomic.Uint64{})
+		buckets = e.stickyLast.Load()
+	}
+	kh := fnv1a32(stickyKey)
+	packed := uint64(kh)<<32 | uint64(fnv1a32(address))
+	b := &buckets[kh%stickyBuckets]
+	old := b.Load()
+	if old == packed {
+		// Steady state (same key, same owner): a read, not an atomic RMW, so
+		// the hot path doesn't write-invalidate the shared cache line on
+		// every sticky admit.
+		return false
+	}
+	if !b.CompareAndSwap(old, packed) {
+		// A concurrent admit updated the bucket first; that admit owns the
+		// count — reporting true here too would double-count one move.
+		return false
+	}
+	return old != 0 && uint32(old>>32) == kh
+}
+
 // Admit picks a ready, non-quarantined endpoint with free capacity (below
 // requestsPerPod), increments its in-flight counter, and returns it with a
 // release func that the caller MUST invoke when the request completes
@@ -516,6 +564,14 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 		var best *Endpoint
 		var bestLoad int64
 		var bestScore uint64
+		// ownerAddr is the sticky key's true HRW winner among ready,
+		// non-quarantined endpoints INCLUDING saturated ones (an address is
+		// never "", so "" doubles as the unset sentinel). The teleport
+		// accounting below records a pick only when the admitted endpoint IS
+		// the owner, so a busy-owner overflow (and the later snap-back) is
+		// load shedding, not a counted teleport.
+		var ownerAddr string
+		var ownerScore uint64
 		counted, quarantinedN, busy := 0, 0, 0
 		for i := range *epsp {
 			ep := &(*epsp)[i]
@@ -530,17 +586,22 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 				}
 			}
 			load := ep.inflight.Load()
+			var score uint64
+			if stickyKey != "" {
+				score = hrwScore(stickyKey, ep.Address)
+				if ownerAddr == "" || score > ownerScore {
+					ownerAddr, ownerScore = ep.Address, score
+				}
+			}
 			if load >= int64(requestsPerPod) {
 				busy++
 				continue
 			}
 			if stickyKey != "" {
-				if score := hrwScore(stickyKey, ep.Address); best == nil || score > bestScore {
+				if best == nil || score > bestScore {
 					best, bestLoad, bestScore = ep, load, score
 				}
-				continue
-			}
-			if best == nil || load < bestLoad {
+			} else if best == nil || load < bestLoad {
 				best, bestLoad = ep, load
 			}
 		}
@@ -555,6 +616,11 @@ func (ix *Index) Admit(namespace, name, version string, requestsPerPod int, stic
 			}
 		}
 		if best.inflight.CompareAndSwap(bestLoad, bestLoad+1) {
+			// Overflow picks (admitted != HRW owner) leave the bucket
+			// untouched: neither the detour nor the return counts.
+			if stickyKey != "" && best.Address == ownerAddr && noteStickyPick(e, stickyKey, best.Address) {
+				RecordStickyTeleport(key.Namespace, key.Name, key.Version)
+			}
 			counter := best.inflight
 			var once sync.Once
 			release := func() { once.Do(func() { counter.Add(-1) }) }

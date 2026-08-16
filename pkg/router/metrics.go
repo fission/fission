@@ -52,9 +52,9 @@ var (
 	// sticky key into the resolver; "fallback" counts requests whose sticky
 	// declaration matched nothing in the request (missing header/param), which
 	// silently take the default pick — the metric is how an operator notices a
-	// misdeclared key source. Per-key ownership moves are deliberately NOT
-	// counted: that would need per-key memory in the router; reshuffle is
-	// churn-driven and observable from pod events.
+	// misdeclared key source. Per-key ownership moves are counted (bucketed,
+	// best-effort) by fission_router_sticky_teleports_total in
+	// pkg/router/endpointcache; these two counters stay per-request-shaped.
 	stickyKeyRequests = metrics.Int64Counter(
 		"fission_router_sticky_requests_total",
 		"Requests to sticky-routed functions that carried their sticky key",
