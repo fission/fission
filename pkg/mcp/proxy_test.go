@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -189,7 +190,7 @@ func TestProxyInvokeStreamingForwardsChunks(t *testing.T) {
 	var mu sync.Mutex
 	var chunks []string
 	var progress []int64
-	notify := func(_ context.Context, chunk string, progressBytes int64) {
+	notify := func(_ context.Context, chunk string, progressBytes int64) error {
 		mu.Lock()
 		defer mu.Unlock()
 		chunks = append(chunks, chunk)
@@ -197,8 +198,9 @@ func TestProxyInvokeStreamingForwardsChunks(t *testing.T) {
 		if len(chunks) == 1 {
 			close(release)
 		}
+		return nil
 	}
-	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	res, err := p.InvokeStreaming(t.Context(), e, nil, notify)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.False(t, res.IsError)
@@ -234,15 +236,16 @@ func TestProxyInvokeStreamingRuneBoundary(t *testing.T) {
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	var mu sync.Mutex
 	var chunks []string
-	notify := func(_ context.Context, chunk string, _ int64) {
+	notify := func(_ context.Context, chunk string, _ int64) error {
 		mu.Lock()
 		defer mu.Unlock()
 		chunks = append(chunks, chunk)
 		if len(chunks) == 1 {
 			close(release)
 		}
+		return nil
 	}
-	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	res, err := p.InvokeStreaming(t.Context(), e, nil, notify)
 	require.NoError(t, err)
 	assert.False(t, res.IsError)
 	assert.Equal(t, "ab€cd", resultText(t, res))
@@ -281,7 +284,7 @@ func TestProxyInvokeStreamingCapAborts(t *testing.T) {
 	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	p.maxBody = 16
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
-	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
+	res, err := p.InvokeStreaming(t.Context(), e, nil, func(context.Context, string, int64) error { return nil })
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, resultText(t, res), "exceeded 16 bytes")
@@ -302,7 +305,7 @@ func TestProxyInvokeStreamingIdleTimeout(t *testing.T) {
 	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true, StreamIdleTimeout: 50 * time.Millisecond}
 	start := time.Now()
-	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) {})
+	res, err := p.InvokeStreaming(t.Context(), e, nil, func(context.Context, string, int64) error { return nil })
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, resultText(t, res), "timed out")
@@ -322,7 +325,7 @@ func TestProxyInvokeStreamingNon2xxNoNotify(t *testing.T) {
 	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
 	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true}
 	notified := false
-	res, err := p.InvokeStreaming(context.Background(), e, nil, func(context.Context, string, int64) { notified = true })
+	res, err := p.InvokeStreaming(t.Context(), e, nil, func(context.Context, string, int64) error { notified = true; return nil })
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
 	assert.Contains(t, resultText(t, res), "function returned 404")
@@ -350,7 +353,7 @@ func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
 	var mu sync.Mutex
 	var chunks []string
 	var progress []int64
-	notify := func(_ context.Context, chunk string, progressBytes int64) {
+	notify := func(_ context.Context, chunk string, progressBytes int64) error {
 		mu.Lock()
 		defer mu.Unlock()
 		chunks = append(chunks, chunk)
@@ -358,8 +361,9 @@ func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
 		if len(chunks) == 1 {
 			close(release)
 		}
+		return nil
 	}
-	res, err := p.InvokeStreaming(context.Background(), e, nil, notify)
+	res, err := p.InvokeStreaming(t.Context(), e, nil, notify)
 	require.NoError(t, err)
 	assert.False(t, res.IsError)
 	assert.Equal(t, "X\xe2\x82", resultText(t, res))
@@ -372,4 +376,48 @@ func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
 		assert.Greater(t, progress[i], progress[i-1], "progress must be strictly increasing across the EOF flush")
 	}
 	assert.Equal(t, int64(3), progress[len(progress)-1], "final progress equals total delivered bytes")
+}
+
+// TestProxyInvokeStreamingCallerGoneUnwinds pins the proxy's client-gone
+// signal for legacy-protocol callers (whose HTTP cancellation the SDK does
+// not propagate into the handler ctx): once notify reports the caller
+// unreachable, the upstream call must be cancelled promptly — NOT run until
+// the function EOFs — and classified as canceled. The handler streams
+// forever until its request ctx is cancelled, so the call returning at all
+// proves the unwind.
+func TestProxyInvokeStreamingCallerGoneUnwinds(t *testing.T) {
+	t.Parallel()
+	upstreamCancelled := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f := w.(http.Flusher)
+		defer close(upstreamCancelled)
+		for {
+			if _, err := w.Write([]byte("tick\n")); err != nil {
+				return
+			}
+			f.Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}))
+	defer srv.Close()
+
+	p := NewProxy(srv.URL, nil, logr.Discard(), 0)
+	e := ToolEntry{Namespace: "ns", FnName: "fn", Streaming: true, StreamIdleTimeout: time.Hour}
+	gone := errors.New("stream not connected or already closed")
+	start := time.Now()
+	res, err := p.InvokeStreaming(t.Context(), e, nil, func(context.Context, string, int64) error { return gone })
+	require.NoError(t, err)
+	assert.True(t, res.IsError)
+	assert.Contains(t, resultText(t, res), "canceled")
+	assert.Less(t, time.Since(start), 5*time.Second, "an unreachable caller must unwind the call promptly, not wait for EOF/idle")
+
+	select {
+	case <-upstreamCancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("upstream request must be cancelled when the caller is gone")
+	}
 }

@@ -207,10 +207,16 @@ func (p *Proxy) mapResponse(e ToolEntry, resp *http.Response) (*mcp.CallToolResu
 }
 
 // streamNotify delivers one UTF-8-complete chunk of function output to the
-// caller; progressBytes is the cumulative byte count (monotonic, so it can
-// feed the MCP progress field directly). Called only from the read loop, in
-// order.
-type streamNotify func(ctx context.Context, chunk string, progressBytes int64)
+// caller; progressBytes is the cumulative delivered byte count (monotonic, so
+// it can feed the MCP progress field directly). Called from the delivery
+// goroutine, in order. A non-nil error means the caller can no longer be
+// reached (its response stream is closed) and is the proxy's ONLY
+// client-gone signal for legacy-protocol callers: the SDK propagates HTTP
+// request cancellation into the handler ctx solely for protocol
+// >= 2026-07-28, so without this a 2025-11-25 client that disconnects
+// mid-stream would leave the call — and its semaphore slot, upstream stream,
+// and pod — running until the function EOFs.
+type streamNotify func(ctx context.Context, chunk string, progressBytes int64) error
 
 // InvokeStreaming proxies a tool call like Invoke but forwards the response
 // body incrementally through notify while accumulating the final
@@ -273,16 +279,28 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 	// NotifyProgress ultimately writes to the client socket with no deadline,
 	// so a slow or stalled client must not stall the upstream read, pin the
 	// semaphore slot at client pace, or trip the idle watchdog for a stream
-	// whose FUNCTION is healthy.
-	d := newDelivery(ctx, notify)
+	// whose FUNCTION is healthy. When delivery reports the caller gone, it
+	// cancels this call with errCallerGone so the upstream read unwinds.
+	d := newDelivery(ctx, notify, func() { cancel(errCallerGone) })
+	// On every abort path the delivery goroutine is stopped (its ctx is
+	// cancelled) and drained BEFORE the error result returns, so no orphaned
+	// progress for content absent from the final result can trail it; on
+	// success the drain is bounded so a stalled client forfeits its tail
+	// instead of holding this call's slot open. Either way the delivery
+	// goroutine has exited by the time the result is written.
+	defer d.finish(streamDrainTimeout)
+
+	// Upstream activity re-arms the idle watchdog through the same
+	// ActivityReadCloser the router's streaming path uses — one definition
+	// of "activity" for a function regardless of entry path.
+	body := streaming.NewActivityReadCloser(resp.Body, wd.Reset, nil)
 
 	var acc bytes.Buffer
 	var total int64
 	buf := make([]byte, 32*1024)
 	for {
-		n, readErr := resp.Body.Read(buf)
+		n, readErr := body.Read(buf)
 		if n > 0 {
-			wd.Reset()
 			total += int64(n)
 			if total > p.maxBody {
 				// Stop the upstream body, don't drain past the cap.
@@ -300,10 +318,11 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 			return p.streamAbort(ctx, e, readErr, "mid-stream"), nil
 		}
 	}
-	// Bounded drain so a healthy client sees every notification before the
-	// final result; a stalled client forfeits the tail instead of holding
-	// this call's slot open.
-	d.finish(streamDrainTimeout)
+	// The function is done; only the client is being waited on from here.
+	// Disarm the watchdog first, or an idle window shorter than the drain
+	// bound (IdleTimeoutSeconds 1-4 is admissible) would cut the drain short
+	// after the body was already fully read.
+	wd.Stop()
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: acc.String()}}}, nil
 }
 
@@ -312,6 +331,7 @@ func (p *Proxy) InvokeStreaming(ctx context.Context, e ToolEntry, args []byte, n
 var (
 	errStreamIdleTimeout   = errors.New("stream aborted: idle timeout")
 	errResponseCapExceeded = errors.New("stream aborted: response cap exceeded")
+	errCallerGone          = errors.New("stream aborted: caller unreachable")
 )
 
 // streamAbort is the single transport-failure classifier for every failure
@@ -344,7 +364,11 @@ func (p *Proxy) streamAbort(ctx context.Context, e ToolEntry, err error, phase s
 // notify is the cumulative DELIVERED byte count — monotonic by construction,
 // including the EOF flush of a trailing partial rune.
 type delivery struct {
-	notify  streamNotify
+	notify streamNotify
+	// onGone is invoked (once) when notify reports the caller unreachable;
+	// InvokeStreaming wires it to cancel the call so the upstream read
+	// unwinds — the proxy's client-gone signal for legacy-protocol callers.
+	onGone  func()
 	ctx     context.Context
 	mu      sync.Mutex
 	raw     []byte // bytes pushed but not yet handed to notify
@@ -355,12 +379,13 @@ type delivery struct {
 
 // newDelivery returns nil when notify is nil; a nil *delivery's methods are
 // no-ops, so the read loop calls them unconditionally.
-func newDelivery(ctx context.Context, notify streamNotify) *delivery {
+func newDelivery(ctx context.Context, notify streamNotify, onGone func()) *delivery {
 	if notify == nil {
 		return nil
 	}
 	d := &delivery{
 		notify:  notify,
+		onGone:  onGone,
 		ctx:     ctx,
 		wake:    make(chan struct{}, 1),
 		drained: make(chan struct{}),
@@ -396,12 +421,15 @@ func (d *delivery) finish(timeout time.Duration) {
 	case d.wake <- struct{}{}:
 	default:
 	}
+	// Wait for the sender to exit, bounded by timeout. Deliberately NOT
+	// short-circuited on ctx.Done(): on an abort the ctx is already
+	// cancelled, and the point is to have the sender gone (run() exits
+	// promptly on a cancelled ctx) before the error result is written.
 	wait := time.NewTimer(timeout)
 	defer wait.Stop()
 	select {
 	case <-d.drained:
 	case <-wait.C:
-	case <-d.ctx.Done():
 	}
 }
 
@@ -430,8 +458,21 @@ func (d *delivery) run() {
 		d.mu.Unlock()
 
 		if out != "" {
+			// An aborted call (ctx cancelled) must not emit progress for
+			// content that will not be in the (error) result.
+			if d.ctx.Err() != nil {
+				return
+			}
 			delivered += int64(len(out))
-			d.notify(d.ctx, out, delivered)
+			if err := d.notify(d.ctx, out, delivered); err != nil {
+				// The caller's stream is closed: nothing further can be
+				// delivered, so stop sending and let InvokeStreaming unwind
+				// the upstream call instead of running it for nobody.
+				if d.onGone != nil {
+					d.onGone()
+				}
+				return
+			}
 			continue // there may be more already buffered
 		}
 		if done {

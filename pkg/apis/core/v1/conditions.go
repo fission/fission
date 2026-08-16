@@ -121,11 +121,12 @@ const (
 // logs, not in condition history.
 const (
 	// Function condition reasons
-	FunctionReasonReady            = "Available"          // executor: backend is serving requests
-	FunctionReasonPackageReady     = "PackageReady"       // buildermgr: package built
-	FunctionReasonPackageFailed    = "PackageBuildFailed" // buildermgr: package build failed
-	FunctionReasonToolExposed      = "ToolExposed"        // mcp: advertised as an MCP tool
-	FunctionReasonToolNameConflict = "ToolNameConflict"   // mcp: tool name already used by another function
+	FunctionReasonReady             = "Available"          // executor: backend is serving requests
+	FunctionReasonPackageReady      = "PackageReady"       // buildermgr: package built
+	FunctionReasonPackageFailed     = "PackageBuildFailed" // buildermgr: package build failed
+	FunctionReasonToolExposed       = "ToolExposed"        // mcp: advertised as an MCP tool
+	FunctionReasonToolNameConflict  = "ToolNameConflict"   // mcp: tool name already used by another function
+	FunctionReasonToolInvalidSchema = "ToolInvalidSchema"  // mcp: input schema the MCP SDK cannot register (not advertised)
 	// FunctionReasonToolAliasFallback: RFC-0025 alias-addressed Tool
 	// (Spec.Tool.Alias set) whose alias has never resolved a target — the mcp
 	// reconciler is serving a fallback entry built from THIS function's own

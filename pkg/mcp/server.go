@@ -120,9 +120,13 @@ func (s *Server) HTTPHandler() http.Handler {
 			MaxRequestBodyBytes: maxRequestBytes,
 			// Tie the handler ctx to the POST's lifecycle: once the caller
 			// is gone the response can't be delivered, so an in-flight
-			// tools/call (a long stream especially) is cancelled instead of
-			// running the function to completion for nobody. The proxy
-			// classifies that as "canceled", not a function failure.
+			// tools/call is cancelled instead of running the function to
+			// completion for nobody. The proxy classifies that as
+			// "canceled", not a function failure. NOTE: the SDK honors this
+			// only for protocol >= 2026-07-28 callers; legacy (2025-11-25)
+			// callers get no ctx cancellation, which is why the streaming
+			// path ALSO treats a failed progress write as "caller gone"
+			// (see callTool's notify) — that signal exists on every version.
 			PropagateRequestCancellation: true,
 		},
 	)
@@ -191,17 +195,22 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 	// tool-output stream today.
 	if token := req.Params.GetProgressToken(); entry.Streaming && token != nil {
 		session := req.Session
-		notify := func(ctx context.Context, chunk string, progressBytes int64) {
-			// Best-effort: a failed notification (client gone mid-stream)
-			// must not fail the call — the final result still returns.
+		notify := func(ctx context.Context, chunk string, progressBytes int64) error {
+			// A failed notification means the caller's response stream is
+			// closed (client gone mid-stream). It is returned, not swallowed:
+			// the proxy uses it as its client-gone signal to unwind the
+			// upstream call — the SDK only propagates HTTP cancellation into
+			// the handler ctx for protocol >= 2026-07-28, so for legacy
+			// clients this is the only way an abandoned stream is reclaimed.
 			err := session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
 				ProgressToken: token,
 				Progress:      float64(progressBytes),
 				Message:       chunk,
 			})
 			if err != nil {
-				s.logger.V(1).Info("progress notify failed", "tool", entry.ToolName, "error", err)
+				s.logger.V(1).Info("progress notify failed; treating caller as gone", "tool", entry.ToolName, "error", err)
 			}
+			return err
 		}
 		return s.proxy.InvokeStreaming(ctx, entry, req.Params.Arguments, notify)
 	}

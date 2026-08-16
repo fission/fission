@@ -383,3 +383,67 @@ func TestFunctionToolReconcilerDelete(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, reg.Len(), "tool removed after function deletion")
 }
+
+// TestFunctionToolReconcilerRefusesNonObjectSchema pins the reconciler-side
+// guard against the SDK's AddTool panic: a stored Function whose input schema
+// predates the admission tightening (type != "object") must NOT be advertised
+// — and must not take the reconciler down — and its condition must say why.
+// A previously-registered tool for the same function is dropped.
+func TestFunctionToolReconcilerRefusesNonObjectSchema(t *testing.T) {
+	fn := exposedFn("legacy", &fv1.ToolConfig{
+		Description: "predates the type check",
+		InputSchema: &apiextensionsv1.JSON{Raw: []byte(`{"type":"string"}`)},
+	})
+	r, reg, c := newReconciler(t, fn)
+	key := types.NamespacedName{Namespace: "default", Name: "legacy"}
+	ctx := t.Context()
+
+	// Simulate a prior good registration so the guard's cleanup is observable.
+	reg.Upsert(entry("default", "legacy", "default-legacy"))
+	require.True(t, reg.HasFunction(key))
+
+	require.NotPanics(t, func() {
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		require.NoError(t, err)
+	})
+
+	assert.False(t, reg.HasFunction(key), "a non-registrable schema must not stay advertised")
+	got := &fv1.Function{}
+	require.NoError(t, c.Get(ctx, key, got))
+	cond := conditions.Find(got.Status.Conditions, fv1.FunctionConditionToolExposed)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, fv1.FunctionReasonToolInvalidSchema, cond.Reason)
+}
+
+// TestFunctionToolReconcilerRefusesBadHeaderAnnotation covers the SECOND
+// AddTool panic class — malformed x-mcp-header parameter annotations — which
+// a structural "type == object" check cannot see. The probe-based guard is
+// the SDK's own rule set, so this must be refused the same way, and the
+// registry must NOT be left holding an entry that AddTool never accepted.
+func TestFunctionToolReconcilerRefusesBadHeaderAnnotation(t *testing.T) {
+	fn := exposedFn("hdr", &fv1.ToolConfig{
+		Description: "empty header annotation",
+		InputSchema: &apiextensionsv1.JSON{Raw: []byte(`{"type":"object","properties":{"p":{"type":"string","x-mcp-header":""}}}`)},
+	})
+	r, reg, c := newReconciler(t, fn)
+	key := types.NamespacedName{Namespace: "default", Name: "hdr"}
+	ctx := t.Context()
+
+	require.NotPanics(t, func() {
+		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+		require.NoError(t, err)
+	})
+	assert.False(t, reg.HasFunction(key), "an SDK-rejected tool must not be registered")
+
+	// A second reconcile must reach the same verdict (no UpsertNoChange
+	// short-circuit flipping the condition to True).
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+	got := &fv1.Function{}
+	require.NoError(t, c.Get(ctx, key, got))
+	cond := conditions.Find(got.Status.Conditions, fv1.FunctionConditionToolExposed)
+	require.NotNil(t, cond)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, fv1.FunctionReasonToolInvalidSchema, cond.Reason)
+}

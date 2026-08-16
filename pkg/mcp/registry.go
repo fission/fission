@@ -6,12 +6,15 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -216,6 +219,34 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 // list) so a future ToolEntry field can't be forgotten here and leave a spec
 // edit deduped to UpsertNoChange — with tools/list silently stale — and no
 // compiler or test signal.
+// probeServer is a throwaway *mcp.Server used only to ask the SDK "would you
+// accept this tool?" without touching the serving server.
+var probeServer = mcp.NewServer(&mcp.Implementation{Name: "fission-mcp-probe", Version: "0"}, nil)
+
+// validateToolRegistrable reports whether the SDK will accept the entry's
+// tool. AddTool PANICS on anything it dislikes — a non-object input schema,
+// malformed x-mcp-header parameter annotations, and whatever rules future
+// SDK versions add — so rather than replicate its rule set (and drift), the
+// entry is probed against a throwaway server under recover(). Admission
+// (ToolConfig.Validate) refuses the common cases up front for good error
+// messages, but stored objects and FunctionVersion snapshots that predate
+// any admission rule still reach the reconciler, and this is the check that
+// stands between them and every replica's reconcile loop. Callers must run
+// it BEFORE Registry.Upsert: a registry entry whose AddTool never happened
+// is a tool that tools/list omits, tools/call rejects, and the condition
+// still calls exposed.
+func validateToolRegistrable(e ToolEntry) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+	probeServer.AddTool(&mcp.Tool{Name: e.ToolName, Description: e.Description, InputSchema: e.InputSchema},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil })
+	probeServer.RemoveTools(e.ToolName)
+	return nil
+}
+
 func toolEntryEqual(a, b ToolEntry) bool {
 	if !bytes.Equal(a.InputSchema, b.InputSchema) {
 		return false

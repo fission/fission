@@ -383,9 +383,9 @@ func (spec FunctionSpec) Validate() error {
 		errs = errors.Join(errs, spec.Streaming.Validate())
 	}
 
-	if spec.Tool != nil {
-		errs = errors.Join(errs, spec.Tool.Validate())
-	}
+	// spec.Tool is validated in validateForAdmission (called below): the MCP
+	// SDK panics on a schema it dislikes, so that check must bind kubectl and
+	// GitOps writers, not only the CLI path.
 
 	if spec.State != nil {
 		errs = errors.Join(errs, spec.State.Validate())
@@ -421,10 +421,16 @@ func (spec FunctionSpec) Validate() error {
 // and the RFC-0030 env rules (iterating env sources likewise exceeds the CEL
 // cost budget; these MUST live here rather than in Validate(), which the
 // webhook does not call — a rule only Validate() runs is enforced on the CLI
-// path alone and bypassed by kubectl/GitOps writers).
+// path alone and bypassed by kubectl/GitOps writers)
+// and the MCP ToolConfig rules (the InputSchema is opaque JSON that CEL
+// cannot parse, and the MCP SDK PANICS on a schema it dislikes, so a
+// GitOps-written Function must be refused here, not only by the CLI).
 func (spec FunctionSpec) validateForAdmission() error {
 	var errs error
 	errs = errors.Join(errs, ValidatePodSpecSafety("Function.spec.podspec", spec.PodSpec))
+	if spec.Tool != nil {
+		errs = errors.Join(errs, spec.Tool.Validate())
+	}
 	if spec.Invocation != nil {
 		errs = errors.Join(errs, spec.Invocation.Validate())
 	}
