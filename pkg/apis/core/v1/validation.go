@@ -648,10 +648,12 @@ func (sc *StreamingConfig) Validate() error {
 
 // Validate checks the MCP tool config (only reached when FunctionSpec.Tool is
 // non-nil, i.e. the function is advertised): a description is required, and a
-// supplied InputSchema must parse as a JSON object carrying a "type" key (a
+// supplied InputSchema must parse as a JSON object whose "type" is "object" (a
 // cheap structural check — full JSON-Schema meta-validation is the agent's job,
-// and CEL cannot parse arbitrary schemas). The ToolName pattern is enforced by
-// the CRD kubebuilder marker.
+// and CEL cannot parse arbitrary schemas). The type check is load-bearing, not
+// cosmetic: the MCP SDK's AddTool panics on a non-object input schema, so
+// admitting one would let a single Function crash-loop every MCP replica's
+// reconciler. The ToolName pattern is enforced by the CRD kubebuilder marker.
 func (tc *ToolConfig) Validate() error {
 	var errs error
 
@@ -663,8 +665,10 @@ func (tc *ToolConfig) Validate() error {
 		var obj map[string]json.RawMessage
 		if err := json.Unmarshal(tc.InputSchema.Raw, &obj); err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), "must be a JSON object"))
-		} else if _, ok := obj["type"]; !ok {
+		} else if typRaw, ok := obj["type"]; !ok {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `must be a JSON Schema object with a "type" key`))
+		} else if typ := ""; json.Unmarshal(typRaw, &typ) != nil || typ != "object" {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `"type" must be "object" (MCP tool arguments are always an object)`))
 		}
 	}
 

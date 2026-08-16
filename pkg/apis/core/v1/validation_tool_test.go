@@ -29,6 +29,10 @@ func TestToolConfigValidate(t *testing.T) {
 		{"valid object schema", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"object","properties":{"q":{"type":"string"}}}`)}, false},
 		{"schema not an object", ToolConfig{Description: "d", InputSchema: rawSchema(`["type"]`)}, true},
 		{"schema missing type", ToolConfig{Description: "d", InputSchema: rawSchema(`{"properties":{}}`)}, true},
+		// The MCP SDK's AddTool panics on a non-object schema; admission must
+		// refuse it so one Function can't crash-loop the MCP reconciler.
+		{"schema type not object", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"string"}`)}, true},
+		{"schema type not a string", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":["object","null"]}`)}, true},
 		{"schema not json", ToolConfig{Description: "d", InputSchema: rawSchema(`{bad`)}, true},
 		// RFC-0025: Alias is a format-only kube-name check (no existence check
 		// — aliases are eventually consistent).

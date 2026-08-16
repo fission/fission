@@ -146,14 +146,11 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 	}
 	resp, err := p.client.Do(req)
 	if err != nil {
-		// Distinguish a deadline (the function ran too long) from other transport
-		// failures; neither leaks internal detail to the agent.
-		if errors.Is(err, context.DeadlineExceeded) {
-			p.logger.V(1).Info("tool call timed out", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-			return toolError("function invocation timed out"), nil
-		}
-		p.logger.Error(err, "tool call transport error", "tool", e.ToolName, "function", e.FnName, "namespace", e.Namespace)
-		return toolError("function invocation failed"), nil
+		// Same classifier as the streaming path: a deadline is the function
+		// running too long, a caller cancel (the transport propagates client
+		// disconnects into the handler ctx) is benign, and neither leaks
+		// internal detail to the agent.
+		return p.streamAbort(ctx, e, err, "connecting"), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 	return p.mapResponse(e, resp)
@@ -317,11 +314,11 @@ var (
 	errResponseCapExceeded = errors.New("stream aborted: response cap exceeded")
 )
 
-// streamAbort is the single failure classifier for both streaming failure
-// sites (connect and mid-stream), so the same cause gets the same label
-// wherever it lands: a watchdog or max-duration abort is "timed out", a
-// caller cancel is "canceled", anything else is a generic failure with the
-// detail kept server-side.
+// streamAbort is the single transport-failure classifier for every failure
+// site (buffered connect, streaming connect, mid-stream), so the same cause
+// gets the same label wherever it lands: a watchdog, call-ceiling, or
+// max-duration abort is "timed out", a caller cancel is "canceled", anything
+// else is a generic failure with the detail kept server-side.
 func (p *Proxy) streamAbort(ctx context.Context, e ToolEntry, err error, phase string) *mcp.CallToolResult {
 	cause := context.Cause(ctx)
 	switch {

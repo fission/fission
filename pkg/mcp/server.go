@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -21,12 +20,9 @@ const (
 	methodToolsList = "tools/list"
 	methodToolsCall = "tools/call"
 
-	// sessionTimeout closes idle MCP sessions so abandoned connections don't
-	// accumulate unbounded server-side state. Clients reconnect transparently.
-	sessionTimeout = 30 * time.Minute
-
 	// maxRequestBytes caps a single inbound /mcp request body (the JSON-RPC
 	// envelope, incl. tools/call arguments) to bound per-request memory.
+	// Passed explicitly: the SDK's own default is 4 MiB.
 	maxRequestBytes int64 = 1 << 20 // 1 MiB
 )
 
@@ -93,8 +89,22 @@ func (s *Server) ApplyToolDelta(add []ToolEntry, removeNames []string) {
 }
 
 // HTTPHandler returns the http.Handler for the MCP Streamable HTTP transport,
-// wrapped with bearer-token authz (pass-through when no signing key is set) and
-// a per-request body cap. SessionTimeout bounds idle-session accumulation.
+// wrapped with bearer-token authz (pass-through when no signing key is set).
+//
+// The transport runs STATELESS (SEP-2567, protocol 2026-07-28): no
+// Mcp-Session-Id is issued or honored, each request is self-describing, and
+// GET/DELETE return 405. This is what makes `mcp.replicas > 1` behind the
+// plain ClusterIP Service actually correct — a stateful session pinned to
+// one replica's memory never survived the Service's round-robin, whereas
+// stateless requests are served identically by any replica (every replica
+// reconciles the full tool registry). Everything this server does fits the
+// model: tools/list and tools/call are one-shot, and streaming progress
+// notifications ride the POST's own SSE response stream, which the SDK
+// delivers in stateless mode. Legacy (<= 2025-11-25) clients negotiate down
+// and keep working; the SDK rejects the session-bound calls they no longer
+// need. Tool-list change notifications are best-effort in this model (a
+// client learns of changes on its next tools/list, or via
+// subscriptions/listen on new-protocol clients).
 func (s *Server) HTTPHandler() http.Handler {
 	// The SDK's localhost DNS-rebinding protection stays ON: port-forwarded
 	// traffic lands on the pod's loopback, so clients reaching svc/mcp
@@ -103,19 +113,20 @@ func (s *Server) HTTPHandler() http.Handler {
 	// accordingly). Non-loopback Hosts over a forward are rejected 403.
 	streamable := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return s.mcp },
-		&mcp.StreamableHTTPOptions{SessionTimeout: sessionTimeout},
+		&mcp.StreamableHTTPOptions{
+			Stateless: true,
+			// The SDK enforces the cap during the read (Content-Length,
+			// chunked, and HTTP/2 alike) and answers 413.
+			MaxRequestBodyBytes: maxRequestBytes,
+			// Tie the handler ctx to the POST's lifecycle: once the caller
+			// is gone the response can't be delivered, so an in-flight
+			// tools/call (a long stream especially) is cancelled instead of
+			// running the function to completion for nobody. The proxy
+			// classifies that as "canceled", not a function failure.
+			PropagateRequestCancellation: true,
+		},
 	)
-	return s.authz.HTTPMiddleware(limitRequestBody(streamable))
-}
-
-// limitRequestBody caps each request body so a single oversized JSON-RPC
-// envelope can't exhaust memory. The SDK surfaces the read error as a protocol
-// error to the caller.
-func limitRequestBody(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
-		next.ServeHTTP(w, r)
-	})
+	return s.authz.HTTPMiddleware(streamable)
 }
 
 // scopeMiddleware enforces the caller's namespace scope: it drops out-of-scope
