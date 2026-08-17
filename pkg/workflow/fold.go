@@ -379,9 +379,9 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 	if err != nil {
 		return err // non-deterministic (KV read): retry via reconcile, not terminal
 	}
-	regionInput, err := shapeInput(st, doc)
+	regionInput, err := applyInputPath(st, doc)
 	if err != nil {
-		failEntry(fmt.Sprintf("shaping region input: %v", err))
+		failEntry(fmt.Sprintf("applying inputPath to region input: %v", err))
 		return nil
 	}
 	if len(st.Branches) == 0 {

@@ -223,14 +223,14 @@ func (e *Engine) assembleJoin(ctx context.Context, run *fv1.WorkflowRun, s *RunS
 	if err != nil {
 		return Event{}, err
 	}
-	shaped, err := shapeOutput(st, regionInput, outputs)
+	joined, err := applyOutputPath(st, regionInput, outputs)
 	if err != nil {
 		if errors.Is(err, errInvalidPath) {
 			return Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrInvalidPath, Cause: causeOf(err)}, nil
 		}
 		return Event{}, err
 	}
-	raw, err := json.Marshal(shaped)
+	raw, err := json.Marshal(joined)
 	if err != nil {
 		return Event{}, fmt.Errorf("encoding join output: %w", err)
 	}

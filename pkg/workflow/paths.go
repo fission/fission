@@ -19,9 +19,9 @@ import (
 // step failure with errorType Fission.InvalidPath.
 var errInvalidPath = errors.New("invalid result path")
 
-// shapeInput applies the state's InputPath ("" = identity) to its input
+// applyInputPath applies the state's InputPath ("" = identity) to its input
 // document. A no-match reads as JSON null (the pinned dialect semantics).
-func shapeInput(st fv1.WorkflowState, input any) (any, error) {
+func applyInputPath(st fv1.WorkflowState, input any) (any, error) {
 	if st.InputPath == "" {
 		return input, nil
 	}
@@ -35,10 +35,10 @@ func shapeInput(st fv1.WorkflowState, input any) (any, error) {
 	return v, nil
 }
 
-// shapeOutput merges the invocation result into the state's input document
+// applyOutputPath merges the invocation result into the state's input document
 // per ResultPath ("" = replace), then filters through OutputPath ("" =
 // identity). An unwritable ResultPath wraps errInvalidPath.
-func shapeOutput(st fv1.WorkflowState, input, result any) (any, error) {
+func applyOutputPath(st fv1.WorkflowState, input, result any) (any, error) {
 	merged := result
 	if st.ResultPath != "" {
 		// Parse failures wrap errInvalidPath too: they are exactly as
