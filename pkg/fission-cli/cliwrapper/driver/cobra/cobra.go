@@ -140,65 +140,29 @@ func toCobraFlag(cmd *cobra.Command, f flag.Flag, global bool) {
 
 	switch f.Type {
 	case flag.Bool:
-		val, ok := f.DefaultValue.(bool)
-		if !ok {
-			val = false
-		}
-		flagset.BoolP(f.Name, f.Short, val, f.Usage)
+		flagset.BoolP(f.Name, f.Short, f.DefaultBool, f.Usage)
 	case flag.String:
-		val, ok := f.DefaultValue.(string)
-		if !ok {
-			val = ""
-		}
-		flagset.StringP(f.Name, f.Short, val, f.Usage)
+		flagset.StringP(f.Name, f.Short, f.DefaultString, f.Usage)
 	case flag.StringSlice:
-		val, ok := f.DefaultValue.([]string)
-		if !ok {
+		val := f.DefaultStrings
+		if val == nil {
 			val = []string{}
 		}
 		flagset.StringArrayP(f.Name, f.Short, val, f.Usage)
 	case flag.Int:
-		val, ok := f.DefaultValue.(int)
-		if !ok {
-			val = 0
-		}
-		flagset.IntP(f.Name, f.Short, val, f.Usage)
+		flagset.IntP(f.Name, f.Short, f.DefaultInt, f.Usage)
 	case flag.IntSlice:
-		val, ok := f.DefaultValue.([]int)
-		if !ok {
-			val = []int{}
-		}
-		flagset.IntSliceP(f.Name, f.Short, val, f.Usage)
+		flagset.IntSliceP(f.Name, f.Short, []int{}, f.Usage)
 	case flag.Int64:
-		val, ok := f.DefaultValue.(int64)
-		if !ok {
-			val = 0
-		}
-		flagset.Int64P(f.Name, f.Short, val, f.Usage)
+		flagset.Int64P(f.Name, f.Short, f.DefaultInt64, f.Usage)
 	case flag.Int64Slice:
-		val, ok := f.DefaultValue.([]int64)
-		if !ok {
-			val = []int64{}
-		}
-		flagset.Int64SliceP(f.Name, f.Short, val, f.Usage)
+		flagset.Int64SliceP(f.Name, f.Short, []int64{}, f.Usage)
 	case flag.Float32:
-		val, ok := f.DefaultValue.(float32)
-		if !ok {
-			val = 0
-		}
-		flagset.Float32P(f.Name, f.Short, val, f.Usage)
+		flagset.Float32P(f.Name, f.Short, 0, f.Usage)
 	case flag.Float64:
-		val, ok := f.DefaultValue.(float64)
-		if !ok {
-			val = 0
-		}
-		flagset.Float64P(f.Name, f.Short, val, f.Usage)
+		flagset.Float64P(f.Name, f.Short, 0, f.Usage)
 	case flag.Duration:
-		val, ok := f.DefaultValue.(time.Duration)
-		if !ok {
-			val = 0
-		}
-		flagset.DurationP(f.Name, f.Short, val, f.Usage)
+		flagset.DurationP(f.Name, f.Short, f.DefaultDuration, f.Usage)
 	}
 }
 
