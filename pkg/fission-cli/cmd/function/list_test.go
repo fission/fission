@@ -61,7 +61,7 @@ func TestFunctionListOutput(t *testing.T) {
 
 	t.Run("json is an array containing the function", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Output, "json")
+		in.SetString(flagkey.Output, "json")
 		out := captureStdout(t, func() error { return List(in) })
 
 		var got []fv1.Function
@@ -75,7 +75,7 @@ func TestFunctionListOutput(t *testing.T) {
 
 	t.Run("wide adds the AGE column", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Output, "wide")
+		in.SetString(flagkey.Output, "wide")
 		out := captureStdout(t, func() error { return List(in) })
 		if !strings.Contains(out, "AGE") {
 			t.Fatalf("wide output missing AGE column:\n%s", out)
@@ -98,7 +98,7 @@ func TestFunctionListOutput(t *testing.T) {
 
 	t.Run("invalid format errors", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Output, "bogus")
+		in.SetString(flagkey.Output, "bogus")
 		if err := List(in); err == nil {
 			t.Fatal("expected an error for -o bogus")
 		}

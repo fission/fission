@@ -42,7 +42,7 @@ func TestAliasDeleteOutputMatchesFnDeleteStyle(t *testing.T) {
 	fc := setAliasClient(newAlias()) // name=prod, namespace=default
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasName, "prod")
 
 	out := captureStdout(t, func() error { return Delete(in) })
 	assert.Equal(t, "function alias 'prod' deleted\n", out)
@@ -55,8 +55,8 @@ func TestAliasDeleteIgnoreNotFound(t *testing.T) {
 	setAliasClient() // empty clientset
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "absent")
-	in.Set(flagkey.IgnoreNotFound, true)
+	in.SetString(flagkey.AliasName, "absent")
+	in.SetBool(flagkey.IgnoreNotFound, true)
 
 	require.NoError(t, Delete(in))
 }
@@ -65,7 +65,7 @@ func TestAliasDeleteMissingAliasErrors(t *testing.T) {
 	setAliasClient() // empty clientset
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "absent")
+	in.SetString(flagkey.AliasName, "absent")
 
 	require.Error(t, Delete(in))
 }

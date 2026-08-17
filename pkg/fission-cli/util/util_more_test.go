@@ -34,7 +34,7 @@ func TestGetResourceReqs(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		flags     map[string]any
+		flags     []dummy.Flag
 		existing  *v1.ResourceRequirements
 		wantErr   bool
 		wantReqs  map[v1.ResourceName]resource.Quantity
@@ -42,46 +42,46 @@ func TestGetResourceReqs(t *testing.T) {
 	}{
 		{
 			name:      "no flags yields empty maps",
-			flags:     map[string]any{},
+			flags:     []dummy.Flag{},
 			wantReqs:  map[v1.ResourceName]resource.Quantity{},
 			wantLimit: map[v1.ResourceName]resource.Quantity{},
 		},
 		{
 			name:      "mincpu only defaults limit to request",
-			flags:     map[string]any{flagkey.RuntimeMincpu: 100},
+			flags:     []dummy.Flag{dummy.Int(flagkey.RuntimeMincpu, 100)},
 			wantReqs:  map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("100m")},
 			wantLimit: map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("100m")},
 		},
 		{
 			name:      "minmemory only defaults limit to request",
-			flags:     map[string]any{flagkey.RuntimeMinmemory: 64},
+			flags:     []dummy.Flag{dummy.Int(flagkey.RuntimeMinmemory, 64)},
 			wantReqs:  map[v1.ResourceName]resource.Quantity{v1.ResourceMemory: mustQty("64Mi")},
 			wantLimit: map[v1.ResourceName]resource.Quantity{v1.ResourceMemory: mustQty("64Mi")},
 		},
 		{
 			name: "valid cpu and memory ranges",
-			flags: map[string]any{
-				flagkey.RuntimeMincpu:    100,
-				flagkey.RuntimeMaxcpu:    200,
-				flagkey.RuntimeMinmemory: 64,
-				flagkey.RuntimeMaxmemory: 128,
+			flags: []dummy.Flag{
+				dummy.Int(flagkey.RuntimeMincpu, 100),
+				dummy.Int(flagkey.RuntimeMaxcpu, 200),
+				dummy.Int(flagkey.RuntimeMinmemory, 64),
+				dummy.Int(flagkey.RuntimeMaxmemory, 128),
 			},
 			wantReqs:  map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("100m"), v1.ResourceMemory: mustQty("64Mi")},
 			wantLimit: map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("200m"), v1.ResourceMemory: mustQty("128Mi")},
 		},
 		{
 			name:    "mincpu greater than maxcpu errors",
-			flags:   map[string]any{flagkey.RuntimeMincpu: 200, flagkey.RuntimeMaxcpu: 100},
+			flags:   []dummy.Flag{dummy.Int(flagkey.RuntimeMincpu, 200), dummy.Int(flagkey.RuntimeMaxcpu, 100)},
 			wantErr: true,
 		},
 		{
 			name:    "minmemory greater than maxmemory errors",
-			flags:   map[string]any{flagkey.RuntimeMinmemory: 128, flagkey.RuntimeMaxmemory: 64},
+			flags:   []dummy.Flag{dummy.Int(flagkey.RuntimeMinmemory, 128), dummy.Int(flagkey.RuntimeMaxmemory, 64)},
 			wantErr: true,
 		},
 		{
 			name:      "existing requirements are preserved",
-			flags:     map[string]any{},
+			flags:     []dummy.Flag{},
 			existing:  &v1.ResourceRequirements{Requests: v1.ResourceList{v1.ResourceCPU: mustQty("50m")}, Limits: v1.ResourceList{v1.ResourceCPU: mustQty("50m")}},
 			wantReqs:  map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("50m")},
 			wantLimit: map[v1.ResourceName]resource.Quantity{v1.ResourceCPU: mustQty("50m")},
@@ -91,10 +91,7 @@ func TestGetResourceReqs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			in := dummy.TestFlagSet()
-			for k, v := range tt.flags {
-				in.Set(k, v)
-			}
+			in := dummy.TestFlagSetWith(tt.flags...)
 			got, err := GetResourceReqs(in, tt.existing)
 			if tt.wantErr {
 				require.Error(t, err)
@@ -146,8 +143,8 @@ func TestApplyLabelsAndAnnotations(t *testing.T) {
 	t.Run("applies labels and annotations", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Labels, "team=a,env=prod")
-		in.Set(flagkey.Annotation, []string{"owner=me"})
+		in.SetString(flagkey.Labels, "team=a,env=prod")
+		in.SetStringSlice(flagkey.Annotation, []string{"owner=me"})
 		om := &metav1.ObjectMeta{}
 		require.NoError(t, ApplyLabelsAndAnnotations(in, om))
 		assert.Equal(t, map[string]string{"team": "a", "env": "prod"}, om.Labels)
@@ -166,14 +163,14 @@ func TestApplyLabelsAndAnnotations(t *testing.T) {
 	t.Run("invalid label errors", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Labels, "not a label")
+		in.SetString(flagkey.Labels, "not a label")
 		require.Error(t, ApplyLabelsAndAnnotations(in, &metav1.ObjectMeta{}))
 	})
 
 	t.Run("invalid annotation errors", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.Annotation, []string{"noequals"})
+		in.SetStringSlice(flagkey.Annotation, []string{"noequals"})
 		require.Error(t, ApplyLabelsAndAnnotations(in, &metav1.ObjectMeta{}))
 	})
 }
@@ -182,7 +179,7 @@ func TestGetSpecDir(t *testing.T) {
 	t.Parallel()
 	in := dummy.TestFlagSet()
 	assert.Equal(t, "specs", GetSpecDir(in))
-	in.Set(flagkey.SpecDir, "custom")
+	in.SetString(flagkey.SpecDir, "custom")
 	assert.Equal(t, "custom", GetSpecDir(in))
 }
 
@@ -190,7 +187,7 @@ func TestGetSpecIgnore(t *testing.T) {
 	t.Parallel()
 	in := dummy.TestFlagSet()
 	assert.Equal(t, SPEC_IGNORE_FILE, GetSpecIgnore(in))
-	in.Set(flagkey.SpecIgnore, ".myignore")
+	in.SetString(flagkey.SpecIgnore, ".myignore")
 	assert.Equal(t, ".myignore", GetSpecIgnore(in))
 }
 
@@ -208,7 +205,7 @@ func TestGetValidationFlag(t *testing.T) {
 	for _, tt := range tests {
 		in := dummy.TestFlagSet()
 		if tt.val != "" {
-			in.Set(flagkey.SpecValidate, tt.val)
+			in.SetString(flagkey.SpecValidate, tt.val)
 		}
 		assert.Equal(t, tt.want, GetValidationFlag(in), "val=%q", tt.val)
 	}

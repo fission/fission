@@ -34,13 +34,13 @@ func setCreateClient(objs ...runtime.Object) versioned.Interface {
 
 func newCreateFlagSet(name, trigger, newFn, oldFn string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, name)
-	in.Set(flagkey.CanaryHTTPTriggerName, trigger)
-	in.Set(flagkey.CanaryNewFunc, newFn)
-	in.Set(flagkey.CanaryOldFunc, oldFn)
-	in.Set(flagkey.CanaryWeightIncrement, 20)
-	in.Set(flagkey.CanaryFailureThreshold, 10)
-	in.Set(flagkey.CanaryIncrementInterval, "2m")
+	in.SetString(flagkey.CanaryName, name)
+	in.SetString(flagkey.CanaryHTTPTriggerName, trigger)
+	in.SetString(flagkey.CanaryNewFunc, newFn)
+	in.SetString(flagkey.CanaryOldFunc, oldFn)
+	in.SetInt(flagkey.CanaryWeightIncrement, 20)
+	in.SetInt(flagkey.CanaryFailureThreshold, 10)
+	in.SetString(flagkey.CanaryIncrementInterval, "2m")
 	return in
 }
 

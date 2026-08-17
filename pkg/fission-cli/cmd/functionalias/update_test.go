@@ -53,7 +53,7 @@ func TestAliasUpdateOnlySetFlagsMutate(t *testing.T) {
 	fc := setAliasClient(newAlias()) // version=hello-v1
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasName, "prod")
 	// no other flags set
 
 	require.NoError(t, Update(in))
@@ -71,8 +71,8 @@ func TestAliasUpdateVersionClearsPackageDigest(t *testing.T) {
 	fc := setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasVersion, "hello-v2")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasVersion, "hello-v2")
 
 	require.NoError(t, Update(in))
 
@@ -86,9 +86,9 @@ func TestAliasUpdatePackageDigestClearsVersion(t *testing.T) {
 	fc := setAliasClient(newAlias()) // version=hello-v1, no digest
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasName, "prod")
 	digest := "sha256:" + fixedDigest()
-	in.Set(flagkey.AliasPackageDigest, digest)
+	in.SetString(flagkey.AliasPackageDigest, digest)
 
 	require.NoError(t, Update(in))
 
@@ -102,9 +102,9 @@ func TestAliasUpdateWeightAndSecondaryVersion(t *testing.T) {
 	fc := setAliasClient(newAlias())
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasWeight, 80)
-	in.Set(flagkey.AliasSecondaryVersion, "hello-v2")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetInt(flagkey.AliasWeight, 80)
+	in.SetString(flagkey.AliasSecondaryVersion, "hello-v2")
 
 	require.NoError(t, Update(in))
 
@@ -122,8 +122,8 @@ func TestAliasUpdateClearWeightDropsSplit(t *testing.T) {
 	fc := setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasClearWeight, true)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetBool(flagkey.AliasClearWeight, true)
 
 	require.NoError(t, Update(in))
 
@@ -137,10 +137,10 @@ func TestAliasUpdateClearWeightWinsOverWeightInSameCall(t *testing.T) {
 	fc := setAliasClient(newAlias())
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasWeight, 30)
-	in.Set(flagkey.AliasSecondaryVersion, "hello-v2")
-	in.Set(flagkey.AliasClearWeight, true)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetInt(flagkey.AliasWeight, 30)
+	in.SetString(flagkey.AliasSecondaryVersion, "hello-v2")
+	in.SetBool(flagkey.AliasClearWeight, true)
 
 	require.NoError(t, Update(in))
 
@@ -154,7 +154,7 @@ func TestAliasUpdateMissingAliasErrors(t *testing.T) {
 	setAliasClient() // empty clientset
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "absent")
+	in.SetString(flagkey.AliasName, "absent")
 
 	require.Error(t, Update(in))
 }
@@ -168,10 +168,10 @@ func TestAliasUpdateWaitSucceedsWhenAlreadyResolved(t *testing.T) {
 	setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasVersion, "hello-v1") // no-op change, resolver already converged
-	in.Set(flagkey.AliasWait, true)
-	in.Set(flagkey.WaitTimeout, time.Second)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasVersion, "hello-v1") // no-op change, resolver already converged
+	in.SetBool(flagkey.AliasWait, true)
+	in.SetDuration(flagkey.WaitTimeout, time.Second)
 
 	require.NoError(t, Update(in))
 }
@@ -184,10 +184,10 @@ func TestAliasUpdateWaitTimesOutWhenUnresolved(t *testing.T) {
 	setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasVersion, "hello-v2")
-	in.Set(flagkey.AliasWait, true)
-	in.Set(flagkey.WaitTimeout, 20*time.Millisecond)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasVersion, "hello-v2")
+	in.SetBool(flagkey.AliasWait, true)
+	in.SetDuration(flagkey.WaitTimeout, 20*time.Millisecond)
 
 	err := Update(in)
 	require.Error(t, err)

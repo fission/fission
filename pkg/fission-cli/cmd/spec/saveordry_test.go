@@ -47,7 +47,7 @@ func TestSaveOrDry(t *testing.T) {
 
 	t.Run("spec-dry prints the resource YAML", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.SpecDry, true)
+		in.SetBool(flagkey.SpecDry, true)
 		var handled bool
 		out := captureSpecStdout(t, func() error {
 			var err error

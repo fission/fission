@@ -55,10 +55,10 @@ func TestCanaryUpdateResetsStatusOnChange(t *testing.T) {
 	fc := setCanaryClient(newCanary())
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, "canary")
-	in.Set(flagkey.CanaryWeightIncrement, 20) // changed from 10
-	in.Set(flagkey.CanaryFailureThreshold, 10)
-	in.Set(flagkey.CanaryIncrementInterval, "2m")
+	in.SetString(flagkey.CanaryName, "canary")
+	in.SetInt(flagkey.CanaryWeightIncrement, 20) // changed from 10
+	in.SetInt(flagkey.CanaryFailureThreshold, 10)
+	in.SetString(flagkey.CanaryIncrementInterval, "2m")
 
 	require.NoError(t, Update(in))
 
@@ -73,10 +73,10 @@ func TestCanaryUpdateNoChangeKeepsStatus(t *testing.T) {
 	fc := setCanaryClient(newCanary())
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, "canary")
-	in.Set(flagkey.CanaryWeightIncrement, 10) // same as existing
-	in.Set(flagkey.CanaryFailureThreshold, 10)
-	in.Set(flagkey.CanaryIncrementInterval, "2m")
+	in.SetString(flagkey.CanaryName, "canary")
+	in.SetInt(flagkey.CanaryWeightIncrement, 10) // same as existing
+	in.SetInt(flagkey.CanaryFailureThreshold, 10)
+	in.SetString(flagkey.CanaryIncrementInterval, "2m")
 
 	require.NoError(t, Update(in))
 
@@ -89,8 +89,8 @@ func TestCanaryUpdateOnlySetFlagsMutate(t *testing.T) {
 	fc := setCanaryClient(newCanary()) // step=10, threshold=10, duration=2m
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, "canary")
-	in.Set(flagkey.CanaryFailureThreshold, 5) // only this flag is provided
+	in.SetString(flagkey.CanaryName, "canary")
+	in.SetInt(flagkey.CanaryFailureThreshold, 5) // only this flag is provided
 
 	require.NoError(t, Update(in))
 
@@ -106,8 +106,8 @@ func TestCanaryUpdateInvalidIntervalErrors(t *testing.T) {
 	setCanaryClient(newCanary())
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, "canary")
-	in.Set(flagkey.CanaryIncrementInterval, "not-a-duration")
+	in.SetString(flagkey.CanaryName, "canary")
+	in.SetString(flagkey.CanaryIncrementInterval, "not-a-duration")
 
 	require.Error(t, Update(in))
 }
@@ -116,8 +116,8 @@ func TestCanaryUpdateMissingConfigErrors(t *testing.T) {
 	setCanaryClient() // empty clientset
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.CanaryName, "absent")
-	in.Set(flagkey.CanaryIncrementInterval, "2m")
+	in.SetString(flagkey.CanaryName, "absent")
+	in.SetString(flagkey.CanaryIncrementInterval, "2m")
 
 	require.Error(t, Update(in))
 }

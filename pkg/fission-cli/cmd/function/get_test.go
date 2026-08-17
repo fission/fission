@@ -56,8 +56,8 @@ func TestGetVersionRendersSnapshotPackage(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	assert.Equal(t, "v1 snapshot content", out)
@@ -100,8 +100,8 @@ func TestGetVersionRendersOriginalPackageForOCIDigest(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	assert.Equal(t, "digest-pinned content", out)
@@ -120,8 +120,8 @@ func TestGetVersionNotFound(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnTestVersion, "does-not-exist")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnTestVersion, "does-not-exist")
 
 	err := Get(in)
 	require.Error(t, err)
@@ -145,8 +145,8 @@ func TestGetVersionWrongFunction(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnTestVersion, "other-v1")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnTestVersion, "other-v1")
 
 	err := Get(in)
 	require.Error(t, err)

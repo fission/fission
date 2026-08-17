@@ -39,7 +39,7 @@ func TestCanaryGet(t *testing.T) {
 
 	t.Run("table output names the config", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.CanaryName, "canary")
+		in.SetString(flagkey.CanaryName, "canary")
 		out := captureStdout(t, func() error { return Get(in) })
 		assert.True(t, strings.Contains(out, "canary"), "table output should name the canary config, got: %q", out)
 		assert.Contains(t, out, "NAME")
@@ -47,15 +47,15 @@ func TestCanaryGet(t *testing.T) {
 
 	t.Run("json output is structured", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.CanaryName, "canary")
-		in.Set(flagkey.Output, "json")
+		in.SetString(flagkey.CanaryName, "canary")
+		in.SetString(flagkey.Output, "json")
 		out := captureStdout(t, func() error { return Get(in) })
 		assert.Contains(t, out, "\"name\": \"canary\"")
 	})
 
 	t.Run("missing config errors", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.CanaryName, "absent")
+		in.SetString(flagkey.CanaryName, "absent")
 		require.Error(t, Get(in))
 	})
 }

@@ -56,8 +56,8 @@ func setRollbackClient(objs ...runtime.Object) *fissionfake.Clientset {
 
 func rollbackFlags(fnName, aliasName string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, fnName)
-	in.Set(flagkey.FnRollbackAlias, aliasName)
+	in.SetString(flagkey.FnName, fnName)
+	in.SetString(flagkey.FnRollbackAlias, aliasName)
 	return in
 }
 
@@ -77,7 +77,7 @@ func TestRollbackToExplicitTarget(t *testing.T) {
 	fc := setRollbackClient(aliasForRollback())
 
 	in := rollbackFlags("hello", "prod")
-	in.Set(flagkey.FnRollbackTo, "hello-v1")
+	in.SetString(flagkey.FnRollbackTo, "hello-v1")
 	require.NoError(t, Rollback(in))
 
 	got, err := fc.CoreV1().FunctionAliases("default").Get(t.Context(), "prod", metav1.GetOptions{})
@@ -202,7 +202,7 @@ func TestRollbackDetachStripsAnnotationsAndRepoints(t *testing.T) {
 	fc := setRollbackClient(alias)
 
 	in := rollbackFlags("hello", "prod")
-	in.Set(flagkey.FnRollbackDetach, true)
+	in.SetBool(flagkey.FnRollbackDetach, true)
 	require.NoError(t, Rollback(in))
 
 	got, err := fc.CoreV1().FunctionAliases("default").Get(t.Context(), "prod", metav1.GetOptions{})
@@ -239,8 +239,8 @@ func TestRollbackWaitSucceedsWhenAlreadyResolved(t *testing.T) {
 	setRollbackClient(alias)
 
 	in := rollbackFlags("hello", "prod")
-	in.Set(flagkey.FnRollbackWait, true)
-	in.Set(flagkey.WaitTimeout, time.Second)
+	in.SetBool(flagkey.FnRollbackWait, true)
+	in.SetDuration(flagkey.WaitTimeout, time.Second)
 	require.NoError(t, Rollback(in))
 }
 
@@ -252,8 +252,8 @@ func TestRollbackWaitTimesOutWhenUnresolved(t *testing.T) {
 	setRollbackClient(alias)
 
 	in := rollbackFlags("hello", "prod")
-	in.Set(flagkey.FnRollbackWait, true)
-	in.Set(flagkey.WaitTimeout, 20*time.Millisecond)
+	in.SetBool(flagkey.FnRollbackWait, true)
+	in.SetDuration(flagkey.WaitTimeout, 20*time.Millisecond)
 
 	err := Rollback(in)
 	require.Error(t, err)
@@ -295,8 +295,8 @@ func TestRollbackWaitFlipsAfterRetries(t *testing.T) {
 	})
 
 	in := rollbackFlags("hello", "prod")
-	in.Set(flagkey.FnRollbackWait, true)
-	in.Set(flagkey.WaitTimeout, 5*time.Second)
+	in.SetBool(flagkey.FnRollbackWait, true)
+	in.SetDuration(flagkey.WaitTimeout, 5*time.Second)
 
 	require.NoError(t, Rollback(in))
 	assert.GreaterOrEqual(t, getsAfterUpdate.Load(), int32(2), "must have retried past the first unresolved poll")

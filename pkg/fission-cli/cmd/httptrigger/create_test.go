@@ -33,10 +33,10 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnAlias, "prod")
-		in.Set(flagkey.HtFnVersion, "fn-v1")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnAlias, "prod")
+		in.SetString(flagkey.HtFnVersion, "fn-v1")
 
 		err := (&CreateSubCommand{}).complete(in)
 		require.Error(t, err)
@@ -49,10 +49,10 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn1", "fn2"})
-		in.Set(flagkey.HtFnWeight, []int{50, 50})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnAlias, "prod")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn1", "fn2"})
+		in.SetIntSlice(flagkey.HtFnWeight, []int{50, 50})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnAlias, "prod")
 
 		err := (&CreateSubCommand{}).complete(in)
 		require.Error(t, err)
@@ -65,9 +65,9 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnAlias, "prod")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnAlias, "prod")
 
 		err := (&CreateSubCommand{}).complete(in)
 		require.Error(t, err)
@@ -84,9 +84,9 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnVersion, "fn-v1")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnVersion, "fn-v1")
 
 		err := (&CreateSubCommand{}).complete(in)
 		require.Error(t, err)
@@ -103,9 +103,9 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnAlias, "prod")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnAlias, "prod")
 
 		opts := &CreateSubCommand{}
 		err := opts.complete(in)
@@ -127,9 +127,9 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
-		in.Set(flagkey.HtFnVersion, "fn-v3")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
+		in.SetString(flagkey.HtFnVersion, "fn-v3")
 
 		opts := &CreateSubCommand{}
 		err := opts.complete(in)
@@ -145,8 +145,8 @@ func TestCreateCompleteFnRefTagFlags(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.HtFnName, []string{"fn"})
-		in.Set(flagkey.HtUrl, "/test")
+		in.SetStringSlice(flagkey.HtFnName, []string{"fn"})
+		in.SetString(flagkey.HtUrl, "/test")
 
 		opts := &CreateSubCommand{}
 		err := opts.complete(in)

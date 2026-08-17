@@ -29,7 +29,7 @@ func setDeleteClient(objs ...runtime.Object) *fissionfake.Clientset {
 
 func deleteFlags(fnName string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, fnName)
+	in.SetString(flagkey.FnName, fnName)
 	return in
 }
 

@@ -114,7 +114,7 @@ func TestGetDeployOCIRefusesCleanly(t *testing.T) {
 	t.Cleanup(cmd.ResetClientsetForTest)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgName, "oci-pkg")
+	in.SetString(flagkey.PkgName, "oci-pkg")
 
 	err := GetDeploy(in)
 	require.Error(t, err, "getdeploy on an OCI package must error, not panic")
@@ -145,7 +145,7 @@ func TestUpdatePackageOCI(t *testing.T) {
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgOCI, "ghcr.io/example/hello-code:v2")
+	in.SetString(flagkey.PkgOCI, "ghcr.io/example/hello-code:v2")
 
 	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
 	require.NoError(t, err)
@@ -172,8 +172,8 @@ func TestUpdatePackageOCIMutualExclusion(t *testing.T) {
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgOCI, "ghcr.io/example/hello-code:v2")
-	in.Set(flagkey.PkgCode, "hello.py")
+	in.SetString(flagkey.PkgOCI, "ghcr.io/example/hello-code:v2")
+	in.SetString(flagkey.PkgCode, "hello.py")
 
 	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
 	require.Error(t, err, "--oci combined with --code must be rejected")
@@ -217,7 +217,7 @@ func TestCreatePackageDeploySecret(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgDeploySecret, "artifactory-creds")
+	in.SetString(flagkey.PkgDeploySecret, "artifactory-creds")
 
 	_, err := CreatePackage(in, client, "auth-pkg", "default", "node-env",
 		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
@@ -236,9 +236,9 @@ func TestCreatePackageDeploySecretExplicitChecksum(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgDeploySecret, "creds")
+	in.SetString(flagkey.PkgDeploySecret, "creds")
 	sum := strings.Repeat("a", 64)
-	in.Set(flagkey.PkgDeployChecksum, sum)
+	in.SetString(flagkey.PkgDeployChecksum, sum)
 
 	_, err := CreatePackage(in, client, "auth-pkg2", "default", "node-env",
 		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
@@ -257,7 +257,7 @@ func TestCreatePackageSecretRequiresURL(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgDeploySecret, "creds")
+	in.SetString(flagkey.PkgDeploySecret, "creds")
 
 	_, err := CreatePackage(in, client, "auth-pkg3", "default", "node-env",
 		nil, []string{"local.zip"}, "", "", "", false, "default", "")
@@ -269,7 +269,7 @@ func TestCreatePackageSrcSecret(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgSrcSecret, "src-creds")
+	in.SetString(flagkey.PkgSrcSecret, "src-creds")
 
 	_, err := CreatePackage(in, client, "auth-src-pkg", "default", "node-env",
 		[]string{"https://repo.example.invalid/src.zip"}, nil, "", "", "", false, "default", "")
@@ -288,7 +288,7 @@ func TestCreatePackageSrcOCI(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+	in.SetString(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
 
 	_, err := CreatePackage(in, client, "srcoci-pkg", "default", "node-env",
 		nil, nil, "", "", "", false, "default", "")
@@ -311,8 +311,8 @@ func TestCreatePackageSrcOCIWithDeployIsPending(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
-	in.Set(flagkey.PkgInsecure, true) // skip the anonymous checksum download for the deploy URL
+	in.SetString(flagkey.PkgSrcOCI, "ghcr.io/example/hello-src:v1")
+	in.SetBool(flagkey.PkgInsecure, true) // skip the anonymous checksum download for the deploy URL
 
 	_, err := CreatePackage(in, client, "srcoci-deploy-pkg", "default", "node-env",
 		nil, []string{"https://repo.example.invalid/a.zip"}, "", "", "", false, "default", "")
@@ -345,7 +345,7 @@ func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgSrcSecret, "correct-creds")
+	in.SetString(flagkey.PkgSrcSecret, "correct-creds")
 
 	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
 	require.NoError(t, err)
@@ -376,7 +376,7 @@ func TestUpdatePackageDeploySecretRotate(t *testing.T) {
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.PkgDeploySecret, "creds-v2")
+	in.SetString(flagkey.PkgDeploySecret, "creds-v2")
 
 	_, err := UpdatePackage(in, client, "", pkg.DeepCopy())
 	require.NoError(t, err)

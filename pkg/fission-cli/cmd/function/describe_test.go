@@ -83,8 +83,8 @@ func setDescribeClients(t *testing.T, fissionObjs []runtime.Object, pods ...runt
 
 func describeInput(name, ns string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, name)
-	in.Set(flagkey.Namespace, ns)
+	in.SetString(flagkey.FnName, name)
+	in.SetString(flagkey.Namespace, ns)
 	return in
 }
 
@@ -264,7 +264,7 @@ func describeVersionObj(name, fnName string, sequence int64) *fv1.FunctionVersio
 
 func describeVersionInput(name, namespace, version string) dummy.Cli {
 	in := describeInput(name, namespace)
-	in.Set(flagkey.FnDescribeVersion, version)
+	in.SetString(flagkey.FnDescribeVersion, version)
 	return in
 }
 
