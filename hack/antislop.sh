@@ -39,6 +39,14 @@ fi
 
 # Flags that record deliberate policy for this repository. Add a comment for
 # every deviation from the analyzer defaults.
-#   (none yet — the baseline is being burned down; see the plan for the
-#   nostructuralnames / test-scope decisions)
-exec "${bin[@]}" "$@"
+#
+# nostructuralnames is off: its only default term is "shape", and in this
+# repository "route shape" is RFC-0013 vocabulary — the set of HTTPTrigger
+# fields whose change forces a mux rebuild — that is exposed as the metric
+# label value shape_changed / shape_change and in HTTPTrigger condition
+# messages. Renaming the identifiers alone would split the vocabulary and
+# renaming the labels is a user-visible metrics change. The analyzer has no
+# per-package exemption (-nostructuralnames.terms replaces the whole list).
+POLICY_FLAGS=(-nostructuralnames=false)
+
+exec "${bin[@]}" "${POLICY_FLAGS[@]}" "$@"
