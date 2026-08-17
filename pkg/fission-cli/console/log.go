@@ -17,7 +17,7 @@ var (
 	Verbosity int
 )
 
-func Error(msg any) {
+func Error(msg string) {
 	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
@@ -26,11 +26,11 @@ func Errorf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "%v: %v\n", color.RedString("Error"), trimNewline(msg))
 }
 
-func Warn(msg any) {
+func Warn(msg string) {
 	fmt.Fprintf(os.Stdout, "%v: %v\n", color.YellowString("Warning"), trimNewline(msg))
 }
 
-func Info(msg any) {
+func Info(msg string) {
 	fmt.Fprintf(os.Stdout, "%v\n", trimNewline(msg))
 }
 
@@ -59,6 +59,6 @@ func sanitizeLogLine(s string) string {
 // trimNewline preserves the existing API for callers that only need
 // to drop a trailing newline; it now also neutralises embedded
 // CR/LF the same way sanitizeLogLine does.
-func trimNewline(m any) string {
-	return sanitizeLogLine(fmt.Sprintf("%v", m))
+func trimNewline(m string) string {
+	return sanitizeLogLine(m)
 }
