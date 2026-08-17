@@ -138,6 +138,13 @@ func toCobraFlag(cmd *cobra.Command, f flag.Flag, global bool) {
 		flagset = cmd.PersistentFlags()
 	}
 
+	// A default in the wrong field would otherwise be dropped in silence; the
+	// command tree is built at startup, so this surfaces immediately (and in
+	// TestCommandTreeLeavesAreRunnable).
+	if err := f.CheckDefault(); err != nil {
+		panic(err)
+	}
+
 	switch f.Type {
 	case flag.Bool:
 		flagset.BoolP(f.Name, f.Short, f.DefaultBool, f.Usage)

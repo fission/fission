@@ -7,6 +7,7 @@ package flag
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -50,6 +51,60 @@ type (
 		Substitute string
 	}
 )
+
+// defaultFieldFor pairs a FlagType with the one Default* field that carries
+// its default. It is the single place that mapping is written down.
+var defaultFieldFor = map[FlagType]string{
+	Bool:        "DefaultBool",
+	String:      "DefaultString",
+	StringSlice: "DefaultStrings",
+	Int:         "DefaultInt",
+	Int64:       "DefaultInt64",
+	Duration:    "DefaultDuration",
+}
+
+// CheckDefault rejects a default written into a field that does not match the
+// flag's Type.
+//
+// Type is the discriminator and the Default* fields are its variants, but the
+// compiler cannot tie them together: `Flag{Type: Duration, DefaultInt: 30}`
+// builds fine and toCobraFlag then registers the flag with a zero default,
+// silently. That is the same failure this struct exists to fix — an untyped
+// `DefaultValue: 90` on an Int64 flag landed in an `any`, failed the int64
+// assertion, and both --graceperiod flags registered as 0 for years.
+// Enforcing the pairing at construction keeps the class closed.
+func (f Flag) CheckDefault() error {
+	var set []string
+	if f.DefaultBool {
+		set = append(set, "DefaultBool")
+	}
+	if f.DefaultString != "" {
+		set = append(set, "DefaultString")
+	}
+	if f.DefaultStrings != nil {
+		set = append(set, "DefaultStrings")
+	}
+	if f.DefaultInt != 0 {
+		set = append(set, "DefaultInt")
+	}
+	if f.DefaultInt64 != 0 {
+		set = append(set, "DefaultInt64")
+	}
+	if f.DefaultDuration != 0 {
+		set = append(set, "DefaultDuration")
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	want, ok := defaultFieldFor[f.Type]
+	if !ok {
+		return fmt.Errorf("flag %q: this kind takes no default, but %s is set", f.Name, strings.Join(set, ", "))
+	}
+	if len(set) > 1 || set[0] != want {
+		return fmt.Errorf("flag %q: this kind reads %s, but %s is set", f.Name, want, strings.Join(set, ", "))
+	}
+	return nil
+}
 
 const (
 	Bool FlagType = iota + 1
