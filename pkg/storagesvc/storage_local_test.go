@@ -130,7 +130,7 @@ func TestStorageClientLocalRoundTrip(t *testing.T) {
 
 	require.NoError(t, client.exists(id))
 
-	ids, err := client.getItemIDsWithFilter(client.filterAllItems, false)
+	ids, err := client.getItemIDsWithFilter(client.filterAllItems)
 	require.NoError(t, err)
 	assert.Contains(t, ids, id)
 

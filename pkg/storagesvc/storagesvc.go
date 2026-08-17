@@ -79,7 +79,7 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	// get all archives on storage
 	// out of them, there may be some just created but not referenced by packages yet.
 	// need to filter them out.
-	archivesInStorage, err := ss.storageClient.getItemIDsWithFilter(ss.storageClient.filterAllItems, false)
+	archivesInStorage, err := ss.storageClient.getItemIDsWithFilter(ss.storageClient.filterAllItems)
 	if err != nil {
 		logger.Error(err, "error getting items from storage")
 		return
