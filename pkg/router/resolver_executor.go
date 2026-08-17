@@ -108,7 +108,7 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 		},
 	)
 	if err != nil {
-		return ResolvedEntry{}, fmt.Errorf("empty service entry: %w", err)
+		return ResolvedEntry{}, fmt.Errorf("resolving service entry: %w", err)
 	}
 	return ResolvedEntry{SvcURL: record.svcURL, FromCache: record.cacheHit}, nil
 }

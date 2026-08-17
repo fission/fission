@@ -28,9 +28,8 @@ import (
 // into a typed object on demand by decodeAs.
 type manifest struct {
 	metav1.TypeMeta
-	Name      string
-	Namespace string
-	raw       []byte
+	Name string
+	raw  []byte
 }
 
 // manifests is a rendered chart.
@@ -71,10 +70,9 @@ func parseManifests(t *testing.T, stream string) manifests {
 			continue
 		}
 		docs = append(docs, manifest{
-			TypeMeta:  head.TypeMeta,
-			Name:      head.Metadata.Name,
-			Namespace: head.Metadata.Namespace,
-			raw:       []byte(doc),
+			TypeMeta: head.TypeMeta,
+			Name:     head.Metadata.Name,
+			raw:      []byte(doc),
 		})
 	}
 	require.NotEmpty(t, docs)
@@ -160,11 +158,6 @@ func deployment(t *testing.T, ms manifests, name string) *appsv1.Deployment {
 	return findAs[appsv1.Deployment](t, ms, "Deployment", name)
 }
 
-func service(t *testing.T, ms manifests, name string) *corev1.Service {
-	t.Helper()
-	return findAs[corev1.Service](t, ms, "Service", name)
-}
-
 func networkPolicy(t *testing.T, ms manifests, name string) *networkingv1.NetworkPolicy {
 	t.Helper()
 	return findAs[networkingv1.NetworkPolicy](t, ms, "NetworkPolicy", name)
@@ -204,7 +197,7 @@ func firstContainer(t *testing.T, d *appsv1.Deployment) corev1.Container {
 // servicePorts returns the ports of a Service doc.
 func servicePorts(t *testing.T, ms manifests, name string) []corev1.ServicePort {
 	t.Helper()
-	return service(t, ms, name).Spec.Ports
+	return findAs[corev1.Service](t, ms, "Service", name).Spec.Ports
 }
 
 // containerArgs returns the first container's args of a Deployment doc.

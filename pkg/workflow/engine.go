@@ -200,7 +200,7 @@ func (e *Engine) dispatchInvoke(run *fv1.WorkflowRun, stream string, s *RunState
 
 // assembleJoin builds the EvBranchesJoined event: the ordered branch outputs
 // as an array, merged into the region's input per Result/OutputPath, spilled
-// when large. A join-shaping InvalidPath fails the RUN (validation rejects
+// when large. A join outputPath InvalidPath fails the RUN (validation rejects
 // unparseable paths at admission; the residual unwritable-shape case is a
 // documented v1 edge without catch routing).
 func (e *Engine) assembleJoin(ctx context.Context, run *fv1.WorkflowRun, s *RunState, deref derefFn) (Event, error) {

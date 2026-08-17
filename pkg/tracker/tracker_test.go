@@ -99,7 +99,7 @@ func TestTracker(t *testing.T) {
 			},
 		} {
 			t.Run(test.name, func(testing *testing.T) {
-				server := MockHTTPServer(test.status, "")
+				server := mockHTTPServer(test.status, "")
 				defer server.Close()
 				tr.gaAPIURL = server.URL
 
@@ -116,11 +116,11 @@ func TestTracker(t *testing.T) {
 	})
 }
 
-func MockHTTPServer[T any](status int, encodeValue T) *httptest.Server {
+func mockHTTPServer(status int, body string) *httptest.Server {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(status)
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(encodeValue)
+		err := json.NewEncoder(w).Encode(body)
 		if err != nil {
 			log.Fatal(err)
 		}
