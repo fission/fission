@@ -22,30 +22,36 @@ func TestErrorObjectWireFormat(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		got  any
-		want string
+		name   string
+		encode func() ([]byte, error)
+		want   string
 	}{
 		{
 			name: "catchError with an object cause",
-			got:  catchError{Cause: json.RawMessage(`{"reason":"past due"}`), ErrorType: "CardDeclined"},
+			encode: func() ([]byte, error) {
+				return json.Marshal(catchError{Cause: json.RawMessage(`{"reason":"past due"}`), ErrorType: "CardDeclined"})
+			},
 			want: `{"cause":{"reason":"past due"},"errorType":"CardDeclined"}`,
 		},
 		{
 			name: "catchError with an absent cause",
-			got:  catchError{Cause: nonEmpty(nil), ErrorType: "Fission.FunctionError"},
+			encode: func() ([]byte, error) {
+				return json.Marshal(catchError{Cause: nonEmpty(nil), ErrorType: "Fission.FunctionError"})
+			},
 			want: `{"cause":null,"errorType":"Fission.FunctionError"}`,
 		},
 		{
 			name: "branchErrorCause carries the branch through",
-			got:  branchErrorCause{Branch: "0", Cause: json.RawMessage(`"boom"`), ErrorType: "Fission.PermanentError"},
+			encode: func() ([]byte, error) {
+				return json.Marshal(branchErrorCause{Branch: "0", Cause: json.RawMessage(`"boom"`), ErrorType: "Fission.PermanentError"})
+			},
 			want: `{"branch":"0","cause":"boom","errorType":"Fission.PermanentError"}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			raw, err := json.Marshal(tt.got)
+			raw, err := tt.encode()
 			require.NoError(t, err)
 			// Byte equality, not JSONEq: a reordering would refingerprint the
 			// documents of runs that are already in flight across an upgrade.

@@ -1,0 +1,44 @@
+# antislop findings accepted for this repository.
+#
+# Format: <count> <file> <analyzer>. No line numbers on purpose — an
+# edit above a finding must not churn this file. Regenerate with
+# 'hack/antislop.sh --update'; the gate is 'hack/antislop.sh'.
+#
+# Everything listed here is pkg/workflow, and all of it is one claim:
+# the workflow engine addresses ARBITRARY USER JSON with JSONPath
+# (RFC-0022, Step Functions parity), so there is no named type to
+# decode into — the schema belongs to the user, not to us. Wrapping
+# the tree was designed and rejected: a json.RawMessage-backed
+# Document re-decodes the whole document per Choice condition, and a
+# generic Value[any] launders the empty interface through a type
+# parameter without adding any evidence. Each narrowing site here is
+# a comma-ok or a type switch whose default branch is correct.
+#
+# The engine-owned shapes that DO have a fixed schema are typed:
+# see catchError / branchErrorCause in pkg/workflow/fold.go. The two
+# noknownwidening entries are those structs being handed to
+# expr.Path.SetResult, which takes any because the tree it writes
+# into is user JSON.
+#
+# Adding a line here is a design claim. Justify it in review.
+1 pkg/workflow/decide_test.go noanycontainers
+1 pkg/workflow/decide_test.go nountypedunmarshal
+3 pkg/workflow/engine_branch_test.go noanycontainers
+3 pkg/workflow/engine_branch_test.go nountypedunmarshal
+2 pkg/workflow/engine_branch_test.go safetycomment
+18 pkg/workflow/expr/eval_test.go noanycontainers
+1 pkg/workflow/expr/eval_test.go noanyfields
+2 pkg/workflow/expr/eval.go noanyparams
+2 pkg/workflow/expr/eval.go noanyreturns
+1 pkg/workflow/fold_branch_test.go noanycontainers
+1 pkg/workflow/fold_branch_test.go nountypedunmarshal
+1 pkg/workflow/fold.go noanyfields
+1 pkg/workflow/fold.go noanyreturns
+2 pkg/workflow/fold.go noknownwidening
+1 pkg/workflow/fold.go nonarrowany
+1 pkg/workflow/fold.go nountypedunmarshal
+3 pkg/workflow/invoker.go nountypedunmarshal
+10 pkg/workflow/paths_test.go noanycontainers
+6 pkg/workflow/paths.go noanyparams
+2 pkg/workflow/paths.go noanyreturns
+3 pkg/workflow/paths.go nonarrowany
