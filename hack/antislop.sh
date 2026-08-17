@@ -8,14 +8,14 @@
 # `any` in signatures, fields and containers, narrowing back out of `any`,
 # reflect, monkey patching, structural names, and untyped decoding.
 #
-# The binary is resolved in this order:
-#   1. $ANTISLOP           — explicit path to a built binary
-#   2. antislop on $PATH
-#   3. go run …@$ANTISLOP_VERSION (needs access to the module; the repository
-#      is private today, so this path only works with GOPRIVATE + git auth)
+# The analyzer is pinned by the `tool` directive in go.mod and invoked with
+# `go tool antislop`, the same way this repo pins addlicense, controller-gen
+# and setup-envtest. Set $ANTISLOP to a locally built binary to run an
+# unreleased build against the tree (for developing the analyzer itself).
 #
 # Usage:
-#   hack/antislop.sh                 gate the tree against the baseline
+#   make antislop                    gate the tree against the baseline
+#   hack/antislop.sh                 same, directly
 #   hack/antislop.sh --list          print every finding, baselined or not
 #   hack/antislop.sh --update        rewrite the baseline from the current tree
 #   hack/antislop.sh ./pkg/router/…  report on specific packages (no gating)
@@ -41,15 +41,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-ANTISLOP_VERSION="${ANTISLOP_VERSION:-latest}"
 BASELINE="hack/antislop-baseline.txt"
 
 if [ -n "${ANTISLOP:-}" ]; then
 	bin=("$ANTISLOP")
-elif command -v antislop >/dev/null 2>&1; then
-	bin=("$(command -v antislop)")
 else
-	bin=(go run "github.com/sanketsudake/antislop/cmd/antislop@${ANTISLOP_VERSION}")
+	# `go tool`, not `go run`: go run reports its own exit 1 for any non-zero
+	# child status, which would make "found findings" (3) indistinguishable
+	# from "failed to build" (1), and it writes progress lines into the
+	# stream the gate parses.
+	bin=(go tool antislop)
 fi
 
 # Flags that record deliberate policy for this repository. Add a comment for
