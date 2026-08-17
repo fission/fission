@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/utils"
 )
 
@@ -51,20 +50,10 @@ func (gp *GenericPool) updateCPUUtilizationSvc(ctx context.Context) {
 				p.Add(container.Usage["cpu"])
 			}
 			if value, ok := gp.podFSVCMap.Load(val.Name); ok {
-				if valArray, ok1 := value.([]any); ok1 {
-					function, ok2 := valArray[0].(crd.CacheKeyUG)
-					if !ok2 {
-						gp.logger.Error(nil, "failed to convert function to type", "function", function)
-						return
-					}
-					address, ok2 := valArray[1].(string)
-					if !ok2 {
-						gp.logger.Error(nil, "failed to convert address to string", "address", address)
-						return
-					}
-					gp.fsCache.SetCPUUtilizaton(function, address, p)
-					gp.logger.Info("updated function cpu usage", "function", function, "address", address, "cpuUsage", p)
-				}
+				// SAFETY: podFSVCMap is only ever written by Store(pod.Name, podFuncSvc{...}) in gp.go.
+				pfs := value.(podFuncSvc)
+				gp.fsCache.SetCPUUtilizaton(pfs.function, pfs.address, p)
+				gp.logger.Info("updated function cpu usage", "function", pfs.function, "address", pfs.address, "cpuUsage", p)
 			}
 		}
 	}
