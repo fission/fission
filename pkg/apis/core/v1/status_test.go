@@ -38,135 +38,93 @@ func sampleConditions() []metav1.Condition {
 	}
 }
 
-// statusCase couples a Status value with a freshly-constructed empty value
-// for unmarshal targets — needed because *Status types are distinct and we
-// want to keep this table generic over them.
-type statusCase struct {
-	name string
-	// got is the populated value to marshal.
-	got any
-	// fresh returns a zero-valued instance of the same concrete type.
-	fresh func() any
+// roundTripJSON marshals got, unmarshals into a fresh T and compares the JSON
+// projections. Comparing the round-tripped Go value to the original via deep
+// equality is brittle because metav1.Time embeds a time.Time whose
+// *time.Location pointer differs after unmarshal even though the instant is
+// identical; the JSON projection is the contract the apiserver and clients
+// actually care about.
+func roundTripJSON[T any](t *testing.T, got T) {
+	t.Helper()
+	first, err := json.Marshal(got)
+	require.NoError(t, err)
+
+	var target T
+	require.NoError(t, json.Unmarshal(first, &target))
+
+	second, err := json.Marshal(target)
+	require.NoError(t, err)
+	require.JSONEq(t, string(first), string(second))
 }
 
-func statusCases() []statusCase {
+func TestStatusJSONRoundTrip(t *testing.T) {
 	conds := sampleConditions()
-	return []statusCase{
-		{
-			name:  "FunctionStatus",
-			got:   FunctionStatus{ObservedGeneration: 7, Conditions: conds},
-			fresh: func() any { return &FunctionStatus{} },
-		},
-		{
-			name:  "EnvironmentStatus",
-			got:   EnvironmentStatus{ObservedGeneration: 3, Conditions: conds},
-			fresh: func() any { return &EnvironmentStatus{} },
-		},
-		{
-			name:  "HTTPTriggerStatus",
-			got:   HTTPTriggerStatus{ObservedGeneration: 1, Conditions: conds},
-			fresh: func() any { return &HTTPTriggerStatus{} },
-		},
-		{
-			name:  "KubernetesWatchTriggerStatus",
-			got:   KubernetesWatchTriggerStatus{ObservedGeneration: 2, Conditions: conds},
-			fresh: func() any { return &KubernetesWatchTriggerStatus{} },
-		},
-		{
-			name:  "TimeTriggerStatus",
-			got:   TimeTriggerStatus{ObservedGeneration: 4, Conditions: conds},
-			fresh: func() any { return &TimeTriggerStatus{} },
-		},
-		{
-			name:  "MessageQueueTriggerStatus",
-			got:   MessageQueueTriggerStatus{ObservedGeneration: 5, Conditions: conds},
-			fresh: func() any { return &MessageQueueTriggerStatus{} },
-		},
-		{
-			name: "PackageStatus",
-			got: PackageStatus{
+	cases := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{"FunctionStatus", func(t *testing.T) { roundTripJSON(t, FunctionStatus{ObservedGeneration: 7, Conditions: conds}) }},
+		{"EnvironmentStatus", func(t *testing.T) { roundTripJSON(t, EnvironmentStatus{ObservedGeneration: 3, Conditions: conds}) }},
+		{"HTTPTriggerStatus", func(t *testing.T) { roundTripJSON(t, HTTPTriggerStatus{ObservedGeneration: 1, Conditions: conds}) }},
+		{"KubernetesWatchTriggerStatus", func(t *testing.T) {
+			roundTripJSON(t, KubernetesWatchTriggerStatus{ObservedGeneration: 2, Conditions: conds})
+		}},
+		{"TimeTriggerStatus", func(t *testing.T) { roundTripJSON(t, TimeTriggerStatus{ObservedGeneration: 4, Conditions: conds}) }},
+		{"MessageQueueTriggerStatus", func(t *testing.T) {
+			roundTripJSON(t, MessageQueueTriggerStatus{ObservedGeneration: 5, Conditions: conds})
+		}},
+		{"PackageStatus", func(t *testing.T) {
+			roundTripJSON(t, PackageStatus{
 				BuildStatus:         BuildStatusSucceeded,
 				BuildLog:            "ok",
 				LastUpdateTimestamp: metav1.NewTime(time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)),
 				Conditions:          conds,
-			},
-			fresh: func() any { return &PackageStatus{} },
-		},
-		{
-			name:  "CanaryConfigStatus",
-			got:   CanaryConfigStatus{Status: "Pending", Conditions: conds},
-			fresh: func() any { return &CanaryConfigStatus{} },
-		},
+			})
+		}},
+		{"CanaryConfigStatus", func(t *testing.T) { roundTripJSON(t, CanaryConfigStatus{Status: "Pending", Conditions: conds}) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, tc.run)
 	}
 }
 
-func TestStatusJSONRoundTrip(t *testing.T) {
-	for _, tc := range statusCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			first, err := json.Marshal(tc.got)
-			require.NoError(t, err)
-
-			target := tc.fresh()
-			require.NoError(t, json.Unmarshal(first, target))
-
-			// Comparing the round-tripped Go value to the original via deep
-			// equality is brittle because metav1.Time embeds a time.Time whose
-			// *time.Location pointer differs after unmarshal even though the
-			// instant is identical. We compare the JSON projection instead —
-			// it's the contract the apiserver and clients actually care about.
-			second, err := json.Marshal(derefAny(target))
-			require.NoError(t, err)
-			require.JSONEq(t, string(first), string(second))
-		})
-	}
+// checkDeepCopy asserts dup equals orig and that mutate (which edits dup)
+// leaves orig untouched, i.e. the copy has independent backing storage.
+func checkDeepCopy[T any](t *testing.T, orig, dup T, mutate func()) {
+	t.Helper()
+	require.EqualValues(t, orig, dup, "DeepCopy must produce equal value")
+	mutate()
+	require.NotEqualValues(t, orig, dup, "mutating the copy must not affect the original (independent backing storage)")
 }
 
 func TestStatusDeepCopy(t *testing.T) {
 	cases := []struct {
-		name        string
-		copy        func() (orig, dup any, mutate func())
-		expectEqual func(orig, dup any) bool
+		name string
+		run  func(t *testing.T)
 	}{
-		{
-			name: "FunctionStatus",
-			copy: func() (any, any, func()) {
-				o := FunctionStatus{Conditions: sampleConditions()}
-				d := *o.DeepCopy()
-				return o, d, func() { d.Conditions[0].Reason = "Mutated" }
-			},
-		},
-		{
-			name: "PackageStatus",
-			copy: func() (any, any, func()) {
-				o := PackageStatus{Conditions: sampleConditions(), BuildStatus: BuildStatusSucceeded}
-				d := *o.DeepCopy()
-				return o, d, func() { d.Conditions[0].Reason = "Mutated" }
-			},
-		},
-		{
-			name: "CanaryConfigStatus",
-			copy: func() (any, any, func()) {
-				o := CanaryConfigStatus{Status: "running", Conditions: sampleConditions()}
-				d := *o.DeepCopy()
-				return o, d, func() { d.Conditions[0].Reason = "Mutated" }
-			},
-		},
-		{
-			name: "HTTPTriggerStatus",
-			copy: func() (any, any, func()) {
-				o := HTTPTriggerStatus{Conditions: sampleConditions()}
-				d := *o.DeepCopy()
-				return o, d, func() { d.Conditions[0].Reason = "Mutated" }
-			},
-		},
+		{"FunctionStatus", func(t *testing.T) {
+			o := FunctionStatus{Conditions: sampleConditions()}
+			d := *o.DeepCopy()
+			checkDeepCopy(t, o, d, func() { d.Conditions[0].Reason = "Mutated" })
+		}},
+		{"PackageStatus", func(t *testing.T) {
+			o := PackageStatus{Conditions: sampleConditions(), BuildStatus: BuildStatusSucceeded}
+			d := *o.DeepCopy()
+			checkDeepCopy(t, o, d, func() { d.Conditions[0].Reason = "Mutated" })
+		}},
+		{"CanaryConfigStatus", func(t *testing.T) {
+			o := CanaryConfigStatus{Status: "running", Conditions: sampleConditions()}
+			d := *o.DeepCopy()
+			checkDeepCopy(t, o, d, func() { d.Conditions[0].Reason = "Mutated" })
+		}},
+		{"HTTPTriggerStatus", func(t *testing.T) {
+			o := HTTPTriggerStatus{Conditions: sampleConditions()}
+			d := *o.DeepCopy()
+			checkDeepCopy(t, o, d, func() { d.Conditions[0].Reason = "Mutated" })
+		}},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			orig, dup, mutate := tc.copy()
-			require.EqualValues(t, orig, dup, "DeepCopy must produce equal value")
-			mutate()
-			require.NotEqualValues(t, orig, dup, "mutating the copy must not affect the original (independent backing storage)")
-		})
+		t.Run(tc.name, tc.run)
 	}
 }
 
@@ -191,29 +149,4 @@ func TestCanaryConfigStatusBackwardCompat(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(legacy), &s))
 	require.Equal(t, "running", s.Status)
 	require.Nil(t, s.Conditions)
-}
-
-// derefAny unwraps the *T returned by statusCase.fresh into a T so the
-// table-driven test can EqualValues against the populated input directly.
-func derefAny(p any) any {
-	switch v := p.(type) {
-	case *FunctionStatus:
-		return *v
-	case *EnvironmentStatus:
-		return *v
-	case *HTTPTriggerStatus:
-		return *v
-	case *KubernetesWatchTriggerStatus:
-		return *v
-	case *TimeTriggerStatus:
-		return *v
-	case *MessageQueueTriggerStatus:
-		return *v
-	case *PackageStatus:
-		return *v
-	case *CanaryConfigStatus:
-		return *v
-	default:
-		return p
-	}
 }
