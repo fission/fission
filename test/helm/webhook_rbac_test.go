@@ -19,15 +19,15 @@ func TestWebhookEnvReaderRBACScopesByTenancy(t *testing.T) {
 
 	t.Run("static: namespaced Roles, no ClusterRole", func(t *testing.T) {
 		docs := render(t, "--set", "additionalFissionNamespaces={fission-fn}")
-		assert.GreaterOrEqual(t, countByKindName(docs, "Role", roleName), 2,
+		assert.GreaterOrEqual(t, docs.countByKindName("Role", roleName), 2,
 			"a Role in defaultNamespace + each additionalFissionNamespaces")
-		assert.Zero(t, countByKindName(docs, "ClusterRole", roleName),
+		assert.Zero(t, docs.countByKindName("ClusterRole", roleName),
 			"static tenancy must not grant cluster-wide environment read")
 	})
 
 	t.Run("dynamic: adds the ClusterRole", func(t *testing.T) {
 		docs := render(t, "--set", "tenancy.mode=dynamic")
-		assert.Equal(t, 1, countByKindName(docs, "ClusterRole", roleName),
+		assert.Equal(t, 1, docs.countByKindName("ClusterRole", roleName),
 			"dynamic tenancy onboards namespaces at runtime, so the read is cluster-wide")
 	})
 }

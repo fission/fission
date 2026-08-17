@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 // TestBuildermgrCanRollBuilderDeployments guards an RBAC gap that fails CLOSED
@@ -25,24 +26,18 @@ func TestBuildermgrCanRollBuilderDeployments(t *testing.T) {
 	docs := render(t)
 
 	var found bool
-	for _, doc := range docs {
-		kind, _ := doc["kind"].(string)
-		if kind != "Role" && kind != "ClusterRole" {
+	for _, role := range roles(t, docs) {
+		if !strings.Contains(role.Name, "buildermgr") {
 			continue
 		}
-		meta, _ := doc["metadata"].(map[string]any)
-		name, _ := meta["name"].(string)
-		if !strings.Contains(name, "buildermgr") {
-			continue
-		}
-		verbs := verbsFor(doc, "apps", "deployments")
+		verbs := verbsFor(role.Rules, "apps", "deployments")
 		if len(verbs) == 0 {
 			continue
 		}
 		found = true
 		for _, want := range []string{"list", "create", "update", "delete"} {
 			assert.Truef(t, verbs[want],
-				"%s %q must grant %q on apps/deployments (have %v)", kind, name, want, verbs)
+				"%s %q must grant %q on apps/deployments (have %v)", role.Kind, role.Name, want, verbs)
 		}
 	}
 	require.True(t, found, "no buildermgr Role/ClusterRole granting apps/deployments was rendered")
@@ -50,19 +45,13 @@ func TestBuildermgrCanRollBuilderDeployments(t *testing.T) {
 
 // verbsFor returns the verbs a rendered Role/ClusterRole grants for a resource
 // in an API group, merged across every rule that mentions it.
-func verbsFor(doc map[string]any, apiGroup, resource string) map[string]bool {
+func verbsFor(rules []rbacv1.PolicyRule, apiGroup, resource string) map[string]bool {
 	out := map[string]bool{}
-	rules, _ := doc["rules"].([]any)
-	for _, r := range rules {
-		rule, _ := r.(map[string]any)
-		groups, _ := rule["apiGroups"].([]any)
-		resources, _ := rule["resources"].([]any)
-		if !slices.Contains(stringsOf(groups), apiGroup) ||
-			!slices.Contains(stringsOf(resources), resource) {
+	for _, rule := range rules {
+		if !slices.Contains(rule.APIGroups, apiGroup) || !slices.Contains(rule.Resources, resource) {
 			continue
 		}
-		verbs, _ := rule["verbs"].([]any)
-		for _, v := range stringsOf(verbs) {
+		for _, v := range rule.Verbs {
 			if v != "" {
 				out[v] = true
 			}

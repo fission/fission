@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // TestInternalAuthExistingSecret pins RFC-0029's `internalAuth.existingSecret`
@@ -28,9 +29,9 @@ func TestInternalAuthExistingSecret(t *testing.T) {
 
 	t.Run("default: the chart renders the master and points at it", func(t *testing.T) {
 		docs := render(t)
-		assert.Positive(t, countByKindName(docs, "Secret", defaultName),
+		assert.Positive(t, docs.countByKindName("Secret", defaultName),
 			"with no existingSecret the chart must generate the master itself")
-		names := internalAuthEnvNames(docs)
+		names := internalAuthEnvNames(t, docs)
 		require.NotEmpty(t, names,
 			"no internal-auth secretKeyRef was rendered; the loop below would assert nothing")
 		for _, name := range names {
@@ -40,9 +41,9 @@ func TestInternalAuthExistingSecret(t *testing.T) {
 
 	t.Run("existingSecret: the chart renders no master and points at theirs", func(t *testing.T) {
 		docs := render(t, "--set", "internalAuth.existingSecret=my-master")
-		assert.Zero(t, countByKindName(docs, "Secret", defaultName),
+		assert.Zero(t, docs.countByKindName("Secret", defaultName),
 			"the chart must not generate a master when the operator supplies one")
-		names := internalAuthEnvNames(docs)
+		names := internalAuthEnvNames(t, docs)
 		require.NotEmpty(t, names, "no internal-auth secretKeyRef was rendered")
 		for _, name := range names {
 			assert.Equal(t, "my-master", name,
@@ -60,7 +61,7 @@ func TestInternalAuthExistingSecret(t *testing.T) {
 			{nil, defaultName},
 			{[]string{"--set", "internalAuth.existingSecret=my-master"}, "my-master"},
 		} {
-			vals := envValues(render(t, tc.args...), "FISSION_INTERNAL_AUTH_SECRET_NAME")
+			vals := envValues(t, render(t, tc.args...), "FISSION_INTERNAL_AUTH_SECRET_NAME")
 			require.NotEmptyf(t, vals, "FISSION_INTERNAL_AUTH_SECRET_NAME must be set (%v)", tc.args)
 			for _, v := range vals {
 				assert.Equal(t, tc.want, v)
@@ -76,18 +77,18 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 
 	t.Run("off by default: the template still renders the master", func(t *testing.T) {
 		docs := render(t)
-		assert.Positive(t, countByKindName(docs, "Secret", master),
+		assert.Positive(t, docs.countByKindName("Secret", master),
 			"autoGenerate defaults off, so existing installs must be untouched")
-		assert.Zero(t, countByKindName(docs, "Role", "fission-preupgrade-authgen"),
+		assert.Zero(t, docs.countByKindName("Role", "fission-preupgrade-authgen"),
 			"no generation means no read grant")
 	})
 
 	t.Run("on: the template stops rendering and the hook is wired", func(t *testing.T) {
 		docs := render(t, "--set", "internalAuth.autoGenerate=true")
-		assert.Zero(t, countByKindName(docs, "Secret", master),
+		assert.Zero(t, docs.countByKindName("Secret", master),
 			"generation moves in-cluster, so the template must render no master — "+
 				"the retention hook is what stops Helm pruning the live one")
-		vals := envValues(docs, "GENERATE_AUTH_SECRET")
+		vals := envValues(t, docs, "GENERATE_AUTH_SECRET")
 		require.NotEmpty(t, vals, "the hook must be told which Secret to provision")
 		for _, v := range vals {
 			assert.Equal(t, master, v)
@@ -101,7 +102,7 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 		static := render(t,
 			"--set", "internalAuth.autoGenerate=true",
 			"--set", "additionalFissionNamespaces={fission-fn}")
-		staticNS := envValues(static, "GENERATE_AUTH_SECRET_NAMESPACES")
+		staticNS := envValues(t, static, "GENERATE_AUTH_SECRET_NAMESPACES")
 		require.NotEmpty(t, staticNS)
 		assert.Contains(t, staticNS[0], "fission-fn",
 			"static tenancy replicates the master: kubelet cannot resolve a cross-namespace secretKeyRef")
@@ -110,7 +111,7 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 			"--set", "internalAuth.autoGenerate=true",
 			"--set", "tenancy.mode=dynamic",
 			"--set", "additionalFissionNamespaces={fission-fn}")
-		dynNS := envValues(dynamic, "GENERATE_AUTH_SECRET_NAMESPACES")
+		dynNS := envValues(t, dynamic, "GENERATE_AUTH_SECRET_NAMESPACES")
 		require.NotEmpty(t, dynNS)
 		assert.NotContains(t, dynNS[0], "fission-fn",
 			"under dynamic tenancy the master must stay in the release namespace: "+
@@ -133,7 +134,7 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 			{"an operator-owned secret under another name", []string{"--set", "internalAuth.existingSecret=my-own"}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				vals := envValues(render(t, tc.args...), "ADOPT_SECRETS")
+				vals := envValues(t, render(t, tc.args...), "ADOPT_SECRETS")
 				require.NotEmpty(t, vals, "the retention hook must render")
 				assert.Containsf(t, vals[0], master,
 					"the chart-generated master must stay in the retention set (%s), "+
@@ -172,20 +173,14 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 	t.Run("the generation grant is fenced to the master alone", func(t *testing.T) {
 		docs := render(t, "--set", "internalAuth.autoGenerate=true")
 		var checked, sawGet, sawCreate int
-		for _, d := range docs {
-			kind, _ := d["kind"].(string)
-			meta, _ := d["metadata"].(map[string]any)
-			name, _ := meta["name"].(string)
-			if kind != "Role" || name != "fission-preupgrade-authgen" {
+		for _, role := range roles(t, docs) {
+			if role.Kind != "Role" || role.Name != "fission-preupgrade-authgen" {
 				continue
 			}
 			checked++
-			rules, _ := d["rules"].([]any)
-			for _, r := range rules {
-				rule, _ := r.(map[string]any)
-				names, _ := rule["resourceNames"].([]any)
-				rawVerbs, _ := rule["verbs"].([]any)
-				verbs := stringsOf(rawVerbs)
+			for _, rule := range role.Rules {
+				names := rule.ResourceNames
+				verbs := rule.Verbs
 				for _, v := range verbs {
 					assert.NotEqual(t, "list", v, "list would let this identity enumerate every Secret")
 					assert.NotEqual(t, "delete", v)
@@ -213,31 +208,26 @@ func TestInternalAuthAutoGenerate(t *testing.T) {
 
 // internalAuthEnvNames collects the Secret names every FISSION_INTERNAL_AUTH_SECRET
 // secretKeyRef points at, across every rendered pod template.
-func internalAuthEnvNames(docs []map[string]any) []string {
+func internalAuthEnvNames(t *testing.T, docs manifests) []string {
+	t.Helper()
 	var out []string
-	forEachContainerEnv(docs, func(e map[string]any) {
-		name, _ := e["name"].(string)
-		if name != "FISSION_INTERNAL_AUTH_SECRET" {
+	forEachContainerEnv(t, docs, func(e corev1.EnvVar) {
+		if e.Name != "FISSION_INTERNAL_AUTH_SECRET" || e.ValueFrom == nil || e.ValueFrom.SecretKeyRef == nil {
 			return
 		}
-		vf, _ := e["valueFrom"].(map[string]any)
-		skr, _ := vf["secretKeyRef"].(map[string]any)
-		if n, ok := skr["name"].(string); ok {
-			out = append(out, n)
-		}
+		out = append(out, e.ValueFrom.SecretKeyRef.Name)
 	})
 	return out
 }
 
 // envValues collects the literal values of a named env var across every
 // rendered pod template.
-func envValues(docs []map[string]any, envName string) []string {
+func envValues(t *testing.T, docs manifests, envName string) []string {
+	t.Helper()
 	var out []string
-	forEachContainerEnv(docs, func(e map[string]any) {
-		if name, _ := e["name"].(string); name == envName {
-			if v, ok := e["value"].(string); ok {
-				out = append(out, v)
-			}
+	forEachContainerEnv(t, docs, func(e corev1.EnvVar) {
+		if e.Name == envName && e.ValueFrom == nil {
+			out = append(out, e.Value)
 		}
 	})
 	return out

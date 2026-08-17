@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // TestExecutorRolloutPosture pins the two chart defaults that make poolmgr's
@@ -27,23 +29,21 @@ import (
 //     every pod whose instance annotation belongs to the previous executor,
 //     which is exactly the specialized warm pods and only them.
 func TestExecutorRolloutPosture(t *testing.T) {
-	deployment := func(docs []map[string]any) map[string]any {
-		d := find(docs, "Deployment", "executor")
-		require.NotNil(t, d, "executor Deployment must render")
-		return d
+	executor := func(docs manifests) *appsv1.Deployment {
+		return deployment(t, docs, "executor")
 	}
 
 	t.Run("defaults: overlap-free rollout + adoption on", func(t *testing.T) {
 		docs := render(t)
-		d := deployment(docs)
+		d := executor(docs)
 
-		strategy, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)
-		assert.Equal(t, "RollingUpdate", strategy["type"],
+		strategy := d.Spec.Strategy
+		assert.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, strategy.Type,
 			"the type must stay RollingUpdate — flipping to Recreate fails API validation against every live install")
-		ru, _ := strategy["rollingUpdate"].(map[string]any)
-		assert.EqualValues(t, 0, ru["maxSurge"],
+		require.NotNil(t, strategy.RollingUpdate)
+		assert.Equal(t, intstr.FromInt32(0), *strategy.RollingUpdate.MaxSurge,
 			"maxSurge 0 is the single-writer guarantee: never two executors at once")
-		assert.EqualValues(t, 1, ru["maxUnavailable"],
+		assert.Equal(t, intstr.FromInt32(1), *strategy.RollingUpdate.MaxUnavailable,
 			"maxUnavailable 1 lets the old pod die before the new one starts")
 
 		env := containerEnv(t, d)
@@ -58,11 +58,12 @@ func TestExecutorRolloutPosture(t *testing.T) {
 			"--set", "executor.adoptExistingResources=false",
 			"--set", "executor.strategy.rollingUpdate.maxSurge=1",
 			"--set", "executor.strategy.rollingUpdate.maxUnavailable=0")
-		d := deployment(docs)
+		d := executor(docs)
 
-		ru, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)["rollingUpdate"].(map[string]any)
-		assert.EqualValues(t, 1, ru["maxSurge"], "the HA surge escape hatch must stay open")
-		assert.EqualValues(t, 0, ru["maxUnavailable"])
+		ru := d.Spec.Strategy.RollingUpdate
+		require.NotNil(t, ru)
+		assert.Equal(t, intstr.FromInt32(1), *ru.MaxSurge, "the HA surge escape hatch must stay open")
+		assert.Equal(t, intstr.FromInt32(0), *ru.MaxUnavailable)
 
 		env := containerEnv(t, d)
 		assert.Equal(t, "false", env["ADOPT_EXISTING_RESOURCES"])
@@ -75,17 +76,16 @@ func TestExecutorRolloutPosture(t *testing.T) {
 	// failure (the exact trap the upgrade gate caught when Recreate was
 	// briefly the default).
 	t.Run("Recreate opt-out renders a valid strategy", func(t *testing.T) {
-		d := deployment(render(t, "--set", "executor.strategy.type=Recreate"))
-		strategy, _ := d["spec"].(map[string]any)["strategy"].(map[string]any)
-		assert.Equal(t, "Recreate", strategy["type"])
-		assert.NotContains(t, strategy, "rollingUpdate",
+		d := executor(render(t, "--set", "executor.strategy.type=Recreate"))
+		assert.Equal(t, appsv1.RecreateDeploymentStrategyType, d.Spec.Strategy.Type)
+		assert.Nil(t, d.Spec.Strategy.RollingUpdate,
 			"Recreate + rollingUpdate is rejected by the API server")
 	})
 
 	// Clearing the strategy entirely must also work (k8s default applies).
 	t.Run("null strategy renders no strategy block", func(t *testing.T) {
-		d := deployment(render(t, "--set", "executor.strategy=null"))
-		_, has := d["spec"].(map[string]any)["strategy"]
-		assert.False(t, has, "a nulled strategy must fall back to the Kubernetes default")
+		d := executor(render(t, "--set", "executor.strategy=null"))
+		assert.Equal(t, appsv1.DeploymentStrategy{}, d.Spec.Strategy,
+			"a nulled strategy must fall back to the Kubernetes default")
 	})
 }

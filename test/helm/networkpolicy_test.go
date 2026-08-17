@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	networkingv1 "k8s.io/api/networking/v1"
 )
 
 // TestNetworkPolicySvcLabelsResolveToRealWorkloads is the fixed-name inventory
@@ -40,27 +41,22 @@ func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
 
 	// Every `svc:` label carried by a rendered pod template.
 	known := map[string]bool{}
-	for _, tmpl := range podTemplates(docs) {
-		meta, _ := tmpl["metadata"].(map[string]any)
-		labels, _ := meta["labels"].(map[string]any)
-		if v, ok := labels["svc"].(string); ok && v != "" {
+	for _, tmpl := range podTemplates(t, docs) {
+		if v := tmpl.Labels["svc"]; v != "" {
 			known[v] = true
 		}
 	}
 	require.NotEmpty(t, known, "no pod template carried an svc label; the selector convention changed")
 
 	var checked int
-	for _, doc := range docs {
-		if kind, _ := doc["kind"].(string); kind != "NetworkPolicy" {
-			continue
-		}
-		meta, _ := doc["metadata"].(map[string]any)
-		npName, _ := meta["name"].(string)
-		for _, label := range podSelectorSvcLabels(doc) {
+	policies := docs.ofKind("NetworkPolicy")
+	for i := range policies {
+		np := decodeAs[networkingv1.NetworkPolicy](t, &policies[i])
+		for _, label := range podSelectorSvcLabels(np) {
 			checked++
 			assert.Truef(t, known[label],
 				"NetworkPolicy %q references svc=%q, which no rendered pod template carries; "+
-					"the policy would silently drop that traffic", npName, label)
+					"the policy would silently drop that traffic", np.Name, label)
 		}
 	}
 	require.Positive(t, checked, "no NetworkPolicy svc selectors were checked; the guard is inert")
@@ -69,12 +65,10 @@ func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
 // podSelectorSvcLabels collects every `svc:` value a NetworkPolicy references —
 // the workload it TARGETS plus everything its ingress allowlists admit. Both
 // must name a workload that actually renders, which is what this feeds.
-func podSelectorSvcLabels(doc map[string]any) []string {
+func podSelectorSvcLabels(np *networkingv1.NetworkPolicy) []string {
 	var out []string
-	spec, _ := doc["spec"].(map[string]any)
-	sel, _ := spec["podSelector"].(map[string]any)
-	if v := selectorSvcLabel(sel); v != "" {
+	if v := selectorSvcLabel(&np.Spec.PodSelector); v != "" {
 		out = append(out, v)
 	}
-	return append(out, ingressSvcLabels(doc)...)
+	return append(out, ingressSvcLabels(np)...)
 }
