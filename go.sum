@@ -453,6 +453,8 @@ github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDj
 github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
 github.com/sanketsudake/antislop v0.1.0 h1:+tlU218vHEQt9n2D9rABiShwa/H7N5EPwxk+/MLBGmY=
 github.com/sanketsudake/antislop v0.1.0/go.mod h1:/g3pgt8Zj5nPLTIL5SB8qPhERXKVci5IeYcFGL9tzao=
+github.com/sanketsudake/antislop v0.2.0 h1:1c5gcCUiv1pNCFGtTE/IyNSaHz1UsJi816YOJ+q52WY=
+github.com/sanketsudake/antislop v0.2.0/go.mod h1:/g3pgt8Zj5nPLTIL5SB8qPhERXKVci5IeYcFGL9tzao=
 github.com/sanketsudake/go-portless v0.4.0 h1:jT2dF5Fbe84SI1mXe54bqY9jXTWZCVIEaJtX6hjki+k=
 github.com/sanketsudake/go-portless v0.4.0/go.mod h1:jRGHM6BOYLizSy8fvFfQOX9pmBayEuAWpOz8GYhrPbI=
 github.com/sanketsudake/go-portless/k8s v0.3.0 h1:upMXPHIcFPeeQXIUTxUlfgvxVbMZx3oqXWyBOrYj3VU=
