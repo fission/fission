@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/crds"
 )
@@ -38,10 +39,10 @@ func TestEmbeddedCRDsAreApplyable(t *testing.T) {
 
 		// The apply body must be valid JSON carrying the same identity, or
 		// the apiserver rejects the patch.
-		var decoded map[string]any
+		var decoded metav1.TypeMeta
 		require.NoError(t, json.Unmarshal(body, &decoded), m.Name)
-		assert.Equal(t, "apiextensions.k8s.io/v1", decoded["apiVersion"], m.Name)
-		assert.Equal(t, "CustomResourceDefinition", decoded["kind"], m.Name)
+		assert.Equal(t, "apiextensions.k8s.io/v1", decoded.APIVersion, m.Name)
+		assert.Equal(t, "CustomResourceDefinition", decoded.Kind, m.Name)
 	}
 
 	// Spot-check the CRDs the control plane cannot start without, so a

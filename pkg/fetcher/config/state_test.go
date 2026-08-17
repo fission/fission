@@ -98,6 +98,8 @@ func TestSpecializePayloadCarriesNoToken(t *testing.T) {
 	assert.NotContains(t, strings.ToLower(payload), "token")
 	assert.NotContains(t, strings.ToLower(payload), "secret\":")
 
-	var decoded map[string]any
-	require.NoError(t, json.Unmarshal([]byte(payload), &decoded))
+	// The payload must be a well-formed JSON object; json.Valid plus the
+	// object check is the whole assertion, no fields are read back.
+	require.True(t, json.Valid([]byte(payload)), "payload must be valid JSON")
+	assert.True(t, strings.HasPrefix(strings.TrimSpace(payload), "{"), "payload must be a JSON object")
 }

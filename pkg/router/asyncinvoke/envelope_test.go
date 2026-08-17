@@ -108,10 +108,15 @@ func TestEnvelopeRoundTrip_FunctionVersion(t *testing.T) {
 	data, err := env.Encode()
 	require.NoError(t, err)
 
-	var raw map[string]any
+	// Only the two keys under test are named; the wire format is otherwise
+	// pinned by the round trip below.
+	var raw struct {
+		Version         string `json:"version"`
+		FunctionVersion string `json:"functionVersion"`
+	}
 	require.NoError(t, json.Unmarshal(data, &raw))
-	assert.Equal(t, EnvelopeVersion, raw["version"], "wire-format schema version key is untouched")
-	assert.Equal(t, "hello-v1", raw["functionVersion"], "FunctionVersion marshals under its own key")
+	assert.Equal(t, EnvelopeVersion, raw.Version, "wire-format schema version key is untouched")
+	assert.Equal(t, "hello-v1", raw.FunctionVersion, "FunctionVersion marshals under its own key")
 
 	got, err := Decode(data)
 	require.NoError(t, err)
