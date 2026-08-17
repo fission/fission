@@ -58,14 +58,9 @@ func TestFlagSetWith(flags ...Flag) Cli {
 	return c
 }
 
-func String(key, v string) Flag                 { return func(c Cli) { c.SetString(key, v) } }
-func Bool(key string, v bool) Flag              { return func(c Cli) { c.SetBool(key, v) } }
-func Int(key string, v int) Flag                { return func(c Cli) { c.SetInt(key, v) } }
-func Int64(key string, v int64) Flag            { return func(c Cli) { c.SetInt64(key, v) } }
-func StringSlice(key string, v []string) Flag   { return func(c Cli) { c.SetStringSlice(key, v) } }
-func IntSlice(key string, v []int) Flag         { return func(c Cli) { c.SetIntSlice(key, v) } }
-func Int64Slice(key string, v []int64) Flag     { return func(c Cli) { c.SetInt64Slice(key, v) } }
-func Duration(key string, v time.Duration) Flag { return func(c Cli) { c.SetDuration(key, v) } }
+func String(key, v string) Flag               { return func(c Cli) { c.SetString(key, v) } }
+func Int(key string, v int) Flag              { return func(c Cli) { c.SetInt(key, v) } }
+func StringSlice(key string, v []string) Flag { return func(c Cli) { c.SetStringSlice(key, v) } }
 
 func (u Cli) Context() context.Context {
 	return context.TODO()
@@ -77,7 +72,6 @@ func (u Cli) SetStringSlice(key string, v []string)   { u.stringSlices[key] = v 
 func (u Cli) SetInt(key string, v int)                { u.ints[key] = v }
 func (u Cli) SetIntSlice(key string, v []int)         { u.intSlices[key] = v }
 func (u Cli) SetInt64(key string, v int64)            { u.int64s[key] = v }
-func (u Cli) SetInt64Slice(key string, v []int64)     { u.int64Slices[key] = v }
 func (u Cli) SetDuration(key string, v time.Duration) { u.durations[key] = v }
 
 func (u Cli) IsSet(key string) bool {

@@ -67,46 +67,7 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 		return ResolvedEntry{}, err
 	}
 
-	fnMeta := &fn.ObjectMeta
-	// Dedup key is UID+Generation, not ResourceVersion (see #3596):
-	// ResourceVersion moves on status-only writes, and this component's
-	// informer cache can lag another component's view, so an RV-keyed
-	// throttler key could split one function's in-flight specialization
-	// across concurrent callers observing different RVs of the same spec.
-	//
-	// Minor pre-existing gap (unrelated to the RV->Generation swap, noted
-	// here for a future revisit): the key is derived from fnMeta — the
-	// resolved fn snapshot passed in — but fromExecutor() below re-reads the
-	// live Function via currentFunction() before calling GetServiceForFunction.
-	// A spec update landing between the two reads means the throttler key
-	// (old Generation) and the object actually specialized (new Generation)
-	// can diverge for that one race window; a follower joining on the old
-	// key would get an entry keyed under a Generation that doesn't match
-	// what was specialized. Pre-existing shape (predates this migration).
-	// Version-pinned projections (fv1.FUNCTION_VERSION label) are exempt
-	// from this race: currentFunction passes them through without a re-read,
-	// so the throttler key and the specialized object always agree.
-	record, err := throttler.RunOnce(r.throttler,
-		crd.CacheKeyUGFromMeta(fnMeta).String(),
-		func(firstToTheLock bool) (svcEntryRecord, error) {
-			if !firstToTheLock {
-				svcURL, err := r.fromCache(fn)
-				if err != nil {
-					return svcEntryRecord{}, err
-				}
-				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, nil
-			}
-			svcURL, err = r.fromExecutor(ctx, fn)
-			if err != nil {
-				return svcEntryRecord{}, err
-			}
-			r.fmap.assign(&fn.ObjectMeta, svcURL)
-			return svcEntryRecord{
-				svcURL:   svcURL,
-				cacheHit: false,
-			}, nil
-		},
-	)
+	record, err := r.coalescedResolve(ctx, fn)
 	if err != nil {
 		return ResolvedEntry{}, fmt.Errorf("resolving service entry: %w", err)
 	}
@@ -183,7 +144,38 @@ func (r *executorResolver) currentFunction(ctx context.Context, fn *fv1.Function
 // Service DNS would dial into a backendless Service, but a thundering herd of
 // uncoalesced RPCs is the very thing the throttler exists to prevent.
 func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function) (*url.URL, error) {
-	record, err := throttler.RunOnce(r.throttler,
+	record, err := r.coalescedResolve(ctx, fn)
+	if err != nil {
+		return nil, err
+	}
+	return record.svcURL, nil
+}
+
+// coalescedResolve asks the executor for fn's address behind the throttler:
+// the leader performs the RPC and populates the address cache, and followers
+// that arrive while it is in flight read the leader's result back out of the
+// cache instead of issuing their own RPC.
+//
+// Dedup key is UID+Generation, not ResourceVersion (see #3596):
+// ResourceVersion moves on status-only writes, and this component's
+// informer cache can lag another component's view, so an RV-keyed
+// throttler key could split one function's in-flight specialization
+// across concurrent callers observing different RVs of the same spec.
+//
+// Minor pre-existing gap (unrelated to the RV->Generation swap, noted
+// here for a future revisit): the key is derived from the resolved fn
+// snapshot passed in, but fromExecutor() re-reads the live Function via
+// currentFunction() before calling GetServiceForFunction. A spec update
+// landing between the two reads means the throttler key (old Generation)
+// and the object actually specialized (new Generation) can diverge for
+// that one race window; a follower joining on the old key would get an
+// entry keyed under a Generation that doesn't match what was specialized.
+// Pre-existing shape (predates this migration). Version-pinned projections
+// (fv1.FUNCTION_VERSION label) are exempt from this race: currentFunction
+// passes them through without a re-read, so the throttler key and the
+// specialized object always agree.
+func (r *executorResolver) coalescedResolve(ctx context.Context, fn *fv1.Function) (svcEntryRecord, error) {
+	return throttler.RunOnce(r.throttler,
 		crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(),
 		func(firstToTheLock bool) (svcEntryRecord, error) {
 			if !firstToTheLock {
@@ -201,10 +193,6 @@ func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function
 			return svcEntryRecord{svcURL: svcURL, cacheHit: false}, nil
 		},
 	)
-	if err != nil {
-		return nil, err
-	}
-	return record.svcURL, nil
 }
 
 // fromExecutor asks the executor for the function's service address

@@ -107,11 +107,7 @@ func (c *Client) Ping(ctx context.Context) error {
 // postJSON sends req as JSON to path and decodes a 2xx body into out. A non-2xx
 // status is mapped back to its statestore sentinel.
 func postJSON[Req, Resp any](c *Client, ctx context.Context, path string, req Req, out *Resp) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	resp, err := c.post(ctx, path, body)
+	resp, err := post(c, ctx, path, req)
 	if err != nil {
 		return err
 	}
@@ -121,11 +117,7 @@ func postJSON[Req, Resp any](c *Client, ctx context.Context, path string, req Re
 
 // postNoResponse is postJSON for endpoints whose 2xx reply carries no body.
 func postNoResponse[Req any](c *Client, ctx context.Context, path string, req Req) error {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	resp, err := c.post(ctx, path, body)
+	resp, err := post(c, ctx, path, req)
 	if err != nil {
 		return err
 	}
@@ -133,9 +125,20 @@ func postNoResponse[Req any](c *Client, ctx context.Context, path string, req Re
 	return nil
 }
 
-// post sends a JSON body to path and returns the 2xx response, its body still
-// open; a non-2xx status is drained and mapped back to its statestore sentinel.
-func (c *Client) post(ctx context.Context, path string, body []byte) (*http.Response, error) {
+// post encodes req and sends it, returning the 2xx response with its body
+// still open for the caller to decode or drain.
+func post[Req any](c *Client, ctx context.Context, path string, req Req) (*http.Response, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	return c.send(ctx, path, body)
+}
+
+// send posts an encoded body to path and returns the 2xx response, its body
+// still open; a non-2xx status is drained and mapped back to its statestore
+// sentinel.
+func (c *Client) send(ctx context.Context, path string, body []byte) (*http.Response, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
