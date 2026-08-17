@@ -187,6 +187,7 @@ func (roundTripper *RetryingRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	// close req body
 	defer func() {
 		if req.Body != nil {
+			// SAFETY: a non-nil req.Body was wrapped in a *fakeCloseReadCloser just above, and nothing in this function replaces it.
 			err := req.Body.(*fakeCloseReadCloser).RealClose()
 			if err != nil {
 				roundTripper.logger.Error(err, "Error closing body")

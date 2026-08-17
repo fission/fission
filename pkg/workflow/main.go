@@ -150,6 +150,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// by field errors without this index.
 	err = crMgr.GetFieldIndexer().IndexField(ctx, &fv1.WorkflowRun{}, WorkflowRefIndex,
 		func(obj client.Object) []string {
+			// SAFETY: this indexer is registered for &fv1.WorkflowRun{} only, so obj is always a *fv1.WorkflowRun.
 			return []string{obj.(*fv1.WorkflowRun).Spec.WorkflowRef}
 		})
 	if err != nil {
