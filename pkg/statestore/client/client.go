@@ -104,31 +104,52 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
-// post sends req as JSON to path and decodes a 2xx body into out (out may be nil
-// for endpoints with no response body). A non-2xx status is mapped back to its
-// statestore sentinel.
-func (c *Client) post(ctx context.Context, path string, req, out any) error {
+// postJSON sends req as JSON to path and decodes a 2xx body into out. A non-2xx
+// status is mapped back to its statestore sentinel.
+func postJSON[Req, Resp any](c *Client, ctx context.Context, path string, req Req, out *Resp) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := c.hc.Do(httpReq)
+	resp, err := c.post(ctx, path, body)
 	if err != nil {
 		return err
 	}
 	defer drainClose(resp)
-	if resp.StatusCode/100 != 2 {
-		return decodeErr(resp)
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// postNoResponse is postJSON for endpoints whose 2xx reply carries no body.
+func postNoResponse[Req any](c *Client, ctx context.Context, path string, req Req) error {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
 	}
-	if out != nil {
-		return json.NewDecoder(resp.Body).Decode(out)
+	resp, err := c.post(ctx, path, body)
+	if err != nil {
+		return err
 	}
+	drainClose(resp)
 	return nil
+}
+
+// post sends a JSON body to path and returns the 2xx response, its body still
+// open; a non-2xx status is drained and mapped back to its statestore sentinel.
+func (c *Client) post(ctx context.Context, path string, body []byte) (*http.Response, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := c.hc.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode/100 != 2 {
+		defer drainClose(resp)
+		return nil, decodeErr(resp)
+	}
+	return resp, nil
 }
 
 func decodeErr(resp *http.Response) error {
@@ -160,33 +181,33 @@ func (e *conflictError) Is(target error) bool {
 
 func (c *Client) Get(ctx context.Context, s statestore.Scope, key string) (statestore.Value, error) {
 	var resp httpapi.KVGetResp
-	if err := c.post(ctx, httpapi.PathKVGet, httpapi.KVGetReq{Scope: s, Key: key}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathKVGet, httpapi.KVGetReq{Scope: s, Key: key}, &resp); err != nil {
 		return statestore.Value{}, err
 	}
 	return statestore.Value{Data: resp.Value, Version: resp.Version}, nil
 }
 
 func (c *Client) Set(ctx context.Context, s statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
-	return c.post(ctx, httpapi.PathKVSet, httpapi.KVSetReq{
+	return postNoResponse(c, ctx, httpapi.PathKVSet, httpapi.KVSetReq{
 		Scope: s, Key: key, Value: val, IfVersion: o.IfVersion, TTLNanos: o.TTL.Nanoseconds(),
-	}, nil)
+	})
 }
 
 // SetCounted implements statestore.CountedKV by forwarding the budget to the
 // server, whose backing driver performs the atomic counted set.
 func (c *Client) SetCounted(ctx context.Context, s statestore.Scope, key string, val []byte, o statestore.SetOptions, maxKeys int64) error {
-	return c.post(ctx, httpapi.PathKVSet, httpapi.KVSetReq{
+	return postNoResponse(c, ctx, httpapi.PathKVSet, httpapi.KVSetReq{
 		Scope: s, Key: key, Value: val, IfVersion: o.IfVersion, TTLNanos: o.TTL.Nanoseconds(), MaxKeys: maxKeys,
-	}, nil)
+	})
 }
 
 func (c *Client) Delete(ctx context.Context, s statestore.Scope, key string, ifVersion int64) error {
-	return c.post(ctx, httpapi.PathKVDelete, httpapi.KVDeleteReq{Scope: s, Key: key, IfVersion: ifVersion}, nil)
+	return postNoResponse(c, ctx, httpapi.PathKVDelete, httpapi.KVDeleteReq{Scope: s, Key: key, IfVersion: ifVersion})
 }
 
 func (c *Client) List(ctx context.Context, s statestore.Scope, prefix string, page statestore.Page) (statestore.KeyPage, error) {
 	var resp httpapi.KVListResp
-	if err := c.post(ctx, httpapi.PathKVList, httpapi.KVListReq{Scope: s, Prefix: prefix, Page: page}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathKVList, httpapi.KVListReq{Scope: s, Prefix: prefix, Page: page}, &resp); err != nil {
 		return statestore.KeyPage{}, err
 	}
 	return statestore.KeyPage{Keys: resp.Keys, Next: resp.Next}, nil
@@ -196,7 +217,7 @@ func (c *Client) List(ctx context.Context, s statestore.Scope, prefix string, pa
 
 func (c *Client) Append(ctx context.Context, stream string, expectedSeq int64, events []statestore.Event) (int64, error) {
 	var resp httpapi.EventAppendResp
-	if err := c.post(ctx, httpapi.PathEventAppend, httpapi.EventAppendReq{Stream: stream, ExpectedSeq: expectedSeq, Events: events}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathEventAppend, httpapi.EventAppendReq{Stream: stream, ExpectedSeq: expectedSeq, Events: events}, &resp); err != nil {
 		// A conflict carries the current head so the CAS caller can
 		// resynchronize (contract: the head is meaningful on ErrVersionConflict).
 		if ce, ok := errors.AsType[*conflictError](err); ok {
@@ -209,19 +230,19 @@ func (c *Client) Append(ctx context.Context, stream string, expectedSeq int64, e
 
 func (c *Client) Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]statestore.Event, error) {
 	var resp httpapi.EventReadResp
-	if err := c.post(ctx, httpapi.PathEventRead, httpapi.EventReadReq{Stream: stream, FromSeq: fromSeq, Limit: limit}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathEventRead, httpapi.EventReadReq{Stream: stream, FromSeq: fromSeq, Limit: limit}, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Events, nil
 }
 
 func (c *Client) Trim(ctx context.Context, stream string, belowSeq int64) error {
-	return c.post(ctx, httpapi.PathEventTrim, httpapi.EventTrimReq{Stream: stream, BelowSeq: belowSeq}, nil)
+	return postNoResponse(c, ctx, httpapi.PathEventTrim, httpapi.EventTrimReq{Stream: stream, BelowSeq: belowSeq})
 }
 
 func (c *Client) Head(ctx context.Context, stream string) (int64, error) {
 	var resp httpapi.EventHeadResp
-	if err := c.post(ctx, httpapi.PathEventHead, httpapi.EventHeadReq{Stream: stream}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathEventHead, httpapi.EventHeadReq{Stream: stream}, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Head, nil
@@ -231,7 +252,7 @@ func (c *Client) Head(ctx context.Context, stream string) (int64, error) {
 
 func (c *Client) Enqueue(ctx context.Context, queue string, msg statestore.Message, o statestore.EnqueueOptions) (string, error) {
 	var resp httpapi.QueueEnqueueResp
-	if err := c.post(ctx, httpapi.PathQueueEnqueue, httpapi.QueueEnqueueReq{
+	if err := postJSON(c, ctx, httpapi.PathQueueEnqueue, httpapi.QueueEnqueueReq{
 		Queue: queue, Body: msg.Body, DelayNanos: o.Delay.Nanoseconds(), DedupKey: o.DedupKey,
 	}, &resp); err != nil {
 		return "", err
@@ -241,27 +262,27 @@ func (c *Client) Enqueue(ctx context.Context, queue string, msg statestore.Messa
 
 func (c *Client) Lease(ctx context.Context, queue string, n int, leaseFor time.Duration) ([]statestore.LeasedMessage, error) {
 	var resp httpapi.QueueLeaseResp
-	if err := c.post(ctx, httpapi.PathQueueLease, httpapi.QueueLeaseReq{Queue: queue, N: n, LeaseForNanos: leaseFor.Nanoseconds()}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathQueueLease, httpapi.QueueLeaseReq{Queue: queue, N: n, LeaseForNanos: leaseFor.Nanoseconds()}, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Messages, nil
 }
 
 func (c *Client) Ack(ctx context.Context, receipt string) error {
-	return c.post(ctx, httpapi.PathQueueAck, httpapi.QueueAckReq{Receipt: receipt}, nil)
+	return postNoResponse(c, ctx, httpapi.PathQueueAck, httpapi.QueueAckReq{Receipt: receipt})
 }
 
 func (c *Client) Nack(ctx context.Context, receipt string, retryAfter time.Duration) error {
-	return c.post(ctx, httpapi.PathQueueNack, httpapi.QueueNackReq{Receipt: receipt, RetryAfterNanos: retryAfter.Nanoseconds()}, nil)
+	return postNoResponse(c, ctx, httpapi.PathQueueNack, httpapi.QueueNackReq{Receipt: receipt, RetryAfterNanos: retryAfter.Nanoseconds()})
 }
 
 func (c *Client) Kill(ctx context.Context, receipt string, reason string) error {
-	return c.post(ctx, httpapi.PathQueueKill, httpapi.QueueKillReq{Receipt: receipt, Reason: reason}, nil)
+	return postNoResponse(c, ctx, httpapi.PathQueueKill, httpapi.QueueKillReq{Receipt: receipt, Reason: reason})
 }
 
 func (c *Client) DeadLetters(ctx context.Context, queue string, page statestore.Page) ([]statestore.DeadMessage, error) {
 	var resp httpapi.QueueDeadLettersResp
-	if err := c.post(ctx, httpapi.PathQueueDeadLetter, httpapi.QueueDeadLettersReq{Queue: queue, Page: page}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathQueueDeadLetter, httpapi.QueueDeadLettersReq{Queue: queue, Page: page}, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Messages, nil
@@ -269,7 +290,7 @@ func (c *Client) DeadLetters(ctx context.Context, queue string, page statestore.
 
 func (c *Client) Redrive(ctx context.Context, queue string, ids []string) (int64, error) {
 	var resp httpapi.QueueRedriveResp
-	if err := c.post(ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathQueueRedrive, httpapi.QueueRedriveReq{Queue: queue, IDs: ids}, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Redriven, nil
@@ -277,7 +298,7 @@ func (c *Client) Redrive(ctx context.Context, queue string, ids []string) (int64
 
 func (c *Client) Purge(ctx context.Context, queue string) (int64, error) {
 	var resp httpapi.QueuePurgeResp
-	if err := c.post(ctx, httpapi.PathQueuePurge, httpapi.QueuePurgeReq{Queue: queue}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathQueuePurge, httpapi.QueuePurgeReq{Queue: queue}, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Purged, nil
@@ -285,7 +306,7 @@ func (c *Client) Purge(ctx context.Context, queue string) (int64, error) {
 
 func (c *Client) Stats(ctx context.Context, queue string) (statestore.QueueStats, error) {
 	var resp httpapi.QueueStatsResp
-	if err := c.post(ctx, httpapi.PathQueueStats, httpapi.QueueStatsReq{Queue: queue}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathQueueStats, httpapi.QueueStatsReq{Queue: queue}, &resp); err != nil {
 		return statestore.QueueStats{}, err
 	}
 	return statestore.QueueStats{

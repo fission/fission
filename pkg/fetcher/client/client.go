@@ -135,7 +135,7 @@ func (c *client) Upload(ctx context.Context, fr *fetcher.ArchiveUploadRequest) (
 	return &uploadResp, nil
 }
 
-func sendRequest(logger logr.Logger, ctx context.Context, httpClient *http.Client, req any, url string) ([]byte, error) {
+func sendRequest[Req any](logger logr.Logger, ctx context.Context, httpClient *http.Client, req Req, url string) ([]byte, error) {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err

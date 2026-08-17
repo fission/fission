@@ -128,7 +128,7 @@ func writeNote(dumpDir, name, format string, args ...any) {
 	}
 }
 
-func writeToFile(file string, obj any) {
+func writeToFile[T any](file string, obj T) {
 	bs, err := yaml.Marshal(obj)
 	if err != nil {
 		console.Error(fmt.Sprintf("Error encoding object: %v", err))

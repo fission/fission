@@ -47,7 +47,7 @@ func ParseOutputFormat(s string) (OutputFormat, error) {
 
 // encode marshals v as JSON or YAML. It is the structured half of the printer,
 // kept pure (no stdout) so it is straightforward to unit test.
-func encode(format OutputFormat, v any) ([]byte, error) {
+func encode[T any](format OutputFormat, v T) ([]byte, error) {
 	switch format {
 	case OutputJSON:
 		return json.MarshalIndent(v, "", "  ")
@@ -126,7 +126,7 @@ func PrintObjects[T any](format OutputFormat, items []T, headers []string, row f
 // PrintStructured prints v as json/yaml and returns true when the format is
 // structured; for table/wide it prints nothing and returns false so describe
 // commands fall back to their own human rendering.
-func PrintStructured(format OutputFormat, v any) (bool, error) {
+func PrintStructured[T any](format OutputFormat, v T) (bool, error) {
 	switch format {
 	case OutputJSON, OutputYAML:
 		b, err := encode(format, v)
