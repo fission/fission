@@ -229,16 +229,20 @@ func TestTrackSourceMap(t *testing.T) {
 	require.ErrorContains(t, err, "Duplicate")
 }
 
-func TestSpecExists(t *testing.T) {
+func TestPackageAndArchiveUploadSpecInSpecs(t *testing.T) {
 	t.Parallel()
 	fr := newFissionResources()
-	fr.ArchiveUploadSpecs = []types.ArchiveUploadSpec{{Name: "ar", RootDir: "/root"}}
+	fr.ArchiveUploadSpecs = []types.ArchiveUploadSpec{{Name: "ar", RootDir: "/root", IncludeGlobs: []string{"*.js"}}}
 	fr.Packages = []fv1.Package{{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "default"}}}
 
-	assert.NotNil(t, fr.SpecExists(&types.ArchiveUploadSpec{Name: "ar"}, true, false))
-	assert.Nil(t, fr.SpecExists(&types.ArchiveUploadSpec{Name: "nope"}, true, false))
-	assert.NotNil(t, fr.SpecExists(&fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "default"}}, true, false))
-	assert.Nil(t, fr.SpecExists(&fv1.Function{}, true, false)) // unimplemented type
+	assert.NotNil(t, fr.ArchiveUploadSpecInSpecs(&types.ArchiveUploadSpec{Name: "ar"}, true, false))
+	assert.Nil(t, fr.ArchiveUploadSpecInSpecs(&types.ArchiveUploadSpec{Name: "nope"}, true, false))
+	// compareSpec: same name, different globs is not a match.
+	assert.Nil(t, fr.ArchiveUploadSpecInSpecs(&types.ArchiveUploadSpec{Name: "ar", RootDir: "/root"}, true, true))
+	assert.NotNil(t, fr.ArchiveUploadSpecInSpecs(&types.ArchiveUploadSpec{Name: "ar", RootDir: "/root", IncludeGlobs: []string{"*.js"}}, true, true))
+
+	assert.NotNil(t, fr.PackageInSpecs(&fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "default"}}, true, false))
+	assert.Nil(t, fr.PackageInSpecs(&fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "other"}}, true, false))
 }
 
 func TestExistsInSpecs(t *testing.T) {

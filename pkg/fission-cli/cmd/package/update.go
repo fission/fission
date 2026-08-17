@@ -284,11 +284,9 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 			return nil, fmt.Errorf("error reading specs: %w", err)
 		}
 
-		obj := fr.SpecExists(pkg, true, true)
-		if obj != nil {
-			pkg := obj.(*fv1.Package)
-			fmt.Printf("Re-using previously created package %s\n", pkg.Name)
-			return &pkg.ObjectMeta, nil
+		if existing := fr.PackageInSpecs(pkg, true, true); existing != nil {
+			fmt.Printf("Re-using previously created package %s\n", existing.Name)
+			return &existing.ObjectMeta, nil
 		}
 
 		err = spec.SpecSave(*pkg, specFile, true)

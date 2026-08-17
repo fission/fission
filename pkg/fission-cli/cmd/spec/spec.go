@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -735,40 +736,36 @@ func (fr *FissionResources) ParseYaml(b []byte, loc *Location, commitLabelVal st
 	return nil
 }
 
-// Returns metadata if the given resource exists in the specs, nil
-// otherwise.  compareMetadata and compareSpec control how the
-// equality check is performed.
-// TODO: deprecated SpecExists
-func (fr *FissionResources) SpecExists(resource any, compareMetadata bool, compareSpec bool) any {
-	switch typedres := resource.(type) {
-	case *types.ArchiveUploadSpec:
-		for _, aus := range fr.ArchiveUploadSpecs {
-			if compareMetadata && aus.Name != typedres.Name {
-				continue
-			}
-			if compareSpec &&
-				(!reflect.DeepEqual(aus.RootDir, typedres.RootDir) || !reflect.DeepEqual(aus.IncludeGlobs, typedres.IncludeGlobs) || !reflect.DeepEqual(aus.ExcludeGlobs, typedres.ExcludeGlobs)) {
-				continue
-			}
-			return &aus
+// PackageInSpecs returns the spec Package that matches pkg, or nil.
+// compareMetadata and compareSpec control how the equality check is performed.
+func (fr *FissionResources) PackageInSpecs(pkg *fv1.Package, compareMetadata bool, compareSpec bool) *fv1.Package {
+	for _, p := range fr.Packages {
+		if compareMetadata && !reflect.DeepEqual(p.ObjectMeta, pkg.ObjectMeta) {
+			continue
 		}
-		return nil
-	case *fv1.Package:
-		for _, p := range fr.Packages {
-			if compareMetadata && !reflect.DeepEqual(p.ObjectMeta, typedres.ObjectMeta) {
-				continue
-			}
-			if compareSpec && !reflect.DeepEqual(p.Spec, typedres.Spec) {
-				continue
-			}
-			return &p
+		if compareSpec && !reflect.DeepEqual(p.Spec, pkg.Spec) {
+			continue
 		}
-		return nil
-
-	default:
-		// XXX not implemented
-		return nil
+		return &p
 	}
+	return nil
+}
+
+// ArchiveUploadSpecInSpecs returns the spec ArchiveUploadSpec that matches aus,
+// or nil. compareMetadata and compareSpec control how the equality check is
+// performed.
+func (fr *FissionResources) ArchiveUploadSpecInSpecs(aus *types.ArchiveUploadSpec, compareMetadata bool, compareSpec bool) *types.ArchiveUploadSpec {
+	for _, a := range fr.ArchiveUploadSpecs {
+		if compareMetadata && a.Name != aus.Name {
+			continue
+		}
+		if compareSpec &&
+			(a.RootDir != aus.RootDir || !slices.Equal(a.IncludeGlobs, aus.IncludeGlobs) || !slices.Equal(a.ExcludeGlobs, aus.ExcludeGlobs)) {
+			continue
+		}
+		return &a
+	}
+	return nil
 }
 
 func (fr *FissionResources) ExistsInSpecs(resource any) (bool, error) {
