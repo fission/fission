@@ -37,41 +37,28 @@ func MakeThrottler(timeExpiry time.Duration) *Throttler {
 	return t
 }
 
-// RunOnce accepts two arguments:
-// 1. function metadata:
-//   It's used to check whether the actionLock of a function exists.
+// RunOnce coalesces concurrent callers on resourceKey.
 //
-//   If not exists, an actionLock will be inserted into the map with
-//   passing key. Then, throttler pass true to callbackFunc to indi-
-//   cate this goroutine is the first goroutine and is responsible for
-//   calling backend service, like updating service URL entry in router.
+// The first goroutine to arrive for a key becomes the leader: it inserts an
+// entry into the map and runs callbackFunc(true), which is responsible for
+// talking to the backend (for example asking the executor for a service URL
+// and updating the router cache). Every goroutine that arrives while the
+// leader's entry is live waits for it to finish and then runs
+// callbackFunc(false), which should read the leader's result (for example
+// from the cache). A follower that waits longer than the throttler TTL gives
+// up with an error and the zero T. An entry older than the TTL is treated as
+// expired and the next caller takes over as leader.
 //
-//   If exists, the goroutines have to wait until the first goroutine
-//   finishes the update process.
+// The result type is the callback's own, so callers never round-trip through
+// an untyped value:
 //
-// 2. callback function:
-//   The callback function is a function accepts one bool argument which
-//   indicates whether a goroutine is responsible for getting/updating a
-//   resource from backend service or waiting for the first goroutine to
-//   be finished.
-//
-//   Example callback function:
-//
-//   func(firstToTheLock bool) (interface{}, error) {
-//    var u *url.URL
-//
-//   if firstToTheLock { // first to the service url
-//   // Call to backend services then do something else.
-//   // For example, get service url from executor then update router cache.
-//   } else {
-//   // Do something here.
-//   // For example, get service url from cache
-//   }
-//
-//   return AnythingYouWant{}, error
-//   }
-
-func (t *Throttler) RunOnce(resourceKey string, callbackFunc func(bool) (any, error)) (any, error) {
+//	rec, err := throttler.RunOnce(t, key, func(leader bool) (svcRecord, error) {
+//		if leader {
+//			return fetchFromBackend()
+//		}
+//		return readFromCache()
+//	})
+func RunOnce[T any](t *Throttler, resourceKey string, callbackFunc func(bool) (T, error)) (T, error) {
 	t.mu.Lock()
 	e, ok := t.locks[resourceKey]
 
@@ -83,7 +70,8 @@ func (t *Throttler) RunOnce(resourceKey string, callbackFunc func(bool) (any, er
 			case <-e.done:
 				return callbackFunc(false)
 			case <-time.After(t.ttl):
-				return nil, errors.New("error waiting for throttler entry to be released: exceeded timeout")
+				var zero T
+				return zero, errors.New("error waiting for throttler entry to be released: exceeded timeout")
 			}
 		}
 		// Expired, we take over.

@@ -86,19 +86,19 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 	// Version-pinned projections (fv1.FUNCTION_VERSION label) are exempt
 	// from this race: currentFunction passes them through without a re-read,
 	// so the throttler key and the specialized object always agree.
-	recordObj, err := r.throttler.RunOnce(
+	record, err := throttler.RunOnce(r.throttler,
 		crd.CacheKeyUGFromMeta(fnMeta).String(),
-		func(firstToTheLock bool) (any, error) {
+		func(firstToTheLock bool) (svcEntryRecord, error) {
 			if !firstToTheLock {
 				svcURL, err := r.fromCache(fn)
 				if err != nil {
-					return nil, err
+					return svcEntryRecord{}, err
 				}
-				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
+				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, nil
 			}
 			svcURL, err = r.fromExecutor(ctx, fn)
 			if err != nil {
-				return nil, err
+				return svcEntryRecord{}, err
 			}
 			r.fmap.assign(&fn.ObjectMeta, svcURL)
 			return svcEntryRecord{
@@ -107,16 +107,10 @@ func (r *executorResolver) Resolve(ctx context.Context, fn *fv1.Function, _ stri
 			}, nil
 		},
 	)
-
-	if recordObj == nil {
+	if err != nil {
 		return ResolvedEntry{}, fmt.Errorf("empty service entry: %w", err)
 	}
-
-	record, ok := recordObj.(svcEntryRecord)
-	if !ok {
-		return ResolvedEntry{}, fmt.Errorf("unexpected type of recordObj %T: %w", recordObj, err)
-	}
-	return ResolvedEntry{SvcURL: record.svcURL, FromCache: record.cacheHit}, err
+	return ResolvedEntry{SvcURL: record.svcURL, FromCache: record.cacheHit}, nil
 }
 
 // Invalidate removes the function's service url entry from the cache.
@@ -189,19 +183,19 @@ func (r *executorResolver) currentFunction(ctx context.Context, fn *fv1.Function
 // Service DNS would dial into a backendless Service, but a thundering herd of
 // uncoalesced RPCs is the very thing the throttler exists to prevent.
 func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function) (*url.URL, error) {
-	recordObj, err := r.throttler.RunOnce(
+	record, err := throttler.RunOnce(r.throttler,
 		crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(),
-		func(firstToTheLock bool) (any, error) {
+		func(firstToTheLock bool) (svcEntryRecord, error) {
 			if !firstToTheLock {
 				svcURL, err := r.fromCache(fn)
 				if err != nil {
-					return nil, err
+					return svcEntryRecord{}, err
 				}
-				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, err
+				return svcEntryRecord{svcURL: svcURL, cacheHit: true}, nil
 			}
 			svcURL, err := r.fromExecutor(ctx, fn)
 			if err != nil {
-				return nil, err
+				return svcEntryRecord{}, err
 			}
 			r.fmap.assign(&fn.ObjectMeta, svcURL)
 			return svcEntryRecord{svcURL: svcURL, cacheHit: false}, nil
@@ -209,10 +203,6 @@ func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function
 	)
 	if err != nil {
 		return nil, err
-	}
-	record, ok := recordObj.(svcEntryRecord)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type of recordObj %T", recordObj)
 	}
 	return record.svcURL, nil
 }
