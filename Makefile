@@ -35,11 +35,12 @@ check: test-run build-fission-cli clean
 code-checks: verify-gomod
 	golangci-lint run
 
-# Run the antislop analyzers (low-evidence Go patterns: any in signatures,
-# narrowing out of any, reflect, structural names, untyped decoding).
-# Deliberately not part of code-checks: it needs the antislop binary
-# ($ANTISLOP, PATH, or go-run access to the private module) and the
-# baseline is still being burned down. See hack/antislop.sh.
+# Gate the tree with the antislop analyzers (low-evidence Go patterns: any in
+# signatures, narrowing out of any, reflect, structural names, untyped
+# decoding) against hack/antislop-baseline.txt. Deliberately not part of
+# code-checks and not in CI: it needs the antislop binary ($ANTISLOP, PATH, or
+# go-run access to the module, which is private today). See hack/antislop.sh
+# for the baseline contract and `hack/antislop.sh --list` for every finding.
 .PHONY: antislop
 antislop:
 	hack/antislop.sh
