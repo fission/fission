@@ -53,6 +53,11 @@ func TestScopeClaimUnmarshal(t *testing.T) {
 		{name: "number", raw: `42`, wantErr: true},
 		{name: "object", raw: `{"a":1}`, wantErr: true},
 		{name: "non-string element", raw: `["a",7]`, wantErr: true},
+		// A JSON null element unmarshals into a string as a no-op, so without
+		// an explicit refusal it would become "" and the token would be
+		// accepted where the pre-typed code rejected it.
+		{name: "null element", raw: `[null]`, wantErr: true},
+		{name: "null element after a valid one", raw: `["a",null]`, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -64,7 +69,7 @@ func TestScopeClaimUnmarshal(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, c.AllowedNamespaces.scope())
+			assert.Equal(t, tt.want, AuthScope(c.AllowedNamespaces))
 		})
 	}
 
@@ -72,7 +77,7 @@ func TestScopeClaimUnmarshal(t *testing.T) {
 		t.Parallel()
 		var c mcpClaims
 		require.NoError(t, json.Unmarshal([]byte(`{}`), &c))
-		assert.Equal(t, AuthScope{}, c.AllowedNamespaces.scope())
+		assert.Equal(t, AuthScope{}, AuthScope(c.AllowedNamespaces))
 	})
 }
 
@@ -143,6 +148,22 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": 42, "exp": time.Now().Add(time.Hour).Unix()})
 		_, err := a.verifyToken(context.Background(), tok, nil)
 		assert.Error(t, err, "a malformed allowed_namespaces claim must be rejected")
+	})
+
+	// encoding/json matches struct fields case-insensitively; the pre-typed
+	// code looked claims up by exact key. A token that smuggles a second
+	// spelling past the exact lookup must be rejected, not silently widened.
+	t.Run("case-variant claim spellings are rejected", func(t *testing.T) {
+		t.Parallel()
+		for _, claims := range []jwt.MapClaims{
+			{"sub": "agent", "exp": time.Now().Add(time.Hour).Unix(), "ALLOWED_NAMESPACES": "*"},
+			{"sub": "agent", "exp": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a", "ALLOWED_NAMESPACES": "*"},
+			{"SUB": "agent", "exp": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a"},
+			{"sub": "agent", "EXP": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a"},
+		} {
+			_, err := a.verifyToken(context.Background(), mintToken(t, key, claims), nil)
+			assert.Errorf(t, err, "a case-variant claim must be rejected: %v", claims)
+		}
 	})
 
 	t.Run("null claim is authorized for nothing", func(t *testing.T) {

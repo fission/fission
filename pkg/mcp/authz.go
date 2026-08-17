@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -109,7 +110,7 @@ func (a *Authorizer) verifyToken(_ context.Context, token string, _ *http.Reques
 		return nil, fmt.Errorf("%w: missing sub claim", auth.ErrInvalidToken)
 	}
 
-	scope := claims.AllowedNamespaces.scope()
+	scope := AuthScope(claims.AllowedNamespaces)
 	ti := &auth.TokenInfo{Scopes: scope.Namespaces, Expiration: claims.ExpiresAt.Time, UserID: claims.Subject}
 	if scope.Wildcard {
 		ti.Scopes = []string{wildcardNamespace}
@@ -124,16 +125,54 @@ type mcpClaims struct {
 	AllowedNamespaces scopeClaim `json:"allowed_namespaces"`
 }
 
+// readClaims are the claim names this verifier's decisions depend on, either
+// directly (allowed_namespaces, sub) or through the library's validation
+// (exp, nbf, iat). Their spelling is guarded — see UnmarshalJSON.
+var readClaims = map[string]struct{}{
+	claimAllowedNamespaces: {}, "sub": {}, "exp": {}, "nbf": {}, "iat": {},
+}
+
+// UnmarshalJSON decodes the claim set by EXACT key.
+//
+// encoding/json matches struct fields case-insensitively, so a plain struct
+// decode would let a token carrying "ALLOWED_NAMESPACES" populate the scope
+// that only "allowed_namespaces" is meant to own — and, with two spellings
+// present, the last one in the document would win. The pre-typed code looked
+// claims up in a map with exact keys and had no such hole, so any key that
+// differs only in case from a claim this verifier reads is refused outright.
+func (c *mcpClaims) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	for k := range raw {
+		if _, exact := readClaims[k]; exact {
+			continue
+		}
+		if _, collides := readClaims[strings.ToLower(k)]; collides {
+			return fmt.Errorf("claim %q differs only in case from %q", k, strings.ToLower(k))
+		}
+	}
+	if v, ok := raw[claimAllowedNamespaces]; ok {
+		if err := c.AllowedNamespaces.UnmarshalJSON(v); err != nil {
+			return err
+		}
+	}
+	// Registered claims keep the library's own decoding and validation; the
+	// guard above has already ruled out case variants of the ones that matter.
+	return json.Unmarshal(b, &c.RegisteredClaims)
+}
+
 // scopeClaim is the decoded allowed_namespaces claim. On the wire it may be
 // absent (a valid token authorized for nothing), JSON null, the string "*", a
 // single namespace string, or an array of namespace strings. Any other JSON
 // type — or an array with a non-string element — is malformed and fails the
 // decode, so the token is rejected rather than silently reduced to an empty
 // scope that is indistinguishable from "no tools exist".
-type scopeClaim struct {
-	namespaces []string
-	wildcard   bool
-}
+//
+// It is an AuthScope so the projection is a conversion rather than a second
+// pair of fields that could disagree with it.
+type scopeClaim AuthScope
 
 // UnmarshalJSON accepts a JSON string, an array of strings, or null.
 func (c *scopeClaim) UnmarshalJSON(b []byte) error {
@@ -145,31 +184,34 @@ func (c *scopeClaim) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &single); err == nil {
 		switch single {
 		case wildcardNamespace:
-			c.wildcard = true
+			c.Wildcard = true
 		case "":
 		default:
-			c.namespaces = []string{single}
+			c.Namespaces = []string{single}
 		}
 		return nil
 	}
-	var many []string
+	// []*string rather than []string: a JSON null element unmarshals into a
+	// string as a no-op, so it would silently become "" and the token would be
+	// accepted where the pre-typed code rejected it. A pointer element is nil
+	// for null and can be refused.
+	var many []*string
 	if err := json.Unmarshal(b, &many); err != nil {
 		return fmt.Errorf("%s claim must be a string or an array of strings", claimAllowedNamespaces)
 	}
-	if slices.Contains(many, wildcardNamespace) {
-		c.wildcard = true
-		return nil
+	ns := make([]string, 0, len(many))
+	for _, s := range many {
+		if s == nil {
+			return fmt.Errorf("%s claim has a null element; every element must be a string", claimAllowedNamespaces)
+		}
+		if *s == wildcardNamespace {
+			c.Wildcard = true
+			return nil
+		}
+		ns = append(ns, *s)
 	}
-	c.namespaces = many
+	c.Namespaces = ns
 	return nil
-}
-
-// scope projects the claim into an AuthScope.
-func (c scopeClaim) scope() AuthScope {
-	if c.wildcard {
-		return AuthScope{Wildcard: true}
-	}
-	return AuthScope{Namespaces: c.namespaces}
 }
 
 // ScopeFromTokenInfo derives the namespace scope from a verified token. A nil
