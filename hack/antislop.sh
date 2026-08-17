@@ -24,7 +24,12 @@
 # findings as "<count> <file> <analyzer>" — deliberately without line numbers,
 # so unrelated edits above a finding do not churn it. The gate fails when a
 # file/analyzer pair appears that the baseline does not list, or when a
-# baselined pair grows. It never passes silently on a NEW finding anywhere.
+# baselined pair grows. A pair that shrinks passes.
+#
+# The cost of dropping line numbers is that a net-zero swap within one
+# file/analyzer pair — delete one finding, introduce another — is not caught.
+# Diff stability is worth more than catching that case; the alternative churns
+# the baseline on every edit above a finding.
 #
 # A baseline exists because the standalone binary has no per-package scoping
 # and honours no //nolint directive, so the only alternatives would be to
@@ -63,13 +68,27 @@ POLICY_FLAGS=(-nostructuralnames=false)
 # form, sorted so the file is stable across runs.
 summarize() {
 	sed -E 's#^\./##; s#^'"$PWD"'/##; s#:[0-9]+:[0-9]+: ([a-z]+):.*#\t\1#' |
-		sort | uniq -c | awk '{printf "%s %s %s\n", $1, $2, $3}' | sort -k2,2 -k3,3
+		sort | uniq -c | awk '{print $1, $2, $3}' | sort -k2,2 -k3,3
 }
 
+# run invokes the analyzer. Exit codes follow go/analysis singlechecker:
+# 0 = clean, 3 = diagnostics reported (the normal case here). Anything else
+# means it did not run at all — 1 for a package load error, 2 for a bad flag,
+# 127 for a missing binary. Those must never be mistaken for a clean tree, so
+# they abort loudly instead of yielding empty output the gate would read as
+# "no findings".
 run() {
-	# antislop exits non-zero when it reports findings; that is the normal case
-	# here, so the exit status is checked by the caller via the output instead.
-	"${bin[@]}" "${POLICY_FLAGS[@]}" "$@" 2>&1 || true
+	local out status
+	out="$("${bin[@]}" "${POLICY_FLAGS[@]}" "$@" 2>&1)" && status=0 || status=$?
+	case "$status" in
+	0 | 3) ;;
+	*)
+		echo "antislop: analyzer did not run (exit $status):" >&2
+		echo "$out" >&2
+		exit 2
+		;;
+	esac
+	printf '%s\n' "$out"
 }
 
 case "${1:-}" in
@@ -107,21 +126,23 @@ case "${1:-}" in
 	;;
 "")
 	current="$(run ./... | summarize)"
-	baseline="$(grep -v '^#' "$BASELINE" | grep -v '^[[:space:]]*$' || true)"
 
-	# Report any pair whose count exceeds the baseline (absent == 0).
-	failed=0
-	while read -r count file analyzer; do
-		[ -z "${file:-}" ] && continue
-		allowed="$(awk -v f="$file" -v a="$analyzer" '$2==f && $3==a {print $1}' <<<"$baseline")"
-		allowed="${allowed:-0}"
-		if [ "$count" -gt "$allowed" ]; then
-			echo "antislop: $file: $analyzer: $count finding(s), baseline allows $allowed"
-			failed=1
-		fi
-	done <<<"$current"
-
-	if [ "$failed" -ne 0 ]; then
+	# One awk pass: load the baseline, then fail on any pair that is absent
+	# from it or exceeds its count. A pair that SHRANK is fine.
+	if ! awk '
+		NR==FNR {
+			if ($0 !~ /^#/ && NF == 3) allowed[$2 SUBSEP $3] = $1
+			next
+		}
+		NF == 3 {
+			a = ($2 SUBSEP $3) in allowed ? allowed[$2 SUBSEP $3] : 0
+			if ($1 > a) {
+				printf "antislop: %s: %s: %s finding(s), baseline allows %s\n", $2, $3, $1, a
+				bad = 1
+			}
+		}
+		END { exit bad ? 1 : 0 }
+	' "$BASELINE" <(printf '%s\n' "$current"); then
 		echo
 		echo "New antislop findings. Fix them, or — if 'any' is genuinely the honest"
 		echo "type there — run 'hack/antislop.sh --update' and justify the new"
