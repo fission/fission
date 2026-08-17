@@ -168,7 +168,7 @@ func (opts *dlqSubCommand) fetchDeadLetters(input cli.Input, namespace string, m
 			q.Set("token", token)
 		}
 		var resp dlqListResp
-		if err := opts.call(input, http.MethodGet, dlqAPIList, q, nil, &resp); err != nil {
+		if err := dlqCall(opts, input, http.MethodGet, dlqAPIList, q, nil, &resp); err != nil {
 			return nil, false, err
 		}
 		all = append(all, resp.Messages...)
@@ -186,7 +186,7 @@ func (opts *dlqSubCommand) show(input cli.Input) error {
 	q := url.Values{}
 	q.Set("id", input.String(flagkey.DlqID))
 	var resp dlqShowResp
-	if err := opts.call(input, http.MethodGet, dlqAPIShow, q, nil, &resp); err != nil {
+	if err := dlqCall(opts, input, http.MethodGet, dlqAPIShow, q, nil, &resp); err != nil {
 		return err
 	}
 	out, err := json.MarshalIndent(resp, "", "  ")
@@ -205,8 +205,12 @@ func (opts *dlqSubCommand) redrive(input cli.Input) error {
 	if len(ids) == 0 {
 		return errors.New("nothing to redrive")
 	}
+	body, err := json.Marshal(dlqRedriveReq{IDs: ids})
+	if err != nil {
+		return err
+	}
 	var resp dlqMutateResp
-	if err := opts.call(input, http.MethodPost, dlqAPIRedrive, nil, dlqRedriveReq{IDs: ids}, &resp); err != nil {
+	if err := dlqCall(opts, input, http.MethodPost, dlqAPIRedrive, nil, body, &resp); err != nil {
 		return err
 	}
 	fmt.Printf("redrove %d dead-lettered invocation(s)\n", resp.Count)
@@ -240,19 +244,20 @@ func (opts *dlqSubCommand) redriveIDs(input cli.Input) ([]string, error) {
 
 func (opts *dlqSubCommand) purge(input cli.Input) error {
 	var resp dlqMutateResp
-	if err := opts.call(input, http.MethodPost, dlqAPIPurge, nil, nil, &resp); err != nil {
+	if err := dlqCall(opts, input, http.MethodPost, dlqAPIPurge, nil, nil, &resp); err != nil {
 		return err
 	}
 	fmt.Printf("purged %d dead-lettered invocation(s)\n", resp.Count)
 	return nil
 }
 
-// call performs one DLQ API request against the router INTERNAL listener,
+// dlqCall performs one DLQ API request against the router INTERNAL listener,
 // HMAC-signing it with the ServiceRouterInternal key (from FISSION_INTERNAL_AUTH_SECRET,
-// empty → pass-through) the same way `test --async` does, and decoding a JSON
-// response into out (nil to ignore the body). The endpoints are on the internal
-// listener precisely so they are never an unauthenticated public surface.
-func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.Values, reqBody, out any) error {
+// empty → pass-through) the same way `test --async` does, and decoding the JSON
+// response into out. reqBody is an already-encoded JSON body, or nil for a
+// bodiless request. The endpoints are on the internal listener precisely so
+// they are never an unauthenticated public surface.
+func dlqCall[Resp any](opts *dlqSubCommand, input cli.Input, method, path string, query url.Values, reqBody []byte, out *Resp) error {
 	// --queue targets an RFC-0027 broker egress DLQ instead of the async
 	// invocation queue; threaded here so every subcommand honors it.
 	if qn := input.String(flagkey.DlqQueue); qn != "" {
@@ -272,11 +277,7 @@ func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.
 	}
 	var body io.Reader
 	if reqBody != nil {
-		b, err := json.Marshal(reqBody)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(b)
+		body = bytes.NewReader(reqBody)
 	}
 	req, err := http.NewRequestWithContext(input.Context(), method, u.String(), body)
 	if err != nil {
@@ -305,10 +306,8 @@ func (opts *dlqSubCommand) call(input cli.Input, method, path string, query url.
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("router DLQ API returned %s: %s", resp.Status, strings.TrimSpace(string(msg)))
 	}
-	if out != nil {
-		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return fmt.Errorf("decoding router DLQ response: %w", err)
-		}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decoding router DLQ response: %w", err)
 	}
 	return nil
 }

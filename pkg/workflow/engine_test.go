@@ -398,11 +398,11 @@ func TestEngineConcurrentReconcilers(t *testing.T) {
 	assertInvariants(t, h.log(t), 1)
 }
 
-// TestEngineInputPathShapesRequestBody pins that a function receives the
+// TestEngineInputPathSelectsRequestBody pins that a function receives the
 // InputPath-selected view while ResultPath still merges into the raw flowing
 // document (ASL semantics). The regression this guards: InputPath accepted
 // at admission but silently ignored at invoke time.
-func TestEngineInputPathShapesRequestBody(t *testing.T) {
+func TestEngineInputPathSelectsRequestBody(t *testing.T) {
 	t.Parallel()
 
 	spec := pipelineSpec()

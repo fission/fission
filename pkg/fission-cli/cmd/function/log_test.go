@@ -65,9 +65,9 @@ func setLogClients(t *testing.T, fissionObjs []runtime.Object, pods ...runtime.O
 
 func logInput(dbType string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.Namespace, "default")
-	in.Set(flagkey.FnLogDBType, dbType)
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.Namespace, "default")
+	in.SetString(flagkey.FnLogDBType, dbType)
 	return in
 }
 
@@ -79,8 +79,8 @@ func TestLogAliasVersionMutuallyExclusive(t *testing.T) {
 	setLogClients(t, []runtime.Object{fn})
 
 	in := logInput("kubernetes")
-	in.Set(flagkey.FnTestAlias, "prod")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
+	in.SetString(flagkey.FnTestAlias, "prod")
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
 
 	err := Log(in)
 	require.Error(t, err)
@@ -95,7 +95,7 @@ func TestLogAliasPreflight(t *testing.T) {
 		setLogClients(t, []runtime.Object{fn})
 
 		in := logInput("kubernetes")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		err := Log(in)
 		require.Error(t, err)
@@ -111,7 +111,7 @@ func TestLogAliasPreflight(t *testing.T) {
 		setLogClients(t, []runtime.Object{fn, alias})
 
 		in := logInput("kubernetes")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		err := Log(in)
 		require.Error(t, err)
@@ -138,8 +138,8 @@ func TestLogVersionFilterAppliesToKubernetesSelector(t *testing.T) {
 	setLogClients(t, []runtime.Object{fn, version}, older, newer)
 
 	in := logInput("kubernetes")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
-	in.Set(flagkey.FnLogCount, 10)
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
+	in.SetInt(flagkey.FnLogCount, 10)
 
 	require.NoError(t, Log(in))
 }
@@ -165,8 +165,8 @@ func TestLogVersionFilterWarnsForNonKubernetesDbType(t *testing.T) {
 	setLogClients(t, []runtime.Object{fn, version})
 
 	in := logInput("loki")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
-	in.Set(flagkey.FnLogCount, 10)
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
+	in.SetInt(flagkey.FnLogCount, 10)
 
 	out := captureStdout(t, func() error { return Log(in) })
 	assert.Contains(t, out, "Warning")

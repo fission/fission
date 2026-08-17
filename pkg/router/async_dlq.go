@@ -314,7 +314,7 @@ func dlqParseLimit(raw string) int {
 	return n
 }
 
-func dlqDecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+func dlqDecodeJSON[T any](w http.ResponseWriter, r *http.Request, v *T) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, dlqMaxBodyBytes))
 	if err := dec.Decode(v); err != nil {
 		// Distinguish an over-limit body (the explicit dlqMaxBodyBytes bound → 413)
@@ -329,7 +329,7 @@ func dlqDecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-func dlqWriteJSON(w http.ResponseWriter, ts *HTTPTriggerSet, v any) {
+func dlqWriteJSON[T any](w http.ResponseWriter, ts *HTTPTriggerSet, v T) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		ts.logger.Error(err, "encoding async DLQ response")

@@ -6,6 +6,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -31,31 +32,53 @@ func TestScopeAllows(t *testing.T) {
 	assert.False(t, AuthScope{}.Allows("a"))
 }
 
-func TestParseScopeClaim(t *testing.T) {
+func TestScopeClaimUnmarshal(t *testing.T) {
 	t.Parallel()
 
-	mustScope := func(v any) AuthScope {
-		s, ok := parseScopeClaim(v)
-		require.True(t, ok, "claim %v should be valid", v)
-		return s
+	tests := []struct {
+		name    string
+		raw     string
+		want    AuthScope
+		wantErr bool
+	}{
+		{name: "wildcard string", raw: `"*"`, want: AuthScope{Wildcard: true}},
+		{name: "single namespace", raw: `"ns1"`, want: AuthScope{Namespaces: []string{"ns1"}}},
+		{name: "empty string", raw: `""`, want: AuthScope{}},
+		{name: "array", raw: `["a","b"]`, want: AuthScope{Namespaces: []string{"a", "b"}}},
+		{name: "array with wildcard", raw: `["a","*"]`, want: AuthScope{Wildcard: true}},
+		{name: "empty array", raw: `[]`, want: AuthScope{Namespaces: []string{}}},
+		// Absent and null are both "authorized for nothing", never a reject.
+		{name: "null", raw: `null`, want: AuthScope{}},
+		// Malformed claims are rejected, not silently emptied.
+		{name: "number", raw: `42`, wantErr: true},
+		{name: "object", raw: `{"a":1}`, wantErr: true},
+		{name: "non-string element", raw: `["a",7]`, wantErr: true},
+		// A JSON null element unmarshals into a string as a no-op, so without
+		// an explicit refusal it would become "" and the token would be
+		// accepted where the pre-typed code rejected it.
+		{name: "null element", raw: `[null]`, wantErr: true},
+		{name: "null element after a valid one", raw: `["a",null]`, wantErr: true},
 	}
-	assert.True(t, mustScope("*").Wildcard)
-	assert.Equal(t, []string{"ns1"}, mustScope("ns1").Namespaces)
-	assert.Empty(t, mustScope("").Namespaces)
-	assert.Equal(t, []string{"a", "b"}, mustScope([]any{"a", "b"}).Namespaces)
-	assert.True(t, mustScope([]any{"a", "*"}).Wildcard)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var c mcpClaims
+			err := json.Unmarshal([]byte(`{"allowed_namespaces":`+tt.raw+`}`), &c)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, AuthScope(c.AllowedNamespaces))
+		})
+	}
 
-	// Absent claim is valid (authorized for nothing).
-	s, ok := parseScopeClaim(nil)
-	assert.True(t, ok)
-	assert.Empty(t, s.Namespaces)
-	assert.False(t, s.Wildcard)
-
-	// Malformed claims are rejected, not silently emptied.
-	_, ok = parseScopeClaim(42)
-	assert.False(t, ok, "a numeric claim must be rejected")
-	_, ok = parseScopeClaim([]any{"a", 7})
-	assert.False(t, ok, "a non-string array element must be rejected")
+	t.Run("absent claim", func(t *testing.T) {
+		t.Parallel()
+		var c mcpClaims
+		require.NoError(t, json.Unmarshal([]byte(`{}`), &c))
+		assert.Equal(t, AuthScope{}, AuthScope(c.AllowedNamespaces))
+	})
 }
 
 func TestAuthorizerVerifyToken(t *testing.T) {
@@ -125,6 +148,33 @@ func TestAuthorizerVerifyToken(t *testing.T) {
 		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": 42, "exp": time.Now().Add(time.Hour).Unix()})
 		_, err := a.verifyToken(context.Background(), tok, nil)
 		assert.Error(t, err, "a malformed allowed_namespaces claim must be rejected")
+	})
+
+	// encoding/json matches struct fields case-insensitively; the pre-typed
+	// code looked claims up by exact key. A token that smuggles a second
+	// spelling past the exact lookup must be rejected, not silently widened.
+	t.Run("case-variant claim spellings are rejected", func(t *testing.T) {
+		t.Parallel()
+		for _, claims := range []jwt.MapClaims{
+			{"sub": "agent", "exp": time.Now().Add(time.Hour).Unix(), "ALLOWED_NAMESPACES": "*"},
+			{"sub": "agent", "exp": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a", "ALLOWED_NAMESPACES": "*"},
+			{"SUB": "agent", "exp": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a"},
+			{"sub": "agent", "EXP": time.Now().Add(time.Hour).Unix(), "allowed_namespaces": "ns-a"},
+		} {
+			_, err := a.verifyToken(context.Background(), mintToken(t, key, claims), nil)
+			assert.Errorf(t, err, "a case-variant claim must be rejected: %v", claims)
+		}
+	})
+
+	t.Run("null claim is authorized for nothing", func(t *testing.T) {
+		t.Parallel()
+		tok := mintToken(t, key, jwt.MapClaims{"sub": "agent", "allowed_namespaces": nil, "exp": time.Now().Add(time.Hour).Unix()})
+		ti, err := a.verifyToken(context.Background(), tok, nil)
+		require.NoError(t, err, "a null allowed_namespaces claim is valid, not malformed")
+		scope, ok := a.ScopeFromTokenInfo(ti)
+		require.True(t, ok)
+		assert.False(t, scope.Wildcard)
+		assert.Empty(t, scope.Namespaces)
 	})
 
 	t.Run("missing sub rejected", func(t *testing.T) {

@@ -45,6 +45,19 @@ func (gp *GenericPool) getDeployAnnotations(env *fv1.Environment) map[string]str
 	return deployAnnotations
 }
 
+// podRelabelPatch is the strategic-merge patch that claims a pool pod for a
+// function. No omitempty on either map: a nil map marshals as null, which is
+// delete-semantics under StrategicMergePatchType, and omitting the key would
+// silently turn that into a no-op.
+type podRelabelPatch struct {
+	Metadata podRelabelMetadata `json:"metadata"`
+}
+
+type podRelabelMetadata struct {
+	Annotations map[string]string `json:"annotations"`
+	Labels      map[string]string `json:"labels"`
+}
+
 // choosePod picks a ready pod from the pool and relabels it, waiting if necessary.
 // returns the key and pod API object.
 func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]string) (string, *apiv1.Pod, error) {
@@ -145,12 +158,10 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 			// Append executor instance id to pod annotations to
 			// indicate this pod is managed by this executor.
 			annotations := gp.getDeployAnnotations(gp.env)
-			patch := map[string]any{
-				"metadata": map[string]any{
-					"annotations": annotations,
-					"labels":      newLabels,
-				},
-			}
+			patch := podRelabelPatch{Metadata: podRelabelMetadata{
+				Annotations: annotations,
+				Labels:      newLabels,
+			}}
 			patchBytes, _ := json.Marshal(patch)
 			logger.Info("relabel pod", "pod", string((patchBytes)))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})

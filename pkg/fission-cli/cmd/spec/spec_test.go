@@ -145,7 +145,7 @@ func TestCrdToYamlFunctionAlias(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
 		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
-	meta, kind, data, err := crdToYaml(fa)
+	meta, kind, data, err := crdToYaml(&fa)
 	if err != nil {
 		t.Fatalf("crdToYaml: %v", err)
 	}

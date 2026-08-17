@@ -15,24 +15,12 @@ import (
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
-// versioningFlags builds a dummy.Cli with only the given keys Set (so
-// input.IsSet(...) reports true only for those), mirroring the CLI's real
-// flag-parsing behavior for the create/update mutation-gating tests below.
-func versioningFlags(t *testing.T, values map[string]any) dummy.Cli {
-	t.Helper()
-	in := dummy.TestFlagSet()
-	for k, v := range values {
-		in.Set(k, v)
-	}
-	return in
-}
-
 func TestGetVersioningConfig(t *testing.T) {
 	t.Parallel()
 
 	t.Run("neither flag set, no existing (create, opt-in omitted)", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, nil)
+		in := dummy.TestFlagSetWith()
 		vc, err := getVersioningConfig(in, nil)
 		require.NoError(t, err)
 		assert.Nil(t, vc)
@@ -42,7 +30,7 @@ func TestGetVersioningConfig(t *testing.T) {
 		t.Parallel()
 		retain := 5
 		existing := &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto, Retain: &retain}
-		in := versioningFlags(t, nil)
+		in := dummy.TestFlagSetWith()
 		vc, err := getVersioningConfig(in, existing)
 		require.NoError(t, err)
 		assert.Same(t, existing, vc)
@@ -50,7 +38,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("create with --versioning auto", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "auto"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "auto"))
 		vc, err := getVersioningConfig(in, nil)
 		require.NoError(t, err)
 		require.NotNil(t, vc)
@@ -60,7 +48,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("create with --versioning manual", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "manual"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "manual"))
 		vc, err := getVersioningConfig(in, nil)
 		require.NoError(t, err)
 		require.NotNil(t, vc)
@@ -69,7 +57,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--versioning off on create is a no-op (mirrors omitted)", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "off"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "off"))
 		vc, err := getVersioningConfig(in, nil)
 		require.NoError(t, err)
 		assert.Nil(t, vc)
@@ -79,7 +67,7 @@ func TestGetVersioningConfig(t *testing.T) {
 		t.Parallel()
 		retain := 7
 		existing := &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto, Retain: &retain}
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "manual"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "manual"))
 		vc, err := getVersioningConfig(in, existing)
 		require.NoError(t, err)
 		require.NotNil(t, vc)
@@ -94,7 +82,7 @@ func TestGetVersioningConfig(t *testing.T) {
 		t.Parallel()
 		retain := 3
 		existing := &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto, Retain: &retain}
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "off"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "off"))
 		vc, err := getVersioningConfig(in, existing)
 		require.NoError(t, err)
 		assert.Nil(t, vc)
@@ -102,7 +90,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--retain-versions alongside --versioning auto sets Retain on the new config", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "auto", flagkey.FnRetainVersions: 4})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "auto"), dummy.Int(flagkey.FnRetainVersions, 4))
 		vc, err := getVersioningConfig(in, nil)
 		require.NoError(t, err)
 		require.NotNil(t, vc)
@@ -113,7 +101,7 @@ func TestGetVersioningConfig(t *testing.T) {
 	t.Run("--retain-versions alone with an existing versioning config sets Retain, keeps Mode", func(t *testing.T) {
 		t.Parallel()
 		existing := &fv1.VersioningConfig{Mode: fv1.VersioningModeManual}
-		in := versioningFlags(t, map[string]any{flagkey.FnRetainVersions: 9})
+		in := dummy.TestFlagSetWith(dummy.Int(flagkey.FnRetainVersions, 9))
 		vc, err := getVersioningConfig(in, existing)
 		require.NoError(t, err)
 		require.NotNil(t, vc)
@@ -124,7 +112,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--retain-versions alone with no existing versioning config errors", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnRetainVersions: 4})
+		in := dummy.TestFlagSetWith(dummy.Int(flagkey.FnRetainVersions, 4))
 		_, err := getVersioningConfig(in, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "use --versioning auto|manual with --retain-versions")
@@ -132,7 +120,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--retain-versions with --versioning off errors", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "off", flagkey.FnRetainVersions: 4})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "off"), dummy.Int(flagkey.FnRetainVersions, 4))
 		_, err := getVersioningConfig(in, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "use --versioning auto|manual with --retain-versions")
@@ -140,7 +128,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--retain-versions 0 rejected client-side", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "auto", flagkey.FnRetainVersions: 0})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "auto"), dummy.Int(flagkey.FnRetainVersions, 0))
 		_, err := getVersioningConfig(in, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "must be >= 1")
@@ -148,7 +136,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("--retain-versions negative rejected client-side", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "auto", flagkey.FnRetainVersions: -1})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "auto"), dummy.Int(flagkey.FnRetainVersions, -1))
 		_, err := getVersioningConfig(in, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "must be >= 1")
@@ -156,7 +144,7 @@ func TestGetVersioningConfig(t *testing.T) {
 
 	t.Run("invalid --versioning value rejected", func(t *testing.T) {
 		t.Parallel()
-		in := versioningFlags(t, map[string]any{flagkey.FnVersioning: "sometimes"})
+		in := dummy.TestFlagSetWith(dummy.String(flagkey.FnVersioning, "sometimes"))
 		_, err := getVersioningConfig(in, nil)
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "must be one of auto, manual, off")

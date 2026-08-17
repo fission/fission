@@ -6,7 +6,6 @@ package storagesvc
 
 import (
 	"os"
-	"reflect"
 	"testing"
 )
 
@@ -25,13 +24,19 @@ func TestNewS3Storage(t *testing.T) {
 	os.Setenv("STORAGE_S3_SECRET_ACCESS_KEY", input["secretAccessKey"])
 	os.Setenv("STORAGE_S3_REGION", input["region"])
 
+	// SAFETY: NewS3Storage returns an s3Storage behind the storage interface.
 	storage := NewS3Storage().(s3Storage)
 
+	got := map[string]string{
+		"bucketName":      storage.bucketName,
+		"subDir":          storage.subDir,
+		"accessKeyID":     storage.accessKeyID,
+		"secretAccessKey": storage.secretAccessKey,
+		"region":          storage.region,
+	}
 	for k, v := range input {
-		valueInStruct := reflect.Indirect(reflect.ValueOf(storage)).FieldByName(k).String()
-
-		if valueInStruct != v {
-			t.Errorf("Incorrect s3Storage field. Got: %s, Want %s", valueInStruct, v)
+		if got[k] != v {
+			t.Errorf("Incorrect s3Storage field %s. Got: %s, Want %s", k, got[k], v)
 		}
 	}
 
@@ -47,6 +52,7 @@ func TestNewS3Storage(t *testing.T) {
 }
 
 func TestNewLocalStorage(t *testing.T) {
+	// SAFETY: NewLocalStorage returns a localStorage behind the storage interface.
 	storage := NewLocalStorage("/fission").(localStorage)
 
 	// // When SUBDIR env is not set, expect a default "fission-functions" value.

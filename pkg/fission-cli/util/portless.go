@@ -84,7 +84,7 @@ func SetupPortForward(ctx context.Context, client cmd.Client, namespace, labelSe
 		_ = pfReg.Remove(ctx, key)
 		return "", fmt.Errorf("error bridging %v port-forward locally: %w", labelSelector, err)
 	}
-	// ListenLocal binds "tcp" on loopback, so the Addr is always a *net.TCPAddr.
+	// SAFETY: ListenLocal binds "tcp" on loopback, so the Addr is always a *net.TCPAddr.
 	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	pfBridges[key] = port
 	console.Verbose(2, "Port forward to %s ready on local port %v", labelSelector, port)
@@ -129,6 +129,7 @@ func SetupPortForwardToPort(ctx context.Context, client cmd.Client, namespace, l
 		_ = pfReg.Remove(ctx, key)
 		return "", fmt.Errorf("error bridging %v port-forward locally: %w", labelSelector, err)
 	}
+	// SAFETY: ListenLocal binds "tcp" on loopback, so the Addr is always a *net.TCPAddr.
 	localPort := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	pfBridges[key] = localPort
 	return localPort, nil

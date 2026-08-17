@@ -254,6 +254,7 @@ func TestScaleDownStrategy_Reap(t *testing.T) {
 			if action.GetSubresource() != "scale" {
 				return false, nil, nil
 			}
+			// SAFETY: this reactor is registered for "update" on the scale subresource, so the action is an UpdateAction carrying a *Scale.
 			sc := action.(k8stesting.UpdateAction).GetObject().(*autoscalingv1.Scale)
 			*got = sc.Spec.Replicas
 			return true, sc, nil

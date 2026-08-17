@@ -112,7 +112,7 @@ func (pruner *ArchivePruner) getOrphanArchives(ctx context.Context) {
 	// get all archives on storage
 	// out of them, there may be some just created but not referenced by packages yet.
 	// need to filter them out.
-	archivesInStorage, err := pruner.storageClient.getItemIDsWithFilter(pruner.storageClient.filterItemCreatedAMinuteAgo, time.Now())
+	archivesInStorage, err := pruner.storageClient.getItemIDsWithFilter(pruner.storageClient.filterItemsNewerThan(time.Now(), time.Minute))
 	if err != nil {
 		pruner.logger.Error(err, "error getting items from storage")
 		return

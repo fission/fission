@@ -21,25 +21,25 @@ func qty(t *testing.T, s string) *resource.Quantity {
 	return &q
 }
 
-func TestShapeInput(t *testing.T) {
+func TestApplyInputPath(t *testing.T) {
 	t.Parallel()
 
 	input := map[string]any{"order": map[string]any{"id": "4711"}, "noise": true}
 
-	got, err := shapeInput(fv1.WorkflowState{InputPath: "$.order"}, input)
+	got, err := applyInputPath(fv1.WorkflowState{InputPath: "$.order"}, input)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"id": "4711"}, got)
 
-	got, err = shapeInput(fv1.WorkflowState{}, input)
+	got, err = applyInputPath(fv1.WorkflowState{}, input)
 	require.NoError(t, err)
 	assert.Equal(t, input, got, "empty InputPath is identity")
 
-	got, err = shapeInput(fv1.WorkflowState{InputPath: "$.missing"}, input)
+	got, err = applyInputPath(fv1.WorkflowState{InputPath: "$.missing"}, input)
 	require.NoError(t, err)
 	assert.Nil(t, got, "no-match reads as JSON null")
 }
 
-func TestShapeOutput(t *testing.T) {
+func TestApplyOutputPath(t *testing.T) {
 	t.Parallel()
 
 	input := map[string]any{"order": map[string]any{"id": "4711"}}
@@ -47,7 +47,7 @@ func TestShapeOutput(t *testing.T) {
 
 	t.Run("resultPath merges into input (RFC worked example)", func(t *testing.T) {
 		t.Parallel()
-		got, err := shapeOutput(fv1.WorkflowState{ResultPath: "$.charge"}, input, result)
+		got, err := applyOutputPath(fv1.WorkflowState{ResultPath: "$.charge"}, input, result)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
 			"order":  map[string]any{"id": "4711"},
@@ -57,21 +57,21 @@ func TestShapeOutput(t *testing.T) {
 
 	t.Run("empty resultPath replaces", func(t *testing.T) {
 		t.Parallel()
-		got, err := shapeOutput(fv1.WorkflowState{}, input, result)
+		got, err := applyOutputPath(fv1.WorkflowState{}, input, result)
 		require.NoError(t, err)
 		assert.Equal(t, result, got)
 	})
 
 	t.Run("outputPath filters after merge", func(t *testing.T) {
 		t.Parallel()
-		got, err := shapeOutput(fv1.WorkflowState{ResultPath: "$.charge", OutputPath: "$.charge.txn"}, input, result)
+		got, err := applyOutputPath(fv1.WorkflowState{ResultPath: "$.charge", OutputPath: "$.charge.txn"}, input, result)
 		require.NoError(t, err)
 		assert.Equal(t, "t-1", got)
 	})
 
 	t.Run("unwritable resultPath is errInvalidPath", func(t *testing.T) {
 		t.Parallel()
-		_, err := shapeOutput(fv1.WorkflowState{ResultPath: "$.order.id.deep"}, input, result)
+		_, err := applyOutputPath(fv1.WorkflowState{ResultPath: "$.order.id.deep"}, input, result)
 		require.ErrorIs(t, err, errInvalidPath)
 	})
 }

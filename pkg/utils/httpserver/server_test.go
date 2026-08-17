@@ -92,6 +92,7 @@ func freePort(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
+	// SAFETY: net.Listen("tcp", ...) yields a *net.TCPAddr.
 	port := l.Addr().(*net.TCPAddr).Port
 	require.NoError(t, l.Close())
 	return fmt.Sprintf("127.0.0.1:%d", port)

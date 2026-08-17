@@ -59,7 +59,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 }
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
-	if handled, err := spec.SaveOrDry(input, *opts.wf, fmt.Sprintf("workflow-%v.yaml", opts.wf.Name)); handled {
+	if handled, err := spec.SaveOrDry(input, opts.wf, fmt.Sprintf("workflow-%v.yaml", opts.wf.Name)); handled {
 		return err
 	}
 

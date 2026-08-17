@@ -32,9 +32,9 @@ func TestAliasCreateSetsOwnerRefToFunction(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasFunction, "hello")
-	in.Set(flagkey.AliasVersion, "hello-v1")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasFunction, "hello")
+	in.SetString(flagkey.AliasVersion, "hello-v1")
 
 	require.NoError(t, Create(in))
 
@@ -55,9 +55,9 @@ func TestAliasCreateMissingFunctionErrors(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasFunction, "absent")
-	in.Set(flagkey.AliasVersion, "v1")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasFunction, "absent")
+	in.SetString(flagkey.AliasVersion, "v1")
 
 	require.Error(t, Create(in))
 }
@@ -101,11 +101,11 @@ func TestAliasCreateWaitSucceedsAfterReactorFlips(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasFunction, "hello")
-	in.Set(flagkey.AliasVersion, "hello-v1")
-	in.Set(flagkey.AliasWait, true)
-	in.Set(flagkey.WaitTimeout, 5*time.Second)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasFunction, "hello")
+	in.SetString(flagkey.AliasVersion, "hello-v1")
+	in.SetBool(flagkey.AliasWait, true)
+	in.SetDuration(flagkey.WaitTimeout, 5*time.Second)
 
 	require.NoError(t, Create(in))
 	assert.GreaterOrEqual(t, gets.Load(), int32(2), "must have retried past the first unresolved poll")
@@ -129,11 +129,11 @@ func TestAliasCreateWaitTimesOutWhenUnresolved(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.AliasFunction, "hello")
-	in.Set(flagkey.AliasVersion, "hello-v1")
-	in.Set(flagkey.AliasWait, true)
-	in.Set(flagkey.WaitTimeout, 20*time.Millisecond)
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasFunction, "hello")
+	in.SetString(flagkey.AliasVersion, "hello-v1")
+	in.SetBool(flagkey.AliasWait, true)
+	in.SetDuration(flagkey.WaitTimeout, 20*time.Millisecond)
 
 	err := Create(in)
 	require.Error(t, err)

@@ -168,7 +168,7 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 		}
 
 		if input.Bool(flagkey.SpecDry) {
-			err := spec.SpecDry(*aus)
+			err := spec.SpecDryArchiveUploadSpec(*aus)
 			if err != nil {
 				return nil, err
 			}
@@ -180,14 +180,12 @@ func CreateArchive(client cmd.Client, input cli.Input, includeFiles []string, no
 				return nil, fmt.Errorf("error reading specs: %w", err)
 			}
 
-			obj := fr.SpecExists(aus, true, true)
-			if obj != nil {
-				oldAus := obj.(*spectypes.ArchiveUploadSpec)
+			if oldAus := fr.ArchiveUploadSpecInSpecs(aus, true, true); oldAus != nil {
 				fmt.Printf("Re-using previously created archive %v\n", oldAus.Name)
 				aus.Name = oldAus.Name
 			} else {
 				// save the uploadspec
-				err := spec.SpecSave(*aus, specFile, false)
+				err := spec.SpecSaveArchiveUploadSpec(*aus, specFile, false)
 				if err != nil {
 					return nil, fmt.Errorf("error saving archive spec: %w", err)
 				}

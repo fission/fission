@@ -38,9 +38,9 @@ func TestFunctionWait(t *testing.T) {
 
 	t.Run("returns when condition already met", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnName, "rdy")
-		in.Set(flagkey.WaitFor, "condition=Ready")
-		in.Set(flagkey.WaitTimeout, 2*time.Second)
+		in.SetString(flagkey.FnName, "rdy")
+		in.SetString(flagkey.WaitFor, "condition=Ready")
+		in.SetDuration(flagkey.WaitTimeout, 2*time.Second)
 		if err := Wait(in); err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
@@ -48,9 +48,9 @@ func TestFunctionWait(t *testing.T) {
 
 	t.Run("times out when condition not met", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnName, "notrdy")
-		in.Set(flagkey.WaitFor, "condition=Ready")
-		in.Set(flagkey.WaitTimeout, 30*time.Millisecond)
+		in.SetString(flagkey.FnName, "notrdy")
+		in.SetString(flagkey.WaitFor, "condition=Ready")
+		in.SetDuration(flagkey.WaitTimeout, 30*time.Millisecond)
 		if err := Wait(in); err == nil {
 			t.Fatal("expected a timeout error")
 		}

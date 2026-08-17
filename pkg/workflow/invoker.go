@@ -255,13 +255,13 @@ func functionBody(iv invocation) (json.RawMessage, error) {
 			return nil, fmt.Errorf("decoding step input: %w", err)
 		}
 	}
-	shaped, err := shapeInput(iv.stateSpec, doc)
+	selected, err := applyInputPath(iv.stateSpec, doc)
 	if err != nil {
 		return nil, err
 	}
-	out, err := json.Marshal(shaped)
+	out, err := json.Marshal(selected)
 	if err != nil {
-		return nil, fmt.Errorf("encoding shaped input: %w", err)
+		return nil, fmt.Errorf("encoding step input: %w", err)
 	}
 	return out, nil
 }
@@ -305,7 +305,7 @@ func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 	if !res.succeeded {
 		ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
 	} else {
-		nextDoc, err := inv.shapeSuccess(iv, res.body)
+		nextDoc, err := inv.documentAfterSuccess(iv, res.body)
 		if err != nil {
 			if errors.Is(err, errInvalidPath) {
 				ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt,
@@ -326,9 +326,9 @@ func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 	return appendGuarded(inv.baseCtx, inv.el, iv.stream, iv.expectedSeq, ev, resultGuard(iv.region, iv.branch, iv.state, iv.attempt))
 }
 
-// shapeSuccess merges the function result into the state's input per
-// Result/OutputPath, producing the next state's document.
-func (inv *Invoker) shapeSuccess(iv invocation, body json.RawMessage) (json.RawMessage, error) {
+// documentAfterSuccess merges the function result into the state's input per
+// ResultPath/OutputPath, producing the next state's document.
+func (inv *Invoker) documentAfterSuccess(iv invocation, body json.RawMessage) (json.RawMessage, error) {
 	var input, result any
 	if len(iv.input) > 0 {
 		if err := json.Unmarshal(iv.input, &input); err != nil {
@@ -341,13 +341,13 @@ func (inv *Invoker) shapeSuccess(iv invocation, body json.RawMessage) (json.RawM
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decoding step result: %w", err)
 	}
-	shaped, err := shapeOutput(iv.stateSpec, input, result)
+	next, err := applyOutputPath(iv.stateSpec, input, result)
 	if err != nil {
 		return nil, err
 	}
-	out, err := json.Marshal(shaped)
+	out, err := json.Marshal(next)
 	if err != nil {
-		return nil, fmt.Errorf("encoding shaped output: %w", err)
+		return nil, fmt.Errorf("encoding next document: %w", err)
 	}
 	return out, nil
 }

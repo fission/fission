@@ -13,6 +13,7 @@ import (
 
 func TestPooledTransport(t *testing.T) {
 	t.Parallel()
+	// SAFETY: net/http initializes DefaultTransport as a *http.Transport and this test does not replace it.
 	def := http.DefaultTransport.(*http.Transport)
 
 	t.Run("widens the idle pool and raises the global cap to match", func(t *testing.T) {

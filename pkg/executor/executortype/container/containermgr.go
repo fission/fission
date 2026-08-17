@@ -297,7 +297,7 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 	// per-version Deployments, so their creates must neither serialize
 	// behind each other nor have a loser handed another generation's fsvc
 	// from the cache fallback.
-	fsvcObj, err := caaf.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (any, error) {
+	fsvc, err := throttler.RunOnce(caaf.throttler, crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
 		if ableToCreate {
 			return caaf.fnCreate(ctx, fn)
 		}
@@ -310,14 +310,7 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 		return nil, fmt.Errorf("error creating k8s resources for function %s/%s: %w", fn.Namespace, fn.Name, err)
 	}
 
-	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
-	if !ok {
-		caaf.logger.Error(nil, "receive unknown object while creating function - expected pointer of function service object")
-
-		panic("receive unknown object while creating function - expected pointer of function service object")
-	}
-
-	return fsvc, err
+	return fsvc, nil
 }
 
 func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) error {

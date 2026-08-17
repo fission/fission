@@ -372,7 +372,7 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 	// per-version Deployments, so their creates must neither serialize
 	// behind each other nor have a loser handed another generation's fsvc
 	// from the cache fallback.
-	fsvcObj, err := deploy.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (any, error) {
+	fsvc, err := throttler.RunOnce(deploy.throttler, crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
 		if ableToCreate {
 			return deploy.fnCreate(ctx, fn)
 		}
@@ -385,16 +385,9 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 			"function_namespace", fn.Namespace)
 		return nil, fmt.Errorf("error creating k8s resources for function %s: %w", k8sCache.MetaObjectToName(fn), err)
 	}
-
-	fsvc, ok := fsvcObj.(*fscache.FuncSvc)
-	if !ok {
-		logger.Error(nil, "receive unknown object while creating function - expected pointer of function service object")
-
-		panic("receive unknown object while creating function - expected pointer of function service object")
-	}
 	otelUtils.SpanTrackEvent(ctx, "fnSvcResponse", fscache.GetAttributesForFuncSvc(fsvc)...)
 
-	return fsvc, err
+	return fsvc, nil
 }
 
 func (deploy *NewDeploy) deleteFunction(ctx context.Context, fn *fv1.Function) error {

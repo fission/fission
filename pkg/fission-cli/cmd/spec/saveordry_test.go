@@ -36,7 +36,7 @@ func captureSpecStdout(t *testing.T, fn func() error) string {
 }
 
 func TestSaveOrDry(t *testing.T) {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "ydry"}}
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "ydry"}}
 
 	t.Run("no spec flag is not handled", func(t *testing.T) {
 		in := dummy.TestFlagSet()
@@ -47,7 +47,7 @@ func TestSaveOrDry(t *testing.T) {
 
 	t.Run("spec-dry prints the resource YAML", func(t *testing.T) {
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.SpecDry, true)
+		in.SetBool(flagkey.SpecDry, true)
 		var handled bool
 		out := captureSpecStdout(t, func() error {
 			var err error

@@ -23,7 +23,7 @@ func TestAliasGetOmitsHistoryBlockWhenEmpty(t *testing.T) {
 	setAliasClient(newAlias()) // no Status.History
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasName, "prod")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	assert.NotContains(t, out, "HISTORY:")
@@ -41,7 +41,7 @@ func TestAliasGetRendersHistoryBlockMostRecentLast(t *testing.T) {
 	setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
+	in.SetString(flagkey.AliasName, "prod")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	require.Contains(t, out, "HISTORY:")
@@ -61,8 +61,8 @@ func TestAliasGetWideOutputOmitsHistoryBlock(t *testing.T) {
 	setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.Output, "wide")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.Output, "wide")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	assert.NotContains(t, out, "HISTORY:")
@@ -77,8 +77,8 @@ func TestAliasGetJSONOutputOmitsHistoryBlock(t *testing.T) {
 	setAliasClient(alias)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.AliasName, "prod")
-	in.Set(flagkey.Output, "json")
+	in.SetString(flagkey.AliasName, "prod")
+	in.SetString(flagkey.Output, "json")
 
 	out := captureStdout(t, func() error { return Get(in) })
 	assert.NotContains(t, out, "HISTORY:")

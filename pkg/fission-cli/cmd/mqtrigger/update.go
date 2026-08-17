@@ -145,7 +145,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 			return fv1.AggregateValidationErrors("MessageQueueTrigger", err)
 		}
 		specFile := fmt.Sprintf("mqtrigger-%s.yaml", opts.trigger.Name)
-		err = spec.SpecSave(*opts.trigger, specFile, true)
+		err = spec.SpecSave(opts.trigger, specFile, true)
 		if err != nil {
 			return fmt.Errorf("error saving message queue trigger spec: %w", err)
 		}

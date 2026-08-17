@@ -81,8 +81,8 @@ func TestUpdateRepointsPackage(t *testing.T) {
 	t.Cleanup(cmd.ResetClientsetForTest)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnPackageName, "pkg-b")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnPackageName, "pkg-b")
 	require.NoError(t, Update(in))
 
 	got, err := fc.CoreV1().Functions("default").Get(t.Context(), "hello", metav1.GetOptions{})
@@ -125,8 +125,8 @@ func TestUpdateLeavesStampAloneWhenPackageUntouched(t *testing.T) {
 	t.Cleanup(cmd.ResetClientsetForTest)
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.FnVersioning, "manual")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnVersioning, "manual")
 	require.NoError(t, Update(in))
 
 	got, err := fc.CoreV1().Functions("default").Get(t.Context(), "hello", metav1.GetOptions{})

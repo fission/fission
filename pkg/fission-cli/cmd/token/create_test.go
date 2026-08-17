@@ -53,8 +53,8 @@ func TestTokenCreate(t *testing.T) {
 		t.Setenv("FISSION_ROUTER_URL", srv.URL)
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.TokUsername, "alice")
-		in.Set(flagkey.TokPassword, "secret")
+		in.SetString(flagkey.TokUsername, "alice")
+		in.SetString(flagkey.TokPassword, "secret")
 
 		out := captureStdout(t, func() error { return Create(in) })
 		assert.Contains(t, out, "tok-123")
@@ -68,8 +68,8 @@ func TestTokenCreate(t *testing.T) {
 		t.Setenv("FISSION_ROUTER_URL", srv.URL)
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.TokUsername, "bob")
-		in.Set(flagkey.TokPassword, "secret")
+		in.SetString(flagkey.TokUsername, "bob")
+		in.SetString(flagkey.TokPassword, "secret")
 
 		out := captureStdout(t, func() error { return Create(in) })
 		assert.True(t, strings.Contains(out, "authentication is enabled"),
@@ -87,9 +87,9 @@ func TestTokenCreate(t *testing.T) {
 		t.Setenv("FISSION_ROUTER_URL", srv.URL)
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.TokUsername, "alice")
-		in.Set(flagkey.TokPassword, "secret")
-		in.Set(flagkey.TokAuthURI, "/custom/login")
+		in.SetString(flagkey.TokUsername, "alice")
+		in.SetString(flagkey.TokPassword, "secret")
+		in.SetString(flagkey.TokAuthURI, "/custom/login")
 
 		_ = captureStdout(t, func() error { return Create(in) })
 		assert.Equal(t, "/custom/login", gotPath)

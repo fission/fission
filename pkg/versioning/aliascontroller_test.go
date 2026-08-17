@@ -823,7 +823,7 @@ func updateAliasSpec(t *testing.T, c client.Client, name string, mutate func(*fv
 	require.NoError(t, c.Update(t.Context(), a))
 }
 
-func TestAliasReconcileCanaryShimProgressionThenPromotionWriteShapes(t *testing.T) {
+func TestAliasReconcileCanaryShimProgressionThenPromotionWrites(t *testing.T) {
 	oldVer := testVersion("orders", 1, "")
 	newVer := testVersion("orders", 2, "")
 	alias := testAliasNamePinned("prod", "orders", oldVer.Name)

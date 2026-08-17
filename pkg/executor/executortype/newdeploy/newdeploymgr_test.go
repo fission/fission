@@ -54,6 +54,7 @@ func TestRefreshFuncPods(t *testing.T) {
 	executor, err := MakeNewDeploy(ctx, logger, fissionClient, kubernetesClient, fetcherConfig, "test", nil)
 	require.NoError(t, err, "new deploy manager creation failed")
 
+	// SAFETY: MakeNewDeploy returns a *NewDeploy behind the executortype interface.
 	ndm := executor.(*NewDeploy)
 
 	nsResolver := utils.NamespaceResolver{

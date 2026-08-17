@@ -104,8 +104,8 @@ func TestDoSyncUnauthorized(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
 
 	err := (&TestSubCommand{}).do(in)
 	require.Error(t, err)
@@ -139,9 +139,9 @@ func TestDoAsyncDispatch(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
-	in.Set(flagkey.FnTestAsync, true)
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetBool(flagkey.FnTestAsync, true)
 
 	err := (&TestSubCommand{}).do(in)
 	require.NoError(t, err)
@@ -174,8 +174,8 @@ func TestDoSyncGenericFailure(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, KubernetesClient: kc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
 
 	err := (&TestSubCommand{}).do(in)
 	require.Error(t, err)
@@ -215,9 +215,9 @@ func TestDoSubPathHandling(t *testing.T) {
 			cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 			in := dummy.TestFlagSet()
-			in.Set(flagkey.FnName, "fn")
-			in.Set(flagkey.HtMethod, []string{http.MethodGet})
-			in.Set(flagkey.FnSubPath, tc.subPath)
+			in.SetString(flagkey.FnName, "fn")
+			in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+			in.SetString(flagkey.FnSubPath, tc.subPath)
 
 			err := (&TestSubCommand{}).do(in)
 			require.NoError(t, err)
@@ -256,9 +256,9 @@ func TestDoSyncSmallerTestTimeoutGoverns(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
-	in.Set(flagkey.FnTestTimeout, 1*time.Nanosecond)
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetDuration(flagkey.FnTestTimeout, 1*time.Nanosecond)
 
 	err := (&TestSubCommand{}).do(in)
 	require.Error(t, err, "a 1ns --timeout must govern over the 60s function spec timeout")
@@ -281,8 +281,8 @@ func TestResolveTestRefSuffixMutuallyExclusive(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnTestAlias, "prod")
-	in.Set(flagkey.FnTestVersion, "fn-v3")
+	in.SetString(flagkey.FnTestAlias, "prod")
+	in.SetString(flagkey.FnTestVersion, "fn-v3")
 
 	_, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 	require.Error(t, err)
@@ -304,7 +304,7 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		_, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.Error(t, err)
@@ -321,7 +321,7 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		_, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.Error(t, err)
@@ -338,7 +338,7 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		suffix, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.NoError(t, err)
@@ -358,7 +358,7 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestVersion, "fn-v3")
+		in.SetString(flagkey.FnTestVersion, "fn-v3")
 
 		_, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.Error(t, err)
@@ -375,7 +375,7 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestVersion, "fn-v3")
+		in.SetString(flagkey.FnTestVersion, "fn-v3")
 
 		_, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.Error(t, err)
@@ -392,7 +392,7 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 		cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.FnTestVersion, "fn-v3")
+		in.SetString(flagkey.FnTestVersion, "fn-v3")
 
 		suffix, err := (&TestSubCommand{}).resolveTestRefSuffix(in, "fn", "default")
 		require.NoError(t, err)
@@ -444,9 +444,9 @@ func TestDoAliasSuffixReachesRequestURL(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
-	in.Set(flagkey.FnTestAlias, "prod")
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetString(flagkey.FnTestAlias, "prod")
 
 	err := (&TestSubCommand{}).do(in)
 	require.NoError(t, err)
@@ -481,9 +481,9 @@ func TestDoSyncSuffixedRouteNotFound(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
-	in.Set(flagkey.FnTestAlias, "prod")
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetString(flagkey.FnTestAlias, "prod")
 
 	err := (&TestSubCommand{}).do(in)
 	require.Error(t, err)
@@ -517,10 +517,10 @@ func TestDoAsyncSuffixedRouteNotFound(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "fn")
-	in.Set(flagkey.HtMethod, []string{http.MethodGet})
-	in.Set(flagkey.FnTestVersion, "fn-v3")
-	in.Set(flagkey.FnTestAsync, true)
+	in.SetString(flagkey.FnName, "fn")
+	in.SetStringSlice(flagkey.HtMethod, []string{http.MethodGet})
+	in.SetString(flagkey.FnTestVersion, "fn-v3")
+	in.SetBool(flagkey.FnTestAsync, true)
 
 	err := (&TestSubCommand{}).do(in)
 	require.Error(t, err)

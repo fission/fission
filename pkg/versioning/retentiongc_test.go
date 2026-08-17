@@ -216,6 +216,7 @@ func TestSweepVersions_ForbiddenDeleteSkippedNotTerminal(t *testing.T) {
 	names := seedVersions(t, cl, ns, "fn", 3)
 
 	cl.PrependReactor("delete", "functionversions", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: this reactor is registered for "delete", so the action is a DeleteAction.
 		del := action.(k8stesting.DeleteAction)
 		if del.GetName() == names[0] {
 			return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "fission.io", Resource: "functionversions"}, names[0], fmt.Errorf("denied"))
@@ -374,6 +375,7 @@ func TestRetentionGCReconcile_ForbiddenRequeues(t *testing.T) {
 	names := seedVersions(t, cs, ns, "fn", 2)
 
 	cs.PrependReactor("delete", "functionversions", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: this reactor is registered for "delete", so the action is a DeleteAction.
 		del := action.(k8stesting.DeleteAction)
 		if del.GetName() == names[0] {
 			return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "fission.io", Resource: "functionversions"}, names[0], fmt.Errorf("denied"))

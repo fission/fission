@@ -1432,6 +1432,7 @@ func TestProvisionerScheduleStopProvisionerDeleteFunctionWhileArming(t *testing.
 			{Name: "window1", Start: "CRON_TZ=UTC 0 9 * * *", Duration: "8h", Target: 3},
 		})
 		react := atomic.Bool{}
+		// SAFETY: the test builds p with a fake *fClient.Clientset.
 		fakeClient := p.fissionClient.(*fClient.Clientset)
 		block := make(chan struct{})
 		fakeClient.PrependReactor("get", "functions", func(_ k8stesting.Action) (handled bool, result runtime.Object, err error) {

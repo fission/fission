@@ -41,9 +41,9 @@ func setGCVersionsClient(objs ...runtime.Object) *fissionfake.Clientset {
 
 func gcVersionsFlags(fnName string, keep int, keepSet bool) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, fnName)
+	in.SetString(flagkey.FnName, fnName)
 	if keepSet {
-		in.Set(flagkey.GCVersionsKeep, keep)
+		in.SetInt(flagkey.GCVersionsKeep, keep)
 	}
 	return in
 }

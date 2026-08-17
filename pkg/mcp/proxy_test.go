@@ -177,6 +177,7 @@ func TestProxyInvokeStreamingForwardsChunks(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		_, _ = w.Write([]byte("hello "))
 		f.Flush()
@@ -222,6 +223,7 @@ func TestProxyInvokeStreamingRuneBoundary(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		// "ab" + first 2 of the 3 bytes of "€": the emitable prefix is "ab".
 		_, _ = w.Write([]byte("ab\xe2\x82"))
@@ -266,6 +268,7 @@ func TestProxyInvokeStreamingRuneBoundary(t *testing.T) {
 func TestProxyInvokeStreamingCapAborts(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		for {
 			if _, err := w.Write(make([]byte, 1024)); err != nil {
@@ -295,6 +298,7 @@ func TestProxyInvokeStreamingCapAborts(t *testing.T) {
 func TestProxyInvokeStreamingIdleTimeout(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		_, _ = w.Write([]byte("x"))
 		f.Flush()
@@ -340,6 +344,7 @@ func TestProxyInvokeStreamingEOFPartialRuneProgress(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		// "X" + the first 2 of the 3 bytes of "€", then EOF mid-rune.
 		_, _ = w.Write([]byte("X\xe2\x82"))
@@ -389,6 +394,7 @@ func TestProxyInvokeStreamingCallerGoneUnwinds(t *testing.T) {
 	t.Parallel()
 	upstreamCancelled := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		defer close(upstreamCancelled)
 		for {

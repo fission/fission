@@ -20,15 +20,15 @@ func TestStatestoreChartPorts(t *testing.T) {
 	docs := render(t, "--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
 
 	t.Run("statestore deployment arg", func(t *testing.T) {
-		args := containerArgs(t, find(docs, "Deployment", svcinfo.SvcStatestore))
+		args := containerArgs(t, docs, svcinfo.SvcStatestore)
 		assert.Equal(t, fmt.Sprint(svcinfo.PortStatestore), argAfter(args, "--statestorePort"))
 	})
 
 	t.Run("statestore service", func(t *testing.T) {
-		svc := servicePorts(t, find(docs, "Service", svcinfo.SvcStatestore))
+		svc := servicePorts(t, docs, svcinfo.SvcStatestore)
 		require.Len(t, svc, 1)
-		assert.EqualValues(t, svcinfo.PortStatestore, svc[0]["port"])
-		assert.EqualValues(t, svcinfo.PortStatestore, svc[0]["targetPort"])
+		assert.EqualValues(t, svcinfo.PortStatestore, svc[0].Port)
+		assert.EqualValues(t, svcinfo.PortStatestore, svc[0].TargetPort.IntValue())
 	})
 }
 
@@ -42,8 +42,8 @@ func TestStateSvcChart(t *testing.T) {
 		"--set", "networkPolicy.enabled=true")
 
 	t.Run("statesvc deployment arg and env", func(t *testing.T) {
-		deploy := find(docs, "Deployment", svcinfo.SvcStateSvc)
-		args := containerArgs(t, deploy)
+		deploy := deployment(t, docs, svcinfo.SvcStateSvc)
+		args := firstContainer(t, deploy).Args
 		assert.Equal(t, fmt.Sprint(svcinfo.PortStateSvc), argAfter(args, "--stateApiPort"))
 
 		env := containerEnv(t, deploy)
@@ -52,21 +52,20 @@ func TestStateSvcChart(t *testing.T) {
 	})
 
 	t.Run("statesvc service", func(t *testing.T) {
-		svc := servicePorts(t, find(docs, "Service", svcinfo.SvcStateSvc))
+		svc := servicePorts(t, docs, svcinfo.SvcStateSvc)
 		require.Len(t, svc, 1)
-		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0]["port"])
-		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0]["targetPort"])
+		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0].Port)
+		assert.EqualValues(t, svcinfo.PortStateSvc, svc[0].TargetPort.IntValue())
 	})
 
 	t.Run("statestore networkpolicy admits svc:statesvc", func(t *testing.T) {
-		ssNP := find(docs, "NetworkPolicy", "statestore")
-		require.NotNil(t, ssNP)
+		ssNP := networkPolicy(t, docs, "statestore")
 		assert.True(t, npAllowsFromSvc(ssNP, svcinfo.SvcStateSvc),
 			"statesvc reads/writes keyspaces on the statestore; a missing row is a silent i/o timeout in CI")
 	})
 
 	t.Run("statesvc networkpolicy renders", func(t *testing.T) {
-		require.NotNil(t, find(docs, "NetworkPolicy", svcinfo.SvcStateSvc),
+		require.NotNil(t, docs.find("NetworkPolicy", svcinfo.SvcStateSvc),
 			"function pods reach statesvc across namespaces; the policy must render with the head")
 	})
 
@@ -78,10 +77,10 @@ func TestStateSvcChart(t *testing.T) {
 			"--set", "functionState.enabled=true",
 			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
 			"--set", "serviceMonitor.enabled=true")
-		require.NotNil(t, find(mdocs, "ServiceMonitor", "statesvc-monitor"),
+		require.NotNil(t, mdocs.find("ServiceMonitor", "statesvc-monitor"),
 			"statesvc ServiceMonitor must render when serviceMonitor.enabled")
-		deploy := find(mdocs, "Deployment", svcinfo.SvcStateSvc)
-		assert.Contains(t, containerPorts(t, deploy), 8080, "metrics containerPort")
+		deploy := deployment(t, mdocs, svcinfo.SvcStateSvc)
+		assert.Contains(t, containerPorts(t, deploy), int32(8080), "metrics containerPort")
 	})
 
 	t.Run("renders with coverage enabled (CI profile)", func(t *testing.T) {
@@ -93,18 +92,17 @@ func TestStateSvcChart(t *testing.T) {
 			"--set", "functionState.enabled=true",
 			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
 			"--set", "coverage.enabled=true")
-		deploy := find(docs, "Deployment", svcinfo.SvcStateSvc)
-		require.NotNil(t, deploy)
-		containers := deploy["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)["containers"].([]any)
-		ports, _ := containers[0].(map[string]any)["ports"].([]any)
-		for _, p := range ports {
-			_, hasMount := p.(map[string]any)["mountPath"]
-			assert.False(t, hasMount, "a port carries a mountPath — coverage volumeMount leaked into ports")
+		// A leaked volumeMount under ports decodes as a ContainerPort with no
+		// containerPort (0) and no name; the typed decode drops the unknown
+		// mountPath key, so assert on what would remain of the stray entry.
+		deploy := deployment(t, docs, svcinfo.SvcStateSvc)
+		for _, p := range firstContainer(t, deploy).Ports {
+			assert.NotZero(t, p.ContainerPort, "a port with no containerPort — coverage volumeMount leaked into ports")
 		}
 	})
 
 	t.Run("disabled by default", func(t *testing.T) {
 		docs := render(t)
-		assert.Nil(t, find(docs, "Deployment", svcinfo.SvcStateSvc))
+		assert.Nil(t, docs.find("Deployment", svcinfo.SvcStateSvc))
 	})
 }

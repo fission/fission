@@ -91,6 +91,7 @@ func TestServerStreamingToolCall(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})
 	fnSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// SAFETY: httptest.Server hands handlers a ResponseWriter that implements http.Flusher.
 		f := w.(http.Flusher)
 		_, _ = w.Write([]byte("hello "))
 		f.Flush()
@@ -133,6 +134,7 @@ func TestServerStreamingToolCall(t *testing.T) {
 	require.NotNil(t, res)
 	require.False(t, res.IsError)
 	require.Len(t, res.Content, 1)
+	// SAFETY: the proxy returns function output as a single *mcp.TextContent.
 	assert.Equal(t, "hello world", res.Content[0].(*mcp.TextContent).Text)
 
 	// Notifications are asynchronous: the tail chunk may still be in flight
@@ -151,6 +153,7 @@ func TestServerStreamingToolCall(t *testing.T) {
 	res, err = sess.CallTool(t.Context(), &mcp.CallToolParams{Name: "stream-tool"})
 	require.NoError(t, err)
 	require.False(t, res.IsError)
+	// SAFETY: the proxy returns function output as a single *mcp.TextContent.
 	assert.Equal(t, "hello world", res.Content[0].(*mcp.TextContent).Text)
 	mu.Lock()
 	assert.Equal(t, seen, len(msgs), "token-less call must not emit progress")
@@ -236,6 +239,7 @@ func TestServerStreamingToolCallAuthenticated(t *testing.T) {
 		res, err := sess.CallTool(t.Context(), params)
 		require.NoError(t, err)
 		require.False(t, res.IsError)
+		// SAFETY: the proxy returns function output as a single *mcp.TextContent.
 		assert.Equal(t, "hello world", res.Content[0].(*mcp.TextContent).Text)
 	})
 

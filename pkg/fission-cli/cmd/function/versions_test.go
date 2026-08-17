@@ -199,7 +199,7 @@ func TestVersionsCommandFiltersByFunctionLabel(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnName, "hello")
 	out := captureStdout(t, func() error { return Versions(in) })
 
 	assert.Contains(t, out, "hello-v1")
@@ -236,8 +236,8 @@ func TestVersionsCommandWideShowsEnvDrift(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.Output, "wide")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.Output, "wide")
 	out := captureStdout(t, func() error { return Versions(in) })
 
 	assert.Contains(t, out, "ENVDRIFT")
@@ -353,8 +353,8 @@ func TestVersionsCommandOutputName(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
-	in.Set(flagkey.Output, "name")
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.Output, "name")
 	out := captureStdout(t, func() error { return Versions(in) })
 
 	assert.Equal(t, "hello-v1\nhello-v2\n", out)
@@ -393,7 +393,7 @@ func TestVersionsCommandAliasedByColumn(t *testing.T) {
 	})
 
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnName, "hello")
 	out := captureStdout(t, func() error { return Versions(in) })
 
 	assert.Contains(t, out, "canary,prod")

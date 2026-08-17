@@ -46,6 +46,7 @@ func newReaperGpm(t *testing.T, crObjs ...client.Object) *GenericPoolManager {
 		fissionClient, kubernetesClient, metricsClient,
 		fcfg, strings.ToLower(uniuri.NewLen(8)), nil)
 	require.NoError(t, err)
+	// SAFETY: MakeGenericPoolManager returns a *GenericPoolManager behind the executortype interface.
 	gpm := executor.(*GenericPoolManager)
 	gpm.crClient = crfake.NewClientBuilder().WithScheme(clientgoscheme.Scheme).WithObjects(crObjs...).Build()
 	return gpm

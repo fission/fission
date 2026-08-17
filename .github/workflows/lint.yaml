@@ -75,6 +75,13 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=${{ env.GOLANGCI_LINT_TIMEOUT }}
 
+      # Gates low-evidence Go patterns against hack/antislop-baseline.txt.
+      # Fails on a finding the baseline does not already accept; see
+      # hack/antislop.sh for the contract. The analyzer is pinned by the
+      # tool directive in go.mod.
+      - name: Run antislop
+        run: make antislop
+
       - name: Detect git changes
         if: always()
         run: |

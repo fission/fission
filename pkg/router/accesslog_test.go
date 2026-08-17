@@ -5,6 +5,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,41 +23,46 @@ import (
 	"github.com/fission/fission/pkg/utils/correlation"
 )
 
-// capturingSink records Info log calls and their key/values so a test can
-// assert the structured access record.
+// accessRecord is the structured access log line, decoded from the JSON the
+// funcr sink emits, naming exactly the fields the test asserts.
+type accessRecord struct {
+	Msg               string `json:"msg"`
+	RequestID         string `json:"fission.request.id"`
+	FunctionName      string `json:"fission.function.name"`
+	FunctionNamespace string `json:"fission.function.namespace"`
+	FunctionUID       string `json:"fission.function.uid"`
+	StatusCode        int    `json:"http.status_code"`
+	Backend           string `json:"backend"`
+}
+
+// capturingSink records every Info line as JSON so a test can decode the one
+// it cares about into accessRecord.
 type capturingSink struct {
-	mu   sync.Mutex
-	logs []map[string]any
-	msgs []string
+	mu    sync.Mutex
+	lines []string
 }
 
-func (s *capturingSink) Init(logr.RuntimeInfo) {}
-func (s *capturingSink) Enabled(int) bool      { return true }
-func (s *capturingSink) Info(_ int, msg string, kv ...any) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	m := map[string]any{}
-	for i := 0; i+1 < len(kv); i += 2 {
-		if k, ok := kv[i].(string); ok {
-			m[k] = kv[i+1]
-		}
-	}
-	s.msgs = append(s.msgs, msg)
-	s.logs = append(s.logs, m)
+func (s *capturingSink) logger() logr.Logger {
+	return funcr.NewJSON(func(obj string) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.lines = append(s.lines, obj)
+	}, funcr.Options{})
 }
-func (s *capturingSink) Error(error, string, ...any)    {}
-func (s *capturingSink) WithValues(...any) logr.LogSink { return s }
-func (s *capturingSink) WithName(string) logr.LogSink   { return s }
 
-func (s *capturingSink) find(msg string) (map[string]any, bool) {
+// find returns the first record whose msg matches.
+func (s *capturingSink) find(t *testing.T, msg string) (accessRecord, bool) {
+	t.Helper()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i, m := range s.msgs {
-		if m == msg {
-			return s.logs[i], true
+	for _, line := range s.lines {
+		var rec accessRecord
+		require.NoError(t, json.Unmarshal([]byte(line), &rec), "log line must be JSON: %s", line)
+		if rec.Msg == msg {
+			return rec, true
 		}
 	}
-	return nil, false
+	return accessRecord{}, false
 }
 
 func TestAccessRecord(t *testing.T) {
@@ -65,7 +72,7 @@ func TestAccessRecord(t *testing.T) {
 
 	emit := func(accessLog bool) *capturingSink {
 		sink := &capturingSink{}
-		fh := functionHandler{logger: logr.New(sink), function: fn, accessLog: accessLog}
+		fh := functionHandler{logger: sink.logger(), function: fn, accessLog: accessLog}
 		req := httptest.NewRequest(http.MethodGet, "http://x/fn", nil)
 		req = req.WithContext(correlation.NewContext(req.Context(), "req-xyz"))
 		fh.collectFunctionMetric(time.Now(), &RetryingRoundTripper{serviceURL: backend, totalRetry: 1}, req, resp)
@@ -73,18 +80,18 @@ func TestAccessRecord(t *testing.T) {
 	}
 
 	t.Run("emits the access record when enabled", func(t *testing.T) {
-		rec, ok := emit(true).find("function access")
+		rec, ok := emit(true).find(t, "function access")
 		require.True(t, ok, "access record must be emitted when DISPLAY_ACCESS_LOG is on")
-		assert.Equal(t, "req-xyz", rec["fission.request.id"])
-		assert.Equal(t, "fn", rec["fission.function.name"])
-		assert.Equal(t, "default", rec["fission.function.namespace"])
-		assert.Equal(t, string(fn.UID), rec["fission.function.uid"])
-		assert.Equal(t, 200, rec["http.status_code"])
-		assert.Equal(t, "10.0.0.5:8888", rec["backend"])
+		assert.Equal(t, "req-xyz", rec.RequestID)
+		assert.Equal(t, "fn", rec.FunctionName)
+		assert.Equal(t, "default", rec.FunctionNamespace)
+		assert.Equal(t, string(fn.UID), rec.FunctionUID)
+		assert.Equal(t, 200, rec.StatusCode)
+		assert.Equal(t, "10.0.0.5:8888", rec.Backend)
 	})
 
 	t.Run("no access record when disabled (default)", func(t *testing.T) {
-		_, ok := emit(false).find("function access")
+		_, ok := emit(false).find(t, "function access")
 		assert.False(t, ok, "access record must be off by default")
 	})
 }

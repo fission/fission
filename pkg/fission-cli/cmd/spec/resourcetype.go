@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	k8sCache "k8s.io/client-go/tools/cache"
 )
 
@@ -19,8 +18,7 @@ import (
 // which is all the reconciler needs to read names, namespaces and annotations.
 type Object[T any] interface {
 	*T
-	metav1.Object
-	runtime.Object
+	Resource
 }
 
 // resourceOps describes how to reconcile one Fission resource kind during

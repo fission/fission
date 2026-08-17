@@ -312,6 +312,30 @@ func (s *RunState) applyBranchEvent(e Event, se statestore.Event, deref derefFn)
 	return nil
 }
 
+// catchError is the error object a Catch route makes the flowing document
+// (or merges at its ResultPath): the Step Functions error shape a catch
+// handler reads. Cause is embedded verbatim — it is already JSON, either the
+// failing step's cause or the encoded branchErrorCause.
+//
+// Field order is deliberate. It matches the sorted-key order encoding/json
+// used for the map literal this replaced, so the encoded bytes are unchanged:
+// the object lands in RunState.Doc/Cause, which are persisted and fed to the
+// StepScheduled InputHash, and a reordering would refingerprint documents on
+// runs that are already in flight.
+type catchError struct {
+	Cause     json.RawMessage `json:"cause"`
+	ErrorType string          `json:"errorType"`
+}
+
+// branchErrorCause is the Cause payload of a Fission.BranchFailed failure: it
+// names the branch that failed and carries its own error through. Field order
+// is sorted for the same byte-stability reason as catchError.
+type branchErrorCause struct {
+	Branch    string          `json:"branch"`
+	Cause     json.RawMessage `json:"cause"`
+	ErrorType string          `json:"errorType"`
+}
+
 // failRegion dissolves the live region because branch failed terminally:
 // the region fails with Fission.BranchFailed, routable by a Catch on the
 // fan-out state. Shared by event-driven fail-fast and seed-time failures (a
@@ -319,10 +343,10 @@ func (s *RunState) applyBranchEvent(e Event, se statestore.Event, deref derefFn)
 // Choice never produces an event, and MUST still route — otherwise decide
 // would join a failed region and poison the log against its own fold).
 func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) error {
-	cause, err := json.Marshal(map[string]any{
-		"branch":    branch,
-		"errorType": mini.PendingError,
-		"cause":     nonEmpty(mini.Cause),
+	cause, err := json.Marshal(branchErrorCause{
+		Branch:    branch,
+		Cause:     nonEmpty(mini.Cause),
+		ErrorType: mini.PendingError,
 	})
 	if err != nil {
 		return fmt.Errorf("encoding branch error object: %w", err)
@@ -330,8 +354,8 @@ func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) erro
 	st := s.Spec.States[s.Current]
 	s.BranchRuns, s.RegionID = nil, ""
 	if route := matchCatch(st.Catch, fv1.WorkflowErrBranchFailed); route != nil {
-		errAny := map[string]any{"errorType": fv1.WorkflowErrBranchFailed, "cause": json.RawMessage(cause)}
-		next := any(errAny)
+		errObject := catchError{Cause: cause, ErrorType: fv1.WorkflowErrBranchFailed}
+		next := any(errObject)
 		if route.ResultPath != "" {
 			doc, derr := s.currentDoc(deref)
 			if derr != nil {
@@ -339,7 +363,7 @@ func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) erro
 			}
 			p, perr := expr.Parse(route.ResultPath)
 			if perr == nil {
-				next, perr = p.SetResult(doc, errAny)
+				next, perr = p.SetResult(doc, errObject)
 			}
 			if perr != nil {
 				s.Current = ""
@@ -379,9 +403,9 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 	if err != nil {
 		return err // non-deterministic (KV read): retry via reconcile, not terminal
 	}
-	regionInput, err := shapeInput(st, doc)
+	regionInput, err := applyInputPath(st, doc)
 	if err != nil {
-		failEntry(fmt.Sprintf("shaping region input: %v", err))
+		failEntry(fmt.Sprintf("applying inputPath to region input: %v", err))
 		return nil
 	}
 	if len(st.Branches) == 0 {
@@ -473,8 +497,8 @@ func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
 	}
 	st := s.Spec.States[e.State]
 	if route := matchCatch(st.Catch, e.ErrorType); route != nil {
-		errAny := map[string]any{"errorType": e.ErrorType, "cause": nonEmpty(e.Cause)}
-		next := any(errAny)
+		errObject := catchError{Cause: nonEmpty(e.Cause), ErrorType: e.ErrorType}
+		next := any(errObject)
 		if route.ResultPath != "" {
 			// Merge the error into the flowing document so the catch target
 			// keeps the business data; replacement is the SF-parity default.
@@ -484,7 +508,7 @@ func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
 			}
 			p, err := expr.Parse(route.ResultPath)
 			if err == nil {
-				next, err = p.SetResult(doc, errAny)
+				next, err = p.SetResult(doc, errObject)
 			}
 			if err != nil {
 				// Admission validates the path; an unwritable one here (e.g.

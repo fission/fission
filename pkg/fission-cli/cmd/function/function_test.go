@@ -20,14 +20,14 @@ import (
 func TestGetInvokeStrategy(t *testing.T) {
 	cases := []struct {
 		name                   string
-		testArgs               map[string]any
+		testArgs               []dummy.Flag
 		existingInvokeStrategy *fv1.InvokeStrategy
 		expectedResult         *fv1.InvokeStrategy
 		expectError            bool
 	}{
 		{
 			name:                   "use default executor poolmgr",
-			testArgs:               map[string]any{},
+			testArgs:               []dummy.Flag{},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -40,7 +40,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:                   "executor type set to poolmgr",
-			testArgs:               map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
+			testArgs:               []dummy.Flag{dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypePoolmgr))},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -53,7 +53,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:                   "executor type set to newdeploy",
-			testArgs:               map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
+			testArgs:               []dummy.Flag{dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy))},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -68,7 +68,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:     "executor type change from poolmgr to newdeploy",
-			testArgs: map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy)},
+			testArgs: []dummy.Flag{dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy))},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -88,7 +88,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name:     "executor type change from newdeploy to poolmgr",
-			testArgs: map[string]any{flagkey.FnExecutorType: string(fv1.ExecutorTypePoolmgr)},
+			testArgs: []dummy.Flag{dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypePoolmgr))},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
 				ExecutionStrategy: fv1.ExecutionStrategy{
@@ -109,10 +109,10 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale < maxscale",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMinscale: 2,
-				flagkey.ReplicasMaxscale: 3,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMinscale, 2),
+				dummy.Int(flagkey.ReplicasMaxscale, 3),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -128,10 +128,10 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale > maxscale",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMinscale: 5,
-				flagkey.ReplicasMaxscale: 3,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMinscale, 5),
+				dummy.Int(flagkey.ReplicasMaxscale, 3),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -139,9 +139,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale not specified",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMinscale: 5,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMinscale, 5),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -157,9 +157,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "minscale not specified",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMaxscale: 3,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMaxscale, 3),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -175,9 +175,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale set to 0",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMaxscale: 0,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMaxscale, 0),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -185,9 +185,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "update minscale with value larger than existing maxScale",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMinscale: 9,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMinscale, 9),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -203,9 +203,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "maxscale set to 9 when existing is 5",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.ReplicasMaxscale: 9,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.ReplicasMaxscale, 9),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -229,8 +229,8 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change nothing for existing strategy",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType: string(fv1.ExecutorTypeNewdeploy),
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -254,9 +254,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "set target cpu percentage",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.RuntimeTargetcpu: 50,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.RuntimeTargetcpu, 50),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult: &fv1.InvokeStrategy{
@@ -273,9 +273,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change target cpu percentage",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:   string(fv1.ExecutorTypeNewdeploy),
-				flagkey.RuntimeTargetcpu: 20,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.RuntimeTargetcpu, 20),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -301,9 +301,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "change specializationtimeout",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:          string(fv1.ExecutorTypeNewdeploy),
-				flagkey.FnSpecializationTimeout: 200,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.FnSpecializationTimeout, 200),
 			},
 			existingInvokeStrategy: &fv1.InvokeStrategy{
 				StrategyType: fv1.StrategyTypeExecution,
@@ -326,9 +326,9 @@ func TestGetInvokeStrategy(t *testing.T) {
 		},
 		{
 			name: "specializationtimeout should not be less than 120",
-			testArgs: map[string]any{
-				flagkey.FnExecutorType:          string(fv1.ExecutorTypeNewdeploy),
-				flagkey.FnSpecializationTimeout: 90,
+			testArgs: []dummy.Flag{
+				dummy.String(flagkey.FnExecutorType, string(fv1.ExecutorTypeNewdeploy)),
+				dummy.Int(flagkey.FnSpecializationTimeout, 90),
 			},
 			existingInvokeStrategy: nil,
 			expectedResult:         nil,
@@ -338,11 +338,7 @@ func TestGetInvokeStrategy(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			flags := dummy.TestFlagSet()
-
-			for k, v := range c.testArgs {
-				flags.Set(k, v)
-			}
+			flags := dummy.TestFlagSetWith(c.testArgs...)
 
 			strategy, err := getInvokeStrategy(flags, c.existingInvokeStrategy)
 			if c.expectError {
@@ -364,64 +360,64 @@ func TestGetInvokeStrategy(t *testing.T) {
 func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 	cases := []struct {
 		name        string
-		testArgs    map[string]any
+		testArgs    []dummy.Flag
 		expected    *fv1.ProvisionedConcurrencyConfig
 		errExpected bool
 		errSubStrs  []string
 	}{
 		{
 			name:     "flag not set returns nil",
-			testArgs: map[string]any{},
+			testArgs: []dummy.Flag{},
 			expected: nil,
 		},
 		{
 			name:     "target positive builds config",
-			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 5},
+			testArgs: []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 5)},
 			expected: &fv1.ProvisionedConcurrencyConfig{Target: 5},
 		},
 		{
 			name:     "target zero returns nil (off switch)",
-			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 0},
+			testArgs: []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 0)},
 			expected: nil,
 		},
 		{
 			name:     "target negative returns nil",
-			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: -1},
+			testArgs: []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, -1)},
 			expected: nil,
 		},
 		{
 			name:     "large target builds config",
-			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 100},
+			testArgs: []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 100)},
 			expected: &fv1.ProvisionedConcurrencyConfig{Target: 100},
 		},
 		{
 			name:     "valid schedule",
-			testArgs: map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			testArgs: []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 1), dummy.StringSlice(flagkey.FnProvisionedSchedule, []string{"name=w1;duration=8h;start=0 9 * * *;target=1"})},
 			expected: &fv1.ProvisionedConcurrencyConfig{Target: 1, Windows: []fv1.ProvisionedWindow{{Name: "w1", Duration: "8h", Start: "0 9 * * *", Target: 1}}},
 		},
 		{
 			name:        "valid schedule, invalid base target",
-			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 0, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			testArgs:    []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 0), dummy.StringSlice(flagkey.FnProvisionedSchedule, []string{"name=w1;duration=8h;start=0 9 * * *;target=1"})},
 			expected:    nil,
 			errExpected: true,
 			errSubStrs:  []string{"requires"},
 		},
 		{
 			name:        "valid schedule, no concurrency",
-			testArgs:    map[string]any{flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			testArgs:    []dummy.Flag{dummy.StringSlice(flagkey.FnProvisionedSchedule, []string{"name=w1;duration=8h;start=0 9 * * *;target=1"})},
 			expected:    nil,
 			errExpected: true,
 			errSubStrs:  []string{"provisioned concurrency window is set but provisioned concurrency is not"},
 		},
 		{
 			name:        "invalid schedule",
-			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8;start=0 9 * * *;target=1"}},
+			testArgs:    []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 1), dummy.StringSlice(flagkey.FnProvisionedSchedule, []string{"name=w1;duration=8;start=0 9 * * *;target=1"})},
 			errExpected: true,
 			errSubStrs:  []string{"invalid duration"},
 		},
 		{
 			name:        "duplicate window name",
-			testArgs:    map[string]any{flagkey.FnProvisionedConcurrency: 1, flagkey.FnProvisionedSchedule: []string{"name=w1;duration=8h;start=0 9 * * *;target=1", "name=w1;duration=8h;start=0 9 * * *;target=1"}},
+			testArgs:    []dummy.Flag{dummy.Int(flagkey.FnProvisionedConcurrency, 1), dummy.StringSlice(flagkey.FnProvisionedSchedule, []string{"name=w1;duration=8h;start=0 9 * * *;target=1", "name=w1;duration=8h;start=0 9 * * *;target=1"})},
 			errExpected: true,
 			errSubStrs:  []string{"duplicate provisioned window: w1"},
 		},
@@ -429,10 +425,7 @@ func TestGetProvisionedConcurrencyConfig(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			flags := dummy.TestFlagSet()
-			for k, v := range c.testArgs {
-				flags.Set(k, v)
-			}
+			flags := dummy.TestFlagSetWith(c.testArgs...)
 			got, err := getProvisionedConcurrencyConfig(flags)
 			if !c.errExpected {
 				require.NoError(t, err)

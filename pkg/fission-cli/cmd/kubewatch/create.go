@@ -77,7 +77,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API; save/print and return.
-	if handled, err := spec.SaveOrDry(input, *opts.watcher, fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Name)); handled {
+	if handled, err := spec.SaveOrDry(input, opts.watcher, fmt.Sprintf("kubewatch-%v.yaml", opts.watcher.Name)); handled {
 		return err
 	}
 

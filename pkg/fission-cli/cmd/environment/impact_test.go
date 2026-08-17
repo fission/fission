@@ -244,7 +244,7 @@ func TestBuildImpactRowsResolvedVersionMissingIsNotAssessable(t *testing.T) {
 
 func impactFlags(envName string) dummy.Cli {
 	in := dummy.TestFlagSet()
-	in.Set(flagkey.EnvName, envName)
+	in.SetString(flagkey.EnvName, envName)
 	return in
 }
 
@@ -291,7 +291,7 @@ func TestImpactCommandJSONOutput(t *testing.T) {
 	})
 
 	in := impactFlags("nodejs")
-	in.Set(flagkey.Output, "json")
+	in.SetString(flagkey.Output, "json")
 	out := captureStdout(t, func() error { return Impact(in) })
 
 	var got []ImpactRow

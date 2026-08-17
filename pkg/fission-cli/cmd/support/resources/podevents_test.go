@@ -243,6 +243,7 @@ func TestPodEventIndexFiltersServerSide(t *testing.T) {
 
 	var fields string
 	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListAction.
 		fields = a.(clienttesting.ListAction).GetListRestrictions().Fields.String()
 		return false, nil, nil // fall through to the tracker
 	})
@@ -340,6 +341,7 @@ func TestPodEventIndexKeepsPagesCollectedBeforeAnExpiry(t *testing.T) {
 	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
 
 	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &corev1.EventList{
 				ListMeta: metav1.ListMeta{Continue: "page-2"},
@@ -376,6 +378,7 @@ func TestPodEventIndexKeepsPagesAfterANonExpiryFailure(t *testing.T) {
 	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
 
 	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &corev1.EventList{
 				ListMeta: metav1.ListMeta{Continue: "page-2"},
@@ -426,6 +429,7 @@ func TestPodEventIndexKeepsWalkingPastAnEmptyPage(t *testing.T) {
 	client := k8sfake.NewClientset(fissionPod("router-abc", "uid-router"))
 
 	client.PrependReactor("list", "events", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListActionImpl.
 		switch a.(clienttesting.ListActionImpl).GetListOptions().Continue {
 		case "":
 			return true, &corev1.EventList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil

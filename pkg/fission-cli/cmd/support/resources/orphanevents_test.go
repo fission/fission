@@ -247,6 +247,7 @@ func TestOrphanedPodEventDumperPagesThePodList(t *testing.T) {
 	)
 
 	client.PrependReactor("list", "pods", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &corev1.PodList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
 		}

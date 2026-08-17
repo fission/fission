@@ -150,23 +150,20 @@ func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, quer
 		promApiClient.logger.Info("receive prometheus client query warning", "msg", warn)
 	}
 
-	switch {
-	case val.Type() == model.ValScalar:
-		scalarVal := val.(*model.Scalar)
-		return float64(scalarVal.Value), nil
+	switch v := val.(type) {
+	case *model.Scalar:
+		return float64(v.Value), nil
 
-	case val.Type() == model.ValVector:
-		vectorVal := val.(model.Vector)
+	case model.Vector:
 		total := float64(0)
-		for _, elem := range vectorVal {
+		for _, elem := range v {
 			total = total + float64(elem.Value)
 		}
 		return total, nil
 
-	case val.Type() == model.ValMatrix:
-		matrixVal := val.(model.Matrix)
+	case model.Matrix:
 		total := float64(0)
-		for _, elem := range matrixVal {
+		for _, elem := range v {
 			total += float64(elem.Values[len(elem.Values)-1].Value)
 		}
 		return total, nil

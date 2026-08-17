@@ -64,7 +64,7 @@ func (opts *CreateSubCommand) run(input cli.Input) (err error) {
 		if err = opts.env.Validate(); err != nil {
 			return fv1.AggregateValidationErrors("Environment", err)
 		}
-		_, err = spec.SaveOrDry(input, *opts.env, fmt.Sprintf("env-%v.yaml", opts.env.Name))
+		_, err = spec.SaveOrDry(input, opts.env, fmt.Sprintf("env-%v.yaml", opts.env.Name))
 		return err
 	}
 

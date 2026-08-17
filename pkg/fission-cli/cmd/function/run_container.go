@@ -218,11 +218,11 @@ func (opts *RunContainerSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't create the function
 	// save to spec file or display the spec to console
 	if input.Bool(flagkey.SpecDry) {
-		return spec.SpecDry(*opts.function)
+		return spec.SpecDry(opts.function)
 	}
 
 	if input.Bool(flagkey.SpecSave) {
-		err := spec.SpecSave(*opts.function, opts.specFile, false)
+		err := spec.SpecSave(opts.function, opts.specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving function spec: %w", err)
 		}

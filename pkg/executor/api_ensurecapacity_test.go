@@ -135,6 +135,7 @@ func TestEnsureCapacityWireContract(t *testing.T) {
 		}
 		srv := httptest.NewServer(newExecutor(stub).GetHandler())
 		defer srv.Close()
+		// SAFETY: MakeClient returns *client.Client, which implements capacityCaller.
 		c := client.MakeClient(logger, srv.URL, nil).(capacityCaller)
 
 		_, err := c.EnsureCapacity(t.Context(), poolmgrFn("fn"), 1, 1)
@@ -148,6 +149,7 @@ func TestEnsureCapacityWireContract(t *testing.T) {
 		stub := &capacityStubExecutorType{}
 		srv := httptest.NewServer(newExecutor(stub).GetHandler())
 		defer srv.Close()
+		// SAFETY: MakeClient returns *client.Client, which implements capacityCaller.
 		c := client.MakeClient(logger, srv.URL, nil).(capacityCaller)
 
 		fn := poolmgrFn("fn")

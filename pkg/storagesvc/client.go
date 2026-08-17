@@ -141,11 +141,12 @@ func (client *StorageClient) exists(itemID string) error {
 	return nil
 }
 
-// filter defines an interface to filter out items from a set of items
-type filter func(objectInfo, any) bool
+// filter reports whether an item must be left out of a listing.
+type filter func(objectInfo) bool
 
-// This method returns all items in a container, filtering out items based on the filter function passed to it
-func (client *StorageClient) getItemIDsWithFilter(filterFunc filter, filterFuncParam any) ([]string, error) {
+// getItemIDsWithFilter returns the IDs of all items in the container that the
+// filter does not exclude.
+func (client *StorageClient) getItemIDsWithFilter(exclude filter) ([]string, error) {
 	items, err := client.backend.list(client.config.storage.getSubDir())
 	if err != nil {
 		return nil, fmt.Errorf("error getting items from container: %w", err)
@@ -153,7 +154,7 @@ func (client *StorageClient) getItemIDsWithFilter(filterFunc filter, filterFuncP
 
 	archiveIDList := make([]string, 0)
 	for _, item := range items {
-		if filterFunc(item, filterFuncParam) {
+		if exclude(item) {
 			continue
 		}
 		archiveIDList = append(archiveIDList, item.id)
@@ -162,23 +163,26 @@ func (client *StorageClient) getItemIDsWithFilter(filterFunc filter, filterFuncP
 	return archiveIDList, nil
 }
 
-// filterItemCreatedAMinuteAgo is one type of filter function that filters out items created less than a minute ago.
-// More filter functions can be written if needed, as long as they are of type filter
-func (client StorageClient) filterItemCreatedAMinuteAgo(item objectInfo, currentTime any) bool {
-	if currentTime.(time.Time).Sub(item.lastMod) < 1*time.Minute {
-
-		client.logger.V(1).Info("item created less than a minute ago",
-			"item", item.id,
-			"last_modified_time", item.lastMod)
-		return true
+// filterItemsNewerThan returns a filter that excludes items modified less than
+// minAge before now. The archive pruner uses it so an archive that a build is
+// still uploading is never treated as orphaned.
+func (client StorageClient) filterItemsNewerThan(now time.Time, minAge time.Duration) filter {
+	return func(item objectInfo) bool {
+		if now.Sub(item.lastMod) < minAge {
+			client.logger.V(1).Info("item modified too recently to prune",
+				"item", item.id,
+				"last_modified_time", item.lastMod,
+				"min_age", minAge)
+			return true
+		}
+		return false
 	}
-	return false
 }
 
-func (client StorageClient) filterAllItems(item objectInfo, _ any) bool {
+// filterAllItems excludes nothing; it only logs each item at debug level.
+func (client StorageClient) filterAllItems(item objectInfo) bool {
 	client.logger.V(1).Info("item info",
 		"item", item.id,
 		"last_modified_time", item.lastMod)
 	return false
-
 }

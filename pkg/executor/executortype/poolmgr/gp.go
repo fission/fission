@@ -81,8 +81,18 @@ type (
 		// per-image idle reaper (RFC-0012): stored at creation and on every
 		// GET_POOL. Atomic so the reap pass can read it lock-free.
 		lastActive atomic.Int64
+		// podFSVCMap maps a specialized pod's name to the function it
+		// serves and its address, for the pool CPU-usage collector. Values
+		// are always podFuncSvc.
 		// TODO: move this field into fsCache
 		podFSVCMap sync.Map
+	}
+
+	// podFuncSvc is the podFSVCMap value: which function a specialized pod
+	// serves and where it is reachable.
+	podFuncSvc struct {
+		function crd.CacheKeyUG
+		address  string
 	}
 )
 
@@ -322,7 +332,7 @@ func (gp *GenericPool) getFuncSvc(ctx context.Context, fn *fv1.Function) (*fscac
 	}
 
 	gp.fsCache.PodToFsvc.Store(pod.GetObjectMeta().GetName(), fsvc)
-	gp.podFSVCMap.Store(pod.Name, []any{crd.CacheKeyUGFromMeta(fsvc.Function), fsvc.Address})
+	gp.podFSVCMap.Store(pod.Name, podFuncSvc{function: crd.CacheKeyUGFromMeta(fsvc.Function), address: fsvc.Address})
 	gp.fsCache.AddFunc(ctx, *fsvc, fn.GetRequestPerPod(), fn.GetRetainPods())
 
 	logger.Info("added function service",

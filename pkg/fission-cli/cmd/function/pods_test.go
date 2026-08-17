@@ -59,7 +59,7 @@ func TestListPodsVersionFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, version}, matching, other)
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestVersion, "hello-v1")
+		in.SetString(flagkey.FnTestVersion, "hello-v1")
 
 		out := captureStdout(t, func() error { return ListPods(in) })
 
@@ -76,7 +76,7 @@ func TestListPodsVersionFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, version})
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestVersion, "other-v1")
+		in.SetString(flagkey.FnTestVersion, "other-v1")
 
 		err := ListPods(in)
 		require.Error(t, err)
@@ -106,7 +106,7 @@ func TestListPodsAliasFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, alias}, matching, other)
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		out := captureStdout(t, func() error { return ListPods(in) })
 
@@ -128,7 +128,7 @@ func TestListPodsAliasFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, alias}, matching)
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		out := captureStdout(t, func() error { return ListPods(in) })
 
@@ -144,7 +144,7 @@ func TestListPodsAliasFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, alias})
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		err := ListPods(in)
 		require.Error(t, err)
@@ -160,7 +160,7 @@ func TestListPodsAliasFilter(t *testing.T) {
 		setDescribeClients(t, []runtime.Object{fn, alias})
 
 		in := describeInput("hello", "default")
-		in.Set(flagkey.FnTestAlias, "prod")
+		in.SetString(flagkey.FnTestAlias, "prod")
 
 		err := ListPods(in)
 		require.Error(t, err)
@@ -175,8 +175,8 @@ func TestListPodsAliasVersionMutuallyExclusive(t *testing.T) {
 	setDescribeClients(t, []runtime.Object{fn})
 
 	in := describeInput("hello", "default")
-	in.Set(flagkey.FnTestAlias, "prod")
-	in.Set(flagkey.FnTestVersion, "hello-v1")
+	in.SetString(flagkey.FnTestAlias, "prod")
+	in.SetString(flagkey.FnTestVersion, "hello-v1")
 
 	err := ListPods(in)
 	require.Error(t, err)

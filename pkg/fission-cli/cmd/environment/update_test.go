@@ -33,11 +33,11 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("updates scalar fields", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.EnvImage, "new-image")
-		in.Set(flagkey.EnvPoolsize, 5)
-		in.Set(flagkey.EnvGracePeriod, int64(42))
-		in.Set(flagkey.EnvKeeparchive, true)
-		in.Set(flagkey.EnvImagePullSecret, "regcred")
+		in.SetString(flagkey.EnvImage, "new-image")
+		in.SetInt(flagkey.EnvPoolsize, 5)
+		in.SetInt64(flagkey.EnvGracePeriod, int64(42))
+		in.SetBool(flagkey.EnvKeeparchive, true)
+		in.SetString(flagkey.EnvImagePullSecret, "regcred")
 
 		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("explicit zero grace period is preserved, not dropped to the default", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.EnvGracePeriod, int64(0))
+		in.SetInt64(flagkey.EnvGracePeriod, int64(0))
 
 		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("grace period untouched when the flag is not set", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.EnvImage, "new-image")
+		in.SetString(flagkey.EnvImage, "new-image")
 
 		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("runtime env vars parsed", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.EnvRuntime, []string{"A=1", "B=2"})
+		in.SetStringSlice(flagkey.EnvRuntime, []string{"A=1", "B=2"})
 		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.NoError(t, err)
 		require.Len(t, got.Spec.Runtime.Container.Env, 2)
@@ -87,7 +87,7 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("cpu limit defaults to request when only min set", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.RuntimeMincpu, 100)
+		in.SetInt(flagkey.RuntimeMincpu, 100)
 		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.NoError(t, err)
 		req := got.Spec.Resources.Requests[v1.ResourceCPU]
@@ -98,8 +98,8 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 	t.Run("mincpu greater than maxcpu errors", func(t *testing.T) {
 		t.Parallel()
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.RuntimeMincpu, 200)
-		in.Set(flagkey.RuntimeMaxcpu, 100)
+		in.SetInt(flagkey.RuntimeMincpu, 200)
+		in.SetInt(flagkey.RuntimeMaxcpu, 100)
 		_, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
 		require.Error(t, err)
 	})
@@ -109,7 +109,7 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 		env := baseEnv()
 		env.Spec.Version = 1
 		in := dummy.TestFlagSet()
-		in.Set(flagkey.EnvBuilderImage, "builder:latest")
+		in.SetString(flagkey.EnvBuilderImage, "builder:latest")
 		_, err := updateExistingEnvironmentWithCmd(env, in)
 		require.Error(t, err)
 	})
