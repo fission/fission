@@ -7,7 +7,6 @@ package util
 import (
 	"errors"
 	"fmt"
-	"reflect"
 
 	"dario.cat/mergo"
 	apiv1 "k8s.io/api/core/v1"
@@ -34,10 +33,10 @@ func MergeContainer(dst *apiv1.Container, src *apiv1.Container) (*apiv1.Containe
 		return nil, err
 	}
 	errs = errors.Join(errs,
-		checkSliceConflicts("Name", dstC.Ports),
-		checkSliceConflicts("Name", dstC.Env),
-		checkSliceConflicts("Name", dstC.VolumeMounts),
-		checkSliceConflicts("Name", dstC.VolumeDevices))
+		checkNameConflicts(dstC.Ports, func(p apiv1.ContainerPort) string { return p.Name }),
+		checkNameConflicts(dstC.Env, func(e apiv1.EnvVar) string { return e.Name }),
+		checkNameConflicts(dstC.VolumeMounts, func(m apiv1.VolumeMount) string { return m.Name }),
+		checkNameConflicts(dstC.VolumeDevices, func(d apiv1.VolumeDevice) string { return d.Name }))
 
 	// mergo.WithOverride copies src.SecurityContext onto the merged result,
 	// so a tenant-supplied Environment Runtime.Container / Builder.Container
@@ -256,58 +255,28 @@ func mergeContainerList(dst []apiv1.Container, src []apiv1.Container) ([]apiv1.C
 
 func mergeVolumeLists(dst []apiv1.Volume, src []apiv1.Volume) ([]apiv1.Volume, error) {
 	dst = append(dst, src...)
-	err := checkSliceConflicts("Name", dst)
+	err := checkNameConflicts(dst, func(v apiv1.Volume) string { return v.Name })
 	if err != nil {
 		return nil, err
 	}
 	return dst, err
 }
 
-func checkSliceConflicts(field string, objs any) (err error) {
-	defer func() {
-		// just in case to recover from unknown error
-		if e := recover(); e != nil {
-			err = fmt.Errorf("error checking slice conflicts: %v", e)
-		}
-	}()
-
-	if reflect.TypeOf(objs).Kind() != reflect.Slice {
-		return fmt.Errorf("not a slice type: %v", reflect.TypeOf(objs))
-	}
-
+// checkNameConflicts reports every name that appears more than once in objs,
+// where name projects the element's identifying field. The merge helpers use it
+// after mergo appends src slices onto dst, because two entries with the same
+// name (two ports, two env vars, two mounts) are a spec error rather than an
+// override.
+func checkNameConflicts[T any](objs []T, name func(T) string) error {
 	var errs error
-	names := make(map[string]struct{})
-
-	s := reflect.ValueOf(objs)
-	var elemType reflect.Type
-
-	for i := 0; i < s.Len(); i++ {
-		r := s.Index(i)
-
-		// if objs pass in is a slice of interface{} ([]interface{}), then
-		// use Elem() to get element value.
-		if r.Kind() == reflect.Interface {
-			r = r.Elem()
+	names := make(map[string]struct{}, len(objs))
+	for _, obj := range objs {
+		n := name(obj)
+		if _, dup := names[n]; dup {
+			errs = errors.Join(errs, fmt.Errorf("duplicate name in %T: %v", obj, n))
+			continue
 		}
-		objType := reflect.Indirect(r).Type()
-
-		if elemType == nil {
-			elemType = objType
-		} else if objType != elemType {
-			return fmt.Errorf("unable to check conflict between different types: %v, %v", elemType, objType)
-		}
-
-		f := reflect.Indirect(r).FieldByName(field)
-		if !f.IsValid() {
-			return fmt.Errorf("cannot compare type without target field: %v %v", objType, field)
-		}
-
-		_, ok := names[f.String()]
-		if ok {
-			errs = errors.Join(errs, fmt.Errorf("duplicate name in %v: %v", objType, f.String()))
-		} else {
-			names[f.String()] = struct{}{}
-		}
+		names[n] = struct{}{}
 	}
 	return errs
 }
