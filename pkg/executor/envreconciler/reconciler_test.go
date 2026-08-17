@@ -170,7 +170,9 @@ func TestCollectHandlers(t *testing.T) {
 		handlers := collectHandlers(types)
 		require.Len(t, handlers, 2, "container does not implement EnvReconciler and is skipped")
 		// Deterministic, sorted by executor-type name: newdeploy < poolmgr.
+		// SAFETY: the only EnvReconciler implementations in the input map are fakeEnvExecutorType values.
 		assert.Equal(t, "newdeploy", handlers[0].(fakeEnvExecutorType).id)
+		// SAFETY: the only EnvReconciler implementations in the input map are fakeEnvExecutorType values.
 		assert.Equal(t, "poolmgr", handlers[1].(fakeEnvExecutorType).id)
 	})
 

@@ -44,6 +44,7 @@ func TestSetupDynamicEndpointCacheReusesPreflightRBAC(t *testing.T) {
 	var sarCalls atomic.Int32
 	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		sarCalls.Add(1)
+		// SAFETY: this reactor is registered for "create" on selfsubjectaccessreviews, so the action is a CreateAction carrying a *SelfSubjectAccessReview.
 		sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		return true, &authorizationv1.SelfSubjectAccessReview{
 			Spec:   sar.Spec,
@@ -82,6 +83,7 @@ func newDynamicCacheTest(t *testing.T, allowedNS map[string]bool) (*dynamicEndpo
 	t.Helper()
 	kubeClient := fake.NewSimpleClientset()
 	kubeClient.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: this reactor is registered for "create" on selfsubjectaccessreviews, so the action is a CreateAction carrying a *SelfSubjectAccessReview.
 		sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		ns := sar.Spec.ResourceAttributes.Namespace
 		return true, &authorizationv1.SelfSubjectAccessReview{

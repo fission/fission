@@ -159,7 +159,9 @@ func TestScaleDeployment(t *testing.T) {
 		if action.GetSubresource() != "scale" {
 			return false, nil, nil
 		}
+		// SAFETY: this reactor is registered for "update" on the scale subresource, so the action is an UpdateAction carrying a *Scale.
 		obj := action.(k8stesting.UpdateAction).GetObject()
+		// SAFETY: see above; the update object on the scale subresource is a *Scale.
 		captured = obj.(*autoscalingv1.Scale)
 		return true, obj, nil
 	})

@@ -35,6 +35,7 @@ func newSpecTestContainer(t *testing.T) *Container {
 func countDeploymentUpdates(t *testing.T, caaf *Container) int {
 	t.Helper()
 	n := 0
+	// SAFETY: the test constructs caaf with a *fake.Clientset.
 	for _, a := range caaf.kubernetesClient.(*fake.Clientset).Actions() {
 		if a.GetVerb() == "update" && a.GetResource().Resource == "deployments" {
 			n++

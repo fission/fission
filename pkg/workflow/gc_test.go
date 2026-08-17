@@ -80,6 +80,7 @@ func TestRetentionSweeper(t *testing.T) {
 		WithScheme(scheme.Scheme).
 		WithObjects(wf, run("newest", now), run("older", old)).
 		WithIndex(&fv1.WorkflowRun{}, WorkflowRefIndex, func(obj client.Object) []string {
+			// SAFETY: this indexer is registered for &fv1.WorkflowRun{} only.
 			return []string{obj.(*fv1.WorkflowRun).Spec.WorkflowRef}
 		}).
 		Build()

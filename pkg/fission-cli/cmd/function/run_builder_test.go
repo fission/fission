@@ -139,5 +139,6 @@ func TestPostBuild(t *testing.T) {
 // srvPort extracts the TCP port an httptest.Server is listening on.
 func srvPort(t *testing.T, srv *httptest.Server) int {
 	t.Helper()
+	// SAFETY: httptest.Server listens on a TCP loopback address.
 	return srv.Listener.Addr().(*net.TCPAddr).Port
 }

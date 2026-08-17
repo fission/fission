@@ -61,6 +61,7 @@ func TestPoolPodControllerPodCleanup(t *testing.T) {
 		fetcherConfig, executorInstanceID,
 		nil)
 	require.NoError(t, err, "Error creating generic pool manager")
+	// SAFETY: MakeGenericPoolManager returns a *GenericPoolManager behind the executortype interface.
 	gpm := executor.(*GenericPoolManager)
 	gpm.crClient = crClient
 	ppc.InjectGpm(gpm)

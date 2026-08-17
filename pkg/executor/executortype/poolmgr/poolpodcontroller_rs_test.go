@@ -284,6 +284,7 @@ func TestProcessRSDiscriminator(t *testing.T) {
 			executor, err := MakeGenericPoolManager(t.Context(), logger,
 				fissionClient, kubernetesClient, metricsClient, fetcherCfg, "test-instance", nil)
 			require.NoError(t, err)
+			// SAFETY: MakeGenericPoolManager returns a *GenericPoolManager behind the executortype interface.
 			gpm := executor.(*GenericPoolManager)
 			gpm.crClient = crClient
 			ppc.InjectGpm(gpm)

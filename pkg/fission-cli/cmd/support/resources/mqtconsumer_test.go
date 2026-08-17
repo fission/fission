@@ -245,6 +245,7 @@ func TestDeploymentIndexPagesThroughEveryDeployment(t *testing.T) {
 
 	client := k8sfake.NewClientset()
 	client.PrependReactor("list", "deployments", func(a clienttesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &appsv1.DeploymentList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
 		}

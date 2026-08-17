@@ -41,6 +41,7 @@ func TestUpdateOnConflictRetriesAndReapplies(t *testing.T) {
 		// Echo the submitted object back (handled here rather than falling
 		// through, since the fake tracker's apply/SMD path can't convert CRD
 		// types).
+		// SAFETY: this reactor is registered for "update", so the action is an UpdateAction.
 		return true, action.(k8stesting.UpdateAction).GetObject(), nil
 	})
 

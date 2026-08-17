@@ -127,6 +127,7 @@ func startSub(t *testing.T, s *Statestore, trigger *fv1.MessageQueueTrigger) *su
 	t.Helper()
 	msub, err := s.Subscribe(t.Context(), trigger)
 	require.NoError(t, err)
+	// SAFETY: Subscribe returns a *subscription behind the interface.
 	sub := msub.(*subscription)
 	t.Cleanup(func() { _ = sub.Stop() })
 	require.Eventually(t, sub.started.Load, 5*time.Second, 5*time.Millisecond, "subscription must establish its cursor")

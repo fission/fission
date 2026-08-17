@@ -132,6 +132,7 @@ func TestDynamicCachePersistentSARErrorsEventuallyExcludeAndRecover(t *testing.T
 			"create",
 			"selfsubjectaccessreviews",
 			func(action k8stesting.Action) (bool, runtime.Object, error) {
+				// SAFETY: this reactor is registered for "create" on selfsubjectaccessreviews, so the action is a CreateAction carrying a *SelfSubjectAccessReview.
 				sar := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 				if permissionCheck.Load() {
 					return true, nil, assert.AnError

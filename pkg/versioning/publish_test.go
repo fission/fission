@@ -440,7 +440,9 @@ func TestPublish_ConcurrentAlreadyExistsRetriesOnce(t *testing.T) {
 		}
 		seeded = true
 
+		// SAFETY: this reactor is registered for "create" on functionversions, so the action is a CreateAction carrying a *FunctionVersion.
 		create := action.(k8stesting.CreateAction)
+		// SAFETY: see above; the created object is a *FunctionVersion.
 		winner := create.GetObject().(*fv1.FunctionVersion).DeepCopy()
 		// Keep the SourcePackageAnnotation Publish already computed (the
 		// legacy-path repoint) — only override the description — so the
@@ -482,7 +484,9 @@ func TestPublish_ConcurrentAlreadyExistsTwiceReturnsError(t *testing.T) {
 	// lands, so retrying can never converge: the second attempt must
 	// surface the error instead of looping.
 	cl.PrependReactor("create", "functionversions", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		// SAFETY: this reactor is registered for "create" on functionversions, so the action is a CreateAction carrying a *FunctionVersion.
 		create := action.(k8stesting.CreateAction)
+		// SAFETY: see above; the created object is a *FunctionVersion.
 		name := create.GetObject().(*fv1.FunctionVersion).Name
 		return true, nil, apierrors.NewAlreadyExists(schema.GroupResource{Group: "fission.io", Resource: "functionversions"}, name)
 	})
