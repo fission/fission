@@ -35,6 +35,15 @@ check: test-run build-fission-cli clean
 code-checks: verify-gomod
 	golangci-lint run
 
+# Run the antislop analyzers (low-evidence Go patterns: any in signatures,
+# narrowing out of any, reflect, structural names, untyped decoding).
+# Deliberately not part of code-checks: it needs the antislop binary
+# ($ANTISLOP, PATH, or go-run access to the private module) and the
+# baseline is still being burned down. See hack/antislop.sh.
+.PHONY: antislop
+antislop:
+	hack/antislop.sh
+
 # Fail if go.mod does not keep direct and indirect requirements in separate
 # blocks. `go mod tidy` does not enforce this layout, so this guard does.
 # Convention: .claude/resources/go-mod-conventions.md
