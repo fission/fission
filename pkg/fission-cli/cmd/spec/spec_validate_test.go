@@ -32,18 +32,18 @@ func TestCrdToYaml(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
-		resource any
+		resource Resource
 		wantKind string
 		wantName string
 	}{
-		{"ArchiveUploadSpec", types.ArchiveUploadSpec{Name: "ar"}, "ArchiveUploadSpec", "ar"},
-		{"Package", fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg"}}, "Package", "pkg"},
-		{"Function", fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn"}}, "Function", "fn"},
-		{"Environment", fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env"}}, "Environment", "env"},
-		{"HTTPTrigger", fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: "ht"}}, "HTTPTrigger", "ht"},
-		{"KubernetesWatchTrigger", fv1.KubernetesWatchTrigger{ObjectMeta: metav1.ObjectMeta{Name: "kw"}}, "KubernetesWatchTrigger", "kw"},
-		{"MessageQueueTrigger", fv1.MessageQueueTrigger{ObjectMeta: metav1.ObjectMeta{Name: "mqt"}}, "MessageQueueTrigger", "mqt"},
-		{"TimeTrigger", fv1.TimeTrigger{ObjectMeta: metav1.ObjectMeta{Name: "tt"}}, "TimeTrigger", "tt"},
+		{"Package", &fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "pkg"}}, "Package", "pkg"},
+		{"Function", &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn"}}, "Function", "fn"},
+		{"Environment", &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env"}}, "Environment", "env"},
+		{"HTTPTrigger", &fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: "ht"}}, "HTTPTrigger", "ht"},
+		{"KubernetesWatchTrigger", &fv1.KubernetesWatchTrigger{ObjectMeta: metav1.ObjectMeta{Name: "kw"}}, "KubernetesWatchTrigger", "kw"},
+		{"MessageQueueTrigger", &fv1.MessageQueueTrigger{ObjectMeta: metav1.ObjectMeta{Name: "mqt"}}, "MessageQueueTrigger", "mqt"},
+		{"TimeTrigger", &fv1.TimeTrigger{ObjectMeta: metav1.ObjectMeta{Name: "tt"}}, "TimeTrigger", "tt"},
+		{"Workflow", &fv1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf"}}, "Workflow", "wf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -52,13 +52,25 @@ func TestCrdToYaml(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantKind, kind)
 			assert.Equal(t, tt.wantName, meta.Name)
-			assert.NotEmpty(t, data)
+			assert.Contains(t, string(data), "kind: "+tt.wantKind)
+			assert.Contains(t, string(data), "apiVersion: "+fv1.CRD_VERSION)
+			// The caller's object is not stamped: crdToYaml works on a copy.
+			assert.Empty(t, tt.resource.GetObjectKind().GroupVersionKind().Kind)
 		})
 	}
 
-	t.Run("unknown type errors", func(t *testing.T) {
+	t.Run("ArchiveUploadSpec", func(t *testing.T) {
 		t.Parallel()
-		_, _, _, err := crdToYaml(42)
+		meta, kind, data, err := archiveUploadSpecToYaml(types.ArchiveUploadSpec{Name: "ar"})
+		require.NoError(t, err)
+		assert.Equal(t, "ArchiveUploadSpec", kind)
+		assert.Equal(t, "ar", meta.Name)
+		assert.Contains(t, string(data), "kind: ArchiveUploadSpec")
+	})
+
+	t.Run("type outside the scheme errors", func(t *testing.T) {
+		t.Parallel()
+		_, _, _, err := crdToYaml(&apiv1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}})
 		require.Error(t, err)
 	})
 }
@@ -257,31 +269,39 @@ func TestExistsInSpecs(t *testing.T) {
 	fr.KubernetesWatchTriggers = []fv1.KubernetesWatchTrigger{{ObjectMeta: meta}}
 	fr.MessageQueueTriggers = []fv1.MessageQueueTrigger{{ObjectMeta: meta}}
 	fr.TimeTriggers = []fv1.TimeTrigger{{ObjectMeta: meta}}
+	fr.Workflows = []fv1.Workflow{{ObjectMeta: meta}}
 	fr.FunctionAliases = []fv1.FunctionAlias{{ObjectMeta: meta}}
 
-	present := []any{
-		types.ArchiveUploadSpec{Name: "x"},
-		fv1.Package{ObjectMeta: meta},
-		fv1.Function{ObjectMeta: meta},
-		fv1.Environment{ObjectMeta: meta},
-		fv1.HTTPTrigger{ObjectMeta: meta},
-		fv1.KubernetesWatchTrigger{ObjectMeta: meta},
-		fv1.MessageQueueTrigger{ObjectMeta: meta},
-		fv1.TimeTrigger{ObjectMeta: meta},
-		fv1.FunctionAlias{ObjectMeta: meta},
+	present := []Resource{
+		&fv1.Package{ObjectMeta: meta},
+		&fv1.Function{ObjectMeta: meta},
+		&fv1.Environment{ObjectMeta: meta},
+		&fv1.HTTPTrigger{ObjectMeta: meta},
+		&fv1.KubernetesWatchTrigger{ObjectMeta: meta},
+		&fv1.MessageQueueTrigger{ObjectMeta: meta},
+		&fv1.TimeTrigger{ObjectMeta: meta},
+		&fv1.Workflow{ObjectMeta: meta},
+		&fv1.FunctionAlias{ObjectMeta: meta},
 	}
 	for _, res := range present {
 		exists, err := fr.ExistsInSpecs(res)
 		require.NoError(t, err)
 		assert.True(t, exists, "%T should exist", res)
 	}
+	assert.True(t, fr.ArchiveUploadSpecExists("x"))
+	assert.False(t, fr.ArchiveUploadSpecExists("nope"))
 
-	exists, err := fr.ExistsInSpecs(fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: "default"}})
+	exists, err := fr.ExistsInSpecs(&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: "default"}})
 	require.NoError(t, err)
 	assert.False(t, exists)
 
-	_, err = fr.ExistsInSpecs("not a resource")
-	require.Error(t, err)
+	// Same name, other namespace is a different resource.
+	exists, err = fr.ExistsInSpecs(&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "other"}})
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	_, err = fr.ExistsInSpecs(&apiv1.ConfigMap{ObjectMeta: meta})
+	require.Error(t, err, "a kind the scheme does not know is an error, not a silent false")
 }
 
 func TestLocationString(t *testing.T) {

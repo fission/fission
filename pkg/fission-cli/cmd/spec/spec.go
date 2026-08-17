@@ -15,6 +15,7 @@ import (
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sCache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/yaml"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/fission/fission/pkg/fission-cli/console"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 	"github.com/fission/fission/pkg/fission-cli/util"
+	fissionscheme "github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 )
 
 const (
@@ -180,26 +182,64 @@ func save(data []byte, specDir string, specFile string, truncate bool) error {
 	return nil
 }
 
-// called from `fission * create --spec`
-func SpecSave(resource any, specFile string, update bool) error {
-	var specDir = "specs"
+// Resource is a Fission CRD object that the spec commands save, print and look
+// up: every fv1 type (as a pointer) satisfies it. Its Kind and APIVersion come
+// from the clientset scheme, so the object itself carries the evidence of what
+// it is; the CLI's local ArchiveUploadSpec is not a runtime.Object and has its
+// own entry points below.
+type Resource interface {
+	runtime.Object
+	metav1.Object
+}
 
-	meta, kind, data, err := crdToYaml(resource)
+// kindOf returns the Kind the clientset scheme registers for obj.
+func kindOf(obj Resource) (string, error) {
+	gvks, _, err := fissionscheme.Scheme.ObjectKinds(obj)
+	if err != nil {
+		return "", fmt.Errorf("unknown object type %T: %w", obj, err)
+	}
+	if len(gvks) == 0 {
+		return "", fmt.Errorf("unknown object type %T", obj)
+	}
+	return gvks[0].Kind, nil
+}
+
+// SpecSave writes obj to specFile under the specs directory. It is called from
+// `fission * create --spec-save`; update truncates an existing file.
+func SpecSave(obj Resource, specFile string, update bool) error {
+	meta, kind, data, err := crdToYaml(obj)
 	if err != nil {
 		return err
 	}
+	return saveSpec(specFile, update, meta, kind, data, func(fr *FissionResources) (bool, error) {
+		return fr.ExistsInSpecs(obj)
+	})
+}
+
+// SpecSaveArchiveUploadSpec is SpecSave for the CLI-local ArchiveUploadSpec.
+func SpecSaveArchiveUploadSpec(aus types.ArchiveUploadSpec, specFile string, update bool) error {
+	meta, kind, data, err := archiveUploadSpecToYaml(aus)
+	if err != nil {
+		return err
+	}
+	return saveSpec(specFile, update, meta, kind, data, func(fr *FissionResources) (bool, error) {
+		return fr.ArchiveUploadSpecExists(aus.Name), nil
+	})
+}
+
+func saveSpec(specFile string, update bool, meta metav1.ObjectMeta, kind string, data []byte, exists func(*FissionResources) (bool, error)) error {
+	var specDir = "specs"
 
 	fr, err := ReadSpecs(specDir, util.SPEC_IGNORE_FILE, false)
 	if err != nil {
 		return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 	}
 
-	exists, err := fr.ExistsInSpecs(resource)
+	found, err := exists(fr)
 	if err != nil {
 		return err
 	}
-
-	if exists {
+	if found {
 		return fmt.Errorf("same name resource (%v) already exists in namespace (%v)", meta.Name, meta.Namespace)
 	}
 
@@ -215,8 +255,19 @@ func SpecSave(resource any, specFile string, update bool) error {
 	return nil
 }
 
-func SpecDry(resource any) error {
-	_, _, data, err := crdToYaml(resource)
+// SpecDry prints obj as spec YAML.
+func SpecDry(obj Resource) error {
+	_, _, data, err := crdToYaml(obj)
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// SpecDryArchiveUploadSpec is SpecDry for the CLI-local ArchiveUploadSpec.
+func SpecDryArchiveUploadSpec(aus types.ArchiveUploadSpec) error {
+	_, _, data, err := archiveUploadSpecToYaml(aus)
 	if err != nil {
 		return err
 	}
@@ -235,7 +286,7 @@ func CheckFunctionReferencesInSpecs(input cli.Input, referrerKind, referrerName 
 		return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 	}
 	for _, fn := range fnNames {
-		exists, err := fr.ExistsInSpecs(fv1.Function{
+		exists, err := fr.ExistsInSpecs(&fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{Name: fn, Namespace: namespace},
 		})
 		if err != nil {
@@ -254,12 +305,12 @@ func CheckFunctionReferencesInSpecs(input cli.Input, referrerKind, referrerName 
 // when --spec-save is set it writes it to specFile. It returns handled=true when
 // either flag was set, in which case the caller must return err immediately
 // instead of talking to the API server.
-func SaveOrDry(input cli.Input, resource any, specFile string) (handled bool, err error) {
+func SaveOrDry(input cli.Input, obj Resource, specFile string) (handled bool, err error) {
 	if input.Bool(flagkey.SpecDry) {
-		return true, SpecDry(resource)
+		return true, SpecDry(obj)
 	}
 	if input.Bool(flagkey.SpecSave) {
-		if err := SpecSave(resource, specFile, false); err != nil {
+		if err := SpecSave(obj, specFile, false); err != nil {
 			return true, fmt.Errorf("error saving spec to %s: %w", specFile, err)
 		}
 		return true, nil
@@ -267,84 +318,30 @@ func SaveOrDry(input cli.Input, resource any, specFile string) (handled bool, er
 	return false, nil
 }
 
-func crdToYaml(resource any) (metav1.ObjectMeta, string, []byte, error) {
-	// make sure we're writing a known type
-	var meta metav1.ObjectMeta
-	var kind string
-	var data []byte
-	var err error
-
-	switch typedres := resource.(type) {
-	case types.ArchiveUploadSpec:
-		typedres.Kind = "ArchiveUploadSpec"
-		meta = metav1.ObjectMeta{
-			Name: typedres.Name,
-		}
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.Package:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "Package"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.Function:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "Function"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.Environment:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "Environment"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.HTTPTrigger:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "HTTPTrigger"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.KubernetesWatchTrigger:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "KubernetesWatchTrigger"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.MessageQueueTrigger:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "MessageQueueTrigger"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.TimeTrigger:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "TimeTrigger"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.Workflow:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "Workflow"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	case fv1.FunctionAlias:
-		typedres.APIVersion = fv1.CRD_VERSION
-		typedres.Kind = "FunctionAlias"
-		meta = typedres.ObjectMeta
-		kind = typedres.Kind
-		data, err = yaml.Marshal(typedres)
-	default:
-		err = fmt.Errorf("unknown object type '%v'", typedres)
+// crdToYaml marshals obj as spec YAML with its Kind and APIVersion stamped
+// from the scheme. obj itself is not modified.
+func crdToYaml(obj Resource) (metav1.ObjectMeta, string, []byte, error) {
+	kind, err := kindOf(obj)
+	if err != nil {
+		return metav1.ObjectMeta{}, "", nil, err
 	}
-
+	stamped := obj.DeepCopyObject()
+	stamped.GetObjectKind().SetGroupVersionKind(fv1.SchemeGroupVersion.WithKind(kind))
+	data, err := yaml.Marshal(stamped)
 	if err != nil {
 		return metav1.ObjectMeta{}, "", nil, fmt.Errorf("couldn't marshal YAML: %w", err)
 	}
+	return metav1.ObjectMeta{Name: obj.GetName(), Namespace: obj.GetNamespace()}, kind, data, nil
+}
 
-	return meta, kind, data, nil
+// archiveUploadSpecToYaml is crdToYaml for the CLI-local ArchiveUploadSpec.
+func archiveUploadSpecToYaml(aus types.ArchiveUploadSpec) (metav1.ObjectMeta, string, []byte, error) {
+	aus.Kind = "ArchiveUploadSpec"
+	data, err := yaml.Marshal(aus)
+	if err != nil {
+		return metav1.ObjectMeta{}, "", nil, fmt.Errorf("couldn't marshal YAML: %w", err)
+	}
+	return metav1.ObjectMeta{Name: aus.Name}, aus.Kind, data, nil
 }
 
 // validateFunctionReference checks a function reference
@@ -768,82 +765,54 @@ func (fr *FissionResources) ArchiveUploadSpecInSpecs(aus *types.ArchiveUploadSpe
 	return nil
 }
 
-func (fr *FissionResources) ExistsInSpecs(resource any) (bool, error) {
-	switch typedres := resource.(type) {
-	case types.ArchiveUploadSpec:
-		for _, obj := range fr.ArchiveUploadSpecs {
-			if obj.Name == typedres.Name {
-				return true, nil
-			}
-		}
-	case fv1.Package:
-		for _, obj := range fr.Packages {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.Function:
-		for _, obj := range fr.Functions {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.Environment:
-		for _, obj := range fr.Environments {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.HTTPTrigger:
-		for _, obj := range fr.HttpTriggers {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.KubernetesWatchTrigger:
-		for _, obj := range fr.KubernetesWatchTriggers {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.MessageQueueTrigger:
-		for _, obj := range fr.MessageQueueTriggers {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.TimeTrigger:
-		for _, obj := range fr.TimeTriggers {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.Workflow:
-		for _, obj := range fr.Workflows {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	case fv1.FunctionAlias:
-		for _, obj := range fr.FunctionAliases {
-			if obj.Name == typedres.Name &&
-				obj.Namespace == typedres.Namespace {
-				return true, nil
-			}
-		}
-	default:
-		return false, fmt.Errorf("unknown resource type %#v", typedres)
-	}
+// ArchiveUploadSpecExists reports whether an ArchiveUploadSpec with the name
+// is present in the specs.
+func (fr *FissionResources) ArchiveUploadSpecExists(name string) bool {
+	return slices.ContainsFunc(fr.ArchiveUploadSpecs, func(a types.ArchiveUploadSpec) bool { return a.Name == name })
+}
 
-	return false, nil
+// ExistsInSpecs reports whether an object of obj's kind with the same name and
+// namespace is present in the specs.
+func (fr *FissionResources) ExistsInSpecs(obj Resource) (bool, error) {
+	kind, err := kindOf(obj)
+	if err != nil {
+		return false, err
+	}
+	name, ns := obj.GetName(), obj.GetNamespace()
+	switch kind {
+	case "Package":
+		return hasNamed(fr.Packages, name, ns), nil
+	case "Function":
+		return hasNamed(fr.Functions, name, ns), nil
+	case "Environment":
+		return hasNamed(fr.Environments, name, ns), nil
+	case "HTTPTrigger":
+		return hasNamed(fr.HttpTriggers, name, ns), nil
+	case "KubernetesWatchTrigger":
+		return hasNamed(fr.KubernetesWatchTriggers, name, ns), nil
+	case "MessageQueueTrigger":
+		return hasNamed(fr.MessageQueueTriggers, name, ns), nil
+	case "TimeTrigger":
+		return hasNamed(fr.TimeTriggers, name, ns), nil
+	case "Workflow":
+		return hasNamed(fr.Workflows, name, ns), nil
+	case "FunctionAlias":
+		return hasNamed(fr.FunctionAliases, name, ns), nil
+	default:
+		return false, fmt.Errorf("unknown resource kind %q (%T)", kind, obj)
+	}
+}
+
+// hasNamed reports whether objs holds an object with the given name and
+// namespace.
+func hasNamed[T any, PT Object[T]](objs []T, name, namespace string) bool {
+	for i := range objs {
+		o := PT(&objs[i])
+		if o.GetName() == name && o.GetNamespace() == namespace {
+			return true
+		}
+	}
+	return false
 }
 
 func (loc Location) String() string {

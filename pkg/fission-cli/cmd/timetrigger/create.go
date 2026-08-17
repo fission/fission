@@ -70,7 +70,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 
-		exists, err := fr.ExistsInSpecs(fv1.Function{
+		exists, err := fr.ExistsInSpecs(&fv1.Function{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      fnName,
 				Namespace: userProvidedNS,
@@ -115,7 +115,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 func (opts *CreateSubCommand) run(input cli.Input) error {
 	// if we're writing a spec, don't call the API; save/print and return.
-	if handled, err := spec.SaveOrDry(input, *opts.trigger, fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.Name)); handled {
+	if handled, err := spec.SaveOrDry(input, opts.trigger, fmt.Sprintf("timetrigger-%v.yaml", opts.trigger.Name)); handled {
 		return err
 	}
 

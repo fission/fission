@@ -222,7 +222,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 			return fv1.AggregateValidationErrors("HTTPTrigger", err)
 		}
 		specFile := fmt.Sprintf("route-%s.yaml", opts.trigger.Name)
-		err = spec.SpecSave(*opts.trigger, specFile, true)
+		err = spec.SpecSave(opts.trigger, specFile, true)
 		if err != nil {
 			return fmt.Errorf("error saving HTTP trigger spec: %w", err)
 		}

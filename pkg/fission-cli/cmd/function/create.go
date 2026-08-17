@@ -476,7 +476,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			if err != nil {
 				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
-			exists, err := fr.ExistsInSpecs(fv1.Environment{
+			exists, err := fr.ExistsInSpecs(&fv1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      envName,
 					Namespace: userProvidedNS,
@@ -642,7 +642,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 	}
 
 	// if we're writing a spec, don't create the function; save/print and return.
-	if handled, err := spec.SaveOrDry(input, *opts.function, opts.specFile); handled {
+	if handled, err := spec.SaveOrDry(input, opts.function, opts.specFile); handled {
 		return err
 	}
 

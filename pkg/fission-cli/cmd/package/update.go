@@ -289,7 +289,7 @@ func UpdatePackage(input cli.Input, client cmd.Client, specFile string, pkg *fv1
 			return &existing.ObjectMeta, nil
 		}
 
-		err = spec.SpecSave(*pkg, specFile, true)
+		err = spec.SpecSave(pkg, specFile, true)
 		if err != nil {
 			return nil, fmt.Errorf("error saving package spec: %w", err)
 		}

@@ -291,7 +291,7 @@ func (opts *UpdateSubCommand) run(input cli.Input) error {
 		if err != nil {
 			return fv1.AggregateValidationErrors("Function", err)
 		}
-		err = spec.SpecSave(*opts.function, opts.specFile, false)
+		err = spec.SpecSave(opts.function, opts.specFile, false)
 		if err != nil {
 			return fmt.Errorf("error saving function spec: %w", err)
 		}

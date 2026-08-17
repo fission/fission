@@ -92,7 +92,7 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 		if err != nil {
 			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
-		exists, err := fr.ExistsInSpecs(fv1.Environment{
+		exists, err := fr.ExistsInSpecs(&fv1.Environment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      envName,
 				Namespace: userProvidedNS,
@@ -317,7 +317,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	}
 
 	if input.Bool(flagkey.SpecDry) {
-		return &pkg.ObjectMeta, spec.SpecDry(*pkg)
+		return &pkg.ObjectMeta, spec.SpecDry(pkg)
 	}
 
 	if input.Bool(flagkey.SpecSave) {
@@ -332,7 +332,7 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 			return &existing.ObjectMeta, nil
 		}
 
-		err = spec.SpecSave(*pkg, specFile, false)
+		err = spec.SpecSave(pkg, specFile, false)
 		if err != nil {
 			return nil, fmt.Errorf("error saving package spec: %w", err)
 		}

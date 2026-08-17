@@ -36,7 +36,7 @@ func captureSpecStdout(t *testing.T, fn func() error) string {
 }
 
 func TestSaveOrDry(t *testing.T) {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "ydry"}}
+	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "ydry"}}
 
 	t.Run("no spec flag is not handled", func(t *testing.T) {
 		in := dummy.TestFlagSet()
