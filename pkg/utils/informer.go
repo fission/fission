@@ -31,11 +31,11 @@ func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, r
 	for _, ns := range watchNamespaces {
 		informers[ns] = cache.NewSharedInformer(
 			&cache.ListWatch{
-				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
 					return client.CoreV1().Events(ns).List(ctx, options)
 				},
-				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
 					return client.CoreV1().Events(ns).Watch(ctx, options)
 				},

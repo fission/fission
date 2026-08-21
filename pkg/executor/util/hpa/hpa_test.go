@@ -70,7 +70,7 @@ func TestHpaOps(t *testing.T) {
 			ExecutorType:          fv1.ExecutorTypeNewdeploy,
 			MinScale:              1,
 			MaxScale:              5,
-			TargetCPUPercent:      50,
+			TargetCPUPercent:      50, //nolint:staticcheck // exercises the deprecated field's compatibility path
 			SpecializationTimeout: 300,
 		},
 		"test-fn",

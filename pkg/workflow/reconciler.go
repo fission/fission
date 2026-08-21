@@ -72,7 +72,7 @@ func (r *WorkflowRunReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if apierrors.IsNotFound(err) && time.Since(run.CreationTimestamp.Time) > workflowRefGrace {
 			if failErr := r.engine.FailUnstartable(ctx, run,
 				fmt.Sprintf("workflow %q did not appear within %s of run creation", run.Spec.WorkflowRef, workflowRefGrace)); failErr == nil {
-				return ctrl.Result{Requeue: true}, nil // fold the terminal event into status
+				return ctrl.Result{RequeueAfter: time.Second}, nil // fold the terminal event into status
 			}
 		}
 		controller.SetConditions(ctx, r.logger, r.client, run, metav1.Condition{

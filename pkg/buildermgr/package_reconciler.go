@@ -322,7 +322,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	// re-admit the double-build this suppression exists to prevent.
 	if updated != nil && PackageContentHash(updated.Spec) != updated.Status.ContentHash {
 		logger.Info("package content changed while the build was in flight, requeuing to converge")
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 	return ctrl.Result{}, nil
 }

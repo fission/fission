@@ -256,10 +256,18 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		return
 	}
 
-	director := func(req *http.Request) {
-		if _, ok := req.Header["User-Agent"]; !ok {
+	rewrite := func(pr *httputil.ProxyRequest) {
+		// Reproduce the deprecated Director path byte-for-byte: carry the
+		// inbound X-Forwarded-For chain and append the client IP (what
+		// ServeHTTP did implicitly for Director), and add nothing else —
+		// Director mode never set X-Forwarded-Host/-Proto.
+		pr.Out.Header["X-Forwarded-For"] = pr.In.Header["X-Forwarded-For"]
+		pr.SetXForwarded()
+		pr.Out.Header.Del("X-Forwarded-Host")
+		pr.Out.Header.Del("X-Forwarded-Proto")
+		if _, ok := pr.Out.Header["User-Agent"]; !ok {
 			// explicitly disable User-Agent so it's not set to default value
-			req.Header.Set("User-Agent", "")
+			pr.Out.Header.Set("User-Agent", "")
 		}
 	}
 
@@ -298,7 +306,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	start := time.Now()
 
 	proxy := &httputil.ReverseProxy{
-		Director:     director,
+		Rewrite:      rewrite,
 		Transport:    rrt,
 		BufferPool:   proxyResponseBufferPool,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),
