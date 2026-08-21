@@ -66,7 +66,7 @@ on:
       - ".github/workflows/benchmark.yaml"
 
 env:
-  HELM_VERSION: v4.2.3
+  HELM_VERSION: v4.2.4
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.24.0
