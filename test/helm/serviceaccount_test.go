@@ -4,6 +4,7 @@
 package helm
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -306,8 +307,11 @@ func TestServiceAccountUnknownComponentKeyFailsRender(t *testing.T) {
 func TestServiceAccountComponentsHelperMatchesValues(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "charts", "fission-all", "values.yaml"))
 	require.NoError(t, err)
+	// RawMessage, not `any`: this test reads the KEYS of the block and never
+	// looks inside a value, so decoding them would claim a knowledge of their
+	// shape it does not have and cannot check.
 	var vals struct {
-		ServiceAccounts map[string]any `json:"serviceAccounts"`
+		ServiceAccounts map[string]json.RawMessage `json:"serviceAccounts"`
 	}
 	require.NoError(t, yaml.Unmarshal(raw, &vals))
 	documented := make([]string, 0, len(vals.ServiceAccounts))
