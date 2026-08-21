@@ -31,6 +31,16 @@ import (
 // is requeue-based (not a blocking sleep), so it never holds a reconcile worker.
 const builderPodPollInterval = 5 * time.Second
 
+// convergeRequeueInterval paces the self-requeue taken when a package's content
+// changed while its build was in flight. It replaces a `Requeue: true`
+// (deprecated in controller-runtime v0.24) that rode the workqueue's
+// exponential rate limiter, so unlike that one it does NOT back off: each pass
+// that still sees a hash mismatch starts another build. 5s rather than a
+// sub-second value because every iteration can spawn a builder pod, and a spec
+// being rewritten continuously by an external GitOps controller would otherwise
+// turn this into a per-second rebuild loop.
+const convergeRequeueInterval = 5 * time.Second
+
 // PackageReconciler builds source-archive packages into deployment archives. It
 // replaces the informer-driven packageWatcher: controller-runtime's workqueue
 // owns scheduling and serializes reconciles per Package key, which replaces the
@@ -322,7 +332,7 @@ func (r *PackageReconciler) build(ctx context.Context, pkg *fv1.Package) (ctrl.R
 	// re-admit the double-build this suppression exists to prevent.
 	if updated != nil && PackageContentHash(updated.Spec) != updated.Status.ContentHash {
 		logger.Info("package content changed while the build was in flight, requeuing to converge")
-		return ctrl.Result{RequeueAfter: time.Second}, nil
+		return ctrl.Result{RequeueAfter: convergeRequeueInterval}, nil
 	}
 	return ctrl.Result{}, nil
 }
