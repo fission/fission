@@ -10,6 +10,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sCache "k8s.io/client-go/tools/cache"
+
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 // Object constrains the generic spec reconciler to a pointer to a Fission CRD
@@ -208,4 +210,63 @@ func applyResourceType[T any, PT Object[T]](
 	}
 
 	return metadata, &ras, nil
+}
+
+// crudClient is the slice of a generated typed client that standardOps needs
+// to derive the mechanical closures. Every Fission typed client satisfies it
+// with T the resource value type and L its list type.
+type crudClient[T any, L any] interface {
+	Create(ctx context.Context, obj *T, opts metav1.CreateOptions) (*T, error)
+	Update(ctx context.Context, obj *T, opts metav1.UpdateOptions) (*T, error)
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*T, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	List(ctx context.Context, opts metav1.ListOptions) (*L, error)
+}
+
+// standardOps derives the mechanical resourceOps closures — cluster-wide list,
+// create, conflict-retrying update, delete — from the typed-client accessor,
+// so a kind with no quirks declares only what genuinely differs: where its
+// items live in the spec, how to unwrap its list type, its ObjectMeta, and
+// its equality. Kinds with quirks take this as the base and override fields
+// on the returned value (HTTPTrigger adds validate; Package replaces list,
+// equal, and update — see applyPackages).
+func standardOps[T any, PT Object[T], L any, C crudClient[T, L]](
+	client func(ns string) C,
+	items func(*FissionResources) []T,
+	fromList func(*L) []T,
+	meta func(PT) *metav1.ObjectMeta,
+	equal func(existing, desired PT) bool,
+) resourceOps[T, PT] {
+	return resourceOps[T, PT]{
+		items: items,
+		list: func(ctx context.Context) ([]T, error) {
+			l, err := client(metav1.NamespaceAll).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return fromList(l), nil
+		},
+		meta:  meta,
+		equal: equal,
+		create: func(ctx context.Context, desired PT) (*metav1.ObjectMeta, error) {
+			n, err := client(meta(desired).Namespace).Create(ctx, (*T)(desired), metav1.CreateOptions{})
+			if err != nil {
+				return nil, err
+			}
+			return meta(PT(n)), nil
+		},
+		update: func(ctx context.Context, _, desired PT) (*metav1.ObjectMeta, error) {
+			n, err := util.UpdateOnConflict(ctx, client(meta(desired).Namespace), meta(desired).Name, func(cur *T) {
+				meta(desired).ResourceVersion = meta(PT(cur)).ResourceVersion
+				*cur = *(*T)(desired)
+			})
+			if err != nil {
+				return nil, err
+			}
+			return meta(PT(n)), nil
+		},
+		delete: func(ctx context.Context, ns, name string) error {
+			return client(ns).Delete(ctx, name, metav1.DeleteOptions{})
+		},
+	}
 }
