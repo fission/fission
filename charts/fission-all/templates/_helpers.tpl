@@ -607,10 +607,16 @@ component and emit it as bare, unindented YAML entries. Callers wrap them in
 
 merge's first argument wins, so the component map overrides the chart-wide one
 key by key rather than replacing it wholesale.
+
+BOTH arguments are deep-copied. merge mutates its destination, and these helpers
+run once per account against the same chart-wide map, so a version of sprig that
+writes through to either argument would let the first account's keys contaminate
+the other eighteen. Current sprig does not, and TestServiceAccountNoCrossAccountLeak
+is what keeps that from becoming a silent regression on a helm bump.
 */}}
 {{- define "fission.saAnnotations" -}}
 {{- $sa := .root.Values.serviceAccounts | default dict -}}
-{{- $merged := merge (deepCopy (dig .component "annotations" dict $sa)) ($sa.annotations | default dict) -}}
+{{- $merged := merge (deepCopy (dig .component "annotations" dict $sa)) (deepCopy ($sa.annotations | default dict)) -}}
 {{- range $k, $v := $merged -}}
 {{- if hasPrefix "helm.sh/" $k -}}
 {{- fail (printf "serviceAccounts.%s: %q is reserved — the chart owns helm.sh/* annotations (hook ordering and delete policy on the pre-upgrade account); overriding one would emit a duplicate key and change when the hook runs" $.component $k) -}}
@@ -625,7 +631,7 @@ key by key rather than replacing it wholesale.
 
 {{- define "fission.saLabels" -}}
 {{- $sa := .root.Values.serviceAccounts | default dict -}}
-{{- $merged := merge (deepCopy (dig .component "labels" dict $sa)) ($sa.labels | default dict) -}}
+{{- $merged := merge (deepCopy (dig .component "labels" dict $sa)) (deepCopy ($sa.labels | default dict)) -}}
 {{- range $k, $v := $merged -}}
 {{- if has $k (list "svc" "application" "chart") -}}
 {{- fail (printf "serviceAccounts.%s: %q is reserved — the chart owns it as a component identity label. `svc` in particular selects components in the router NetworkPolicy and the support dump, so overriding it would emit a duplicate key and detach this account from both" $.component $k) -}}

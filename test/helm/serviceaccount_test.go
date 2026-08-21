@@ -175,6 +175,50 @@ serviceAccounts:
 		"a component-scoped role ARN must not leak onto other accounts — that is the whole reason it is per-component")
 }
 
+// TestServiceAccountNoCrossAccountLeak proves account isolation when a
+// chart-wide map and several component maps are in play at once.
+//
+// The helpers run once per account against the same chart-wide map, and sprig's
+// merge mutates its destination — so a helm bump whose merge writes through to
+// either argument would let the first account rendered contaminate the other
+// eighteen. For an IRSA role ARN that is not a cosmetic bug: it would grant every
+// component storagesvc's S3 permissions.
+func TestServiceAccountNoCrossAccountLeak(t *testing.T) {
+	exclusive := map[string]string{
+		"fission-storagesvc": "only/storagesvc",
+		"fission-router":     "only/router",
+		"fission-kafka":      "only/kafka",
+		"fission-builder":    "only/builder",
+	}
+	ms := renderWithValues(t, allComponentsValues+`
+serviceAccounts:
+  annotations:
+    shared/everywhere: global
+  storagesvc:
+    annotations:
+      only/storagesvc: s3-role
+  router:
+    annotations:
+      only/router: router-role
+  kafka:
+    annotations:
+      only/kafka: msk-role
+  builder:
+    annotations:
+      only/builder: builder-role
+`)
+	for _, sa := range serviceAccounts(t, ms) {
+		assert.Equalf(t, "global", sa.Annotations["shared/everywhere"], "ServiceAccount %q must carry the chart-wide annotation", sa.Name)
+		for owner, key := range exclusive {
+			if owner == sa.Name {
+				assert.Containsf(t, sa.Annotations, key, "ServiceAccount %q must carry its own annotation", sa.Name)
+				continue
+			}
+			assert.NotContainsf(t, sa.Annotations, key, "ServiceAccount %q leaked %q, which belongs to %q", sa.Name, key, owner)
+		}
+	}
+}
+
 // TestServiceAccountPreUpgradeKeepsHookAnnotations covers the one account that
 // already owns an annotations block. User annotations merge into it; the Helm
 // hook annotations that decide when the account exists must survive, because
