@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
 	"uuid"
 
 	"github.com/stretchr/testify/assert"

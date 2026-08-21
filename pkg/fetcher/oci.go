@@ -14,12 +14,11 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 
-	"github.com/fission/fission/pkg/utils/uuid"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/oci"
 	"github.com/fission/fission/pkg/utils"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 // fetchOCI materializes an OCI deployment archive (RFC-0001 Path A): it pulls
