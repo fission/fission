@@ -40,22 +40,12 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error getting http trigger: %w", err)
 	}
 
-	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
-	if err != nil {
-		return err
-	}
-	if handled, err := util.PrintStructured(format, ht); err != nil || handled {
-		return err
-	}
-
 	// describe renders the plain table (no -o wide AGE column), consistent with
-	// the other describe commands; json/yaml are handled above.
-	if err := printHtSummary(util.OutputTable, []fv1.HTTPTrigger{*ht}); err != nil {
-		return err
-	}
-	util.PrintConditions(ht.Status.Conditions)
-
-	return nil
+	// the other describe commands; json/yaml are handled by PrintGet.
+	_, err = util.PrintGet(input, ht, func() error {
+		return printHtSummary(util.OutputTable, []fv1.HTTPTrigger{*ht})
+	})
+	return err
 }
 
 func printHtSummary(format util.OutputFormat, triggers []fv1.HTTPTrigger) error {

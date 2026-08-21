@@ -6,14 +6,13 @@ package environment
 
 import (
 	"fmt"
-	"os"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type GetSubCommand struct {
@@ -36,12 +35,12 @@ func (opts *GetSubCommand) do(input cli.Input) (err error) {
 		return fmt.Errorf("error getting environment: %w", err)
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-
-	fmt.Fprintf(w, "%v\t%v\n", "NAME", "IMAGE")
-	fmt.Fprintf(w, "%v\t%v\n",
-		env.Name, env.Spec.Runtime.Image)
-
-	w.Flush()
-	return nil
+	// Historically this was the one get subcommand with no -o json/yaml and no
+	// CONDITIONS block; routing through PrintGet closes that gap. The table
+	// keeps its original two columns so scripted output stays parseable.
+	_, err = util.PrintGet(input, env, func() error {
+		util.PrintTable([]string{"NAME", "IMAGE"}, [][]string{{env.Name, env.Spec.Runtime.Image}})
+		return nil
+	})
+	return err
 }

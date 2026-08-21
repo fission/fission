@@ -36,18 +36,14 @@ func (opts *GetSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error getting function alias: %w", err)
 	}
 
-	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	format, err := util.PrintGet(input, alias, func() error {
+		headers := []string{"NAME", "FUNCTION", "VERSION", "PACKAGE-DIGEST", "WEIGHT", "SECONDARY-VERSION", "RESOLVED-VERSION"}
+		util.PrintTable(headers, [][]string{aliasRow(alias)})
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	if handled, err := util.PrintStructured(format, alias); err != nil || handled {
-		return err
-	}
-
-	headers := []string{"NAME", "FUNCTION", "VERSION", "PACKAGE-DIGEST", "WEIGHT", "SECONDARY-VERSION", "RESOLVED-VERSION"}
-	rows := [][]string{aliasRow(alias)}
-	util.PrintTable(headers, rows)
-	util.PrintConditions(alias.Status.Conditions)
 	if format == util.OutputTable {
 		printHistory(alias.Status.History)
 	}
