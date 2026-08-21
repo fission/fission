@@ -33,6 +33,69 @@ import (
 // logMarker is the line the nodejs/log/log.js fixture writes on each invocation.
 const logMarker = "log test"
 
+// Retry windows shared by the RFC-0024 async tests, named so a context budget can
+// be derived from them instead of guessed.
+//
+// asyncDeliverWindow is the long pole. After the 202 the dispatcher still has to
+// pick the invocation off the single global queue, invoke the source function and
+// only then settle or fire a destination, with the delivery/redelivery backoff
+// chain riding on top — all of it sharing one queue with whatever else the serial
+// suite is running.
+const (
+	asyncUpdateWindow  = 30 * time.Second
+	asyncWarmWindow    = 2 * time.Minute
+	asyncAcceptWindow  = 2 * time.Minute
+	asyncDeliverWindow = 5 * time.Minute
+
+	// Not a delivery wait: the time for a statestore scale-to-zero to take
+	// effect and for the router to start failing the enqueue.
+	asyncStatestoreDownWindow = 3 * time.Minute
+
+	// asyncSetupHeadroom covers what runs inside the same context BEFORE the
+	// first retry window opens: namespace, environment and function creation,
+	// including a package build.
+	asyncSetupHeadroom = 4 * time.Minute
+)
+
+// asyncTestContext returns a context whose deadline covers every retry window the
+// test can spend, plus setup headroom.
+//
+// This is load-bearing, not tidiness. Until #3610 these tests declared more retry
+// time than their context allowed — the destinations test asked for 9.5 minutes of
+// windows inside an 8-minute context, and TestAsyncInvocationExecutes for exactly
+// its whole budget with nothing left for the setup preceding it. No test could
+// spend the time it claimed: whichever stage ran slow, the context expired and the
+// NEXT require.Eventually then failed for its full window against a dead context.
+//
+// That failure reads as "the destination never fired", which is why the flake was
+// first diagnosed as async-queue contention. Deriving the deadline from the windows
+// keeps the arithmetic honest when someone widens one of them.
+func asyncTestContext(t *testing.T, windows ...time.Duration) context.Context {
+	t.Helper()
+	budget := asyncSetupHeadroom
+	for _, w := range windows {
+		budget += w
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), budget)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+// budgetLeft renders a context's remaining time for a failure message, so a wait
+// that times out says whether the wait ran out or the context did. Call it AT
+// failure — testify evaluates msgAndArgs eagerly, so passing it to require.Eventually
+// would report the budget before the wait rather than after.
+func budgetLeft(ctx context.Context) string {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return "context has no deadline"
+	}
+	if remaining := time.Until(deadline); remaining > 0 {
+		return fmt.Sprintf("%s of context budget left", remaining.Truncate(time.Second))
+	}
+	return "context budget was already EXHAUSTED — widen the windows passed to asyncTestContext"
+}
+
 // requireAsyncEnabled skips the test unless the router runs with async invocation
 // on (ASYNC_INVOCATION_ENABLED=true), so the suite passes on installs that leave
 // the feature off.
@@ -108,8 +171,7 @@ func asyncPostE(t *testing.T, ctx context.Context, f *framework.Framework, route
 // to go live into a single durable invocation.
 func TestAsyncInvocationExecutes(t *testing.T) {
 	f := framework.Connect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
+	ctx := asyncTestContext(t, asyncWarmWindow, asyncAcceptWindow, asyncDeliverWindow)
 
 	requireAsyncEnabled(t, ctx, f)
 	image := f.Images().RequireNode(t)
@@ -140,7 +202,7 @@ func TestAsyncInvocationExecutes(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		assert.Less(c, resp.StatusCode, 400, "route live and function ready")
-	}, 3*time.Minute, 2*time.Second)
+	}, asyncWarmWindow, 2*time.Second)
 	baseline := strings.Count(ns.FunctionLogs(t, ctx, fn), logMarker)
 
 	// Async POST returns 202 + an invocation id; the dedup key collapses the
@@ -152,7 +214,7 @@ func TestAsyncInvocationExecutes(t *testing.T) {
 		assert.Equal(c, http.StatusAccepted, status)
 		invID = id
 		assert.NotEmpty(c, id)
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncAcceptWindow, 2*time.Second)
 	require.NotEmpty(t, invID, "202 must carry an X-Fission-Invocation-Id")
 
 	// The async invocation runs the function out-of-band: the marker count grows
@@ -161,15 +223,14 @@ func TestAsyncInvocationExecutes(t *testing.T) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		got := strings.Count(ns.FunctionLogs(t, ctx, fn), logMarker)
 		assert.Greater(c, got, baseline, "async invocation must execute the function")
-	}, 3*time.Minute, 3*time.Second)
+	}, asyncDeliverWindow, 3*time.Second)
 }
 
 // TestAsyncInvocationStatestoreDown503: with the statestore unreachable, an async
 // enqueue fails loud with 503 and never a silently dropped 202 (invariant A1).
 func TestAsyncInvocationStatestoreDown503(t *testing.T) {
 	f := framework.Connect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
+	ctx := asyncTestContext(t, asyncWarmWindow, asyncStatestoreDownWindow)
 
 	requireAsyncEnabled(t, ctx, f)
 	if _, err := f.KubeClient().AppsV1().Deployments(f.FissionNamespace()).Get(ctx, "statestore", metav1.GetOptions{}); err != nil {
@@ -201,7 +262,7 @@ func TestAsyncInvocationStatestoreDown503(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 		assert.Less(c, resp.StatusCode, 400, "route live and function ready")
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncWarmWindow, 2*time.Second)
 
 	// Take the statestore down and confirm the enqueue fails loud (503), restoring
 	// it afterward for the rest of the suite.
@@ -212,5 +273,5 @@ func TestAsyncInvocationStatestoreDown503(t *testing.T) {
 		status, _ := asyncPost(t, ctx, f, route, "")
 		assert.Equal(c, http.StatusServiceUnavailable, status,
 			"async enqueue with the statestore down must 503, never 202")
-	}, 3*time.Minute, 3*time.Second)
+	}, asyncStatestoreDownWindow, 3*time.Second)
 }
