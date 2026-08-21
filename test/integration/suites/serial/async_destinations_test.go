@@ -35,7 +35,7 @@ func setInvocation(t *testing.T, ctx context.Context, f *framework.Framework, ns
 		fn.Spec.Invocation = ic
 		_, err = fc.Update(ctx, fn, metav1.UpdateOptions{})
 		assert.NoError(c, err) // retry on conflict
-	}, 30*time.Second, 1*time.Second)
+	}, asyncUpdateWindow, 1*time.Second)
 }
 
 // warmRoute drives a synchronous POST through the trigger until it 2xxes, so the
@@ -54,7 +54,7 @@ func warmRoute(t *testing.T, ctx context.Context, f *framework.Framework, route 
 		}
 		defer func() { _ = resp.Body.Close() }()
 		assert.Less(c, resp.StatusCode, 400, "route live and function ready")
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncWarmWindow, 2*time.Second)
 }
 
 // warmInternal specializes a route-less destination function by invoking it on the
@@ -68,7 +68,7 @@ func warmInternal(t *testing.T, ctx context.Context, f *framework.Framework, fnN
 			return
 		}
 		assert.Less(c, status, 400, "destination function specialized")
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncWarmWindow, 2*time.Second)
 }
 
 // TestAsyncInvocationOnSuccessFunctionDestination: an async invocation with an
@@ -76,8 +76,7 @@ func warmInternal(t *testing.T, ctx context.Context, f *framework.Framework, fnN
 // the result envelope (the fn→fn chain).
 func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 	f := framework.Connect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
+	ctx := asyncTestContext(t, asyncUpdateWindow, asyncWarmWindow, asyncWarmWindow, asyncAcceptWindow, asyncDeliverWindow)
 
 	requireAsyncEnabled(t, ctx, f)
 	image := f.Images().RequireNode(t)
@@ -108,26 +107,32 @@ func TestAsyncInvocationOnSuccessFunctionDestination(t *testing.T) {
 		status, id := asyncPost(t, ctx, f, route, "dest-once-"+ns.ID)
 		assert.Equal(c, http.StatusAccepted, status)
 		assert.NotEmpty(c, id)
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncAcceptWindow, 2*time.Second)
 
 	marker := ns.Name + "/" + srcFn
-	require.Eventually(t, func() bool {
+	// assert + Fatalf rather than require.Eventually: testify evaluates a failure
+	// message's arguments eagerly, and the remaining context budget is only
+	// meaningful once the wait has actually run out.
+	if !assert.Eventually(t, func() bool {
 		logs, err := ns.FunctionLogsE(t, ctx, dstFn)
 		if err != nil {
 			t.Logf("destination logs: %v (retrying)", err)
 			return false
 		}
 		return strings.Contains(logs, marker)
-	}, 3*time.Minute, 3*time.Second,
-		"onSuccess destination function must execute out-of-band with the result envelope (marker %q)", marker)
+	}, asyncDeliverWindow, 3*time.Second) {
+		t.Fatalf("onSuccess destination function must execute out-of-band with the result envelope (marker %q); %s", marker, budgetLeft(ctx))
+	}
 }
 
 // TestAsyncInvocationDepthCapBounds: a function whose onSuccess points back at
 // itself chains a few hops then STOPS at the depth cap (invariant A6 — no runaway).
 func TestAsyncInvocationDepthCapBounds(t *testing.T) {
 	f := framework.Connect(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
-	defer cancel()
+	// The self-loop chains MaxChainDepth hops, each one a full trip through the
+	// shared queue, so it needs the delivery window more than the single-hop test
+	// does — not less.
+	ctx := asyncTestContext(t, asyncUpdateWindow, asyncWarmWindow, asyncAcceptWindow, asyncDeliverWindow)
 
 	requireAsyncEnabled(t, ctx, f)
 	image := f.Images().RequireNode(t)
@@ -153,7 +158,7 @@ func TestAsyncInvocationDepthCapBounds(t *testing.T) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		status, _ := asyncPost(t, ctx, f, route, "loop-once-"+ns.ID)
 		assert.Equal(c, http.StatusAccepted, status)
-	}, 2*time.Minute, 2*time.Second)
+	}, asyncAcceptWindow, 2*time.Second)
 
 	// The chain runs several hops then the depth cap STOPS it: poll until the
 	// execution count has reached the cap AND stopped growing (two equal reads a
@@ -165,12 +170,23 @@ func TestAsyncInvocationDepthCapBounds(t *testing.T) {
 	// depths 0..MaxChainDepth (the depth+1 enqueue past the cap is dropped); the
 	// slack tolerates at-least-once redelivery.
 	settled := -1
-	require.Eventually(t, func() bool {
-		n := strings.Count(ns.FunctionLogs(t, ctx, fnName), logMarker) - baseline
+	if !assert.Eventually(t, func() bool {
+		logs, err := ns.FunctionLogsE(t, ctx, fnName)
+		if err != nil {
+			// FunctionLogs (no E) fails the test outright, which on an expired
+			// context reports a log-read error rather than the timeout that
+			// caused it. Retry instead, and let the wait own the failure.
+			t.Logf("chain logs: %v (retrying)", err)
+			return false
+		}
+		n := strings.Count(logs, logMarker) - baseline
 		converged := n >= asyncinvoke.MaxChainDepth && n == settled
 		settled = n
 		return converged
-	}, 3*time.Minute, 3*time.Second)
+	}, asyncDeliverWindow, 3*time.Second) {
+		t.Fatalf("self-loop chain must reach the depth cap and settle (last count %d, cap %d); %s",
+			settled, asyncinvoke.MaxChainDepth, budgetLeft(ctx))
+	}
 	assert.LessOrEqualf(t, settled, asyncinvoke.MaxChainDepth+3,
 		"depth cap must bound the chain (got %d executions)", settled)
 }
