@@ -71,7 +71,7 @@ func ownedObjectToFunction(_ context.Context, obj client.Object) []reconcile.Req
 	if utils.CrdWatchClusterWide() && !utils.DefaultNSResolver().IsTenant(ns) {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}}}
+	return []reconcile.Request{{Name: name, Namespace: ns}}
 }
 
 // functionFinalizer gates a Function's deletion on the executor tearing its

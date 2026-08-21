@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -19,7 +18,7 @@ import (
 
 func baseEnv() *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default"},
+		Name: "e", Namespace: "default",
 		Spec: fv1.EnvironmentSpec{
 			Version: 2,
 			Runtime: fv1.Runtime{Image: "old-image", Container: &v1.Container{Name: "e"}},

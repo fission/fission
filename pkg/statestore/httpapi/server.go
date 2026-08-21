@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // NewHandler serves caps over the HTTP wire contract. The returned handler is
@@ -57,7 +58,7 @@ func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var dst T
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBytes)
 	if err := json.NewDecoder(r.Body).Decode(&dst); err != nil {
-		writeCode(w, http.StatusBadRequest, Error{Code: CodeBadRequest, Message: err.Error()})
+		writeJSON(w, http.StatusBadRequest, Error{Code: CodeBadRequest, Message: err.Error()})
 		return dst, false
 	}
 	return dst, true
@@ -65,18 +66,14 @@ func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 
 func writeErr(w http.ResponseWriter, err error) {
 	status, code := ErrToCode(err)
-	writeCode(w, status, Error{Code: code, Message: err.Error()})
+	writeJSON(w, status, Error{Code: code, Message: err.Error()})
 }
 
-func writeCode(w http.ResponseWriter, status int, e Error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(e)
-}
-
-func writeJSON[T any](w http.ResponseWriter, v T) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
+// writeJSON answers with v at status. The two former helpers (writeCode for an
+// explicit status, writeJSON for an implicit 200) had identical bodies once
+// both delegated to httpx.WriteJSON, so they are one function again.
+func writeJSON[T any](w http.ResponseWriter, status int, v T) {
+	_ = httpx.WriteJSON(w, status, v)
 }
 
 // cap accessors that translate an unavailable capability into a wire error.
@@ -121,7 +118,7 @@ func (h *handler) kvGet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, KVGetResp{Value: v.Data, Version: v.Version})
+	writeJSON(w, http.StatusOK, KVGetResp{Value: v.Data, Version: v.Version})
 }
 
 func (h *handler) kvSet(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +182,7 @@ func (h *handler) kvList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, KVListResp{Keys: page.Keys, Next: page.Next})
+	writeJSON(w, http.StatusOK, KVListResp{Keys: page.Keys, Next: page.Next})
 }
 
 func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
@@ -202,13 +199,13 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, statestore.ErrVersionConflict) {
 			// The head is meaningful on a conflict (the contract lets the caller
 			// resynchronize with it); carry it so the client need not re-Head.
-			writeCode(w, http.StatusConflict, Error{Code: CodeVersionConflict, Message: err.Error(), Head: head})
+			writeJSON(w, http.StatusConflict, Error{Code: CodeVersionConflict, Message: err.Error(), Head: head})
 			return
 		}
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, EventAppendResp{Head: head})
+	writeJSON(w, http.StatusOK, EventAppendResp{Head: head})
 }
 
 func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +222,7 @@ func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, EventReadResp{Events: evs})
+	writeJSON(w, http.StatusOK, EventReadResp{Events: evs})
 }
 
 func (h *handler) eventTrim(w http.ResponseWriter, r *http.Request) {
@@ -258,7 +255,7 @@ func (h *handler) eventHead(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, EventHeadResp{Head: head})
+	writeJSON(w, http.StatusOK, EventHeadResp{Head: head})
 }
 
 func (h *handler) queueEnqueue(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +275,7 @@ func (h *handler) queueEnqueue(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueueEnqueueResp{ID: id})
+	writeJSON(w, http.StatusOK, QueueEnqueueResp{ID: id})
 }
 
 func (h *handler) queueLease(w http.ResponseWriter, r *http.Request) {
@@ -295,7 +292,7 @@ func (h *handler) queueLease(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueueLeaseResp{Messages: msgs})
+	writeJSON(w, http.StatusOK, QueueLeaseResp{Messages: msgs})
 }
 
 func (h *handler) queueAck(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +357,7 @@ func (h *handler) queueDeadLetters(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueueDeadLettersResp{Messages: msgs})
+	writeJSON(w, http.StatusOK, QueueDeadLettersResp{Messages: msgs})
 }
 
 func (h *handler) queueRedrive(w http.ResponseWriter, r *http.Request) {
@@ -377,7 +374,7 @@ func (h *handler) queueRedrive(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueueRedriveResp{Redriven: n})
+	writeJSON(w, http.StatusOK, QueueRedriveResp{Redriven: n})
 }
 
 func (h *handler) queuePurge(w http.ResponseWriter, r *http.Request) {
@@ -394,7 +391,7 @@ func (h *handler) queuePurge(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueuePurgeResp{Purged: n})
+	writeJSON(w, http.StatusOK, QueuePurgeResp{Purged: n})
 }
 
 func (h *handler) queueStats(w http.ResponseWriter, r *http.Request) {
@@ -411,7 +408,7 @@ func (h *handler) queueStats(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	writeJSON(w, QueueStatsResp{
+	writeJSON(w, http.StatusOK, QueueStatsResp{
 		Visible:               st.Visible,
 		Leased:                st.Leased,
 		Dead:                  st.Dead,

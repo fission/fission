@@ -14,7 +14,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/correlation"
@@ -62,7 +61,7 @@ func newTestClient(sink logr.LogSink, url string) *client {
 // correlate a cold-start with the router request that triggered it.
 func TestRequestIDPropagation(t *testing.T) {
 	t.Parallel()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 
 	tests := []struct {
 		name string

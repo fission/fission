@@ -168,7 +168,7 @@ func (opts *topicSubCommand) call(input cli.Input, method, path string, query ur
 	if err != nil {
 		return nil, fmt.Errorf("connecting to the Fission router internal listener: %w", err)
 	}
-	u := *internalURL
+	u := internalURL.Clone()
 	u.Path = path
 	u.RawQuery = query.Encode()
 	req, err := http.NewRequestWithContext(input.Context(), method, u.String(), body)

@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -17,14 +16,12 @@ import (
 
 func liveFunctionForIdentity() *fv1.Function {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "hello",
-			Namespace:  "default",
-			UID:        types.UID("fn-uid-1"),
-			Generation: 5,
-			Labels: map[string]string{
-				"already": "here",
-			},
+		Name:       "hello",
+		Namespace:  "default",
+		UID:        types.UID("fn-uid-1"),
+		Generation: 5,
+		Labels: map[string]string{
+			"already": "here",
 		},
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"},
@@ -45,10 +42,8 @@ func versionForIdentity(fn *fv1.Function, seq int64, generation int64) *fv1.Func
 	// of v.Spec.Snapshot.
 	snap.Package.PackageRef.Name = "hello-v-snapshot-pkg"
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hello-v2",
-			Namespace: fn.Namespace,
-		},
+		Name:      "hello-v2",
+		Namespace: fn.Namespace,
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       fn.Name,
 			FunctionUID:        fn.UID,

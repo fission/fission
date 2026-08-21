@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/util"
@@ -78,8 +77,8 @@ func TestPrintHtSummaryFunctionColumn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			trigger := fv1.HTTPTrigger{
-				ObjectMeta: metav1.ObjectMeta{Name: "r", Namespace: "default"},
-				Spec:       fv1.HTTPTriggerSpec{FunctionReference: tt.ref},
+				Name: "r", Namespace: "default",
+				Spec: fv1.HTTPTriggerSpec{FunctionReference: tt.ref},
 			}
 			assert.Contains(t, functionColumn(trigger), tt.want)
 		})
@@ -94,7 +93,7 @@ func TestPrintHtSummaryRunsWithoutError(t *testing.T) {
 	t.Parallel()
 	triggers := []fv1.HTTPTrigger{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "default"},
+			Name: "r1", Namespace: "default",
 			Spec: fv1.HTTPTriggerSpec{
 				FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn", Alias: "prod"},
 			},

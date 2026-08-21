@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -25,21 +24,21 @@ import (
 // package's Literal, not the live function's package.
 func TestGetVersionRendersSnapshotPackage(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Package: fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Namespace: "default", Name: "hello-pkg"}},
 		},
 	}
 	livePkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-		Spec:       fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("live content")}},
+		Name: "hello-pkg", Namespace: "default",
+		Spec: fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("live content")}},
 	}
 	snapshotPkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1-pkg", Namespace: "default"},
-		Spec:       fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("v1 snapshot content")}},
+		Name: "hello-v1-pkg", Namespace: "default",
+		Spec: fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("v1 snapshot content")}},
 	}
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello",
 			Sequence:     1,
@@ -70,17 +69,17 @@ func TestGetVersionRendersSnapshotPackage(t *testing.T) {
 // by name -- correct because the digest already content-addresses it.
 func TestGetVersionRendersOriginalPackageForOCIDigest(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Package: fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Namespace: "default", Name: "hello-pkg"}},
 		},
 	}
 	livePkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-		Spec:       fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("digest-pinned content")}},
+		Name: "hello-pkg", Namespace: "default",
+		Spec: fv1.PackageSpec{Deployment: fv1.Archive{Literal: []byte("digest-pinned content")}},
 	}
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:  "hello",
 			Sequence:      1,
@@ -111,7 +110,7 @@ func TestGetVersionRendersOriginalPackageForOCIDigest(t *testing.T) {
 // not exist surfaces util.GetOwnedFunctionVersion's clear error instead of an
 // opaque downstream failure.
 func TestGetVersionNotFound(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 
 	cmd.ResetClientsetForTest()
 	cmd.SetClientset(cmd.Client{
@@ -132,10 +131,10 @@ func TestGetVersionNotFound(t *testing.T) {
 // --version that exists but belongs to a different function is rejected
 // rather than silently rendering the wrong function's version.
 func TestGetVersionWrongFunction(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	otherVersion := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "other-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "other", Sequence: 1},
+		Name: "other-v1", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "other", Sequence: 1},
 	}
 
 	cmd.ResetClientsetForTest()

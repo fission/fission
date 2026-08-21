@@ -23,8 +23,8 @@ import (
 // resolverFn builds a live Function for resolver tests.
 func resolverFn(name, ns string, uid types.UID, gen int64, timeout int) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, UID: uid, Generation: gen},
-		Spec:       fv1.FunctionSpec{FunctionTimeout: timeout},
+		Name: name, Namespace: ns, UID: uid, Generation: gen,
+		Spec: fv1.FunctionSpec{FunctionTimeout: timeout},
 	}
 }
 
@@ -33,7 +33,7 @@ func resolverFn(name, ns string, uid types.UID, gen int64, timeout int) *fv1.Fun
 // tell "resolved the version's snapshot" apart from "resolved the live spec".
 func resolverVersion(name, ns, fnName string, uid types.UID, gen, seq int64, snapshotTimeout int) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       fnName,
 			FunctionUID:        uid,
@@ -48,8 +48,8 @@ func resolverVersion(name, ns, fnName string, uid types.UID, gen, seq int64, sna
 
 func resolverAlias(name, ns, fnName string, mutate func(*fv1.FunctionAlias)) *fv1.FunctionAlias {
 	a := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: fnName},
+		Name: name, Namespace: ns,
+		Spec: fv1.FunctionAliasSpec{FunctionName: fnName},
 	}
 	if mutate != nil {
 		mutate(a)

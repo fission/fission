@@ -27,8 +27,8 @@ func TestMermaidFromSpec(t *testing.T) {
 			"c": {
 				Type: fv1.WorkflowStateChoice,
 				Choices: []fv1.WorkflowChoiceRule{{
-					WorkflowChoiceCondition: fv1.WorkflowChoiceCondition{Variable: "$.ok", IsPresent: new(true)},
-					Next:                    "done",
+					Variable: "$.ok", IsPresent: new(true),
+					Next: "done",
 				}},
 				Default: "fail",
 			},

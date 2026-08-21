@@ -10,13 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestResolveSecretReferences(t *testing.T) {
 	t.Parallel()
-	kc := k8sfake.NewClientset(&v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "ns"}})
+	kc := k8sfake.NewClientset(&v1.Secret{Name: "s", Namespace: "ns"})
 
 	t.Run("empty names returns nil", func(t *testing.T) {
 		t.Parallel()
@@ -52,7 +51,7 @@ func TestResolveSecretReferences(t *testing.T) {
 
 func TestResolveConfigMapReferences(t *testing.T) {
 	t.Parallel()
-	kc := k8sfake.NewClientset(&v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns"}})
+	kc := k8sfake.NewClientset(&v1.ConfigMap{Name: "c", Namespace: "ns"})
 
 	t.Run("empty names returns nil", func(t *testing.T) {
 		t.Parallel()

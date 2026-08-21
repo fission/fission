@@ -16,7 +16,6 @@ import (
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/mqtrigger/mqpub"
@@ -104,7 +103,7 @@ func newTestProvider(t *testing.T, routerURL string) *Statestore {
 
 func testTrigger(name, topic string, mutate func(*fv1.MessageQueueTrigger)) *fv1.MessageQueueTrigger {
 	tr := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"},
+		Name: name, Namespace: "ns",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
 			MessageQueueType:  fv1.MessageQueueTypeStatestore,

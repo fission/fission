@@ -28,10 +28,8 @@ import (
 
 func describeFunction() *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "hello", Namespace: "default",
-			Labels: map[string]string{"team": "core"},
-		},
+		Name: "hello", Namespace: "default",
+		Labels: map[string]string{"team": "core"},
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"},
 			Package:     fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "hello-pkg", Namespace: "default"}},
@@ -47,22 +45,20 @@ func describeFunction() *fv1.Function {
 
 func describePackage(buildStatus fv1.BuildStatus, buildLog string) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-		Status:     fv1.PackageStatus{BuildStatus: buildStatus, BuildLog: buildLog},
+		Name: "hello-pkg", Namespace: "default",
+		Status: fv1.PackageStatus{BuildStatus: buildStatus, BuildLog: buildLog},
 	}
 }
 
 func describeFunctionPod() *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "poolmgr-nodejs-hello-abc", Namespace: "fission-function",
-			Labels: map[string]string{
-				fv1.FUNCTION_NAME:      "hello",
-				fv1.FUNCTION_NAMESPACE: "default",
-				fv1.EXECUTOR_TYPE:      "poolmgr",
-				fv1.MANAGED:            "false",
-				fv1.SERVED_LABEL:       fv1.SERVED_VALUE,
-			},
+		Name: "poolmgr-nodejs-hello-abc", Namespace: "fission-function",
+		Labels: map[string]string{
+			fv1.FUNCTION_NAME:      "hello",
+			fv1.FUNCTION_NAMESPACE: "default",
+			fv1.EXECUTOR_TYPE:      "poolmgr",
+			fv1.MANAGED:            "false",
+			fv1.SERVED_LABEL:       fv1.SERVED_VALUE,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning, PodIP: "10.0.0.5",
@@ -163,12 +159,12 @@ func TestFunctionDescribe(t *testing.T) {
 
 	t.Run("versioning enabled renders mode/retain, version count, and the alias table", func(t *testing.T) {
 		fn := describeFunction()
-		fn.Spec.Versioning = &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto, Retain: intPtr(5)}
+		fn.Spec.Versioning = &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto, Retain: new(5)}
 		version := describeVersionObj("hello-v1", "hello", 1)
 		weight := 100
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1", Weight: &weight},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1", Weight: &weight},
 			Status: fv1.FunctionAliasStatus{
 				ResolvedVersion: "hello-v1",
 				Conditions: []metav1.Condition{
@@ -224,10 +220,6 @@ func TestFunctionDescribe(t *testing.T) {
 	})
 }
 
-// intPtr is a small test helper for *int fields (VersioningConfig.Retain,
-// FunctionAliasSpec.Weight).
-func intPtr(n int) *int { return &n }
-
 // assertFieldMatches asserts that out contains a tabwriter-rendered
 // "label<whitespace>value" line -- the describe/getmeta printers write
 // fields through a text/tabwriter, which right-pads with spaces to align
@@ -242,11 +234,9 @@ func assertFieldMatches(t *testing.T, out, label, value, msgAndArgs string) {
 // describeVersionObj builds a minimal FunctionVersion for describe tests.
 func describeVersionObj(name, fnName string, sequence int64) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-			Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
-		},
+		Name:      name,
+		Namespace: "default",
+		Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: fnName,
 			Sequence:     sequence,
@@ -274,7 +264,7 @@ func TestFunctionDescribeVersion(t *testing.T) {
 		version := describeVersionObj("hello-v1", "hello", 1)
 		version.Annotations = map[string]string{versioning.DescriptionAnnotation: "fixed the widget bug"}
 		env := &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 1},
+			Name: "nodejs", Namespace: "default", Generation: 1,
 		}
 		setDescribeClients(t, []runtime.Object{fn, version, env})
 
@@ -306,7 +296,7 @@ func TestFunctionDescribeVersion(t *testing.T) {
 		fn := describeFunction()
 		version := describeVersionObj("hello-v1", "hello", 1) // EnvObservedGeneration: 1
 		env := &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2},
+			Name: "nodejs", Namespace: "default", Generation: 2,
 		}
 		setDescribeClients(t, []runtime.Object{fn, version, env})
 
@@ -331,20 +321,20 @@ func TestFunctionDescribeVersion(t *testing.T) {
 		v1obj := describeVersionObj("hello-v1", "hello", 1)
 		v2obj := describeVersionObj("hello-v2", "hello", 2)
 		aliasProd := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 		}
 		// Digest-pinned, resolved via Status rather than Spec.Version -- still
 		// counts as targeting hello-v1 (fv1.FunctionAlias.EffectiveTarget
 		// prefers Spec.Version, falls back to Status.ResolvedVersion).
 		aliasGitops := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "gitops", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + strings40('a')},
-			Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+			Name: "gitops", Namespace: "default",
+			Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + strings40('a')},
+			Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 		}
 		aliasCanary := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
+			Name: "canary", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
 		}
 		setDescribeClients(t, []runtime.Object{fn, v1obj, v2obj, aliasProd, aliasGitops, aliasCanary})
 

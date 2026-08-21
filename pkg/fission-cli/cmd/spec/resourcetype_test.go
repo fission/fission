@@ -62,8 +62,8 @@ func (s *fnStore) ops() resourceOps[fv1.Function, *fv1.Function] {
 
 func fn(name, env string, owned bool) fv1.Function {
 	f := fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Spec:       fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: env}},
+		Name: name, Namespace: "default",
+		Spec: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: env}},
 	}
 	if owned {
 		f.Annotations = map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID}

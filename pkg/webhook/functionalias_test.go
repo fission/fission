@@ -18,14 +18,14 @@ import (
 
 func makeValidFunctionAlias() *v1.FunctionAlias {
 	return &v1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "alias-1", Namespace: "default"},
-		Spec:       v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+		Name: "alias-1", Namespace: "default",
+		Spec: v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 	}
 }
 
 func functionVersionFor(fnName, versionName string) *v1.FunctionVersion {
 	return &v1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: versionName, Namespace: "default"},
+		Name: versionName, Namespace: "default",
 		Spec: v1.FunctionVersionSpec{
 			FunctionName:       fnName,
 			FunctionUID:        "fn-uid",
@@ -84,8 +84,8 @@ func TestFunctionAliasWebhook_ReferenceIntegrity(t *testing.T) {
 
 	t.Run("digest-pinned alias exempt from lookup", func(t *testing.T) {
 		a := &v1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "alias-1", Namespace: "default"},
-			Spec:       v1.FunctionAliasSpec{FunctionName: "fn", PackageDigest: "sha256:" + versionSample64},
+			Name: "alias-1", Namespace: "default",
+			Spec: v1.FunctionAliasSpec{FunctionName: "fn", PackageDigest: "sha256:" + versionSample64},
 		}
 		r := &FunctionAlias{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()}
 		if err := r.Validate(a); err != nil {
@@ -151,8 +151,8 @@ func TestFunctionAliasWebhook_NameCollisionWithVersionScheme(t *testing.T) {
 	r := &FunctionAlias{}
 
 	colliding := &v1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-		Spec:       v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+		Name: "fn-v3", Namespace: "default",
+		Spec: v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 	}
 	err := r.Validate(colliding)
 	if err == nil || !strings.Contains(err.Error(), "FunctionVersion naming scheme") {
@@ -160,8 +160,8 @@ func TestFunctionAliasWebhook_NameCollisionWithVersionScheme(t *testing.T) {
 	}
 
 	allowed := &v1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-		Spec:       v1.FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
+		Name: "fn-v3", Namespace: "default",
+		Spec: v1.FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
 	}
 	if err := r.Validate(allowed); err != nil {
 		t.Fatalf("the same name must be accepted for a different function: %v", err)

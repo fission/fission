@@ -118,7 +118,7 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 		}
 
 		cmEnvSource := &apiv1.ConfigMapEnvSource{
-			LocalObjectReference: apiv1.LocalObjectReference{Name: cm.Name},
+			Name: cm.Name,
 		}
 
 		cmEnvSources = append(cmEnvSources, cmEnvSource)
@@ -134,7 +134,7 @@ func ConvertConfigSecrets(ctx context.Context, fn *fv1.Function, kc kubernetes.I
 		}
 
 		secEnvSource := &apiv1.SecretEnvSource{
-			LocalObjectReference: apiv1.LocalObjectReference{Name: sec.Name},
+			Name: sec.Name,
 		}
 
 		secEnvSources = append(secEnvSources, secEnvSource)

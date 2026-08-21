@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httputil"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -126,6 +127,51 @@ func (fh *functionHandler) mode() stickyMode {
 		return stickyModePerBackend
 	}
 	return stickyModeSingleSource
+}
+
+// directorParityRewrite is the ReverseProxy.Rewrite hook. It is a named
+// function, not a closure, so the Director-parity contract it maintains is
+// testable directly (TestDirectorParityRewrite) and not only through a
+// fully wired proxy.
+func directorParityRewrite(pr *httputil.ProxyRequest) {
+	// Rewrite mode is NOT a drop-in for the deprecated Director: before
+	// calling this hook, ServeHTTP deletes the whole forwarding set from
+	// the outbound request and rewrites the query string. Director did
+	// neither, so both have to be undone here to keep what a function
+	// receives byte-identical.
+	//
+	// 1. Forwarding headers. Director never *set* X-Forwarded-Host/-Proto,
+	// but it did *pass through* whatever the client or a fronting ingress
+	// sent, and addForwardedHostHeader (transport.go, which runs after
+	// this hook) deliberately leaves an external proxy's values intact.
+	// Dropping them would make that guard dead code and hand the function
+	// the router's own host in place of the user-facing one.
+	for _, h := range []string{FORWARDED, X_FORWARDED_HOST, "X-Forwarded-Proto"} {
+		if v, ok := pr.In.Header[h]; ok {
+			pr.Out.Header[h] = slices.Clone(v)
+		}
+	}
+	// 2. X-Forwarded-For. SetXForwarded appends the client IP to the
+	// inbound chain, which is what ServeHTTP did implicitly for Director;
+	// it also (re)sets Host/Proto, so restore those afterwards.
+	pr.Out.Header["X-Forwarded-For"] = slices.Clone(pr.In.Header["X-Forwarded-For"])
+	pr.SetXForwarded()
+	for _, h := range []string{X_FORWARDED_HOST, "X-Forwarded-Proto"} {
+		if v, ok := pr.In.Header[h]; ok {
+			pr.Out.Header[h] = slices.Clone(v)
+		} else {
+			pr.Out.Header.Del(h)
+		}
+	}
+	// 3. Query string. Rewrite mode runs cleanQueryParams unconditionally,
+	// which re-encodes (dropping pairs and sorting keys) on any ';' or
+	// malformed '%' escape. Director ran it only when outreq.Form was
+	// non-nil — the router never parses forms, so it never ran at all.
+	pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+	if _, ok := pr.Out.Header["User-Agent"]; !ok {
+		// explicitly disable User-Agent so it's not set to default value
+		pr.Out.Header.Set("User-Agent", "")
+	}
 }
 
 // proxyPolicyFor returns the hoisted policy for fn, computing it on the spot
@@ -256,13 +302,6 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 		return
 	}
 
-	director := func(req *http.Request) {
-		if _, ok := req.Header["User-Agent"]; !ok {
-			// explicitly disable User-Agent so it's not set to default value
-			req.Header.Set("User-Agent", "")
-		}
-	}
-
 	fnTimeout := fh.functionTimeoutMap[crd.CacheKeyUGFromMeta(&fh.function.ObjectMeta)]
 	if fnTimeout == 0 {
 		fnTimeout = fv1.DEFAULT_FUNCTION_TIMEOUT
@@ -298,7 +337,7 @@ func (fh functionHandler) handler(responseWriter http.ResponseWriter, request *h
 	start := time.Now()
 
 	proxy := &httputil.ReverseProxy{
-		Director:     director,
+		Rewrite:      directorParityRewrite,
 		Transport:    rrt,
 		BufferPool:   proxyResponseBufferPool,
 		ErrorHandler: fh.getProxyErrorHandler(start, rrt),

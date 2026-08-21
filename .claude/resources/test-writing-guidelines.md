@@ -39,7 +39,8 @@ They reflect the patterns already established across the codebase — match them
 
 ## Time-dependent code
 
-- Test timeouts, TTLs, backoff schedules, lease expiry, debounces, and cron windows inside `testing/synctest.Test` bubbles (stable since Go 1.25; this repo is on Go 1.26).
+- Test timeouts, TTLs, backoff schedules, lease expiry, debounces, and cron windows inside `testing/synctest.Test` bubbles (stable since Go 1.25; this repo is on Go 1.27).
+  Prefer `synctest.Sleep(d)` (new in Go 1.27) over a `time.Sleep(d)` + `synctest.Wait()` pair when the intent is "advance the clock, then let every goroutine settle".
   The bubble virtualizes `time.Now`, timers, and sleeps: a "wait 6h then act" test completes instantly and deterministically.
 - Because the bubble fakes the standard `time` package, code under test should just use `time` directly — do **not** add an injectable clock seam only for testability.
 - Everything the bubbled code touches must be in-process and in-memory (fakes, memory drivers, channels); real network or filesystem waits are not virtualized and will hang the bubble.
@@ -81,5 +82,5 @@ They reflect the patterns already established across the codebase — match them
 ## Misc
 
 - New source files need the SPDX header — run `make license` (CI gate: `make license-check`).
-- Prefer the Go 1.26 builtin `new(value)` over `k8s.io/utils/ptr.To(value)`. As of Go 1.26 `new` accepts a value expression and returns a pointer to a copy, so `new(true)` yields a `*bool` (see `pkg/executor/executortype/newdeploy/newdeploy_test.go`); it is no longer type-only.
+- Prefer the builtin `new(value)` (Go 1.26+) over `k8s.io/utils/ptr.To(value)`. As of Go 1.26 `new` accepts a value expression and returns a pointer to a copy, so `new(true)` yields a `*bool` (see `pkg/executor/executortype/newdeploy/newdeploy_test.go`); it is no longer type-only.
 - Name tests `TestXxx`, and test behavior through exported APIs rather than reflecting over unexported fields.

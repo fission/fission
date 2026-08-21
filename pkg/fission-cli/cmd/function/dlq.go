@@ -270,7 +270,7 @@ func dlqCall[Resp any](opts *dlqSubCommand, input cli.Input, method, path string
 	if err != nil {
 		return fmt.Errorf("connecting to the Fission router internal listener: %w", err)
 	}
-	u := *internalURL
+	u := internalURL.Clone()
 	u.Path = path
 	if len(query) > 0 {
 		u.RawQuery = query.Encode()

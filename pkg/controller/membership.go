@@ -9,7 +9,6 @@ import (
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -179,7 +178,7 @@ func tenantReenqueueMapFunc(reader client.Reader, scheme *runtime.Scheme, proto 
 		var reqs []reconcile.Request
 		_ = apimeta.EachListItem(list, func(o runtime.Object) error {
 			if m, err := apimeta.Accessor(o); err == nil {
-				reqs = append(reqs, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: m.GetNamespace(), Name: m.GetName()}})
+				reqs = append(reqs, reconcile.Request{Namespace: m.GetNamespace(), Name: m.GetName()})
 			}
 			return nil
 		})

@@ -152,7 +152,7 @@ func TestWorkflowSpecValidate(t *testing.T) {
 		{"choice rule no operator", func(s *WorkflowSpec) {
 			s.States["c"] = WorkflowState{
 				Type:    WorkflowStateChoice,
-				Choices: []WorkflowChoiceRule{{WorkflowChoiceCondition: WorkflowChoiceCondition{Variable: "$.x"}, Next: "done"}},
+				Choices: []WorkflowChoiceRule{{Variable: "$.x", Next: "done"}},
 				Default: "done",
 			}
 			st := s.States["a"]
@@ -162,7 +162,7 @@ func TestWorkflowSpecValidate(t *testing.T) {
 		{"choice leaf without variable", func(s *WorkflowSpec) {
 			s.States["c"] = WorkflowState{
 				Type:    WorkflowStateChoice,
-				Choices: []WorkflowChoiceRule{{WorkflowChoiceCondition: WorkflowChoiceCondition{IsPresent: new(true)}, Next: "done"}},
+				Choices: []WorkflowChoiceRule{{IsPresent: new(true), Next: "done"}},
 				Default: "done",
 			}
 			st := s.States["a"]
@@ -253,7 +253,7 @@ func TestWorkflowSpecValidate(t *testing.T) {
 		{"bad variable jsonpath", func(s *WorkflowSpec) {
 			s.States["c"] = WorkflowState{
 				Type:    WorkflowStateChoice,
-				Choices: []WorkflowChoiceRule{{WorkflowChoiceCondition: WorkflowChoiceCondition{Variable: "nope", IsPresent: new(true)}, Next: "done"}},
+				Choices: []WorkflowChoiceRule{{Variable: "nope", IsPresent: new(true), Next: "done"}},
 				Default: "done",
 			}
 			st := s.States["a"]
@@ -524,8 +524,8 @@ func TestWorkflowObjectValidate(t *testing.T) {
 	t.Parallel()
 
 	w := &Workflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "Bad_Name", Namespace: "default"},
-		Spec:       wfBase(),
+		Name: "Bad_Name", Namespace: "default",
+		Spec: wfBase(),
 	}
 	require.Error(t, w.Validate())
 
@@ -533,8 +533,8 @@ func TestWorkflowObjectValidate(t *testing.T) {
 	assert.NoError(t, w.Validate())
 
 	wr := &WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default"},
-		Spec:       WorkflowRunSpec{WorkflowRef: "wf"},
+		Name: "run-1", Namespace: "default",
+		Spec: WorkflowRunSpec{WorkflowRef: "wf"},
 	}
 	assert.NoError(t, wr.Validate())
 }

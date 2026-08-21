@@ -28,7 +28,7 @@ func TestPodTemplateChanged(t *testing.T) {
 			ConfigMaps:  []fv1.ConfigMapReference{{Namespace: "ns", Name: "c1"}},
 			Env:         []apiv1.EnvVar{{Name: "DATABASE_URL", Value: "postgres://old"}},
 			EnvFrom: []apiv1.EnvFromSource{{
-				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}},
+				SecretRef: &apiv1.SecretEnvSource{Name: "creds"},
 			}},
 		}}
 	}

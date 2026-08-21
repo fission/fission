@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -24,8 +23,8 @@ func TestMembershipPredicate(t *testing.T) {
 	r.SetTenants(map[string]string{"team-a": "team-a"})
 	p := MembershipPredicate(r)
 
-	inTenant := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a"}}
-	notTenant := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "team-b"}}
+	inTenant := &fv1.Function{Namespace: "team-a"}
+	notTenant := &fv1.Function{Namespace: "team-b"}
 
 	assert.True(t, p.Create(event.CreateEvent{Object: inTenant}), "tenant-namespace object is admitted")
 	assert.False(t, p.Create(event.CreateEvent{Object: notTenant}), "non-tenant object is dropped")
@@ -48,9 +47,9 @@ func TestTenantReenqueueMapFunc(t *testing.T) {
 	require.NoError(t, fv1.AddToScheme(scheme))
 
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "fn1"}},
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "fn2"}},
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Namespace: "team-b", Name: "other"}},
+		&fv1.Function{Namespace: "team-a", Name: "fn1"},
+		&fv1.Function{Namespace: "team-a", Name: "fn2"},
+		&fv1.Function{Namespace: "team-b", Name: "other"},
 	).Build()
 
 	r := utils.DefaultNSResolver()
@@ -60,8 +59,8 @@ func TestTenantReenqueueMapFunc(t *testing.T) {
 
 	reqs := tenantReenqueueMapFunc(c, scheme, &fv1.Function{})(t.Context(),
 		&fv1.FissionTenant{
-			ObjectMeta: metav1.ObjectMeta{Name: "team-a"},
-			Spec:       fv1.FissionTenantSpec{Namespace: "team-a"},
+			Name: "team-a",
+			Spec: fv1.FissionTenantSpec{Namespace: "team-a"},
 		})
 
 	// (1) Membership went live immediately — so a Function created right after

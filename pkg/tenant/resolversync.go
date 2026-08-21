@@ -106,10 +106,7 @@ func (r *ResolverSyncReconciler) Reconcile(ctx context.Context, _ ctrl.Request) 
 // bounded before it is applied so the doubling can never overflow.
 func (r *ResolverSyncReconciler) nextRetryDelay() time.Duration {
 	const maxShift = 4 // hookRetryDelay<<4 == 32s, already past the cap
-	shift := r.pendingRounds.Add(1) - 1
-	if shift > maxShift {
-		shift = maxShift
-	}
+	shift := min(r.pendingRounds.Add(1)-1, maxShift)
 	delay := hookRetryDelay << shift
 	return min(delay, hookRetryMaxDelay)
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -118,7 +117,7 @@ func TestStickyWeightHash_MatchesFNV64a(t *testing.T) {
 
 func TestGetCanaryBackend(t *testing.T) {
 	t.Parallel()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "only"}}
+	fn := &fv1.Function{Name: "only"}
 
 	t.Run("returns the mapped function", func(t *testing.T) {
 		fnMap := map[string]*fv1.Function{"only": fn}
@@ -134,7 +133,7 @@ func TestGetCanaryBackend(t *testing.T) {
 	})
 
 	t.Run("degenerate all-zero weights falls back to first entry instead of panicking", func(t *testing.T) {
-		zero := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "zero"}}
+		zero := &fv1.Function{Name: "zero"}
 		fnMap := map[string]*fv1.Function{"zero": zero}
 		dist := []functionWeightDistribution{{name: "zero", weight: 0, sumPrefix: 0}}
 		got := getCanaryBackend(fnMap, dist, "")
@@ -176,7 +175,7 @@ func TestFindCeil_FullEnumeration(t *testing.T) {
 		}{{"a", 30}, {"b", 70}})
 		total := dist[len(dist)-1].sumPrefix
 		counts := map[string]int{}
-		for draw := 0; draw < total; draw++ {
+		for draw := range total {
 			counts[findCeil(draw, dist)]++
 		}
 		assert.Equal(t, 30, counts["a"])
@@ -191,7 +190,7 @@ func TestFindCeil_FullEnumeration(t *testing.T) {
 		}{{"a", 50}, {"b", 50}})
 		total := dist[len(dist)-1].sumPrefix
 		counts := map[string]int{}
-		for draw := 0; draw < total; draw++ {
+		for draw := range total {
 			counts[findCeil(draw, dist)]++
 		}
 		assert.Equal(t, 50, counts["a"])
@@ -205,7 +204,7 @@ func TestFindCeil_FullEnumeration(t *testing.T) {
 		}{{"a", 100}, {"b", 0}})
 		total := dist[len(dist)-1].sumPrefix
 		counts := map[string]int{}
-		for draw := 0; draw < total; draw++ {
+		for draw := range total {
 			counts[findCeil(draw, dist)]++
 		}
 		assert.Equal(t, 100, counts["a"])
@@ -218,7 +217,7 @@ func TestFindCeil_FullEnumeration(t *testing.T) {
 		}{{"a", 0}, {"b", 100}})
 		totalFirst := distFirst[len(distFirst)-1].sumPrefix
 		countsFirst := map[string]int{}
-		for draw := 0; draw < totalFirst; draw++ {
+		for draw := range totalFirst {
 			countsFirst[findCeil(draw, distFirst)]++
 		}
 		assert.Equal(t, 0, countsFirst["a"])
@@ -237,8 +236,8 @@ func TestFindCeil_FullEnumeration(t *testing.T) {
 }
 
 func twoBackendDist(primaryWeight int) (map[string]*fv1.Function, []functionWeightDistribution) {
-	primary := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "primary"}}
-	secondary := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "secondary"}}
+	primary := &fv1.Function{Name: "primary"}
+	secondary := &fv1.Function{Name: "secondary"}
 	fnMap := map[string]*fv1.Function{"primary": primary, "secondary": secondary}
 	dist := []functionWeightDistribution{
 		{name: "primary", weight: primaryWeight, sumPrefix: primaryWeight},

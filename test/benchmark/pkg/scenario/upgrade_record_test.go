@@ -228,7 +228,7 @@ func TestWaitControlPlaneRolledRecordsTransitions(t *testing.T) {
 		update(dep("router", 2, 2, 0))
 		time.Sleep(11 * time.Second) // ≥2 polls observe the regression
 		update(dep("router", 2, 2, 1))
-		time.Sleep(11 * time.Second) // ≥2 polls observe the re-convergence
+		time.Sleep(11 * time.Second)     // ≥2 polls observe the re-convergence
 		update(dep("executor", 1, 1, 1)) // release the poll
 
 		synctest.Wait()

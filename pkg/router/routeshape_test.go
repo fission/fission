@@ -55,12 +55,12 @@ func newShapeTS(t testing.TB, functions []fv1.Function, triggers []fv1.HTTPTrigg
 }
 
 func shapeFn(name string) fv1.Function {
-	return fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	return fv1.Function{Name: name, Namespace: "default"}
 }
 
 func shapeTrigger(name string, mutate func(*fv1.HTTPTrigger)) fv1.HTTPTrigger {
 	tr := fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Name: name, Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -301,8 +301,8 @@ func TestRouteShapeSkipsInvalidAndUnresolvable(t *testing.T) {
 // the /fission-function/<ns>/<name> form, and each function registers the
 // exact route plus its slash-prefix subtree.
 func TestRouteShapeInternalNamespaceFolding(t *testing.T) {
-	fnDefault := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fd", Namespace: metav1.NamespaceDefault}}
-	fnOther := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fo", Namespace: "myns"}}
+	fnDefault := fv1.Function{Name: "fd", Namespace: metav1.NamespaceDefault}
+	fnOther := fv1.Function{Name: "fo", Namespace: "myns"}
 	ts := newShapeTS(t, []fv1.Function{fnDefault, fnOther}, nil)
 	_, internal, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)

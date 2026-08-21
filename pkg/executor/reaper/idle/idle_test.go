@@ -164,7 +164,7 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 		s, fc := newStrategy()
 		const uid = types.UID("fn-uid-1")
 		s.fnByUID[uid] = fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+			Name: "fn", Namespace: "default", UID: uid,
 			Spec: fv1.FunctionSpec{
 				ProvisionedConcurrency: &fv1.ProvisionedConcurrencyConfig{Target: 2},
 			},
@@ -184,7 +184,7 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 		s, fc := newStrategy()
 		const uid = types.UID("fn-uid-1")
 		s.fnByUID[uid] = fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+			Name: "fn", Namespace: "default", UID: uid,
 			Spec: fv1.FunctionSpec{
 				ProvisionedConcurrency: &fv1.ProvisionedConcurrencyConfig{Target: 2},
 			},
@@ -205,7 +205,7 @@ func TestPoolDeleteStrategy_Skips(t *testing.T) {
 		const uid = types.UID("fn-uid-2")
 		// Function does NOT opt into provisioned concurrency.
 		s.fnByUID[uid] = fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: uid},
+			Name: "fn", Namespace: "default", UID: uid,
 		}
 		f := idleFsvc()
 		f.Function.UID = uid
@@ -226,7 +226,7 @@ func TestScaleDownStrategy_Reap(t *testing.T) {
 	const ns, deplName, fnName = "default", "fn-depl", "fn"
 
 	makeFn := func(minScale int) *fv1.Function {
-		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: fnName, Namespace: ns}}
+		fn := &fv1.Function{Name: fnName, Namespace: ns}
 		fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = minScale
 		return fn
 	}
@@ -244,8 +244,8 @@ func TestScaleDownStrategy_Reap(t *testing.T) {
 	}
 	deployWithReplicas := func(r int32) *appsv1.Deployment {
 		return &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: deplName, Namespace: ns},
-			Spec:       appsv1.DeploymentSpec{Replicas: &r},
+			Name: deplName, Namespace: ns,
+			Spec: appsv1.DeploymentSpec{Replicas: &r},
 		}
 	}
 	// captureScale records the replica count of any scale update.
@@ -298,11 +298,9 @@ func TestScaleDownStrategy_Reap(t *testing.T) {
 func TestPoolDeleteStrategy_DrainThenDelete(t *testing.T) {
 	t.Parallel()
 	pod := &apiv1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fn-pod",
-			Namespace: "default",
-			Labels:    map[string]string{fv1.SERVED_LABEL: "true", "managed": "false"},
-		},
+		Name:      "fn-pod",
+		Namespace: "default",
+		Labels:    map[string]string{fv1.SERVED_LABEL: "true", "managed": "false"},
 	}
 	kc := k8sfake.NewSimpleClientset(pod)
 	fc := fscache.MakeFunctionServiceCache(logr.Discard())

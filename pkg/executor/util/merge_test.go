@@ -225,17 +225,17 @@ func Test_mergeVolumeLists(t *testing.T) {
 			name: "merge volume list",
 			args: args{
 				dst: []apiv1.Volume{
-					{Name: "vol1", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}}},
-					{Name: "vol2", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}}},
+					{Name: "vol1", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}},
+					{Name: "vol2", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}},
 				},
 				src: []apiv1.Volume{
-					{Name: "vol3", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}}},
+					{Name: "vol3", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}},
 				},
 			},
 			want: []apiv1.Volume{
-				{Name: "vol1", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}}},
-				{Name: "vol2", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}}},
-				{Name: "vol3", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}}},
+				{Name: "vol1", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}},
+				{Name: "vol2", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}},
+				{Name: "vol3", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}},
 			},
 			wantErr: false,
 		},
@@ -243,11 +243,11 @@ func Test_mergeVolumeLists(t *testing.T) {
 			name: "conflict volume name",
 			args: args{
 				dst: []apiv1.Volume{
-					{Name: "vol1", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}}},
-					{Name: "vol2", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}}},
+					{Name: "vol1", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foo"}},
+					{Name: "vol2", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/bar"}},
 				},
 				src: []apiv1.Volume{
-					{Name: "vol1", VolumeSource: apiv1.VolumeSource{HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}}},
+					{Name: "vol1", HostPath: &apiv1.HostPathVolumeSource{Path: "/tmp/foobar"}},
 				},
 			},
 			want:    nil,
@@ -404,10 +404,8 @@ func TestMergePodSpec_StripsDangerousFields(t *testing.T) {
 			RunAsNonRoot: &runAsNonRoot,
 		},
 		Volumes: []apiv1.Volume{{
-			Name: "host-root",
-			VolumeSource: apiv1.VolumeSource{
-				HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-			},
+			Name:     "host-root",
+			HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
 		}},
 		Containers: []apiv1.Container{{
 			Name:            "user",

@@ -45,10 +45,7 @@ const projectedFileMode = 0750
 func volumeName(kind, objName string, index int) string {
 	suffix := fmt.Sprintf("-%d", index)
 	prefix := "fission-" + kind + "-"
-	room := maxVolumeNameLen - len(prefix) - len(suffix)
-	if room < 0 {
-		room = 0
-	}
+	room := max(maxVolumeNameLen-len(prefix)-len(suffix), 0)
 	if len(objName) > room {
 		objName = objName[:room]
 	}
@@ -86,8 +83,8 @@ func MountPathVolumes(fn *fv1.Function) ([]apiv1.Volume, []apiv1.VolumeMount, er
 		} else {
 			vol.VolumeSource = apiv1.VolumeSource{
 				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: objName},
-					DefaultMode:          new(int32(projectedFileMode)),
+					Name:        objName,
+					DefaultMode: new(int32(projectedFileMode)),
 				},
 			}
 		}

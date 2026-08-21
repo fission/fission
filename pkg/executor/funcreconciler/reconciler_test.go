@@ -11,7 +11,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -52,7 +51,7 @@ func crClient(objs ...client.Object) client.Client {
 }
 
 func fn(name string, et fv1.ExecutorType, uid types.UID) *fv1.Function {
-	f := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: uid}}
+	f := &fv1.Function{Name: name, Namespace: "default", UID: uid}
 	f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = et
 	return f
 }

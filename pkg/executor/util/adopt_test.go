@@ -29,7 +29,7 @@ func TestAdoptFunctionsFiltersByExecutorType(t *testing.T) {
 	// so create the functions there for AdoptFunctions to find them.
 	mk := func(name string, et fv1.ExecutorType) {
 		_, err := client.CoreV1().Functions(metav1.NamespaceDefault).Create(ctx, &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: metav1.NamespaceDefault, UID: types.UID(name)},
+			Name: name, Namespace: metav1.NamespaceDefault, UID: types.UID(name),
 			Spec: fv1.FunctionSpec{
 				InvokeStrategy: fv1.InvokeStrategy{
 					ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: et},
@@ -66,7 +66,7 @@ func TestAdoptFunctionsToleratesCreateErrors(t *testing.T) {
 
 	for _, name := range []string{"a", "b", "c"} {
 		_, err := client.CoreV1().Functions(metav1.NamespaceDefault).Create(ctx, &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: metav1.NamespaceDefault, UID: types.UID(name)},
+			Name: name, Namespace: metav1.NamespaceDefault, UID: types.UID(name),
 			Spec: fv1.FunctionSpec{
 				InvokeStrategy: fv1.InvokeStrategy{
 					ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypeNewdeploy},

@@ -23,11 +23,9 @@ import (
 // other spec-managed kind.
 func TestForceDeleteResourcesRemovesFunctionAliases(t *testing.T) {
 	owned := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prod", Namespace: "default",
-			Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
-		},
-		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		Spec:        fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	//nolint:staticcheck // FunctionAlias SMD schema not yet generated for NewClientset, see k8s#126850
 	fc := fissionfake.NewSimpleClientset(owned)
@@ -52,8 +50,8 @@ func TestForceDeleteResourcesRemovesFunctionAliases(t *testing.T) {
 // cleaned up on its own.
 func TestDeleteResourcesRemovesFunctionAliases(t *testing.T) {
 	unowned := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"}, // no ownerRef
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default", // no ownerRef
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	//nolint:staticcheck // see k8s#126850
 	fc := fissionfake.NewSimpleClientset(unowned)

@@ -176,8 +176,7 @@ func (t *templater) optionsCmdFor(c *cobra.Command) string {
 		return ""
 	}
 	rootCmdStructure := t.parents(c)
-	for i := len(rootCmdStructure) - 1; i >= 0; i-- {
-		cmd := rootCmdStructure[i]
+	for _, cmd := range slices.Backward(rootCmdStructure) {
 		if _, _, err := cmd.Find([]string{"options"}); err == nil {
 			return cmd.CommandPath() + " options"
 		}

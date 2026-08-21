@@ -51,11 +51,9 @@ func AddImageVolume(podSpec *apiv1.PodSpec, oa *fv1.OCIArchive, mountPath string
 	}
 	podSpec.Volumes = append(podSpec.Volumes, apiv1.Volume{
 		Name: OCIImageVolumeName,
-		VolumeSource: apiv1.VolumeSource{
-			Image: &apiv1.ImageVolumeSource{
-				Reference:  OCIVolumeReference(oa),
-				PullPolicy: apiv1.PullIfNotPresent,
-			},
+		Image: &apiv1.ImageVolumeSource{
+			Reference:  OCIVolumeReference(oa),
+			PullPolicy: apiv1.PullIfNotPresent,
 		},
 	})
 	mount := apiv1.VolumeMount{

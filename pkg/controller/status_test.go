@@ -35,7 +35,7 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 }
 
 func TestSetConditions_WritesAndStampsGeneration(t *testing.T) {
-	tt := &fv1.TimeTrigger{ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "ns", Generation: 3}}
+	tt := &fv1.TimeTrigger{Name: "t1", Namespace: "ns", Generation: 3}
 	c := newFakeClient(t, tt)
 	ctx := t.Context()
 
@@ -52,7 +52,7 @@ func TestSetConditions_WritesAndStampsGeneration(t *testing.T) {
 }
 
 func TestSetConditions_FastPathSkipsWrite(t *testing.T) {
-	tt := &fv1.TimeTrigger{ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "ns", Generation: 1}}
+	tt := &fv1.TimeTrigger{Name: "t1", Namespace: "ns", Generation: 1}
 	c := newFakeClient(t, tt)
 	ctx := t.Context()
 	want := metav1.Condition{Type: fv1.TimeTriggerConditionReady, Status: metav1.ConditionTrue, Reason: fv1.TimeTriggerReasonCronRegistered}
@@ -71,7 +71,7 @@ func TestSetConditions_FastPathSkipsWrite(t *testing.T) {
 }
 
 func TestSetConditions_NoWantIsNoop(t *testing.T) {
-	tt := &fv1.TimeTrigger{ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "ns"}}
+	tt := &fv1.TimeTrigger{Name: "t1", Namespace: "ns"}
 	c := newFakeClient(t, tt)
 	ctx := t.Context()
 	SetConditions(ctx, logr.Discard(), c, tt) // no want

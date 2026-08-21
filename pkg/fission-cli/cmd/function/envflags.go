@@ -48,15 +48,15 @@ func parseFunctionEnvFlags(input cli.Input) ([]apiv1.EnvVar, []apiv1.EnvFromSour
 		}
 		if key == "" {
 			envFrom = append(envFrom, apiv1.EnvFromSource{
-				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: objName}},
+				SecretRef: &apiv1.SecretEnvSource{Name: objName},
 			})
 			continue
 		}
 		env = append(env, apiv1.EnvVar{
 			Name: envName,
 			ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
-				LocalObjectReference: apiv1.LocalObjectReference{Name: objName},
-				Key:                  key,
+				Name: objName,
+				Key:  key,
 			}},
 		})
 	}
@@ -68,15 +68,15 @@ func parseFunctionEnvFlags(input cli.Input) ([]apiv1.EnvVar, []apiv1.EnvFromSour
 		}
 		if key == "" {
 			envFrom = append(envFrom, apiv1.EnvFromSource{
-				ConfigMapRef: &apiv1.ConfigMapEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: objName}},
+				ConfigMapRef: &apiv1.ConfigMapEnvSource{Name: objName},
 			})
 			continue
 		}
 		env = append(env, apiv1.EnvVar{
 			Name: envName,
 			ValueFrom: &apiv1.EnvVarSource{ConfigMapKeyRef: &apiv1.ConfigMapKeySelector{
-				LocalObjectReference: apiv1.LocalObjectReference{Name: objName},
-				Key:                  key,
+				Name: objName,
+				Key:  key,
 			}},
 		})
 	}

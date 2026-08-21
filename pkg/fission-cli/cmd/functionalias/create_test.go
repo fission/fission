@@ -25,7 +25,7 @@ import (
 
 func TestAliasCreateSetsOwnerRefToFunction(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: types.UID("fn-uid")},
+		Name: "hello", Namespace: "default", UID: types.UID("fn-uid"),
 	}
 	fc := fissionfake.NewSimpleClientset(fn) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
@@ -64,7 +64,7 @@ func TestAliasCreateMissingFunctionErrors(t *testing.T) {
 
 func newAliasFunction() *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: types.UID("fn-uid")},
+		Name: "hello", Namespace: "default", UID: types.UID("fn-uid"),
 	}
 }
 
@@ -84,8 +84,8 @@ func TestAliasCreateWaitSucceedsAfterReactorFlips(t *testing.T) {
 	fc.PrependReactor("get", "functionaliases", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		n := gets.Add(1)
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 		}
 		if n < 2 {
 			alias.Status.Conditions = []metav1.Condition{
@@ -118,8 +118,8 @@ func TestAliasCreateWaitTimesOutWhenUnresolved(t *testing.T) {
 
 	fc.PrependReactor("get", "functionaliases", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 			Status: fv1.FunctionAliasStatus{
 				Conditions: []metav1.Condition{
 					{Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionFalse, Reason: fv1.FunctionAliasReasonVersionNotFound},

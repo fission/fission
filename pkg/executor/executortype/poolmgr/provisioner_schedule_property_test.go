@@ -9,8 +9,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"

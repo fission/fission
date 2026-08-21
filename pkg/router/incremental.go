@@ -312,15 +312,15 @@ func (ts *HTTPTriggerSet) reapplyTriggersForAlias(ctx context.Context, key types
 // from it.
 func internalKeyForAlias(alias *fv1.FunctionAlias) routetable.InternalKey {
 	return routetable.InternalKey{
-		NamespacedName: types.NamespacedName{Namespace: alias.Namespace, Name: alias.Spec.FunctionName},
-		Suffix:         alias.Name,
+		Namespace: alias.Namespace, Name: alias.Spec.FunctionName,
+		Suffix: alias.Name,
 	}
 }
 
 func internalKeyForVersion(v *fv1.FunctionVersion) routetable.InternalKey {
 	return routetable.InternalKey{
-		NamespacedName: types.NamespacedName{Namespace: v.Namespace, Name: v.Spec.FunctionName},
-		Suffix:         v.Name,
+		Namespace: v.Namespace, Name: v.Spec.FunctionName,
+		Suffix: v.Name,
 	}
 }
 

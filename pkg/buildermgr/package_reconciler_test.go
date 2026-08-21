@@ -36,7 +36,7 @@ func newFissionFake(objs ...runtime.Object) versioned.Interface {
 
 func sourcePkg(name string, status fv1.BuildStatus) *fv1.Package {
 	p := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Name: name, Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "go", Namespace: "default"},
 			Source:      fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://example/src.zip"},
@@ -90,17 +90,17 @@ func TestBuildTriggerPredicate(t *testing.T) {
 // deployment archive does not (none), and an empty spec is unbuildable (failed).
 func TestSetInitialBuildStatus(t *testing.T) {
 	deployPkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "deploy", Namespace: "default"},
+		Name: "deploy", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Deployment: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://example/deploy.zip"},
 		},
 	}
-	emptyPkg := &fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "empty", Namespace: "default"}}
+	emptyPkg := &fv1.Package{Name: "empty", Namespace: "default"}
 	// An OCI-only deployment archive must behave exactly like a tarball
 	// deployment archive: nothing to build (RFC-0001; Archive.IsEmpty is the
 	// load-bearing check).
 	ociPkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "oci", Namespace: "default"},
+		Name: "oci", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Deployment: fv1.Archive{Type: fv1.ArchiveTypeOCI, OCI: &fv1.OCIArchive{Image: "ghcr.io/example/hello-code:v1"}},
 		},
@@ -146,7 +146,7 @@ func newTestPackageReconciler(t *testing.T, fc versioned.Interface, crObjs ...cl
 // package is initialised, built, or left alone.
 func TestPackageReconcileGate(t *testing.T) {
 	req := func(name string) ctrl.Request {
-		return ctrl.Request{NamespacedName: client.ObjectKey{Name: name, Namespace: "default"}}
+		return ctrl.Request{Name: name, Namespace: "default"}
 	}
 
 	t.Run("empty status writes initial pending", func(t *testing.T) {
@@ -205,19 +205,17 @@ func TestPackageReconcileGate(t *testing.T) {
 // TestBuilderPodReady checks the readiness gate that the package build waits on.
 func TestBuilderPodReady(t *testing.T) {
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "go", Namespace: "default", ResourceVersion: "42"},
+		Name: "go", Namespace: "default", ResourceVersion: "42",
 	}
 	const builderNs = "default"
 	podWith := func(name string, statuses ...apiv1.ContainerStatus) *apiv1.Pod {
 		return &apiv1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: builderNs,
-				Labels: map[string]string{
-					LABEL_ENV_NAME:            env.Name,
-					LABEL_ENV_NAMESPACE:       builderNs,
-					LABEL_ENV_RESOURCEVERSION: env.ResourceVersion,
-				},
+			Name:      name,
+			Namespace: builderNs,
+			Labels: map[string]string{
+				LABEL_ENV_NAME:            env.Name,
+				LABEL_ENV_NAMESPACE:       builderNs,
+				LABEL_ENV_RESOURCEVERSION: env.ResourceVersion,
 			},
 			Status: apiv1.PodStatus{ContainerStatuses: statuses},
 		}
@@ -255,7 +253,7 @@ func TestBuilderPodReady(t *testing.T) {
 // so had no propagation at all before content-keyed re-stamping.
 func ociPkg(name, digest, contentHash string) *fv1.Package {
 	p := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", ResourceVersion: "100"},
+		Name: name, Namespace: "default", ResourceVersion: "100",
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "go", Namespace: "default"},
 			Deployment: fv1.Archive{
@@ -271,7 +269,7 @@ func ociPkg(name, digest, contentHash string) *fv1.Package {
 
 func fnForPkg(name, pkgName, pkgRV string, annotations map[string]string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Annotations: annotations},
+		Name: name, Namespace: "default", Annotations: annotations,
 		Spec: fv1.FunctionSpec{Package: fv1.FunctionPackageRef{
 			PackageRef: fv1.PackageRef{Name: pkgName, Namespace: "default", ResourceVersion: pkgRV},
 		}},

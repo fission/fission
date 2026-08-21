@@ -31,13 +31,13 @@ func DecodeReceipt(receipt string) (id string, epoch int64, ok bool) {
 	if err != nil {
 		return "", 0, false
 	}
-	sep := strings.LastIndexByte(string(raw), 0)
-	if sep < 0 {
+	idPart, epochPart, found := strings.CutLast(string(raw), "\x00")
+	if !found {
 		return "", 0, false
 	}
-	epoch, err = strconv.ParseInt(string(raw[sep+1:]), 10, 64)
+	epoch, err = strconv.ParseInt(epochPart, 10, 64)
 	if err != nil {
 		return "", 0, false
 	}
-	return string(raw[:sep]), epoch, true
+	return idPart, epoch, true
 }

@@ -12,14 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func stateTestFn(state *fv1.StateConfig) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "counter", Namespace: "user-ns"},
+		Name: "counter", Namespace: "user-ns",
 		Spec: fv1.FunctionSpec{
 			Package: fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "pkg", Namespace: "user-ns"}},
 			State:   state,
@@ -29,8 +28,8 @@ func stateTestFn(state *fv1.StateConfig) *fv1.Function {
 
 func stateTestEnv() *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "node", Namespace: "user-ns"},
-		Spec:       fv1.EnvironmentSpec{Version: 2},
+		Name: "node", Namespace: "user-ns",
+		Spec: fv1.EnvironmentSpec{Version: 2},
 	}
 }
 

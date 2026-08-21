@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -111,8 +110,8 @@ func TestCheckFnRefTagOwnership(t *testing.T) {
 	t.Run("alias targeting a different function errors", func(t *testing.T) {
 		t.Parallel()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
 		}
 		fc := fissionfake.NewSimpleClientset(alias) //nolint:staticcheck
 		client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
@@ -124,8 +123,8 @@ func TestCheckFnRefTagOwnership(t *testing.T) {
 	t.Run("matching alias is accepted", func(t *testing.T) {
 		t.Parallel()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		fc := fissionfake.NewSimpleClientset(alias) //nolint:staticcheck
 		client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
@@ -145,8 +144,8 @@ func TestCheckFnRefTagOwnership(t *testing.T) {
 	t.Run("version targeting a different function errors", func(t *testing.T) {
 		t.Parallel()
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "other-fn"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "other-fn"},
 		}
 		fc := fissionfake.NewSimpleClientset(version) //nolint:staticcheck
 		client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
@@ -158,8 +157,8 @@ func TestCheckFnRefTagOwnership(t *testing.T) {
 	t.Run("matching version is accepted", func(t *testing.T) {
 		t.Parallel()
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "fn"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "fn"},
 		}
 		fc := fissionfake.NewSimpleClientset(version) //nolint:staticcheck
 		client := cmd.Client{FissionClientSet: fc, Namespace: "default"}

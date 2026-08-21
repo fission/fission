@@ -20,8 +20,6 @@ SHA-pinned actions usually present (Dependabot's domain): `Azure/setup-helm`, `g
 
 ## Deliberately-stale pins — don't "fix"
 
-- **Helm v3 in `upgrade_test.yaml` vs v4 in `push_pr.yaml`** is intentional: `upgrade_test` simulates a user on Helm v3 upgrading their Fission install.
-  Leave the v3 pin unless the user says otherwise.
 - **`matrix.kindversion` entries that intentionally lag** (e.g. testing an older k8s LTS for backwards compat) — leave unless the kind binary no longer ships that `kindest/node:vX.Y.Z` image.
 
 ## Gotchas

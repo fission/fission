@@ -44,7 +44,7 @@ func TestSeedTenantsCreatesPerNamespaceWithDefaultMapping(t *testing.T) {
 
 func TestSeedTenantsIdempotentSkipsAlreadyManaged(t *testing.T) {
 	// "custom" already manages team-a under a different name.
-	existing := &fv1.FissionTenant{ObjectMeta: metav1.ObjectMeta{Name: "custom"}, Spec: fv1.FissionTenantSpec{Namespace: "team-a"}}
+	existing := &fv1.FissionTenant{Name: "custom", Spec: fv1.FissionTenantSpec{Namespace: "team-a"}}
 	fc := fakeversioned.NewSimpleClientset(existing)
 	nsr := &utils.NamespaceResolver{DefaultNamespace: "default"}
 	nsr.SetTenants(map[string]string{"team-a": "team-a"})

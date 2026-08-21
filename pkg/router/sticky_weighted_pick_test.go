@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/crd"
@@ -31,10 +30,10 @@ func weightedAliasHandlerForPickAdmitTest(t *testing.T, resolver *scriptedResolv
 	// Distinct Names (unlike a real weighted alias's primary/secondary, which
 	// share Name/UID and differ only in Generation) so scriptedResolver's
 	// lastFnName test seam can tell which one Resolve actually saw.
-	primary := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello-primary", Namespace: "default"}}
-	secondary := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello-secondary", Namespace: "default"}}
+	primary := &fv1.Function{Name: "hello-primary", Namespace: "default"}
+	secondary := &fv1.Function{Name: "hello-secondary", Namespace: "default"}
 	live := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			State: &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: headerName}},
 		},
@@ -223,12 +222,12 @@ func TestHandler_LegacyFunctionWeights_PreservesPrePickStickyBehavior(t *testing
 		t.Parallel()
 		u := newUpstream(t)
 		withSticky := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Name: "a", Namespace: "default",
 			Spec: fv1.FunctionSpec{
 				State: &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Session-Id"}},
 			},
 		}
-		other := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
+		other := &fv1.Function{Name: "b", Namespace: "default"}
 		functionMap := map[string]*fv1.Function{"a": withSticky, "b": other}
 		// 100/0: the pick always lands on "a", the sticky-configured backend.
 		dist := []functionWeightDistribution{
@@ -254,12 +253,12 @@ func TestHandler_LegacyFunctionWeights_PreservesPrePickStickyBehavior(t *testing
 		t.Parallel()
 		u := newUpstream(t)
 		withSticky := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Name: "a", Namespace: "default",
 			Spec: fv1.FunctionSpec{
 				State: &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: fv1.StickySourceHeader, Name: "X-Session-Id"}},
 			},
 		}
-		other := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
+		other := &fv1.Function{Name: "b", Namespace: "default"}
 		functionMap := map[string]*fv1.Function{"a": withSticky, "b": other}
 		// 0/100: the pick always lands on "b", which declares no StickyConfig.
 		dist := []functionWeightDistribution{

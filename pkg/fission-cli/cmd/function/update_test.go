@@ -24,22 +24,22 @@ import (
 // succeeds), not synchronously with the update that just printed.
 func TestVersioningAutoHint(t *testing.T) {
 	t.Run("no versioning config yields no hint", func(t *testing.T) {
-		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello"}}
+		fn := &fv1.Function{Name: "hello"}
 		assert.Empty(t, versioningAutoHint(fn))
 	})
 
 	t.Run("manual mode yields no hint", func(t *testing.T) {
 		fn := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello"},
-			Spec:       fv1.FunctionSpec{Versioning: &fv1.VersioningConfig{Mode: fv1.VersioningModeManual}},
+			Name: "hello",
+			Spec: fv1.FunctionSpec{Versioning: &fv1.VersioningConfig{Mode: fv1.VersioningModeManual}},
 		}
 		assert.Empty(t, versioningAutoHint(fn))
 	})
 
 	t.Run("auto mode names the function and the versions command", func(t *testing.T) {
 		fn := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello"},
-			Spec:       fv1.FunctionSpec{Versioning: &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto}},
+			Name: "hello",
+			Spec: fv1.FunctionSpec{Versioning: &fv1.VersioningConfig{Mode: fv1.VersioningModeAuto}},
 		}
 		hint := versioningAutoHint(fn)
 		assert.Contains(t, hint, "versioning=auto")
@@ -58,15 +58,15 @@ func TestVersioningAutoHint(t *testing.T) {
 // failure only the integration suite caught, at ~13 minutes a run.
 func TestUpdateRepointsPackage(t *testing.T) {
 	pkgA := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "pkg-a", Namespace: "default", ResourceVersion: "100"},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+		Name: "pkg-a", Namespace: "default", ResourceVersion: "100",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
 	}
 	pkgB := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "pkg-b", Namespace: "default", ResourceVersion: "200"},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+		Name: "pkg-b", Namespace: "default", ResourceVersion: "200",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
 	}
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
 			Package: fv1.FunctionPackageRef{
@@ -106,11 +106,11 @@ func TestUpdateLeavesStampAloneWhenPackageUntouched(t *testing.T) {
 	// The package has been written since the function was stamped: status
 	// writes carried it from 100 to 140.
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "pkg-a", Namespace: "default", ResourceVersion: "140"},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+		Name: "pkg-a", Namespace: "default", ResourceVersion: "140",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
 	}
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
 			Package: fv1.FunctionPackageRef{

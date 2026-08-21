@@ -26,7 +26,7 @@ const digest64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
 
 func makeEnv(name, ns, image string) *fv1.Environment {
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.EnvironmentSpec{
 			Runtime: fv1.Runtime{Image: image},
 		},
@@ -40,7 +40,7 @@ func makeEnv(name, ns, image string) *fv1.Environment {
 // "legacy" (non-OCI) case.
 func makeDeployPackage(name, ns string) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns},
 			Deployment: fv1.Archive{
@@ -60,7 +60,7 @@ func makeDeployPackage(name, ns string) *fv1.Package {
 // case, which never needs a snapshot Package copy.
 func makeOCIPackage(name, ns string) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns},
 			Deployment: fv1.Archive{
@@ -79,7 +79,7 @@ func makeOCIPackage(name, ns string) *fv1.Package {
 // byte payload with no checksum recorded (util.go:38-40's case).
 func makeLiteralPackage(name, ns string, literal []byte) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns},
 			Deployment: fv1.Archive{
@@ -93,7 +93,7 @@ func makeLiteralPackage(name, ns string, literal []byte) *fv1.Package {
 
 func makeFunction(name, ns, pkgName string) *fv1.Function {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, UID: types.UID(name + "-uid")},
+		Name: name, Namespace: ns, UID: types.UID(name + "-uid"),
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns},
 			Package: fv1.FunctionPackageRef{
@@ -336,8 +336,8 @@ func TestPublish_SnapshotPackageNameCollisionRejected(t *testing.T) {
 	// Publish will pick for fn's v1 snapshot copy ("fn-v1-pkg") — a plain
 	// name collision, not a Fission-owned object left behind by a crash.
 	foreign := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1-pkg", Namespace: ns},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
+		Name: "fn-v1-pkg", Namespace: ns,
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
 	}
 
 	cl := fakeversioned.NewSimpleClientset(pkg, env, fn, foreign)
@@ -363,8 +363,8 @@ func TestPublish_SnapshotPackageNameCollisionRejectedOnEveryRetry(t *testing.T) 
 	// — that path must re-validate ownership too, or the foreign package
 	// would be silently treated as healthy on every subsequent publish.
 	foreign := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1-pkg", Namespace: ns},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
+		Name: "fn-v1-pkg", Namespace: ns,
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "env", Namespace: ns}},
 	}
 
 	cl := fakeversioned.NewSimpleClientset(pkg, env, fn, foreign)
@@ -395,7 +395,7 @@ func TestEnsureSnapshotPackage_AlreadyExistsWithMatchingOwnerAdopts(t *testing.T
 	cl := fakeversioned.NewSimpleClientset(pkg, env, fn)
 
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1", Namespace: ns, UID: types.UID("fn-v1-uid")},
+		Name: "fn-v1", Namespace: ns, UID: types.UID("fn-v1-uid"),
 		Spec: fv1.FunctionVersionSpec{
 			Snapshot: fv1.FunctionSpec{
 				Package: fv1.FunctionPackageRef{PackageRef: fv1.PackageRef{Name: "fn-v1-pkg", Namespace: ns}},

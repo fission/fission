@@ -45,22 +45,18 @@ func TestKedaDumperDumpsOnlyMessageQueueTriggerOwnedObjects(t *testing.T) {
 
 	// Created by fission's mqt-keda scaler.
 	ours := &kedav1alpha1.ScaledObject{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-		},
+		Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
 	}
 	// Someone else's ScaledObject: KEDA is cluster-wide, and a support bundle
 	// must not carry an unrelated team's scaling config.
 	theirs := &kedav1alpha1.ScaledObject{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "other-teams-app", Namespace: "other", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
-		},
+		Name: "other-teams-app", Namespace: "other", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
 	}
 	// No owner at all — hand-written by an operator, also not ours.
 	orphan := &kedav1alpha1.ScaledObject{
-		ObjectMeta: metav1.ObjectMeta{Name: "orphan", Namespace: "default", ResourceVersion: "1"},
+		Name: "orphan", Namespace: "default", ResourceVersion: "1",
 	}
 
 	dir := t.TempDir()
@@ -79,10 +75,8 @@ func TestKedaDumperMasksVaultToken(t *testing.T) {
 	t.Parallel()
 
 	ta := &kedav1alpha1.TriggerAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-		},
+		Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
 		Spec: kedav1alpha1.TriggerAuthenticationSpec{
 			HashiCorpVault: &kedav1alpha1.HashiCorpVault{
 				Address:    "https://vault.example.com",
@@ -95,10 +89,8 @@ func TestKedaDumperMasksVaultToken(t *testing.T) {
 	// and secret names out of a bundle that gets sent to a third party, and it
 	// is applied on this branch too — not only to ScaledObjects.
 	theirs := &kedav1alpha1.TriggerAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "other-teams-auth", Namespace: "other", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
-		},
+		Name: "other-teams-auth", Namespace: "other", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "web"}},
 		Spec: kedav1alpha1.TriggerAuthenticationSpec{
 			HashiCorpVault: &kedav1alpha1.HashiCorpVault{Address: "https://vault.other.example.com"},
 		},
@@ -130,10 +122,8 @@ func TestKedaDumperLeavesTheListedObjectUnmutated(t *testing.T) {
 	// Masking must not edit the object the API returned — triggerAuthClean
 	// copies first because the token sits behind a shared pointer.
 	ta := &kedav1alpha1.TriggerAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-		},
+		Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
 		Spec: kedav1alpha1.TriggerAuthenticationSpec{
 			HashiCorpVault: &kedav1alpha1.HashiCorpVault{
 				Credential: &kedav1alpha1.Credential{Token: "s.verysecrettoken"},
@@ -155,14 +145,12 @@ func TestKedaDumperUnknownTypeWritesNothing(t *testing.T) {
 	dir := t.TempDir()
 	d := KedaDumper{
 		client: kedafake.NewSimpleClientset(
-			&kedav1alpha1.ScaledObject{ObjectMeta: metav1.ObjectMeta{
+			&kedav1alpha1.ScaledObject{
 				Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
-				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-			}},
-			&kedav1alpha1.TriggerAuthentication{ObjectMeta: metav1.ObjectMeta{
+				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()}},
+			&kedav1alpha1.TriggerAuthentication{
 				Name: "my-mqt-auth", Namespace: "default", ResourceVersion: "1",
-				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-			}},
+				OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()}},
 		),
 		kedaType: "NotAKedaKind",
 	}
@@ -230,11 +218,9 @@ func TestKedaDumperIgnoresSameKindFromAnotherGroup(t *testing.T) {
 	// "MessageQueueTrigger" is not a Kind fission owns across every API group,
 	// and this filter decides what reaches a third party.
 	impostor := &kedav1alpha1.ScaledObject{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "someone-elses-mqt", Namespace: "other", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{
-				{Kind: mqtKind, Name: "their-mqt", APIVersion: "queues.example.com/v1"},
-			},
+		Name: "someone-elses-mqt", Namespace: "other", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{
+			{Kind: mqtKind, Name: "their-mqt", APIVersion: "queues.example.com/v1"},
 		},
 	}
 
@@ -323,10 +309,8 @@ func TestKedaDumperMasksTriggerMetadataCredentials(t *testing.T) {
 	t.Parallel()
 
 	so := &kedav1alpha1.ScaledObject{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-		},
+		Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
 		Spec: kedav1alpha1.ScaledObjectSpec{
 			Triggers: []kedav1alpha1.ScaleTriggers{{
 				Type: "rabbitmq",

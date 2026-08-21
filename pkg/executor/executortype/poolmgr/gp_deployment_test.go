@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
@@ -101,26 +100,18 @@ const envContainerName = "test-env"
 
 func TestGetPoolName(t *testing.T) {
 	longEnv := &fv1.Environment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       fv1.CRD_NAME_ENVIRONMENT,
-			APIVersion: fv1.CRD_VERSION,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "justtryingtoincreasethenumberofcharactersinthisstring",
-			Namespace:       "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
-			ResourceVersion: "2518",
-		},
+		Kind:            fv1.CRD_NAME_ENVIRONMENT,
+		APIVersion:      fv1.CRD_VERSION,
+		Name:            "justtryingtoincreasethenumberofcharactersinthisstring",
+		Namespace:       "checkingifthegetpoolfunctionworkswithcharactersmorethan18",
+		ResourceVersion: "2518",
 	}
 	shortEnv := &fv1.Environment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       fv1.CRD_NAME_ENVIRONMENT,
-			APIVersion: fv1.CRD_VERSION,
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "test",
-			Namespace:       "testns",
-			ResourceVersion: "2517",
-		},
+		Kind:            fv1.CRD_NAME_ENVIRONMENT,
+		APIVersion:      fv1.CRD_VERSION,
+		Name:            "test",
+		Namespace:       "testns",
+		ResourceVersion: "2517",
 	}
 	tests := []struct {
 		name      string
@@ -160,10 +151,8 @@ func newTestGenericPool(t *testing.T) *GenericPool {
 
 func newTestEnv() *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      envContainerName,
-			Namespace: "default",
-		},
+		Name:      envContainerName,
+		Namespace: "default",
 		Spec: fv1.EnvironmentSpec{
 			Version: 1,
 			Runtime: fv1.Runtime{

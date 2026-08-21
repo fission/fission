@@ -155,13 +155,11 @@ func TestBackoffDelaysRedelivery(t *testing.T) {
 		require.EqualValues(t, 1, attempts.Load(), "one delivery so far")
 
 		// 30 minutes in — still within the backoff, no re-delivery.
-		time.Sleep(30 * time.Minute)
-		synctest.Wait()
+		synctest.Sleep(30 * time.Minute)
 		require.EqualValues(t, 1, attempts.Load(), "no re-delivery before backoff elapses")
 
 		// Past the 1h backoff — re-delivered.
-		time.Sleep(31 * time.Minute)
-		synctest.Wait()
+		synctest.Sleep(31 * time.Minute)
 		require.GreaterOrEqual(t, attempts.Load(), int64(2), "re-delivered after backoff")
 
 		cancel()
@@ -237,8 +235,7 @@ func TestSettleSurvivesSlowDelivery(t *testing.T) {
 
 		// Advance virtual time past the deliverer's sleep so it actually returns,
 		// then let process() run to completion.
-		time.Sleep(settleTimeout * 4)
-		synctest.Wait()
+		synctest.Sleep(settleTimeout * 4)
 
 		require.Empty(t, rq.acks)
 		require.Empty(t, rq.kills)

@@ -76,10 +76,8 @@ func TestNewdeployReconcileDeploymentSpec(t *testing.T) {
 		fn.UID = "00000000-0000-0000-0000-0000000000a3"
 		fn.ResourceVersion = "41"
 		_, err := client.AppsV1().Deployments("default").Create(t.Context(), &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "nd-fn", Namespace: "default",
-				Annotations: map[string]string{fv1.FUNCTION_RESOURCE_VERSION: "41"},
-			},
+			Name: "nd-fn", Namespace: "default",
+			Annotations: map[string]string{fv1.FUNCTION_RESOURCE_VERSION: "41"},
 		}, metav1.CreateOptions{})
 		require.NoError(t, err)
 		_, err = deploy.fsCache.Add(fscache.FuncSvc{

@@ -54,7 +54,7 @@ func TestRetentionSweeper(t *testing.T) {
 	old := metav1.NewTime(now.Add(-2 * time.Hour))
 
 	wf := &fv1.Workflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "default"},
+		Name: "wf", Namespace: "default",
 		Spec: fv1.WorkflowSpec{
 			StartAt: "a",
 			States:  map[string]fv1.WorkflowState{"a": {Type: fv1.WorkflowStateSucceed}},
@@ -65,11 +65,9 @@ func TestRetentionSweeper(t *testing.T) {
 	}
 	run := func(name string, finished metav1.Time) *fv1.WorkflowRun {
 		return &fv1.WorkflowRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name, Namespace: "default", UID: types.UID("uid-" + name),
-				Finalizers: []string{FinalizerName},
-			},
-			Spec: fv1.WorkflowRunSpec{WorkflowRef: "wf"},
+			Name: name, Namespace: "default", UID: types.UID("uid-" + name),
+			Finalizers: []string{FinalizerName},
+			Spec:       fv1.WorkflowRunSpec{WorkflowRef: "wf"},
 			Status: fv1.WorkflowRunStatus{
 				Phase: fv1.WorkflowRunSucceeded, FinishedAt: &finished,
 			},

@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -19,7 +18,7 @@ import (
 // validation rules so we can isolate the new spec.podspec-allowlist check.
 func validBaseMQT() *fv1.MessageQueueTrigger {
 	return &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "mqt-1", Namespace: "default"},
+		Name: "mqt-1", Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,

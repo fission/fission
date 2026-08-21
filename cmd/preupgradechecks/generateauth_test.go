@@ -93,8 +93,8 @@ func TestGenerateAuthSecret(t *testing.T) {
 		t.Parallel()
 		existing := []byte("already-provisioned-master-value")
 		cs := fake.NewClientset(&apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: "fission"},
-			Data:       map[string][]byte{authSecretKey: existing},
+			Name: testAuthSecret, Namespace: "fission",
+			Data: map[string][]byte{authSecretKey: existing},
 		})
 		require.NoError(t, GenerateAuthSecret(t.Context(), cs, logger, []string{"fission", "default"}, testAuthSecret))
 
@@ -108,8 +108,8 @@ func TestGenerateAuthSecret(t *testing.T) {
 		t.Parallel()
 		existing := []byte("master-living-in-default")
 		cs := fake.NewClientset(&apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: "default"},
-			Data:       map[string][]byte{authSecretKey: existing},
+			Name: testAuthSecret, Namespace: "default",
+			Data: map[string][]byte{authSecretKey: existing},
 		})
 		require.NoError(t, GenerateAuthSecret(t.Context(), cs, logger, []string{"fission", "default"}, testAuthSecret))
 		assert.Equal(t, existing, masterIn(t, cs, "fission"))
@@ -156,8 +156,8 @@ func TestGenerateAuthSecretConvergence(t *testing.T) {
 		t.Helper()
 		cs := fake.NewClientset()
 		_, err := cs.CoreV1().Secrets(ns).Create(t.Context(), &apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: ns},
-			Data:       data,
+			Name: testAuthSecret, Namespace: ns,
+			Data: data,
 		}, metav1.CreateOptions{})
 		require.NoError(t, err)
 		return cs
@@ -199,8 +199,8 @@ func TestGenerateAuthSecretConvergence(t *testing.T) {
 			// Add via the tracker, not the clientset: a nested client call
 			// from inside a reactor re-enters the reaction chain.
 			require.NoError(t, cs.Tracker().Add(&apiv1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: ns},
-				Data:       map[string][]byte{authSecretKey: winner},
+				Name: testAuthSecret, Namespace: ns,
+				Data: map[string][]byte{authSecretKey: winner},
 			}))
 			return true, nil, k8serrors.NewAlreadyExists(
 				schema.GroupResource{Resource: "secrets"}, testAuthSecret)
@@ -228,8 +228,8 @@ func TestGenerateAuthSecretConvergence(t *testing.T) {
 		t.Parallel()
 		cs := fake.NewClientset()
 		_, err := cs.CoreV1().Secrets("default").Create(t.Context(), &apiv1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: testAuthSecret, Namespace: "default"},
-			Data:       map[string][]byte{},
+			Name: testAuthSecret, Namespace: "default",
+			Data: map[string][]byte{},
 		}, metav1.CreateOptions{})
 		require.NoError(t, err)
 

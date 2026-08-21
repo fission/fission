@@ -18,7 +18,12 @@ import (
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 )
 
-func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
+// GetInformerEventChecker builds one Event informer per watched namespace.
+// The list/watch closures receive their context from the reflector that drives
+// them, so this function takes none: an outer context here would be shadowed
+// and silently ignored. Cancellation is the caller's, via the channel it hands
+// to informer.Run.
+func GetInformerEventChecker(client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
 	informers := make(map[string]cache.SharedInformer)
 	// Cluster mode: function pods (and their websocket-connection events) live in
 	// any namespace, so watch Events cluster-wide via a single informer keyed ""
@@ -31,11 +36,11 @@ func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, r
 	for _, ns := range watchNamespaces {
 		informers[ns] = cache.NewSharedInformer(
 			&cache.ListWatch{
-				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
 					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
 					return client.CoreV1().Events(ns).List(ctx, options)
 				},
-				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
 					options.FieldSelector = fmt.Sprintf("involvedObject.kind=Pod,type=Normal,reason=%s", reason)
 					return client.CoreV1().Events(ns).Watch(ctx, options)
 				},

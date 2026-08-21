@@ -52,7 +52,7 @@ func TestPackageEqual(t *testing.T) {
 
 	sourcePkg := func(buildStatus fv1.BuildStatus, deployURL string) *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "mypkg", Namespace: "default"},
+			Name: "mypkg", Namespace: "default",
 			Spec: fv1.PackageSpec{
 				Environment:  fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 				Source:       fv1.Archive{URL: "http://storagesvc/src.zip"},
@@ -65,7 +65,7 @@ func TestPackageEqual(t *testing.T) {
 
 	desiredSourcePkg := func() *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "mypkg", Namespace: "default"},
+			Name: "mypkg", Namespace: "default",
 			Spec: fv1.PackageSpec{
 				Environment:  fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 				Source:       fv1.Archive{URL: "http://storagesvc/src.zip"},
@@ -77,7 +77,7 @@ func TestPackageEqual(t *testing.T) {
 
 	deployPkg := func(buildStatus fv1.BuildStatus) *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "deploypkg", Namespace: "default"},
+			Name: "deploypkg", Namespace: "default",
 			Spec: fv1.PackageSpec{
 				Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 				Deployment:  fv1.Archive{URL: "http://storagesvc/deploy.zip"},
@@ -126,7 +126,7 @@ func TestPackageEqual(t *testing.T) {
 			name:     "deploy-archive package with status none is equal",
 			existing: deployPkg(fv1.BuildStatusNone),
 			desired: &fv1.Package{
-				ObjectMeta: metav1.ObjectMeta{Name: "deploypkg", Namespace: "default"},
+				Name: "deploypkg", Namespace: "default",
 				Spec: fv1.PackageSpec{
 					Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 					Deployment:  fv1.Archive{URL: "http://storagesvc/deploy.zip"},
@@ -138,7 +138,7 @@ func TestPackageEqual(t *testing.T) {
 			name:     "source changed triggers update",
 			existing: sourcePkg(fv1.BuildStatusSucceeded, "http://storagesvc/deploy.zip"),
 			desired: &fv1.Package{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypkg", Namespace: "default"},
+				Name: "mypkg", Namespace: "default",
 				Spec: fv1.PackageSpec{
 					Environment:  fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 					Source:       fv1.Archive{URL: "http://storagesvc/src-v2.zip"}, // changed
@@ -279,12 +279,12 @@ func aliasFR(aliases ...fv1.FunctionAlias) *FissionResources {
 // collected along with the Function.
 func TestApplyFunctionAliasesCreateSetsOwnerRefWhenFunctionExists(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: types.UID("fn-uid")},
+		Name: "hello", Namespace: "default", UID: types.UID("fn-uid"),
 	}
 	fc := fissionfake.NewSimpleClientset(fn) //nolint:staticcheck // FunctionAlias SMD schema not yet generated for NewClientset, see k8s#126850
 	fr := aliasFR(fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	})
 
 	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false)
@@ -311,8 +311,8 @@ func TestApplyFunctionAliasesCreateSetsOwnerRefWhenFunctionExists(t *testing.T) 
 func TestApplyFunctionAliasesCreateWithoutFunctionIsUnowned(t *testing.T) {
 	fc := fissionfake.NewSimpleClientset() //nolint:staticcheck // see k8s#126850
 	fr := aliasFR(fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "not-yet-created", PackageDigest: "sha256:" + repeatHexChar('a', 64)},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "not-yet-created", PackageDigest: "sha256:" + repeatHexChar('a', 64)},
 	})
 
 	_, ras, err := applyFunctionAliases(t.Context(), cmd.Client{FissionClientSet: fc}, fr, false, false, false)
@@ -339,15 +339,13 @@ func repeatHexChar(c byte, n int) string {
 // the alias-reconciler.
 func TestApplyFunctionAliasesUpdateInPlacePreservesStatus(t *testing.T) {
 	existing := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "prod",
-			Namespace:       "default",
-			UID:             types.UID("alias-uid-1"),
-			OwnerReferences: []metav1.OwnerReference{{Kind: "Function", Name: "hello", UID: types.UID("fn-uid")}},
-			Annotations:     map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
-		},
-		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+		Name:            "prod",
+		Namespace:       "default",
+		UID:             types.UID("alias-uid-1"),
+		OwnerReferences: []metav1.OwnerReference{{Kind: "Function", Name: "hello", UID: types.UID("fn-uid")}},
+		Annotations:     map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		Spec:            fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status:          fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 	}
 	fc := fissionfake.NewSimpleClientset(existing) //nolint:staticcheck // see k8s#126850
 
@@ -359,7 +357,7 @@ func TestApplyFunctionAliasesUpdateInPlacePreservesStatus(t *testing.T) {
 	})
 
 	fr := aliasFR(fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Name: "prod", Namespace: "default",
 		// spec.Version changed -- this is the update trigger.
 		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
 	})
@@ -389,11 +387,9 @@ func TestApplyFunctionAliasesUpdateInPlacePreservesStatus(t *testing.T) {
 // left alone, matching every other spec-managed kind's prune semantics.
 func TestApplyFunctionAliasesPruneOnlyWithDeploymentUID(t *testing.T) {
 	owned := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "owned", Namespace: "default",
-			Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
-		},
-		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "owned", Namespace: "default",
+		Annotations: map[string]string{FISSION_DEPLOYMENT_UID_KEY: testDeployUID},
+		Spec:        fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	foreign := &fv1.FunctionAlias{
 		ObjectMeta: metav1.ObjectMeta{
@@ -442,12 +438,10 @@ func TestSpecApplyListsPackagesOnce(t *testing.T) {
 	t.Parallel()
 
 	live := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "hello", Namespace: "default",
-			Annotations: map[string]string{
-				FISSION_DEPLOYMENT_NAME_KEY: "test",
-				FISSION_DEPLOYMENT_UID_KEY:  "uid-1",
-			},
+		Name: "hello", Namespace: "default",
+		Annotations: map[string]string{
+			FISSION_DEPLOYMENT_NAME_KEY: "test",
+			FISSION_DEPLOYMENT_UID_KEY:  "uid-1",
 		},
 		Spec:   fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
 		Status: fv1.PackageStatus{BuildStatus: fv1.BuildStatusSucceeded},

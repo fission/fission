@@ -33,9 +33,9 @@ import (
 // reads it.
 func incrAlias(name, ns, fnName, resolvedVersion string, gen int64) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: gen, UID: types.UID("alias-" + name)},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: fnName},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: resolvedVersion},
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("alias-" + name),
+		Spec:   fv1.FunctionAliasSpec{FunctionName: fnName},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: resolvedVersion},
 	}
 }
 
@@ -43,7 +43,7 @@ func incrAlias(name, ns, fnName, resolvedVersion string, gen int64) *fv1.Functio
 // RFC-0025 Alias reference).
 func incrAliasTrigger(name, ns string, gen int64, url, fnName, alias string) *fv1.HTTPTrigger {
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name)},
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name),
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: url,
 			Methods:     []string{http.MethodGet},
@@ -79,7 +79,7 @@ func TestAliasReconcilerCreateMaterializesBothNamespaceForms(t *testing.T) {
 	ts, cl := newIncrementalTS(t, fn, v, alias)
 
 	r := &functionAliasReconciler{logger: ts.logger, client: cl, ts: ts}
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())
@@ -102,7 +102,7 @@ func TestAliasReconcilerNonDefaultNamespace(t *testing.T) {
 	ts, cl := newIncrementalTS(t, fn, v, alias)
 
 	r := &functionAliasReconciler{logger: ts.logger, client: cl, ts: ts}
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "myns", Name: "prod"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "myns", Name: "prod"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())
@@ -151,7 +151,7 @@ func TestAliasRepointIsHandlerSwapOnlyZeroDrift(t *testing.T) {
 	repointed.Status.ResolvedVersion = "hello-v2"
 	require.NoError(t, cl.Update(t.Context(), repointed))
 
-	_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err = r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	requireNoSignal(t, ts) // the headline assertion: no materializer run
 
@@ -189,7 +189,7 @@ func TestAliasCascadeRepointsHTTPTriggerHandlerSwapped(t *testing.T) {
 	res, err := ts.applyTriggerIncremental(t.Context(), trigger)
 	require.NoError(t, err)
 	require.Equal(t, routetable.ShapeChanged, res, "first apply resolves through the alias and admits")
-	_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err = r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())
@@ -206,7 +206,7 @@ func TestAliasCascadeRepointsHTTPTriggerHandlerSwapped(t *testing.T) {
 	repointed.Status.ResolvedVersion = "hello-v2"
 	require.NoError(t, cl.Update(t.Context(), repointed))
 
-	_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err = r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	requireNoSignal(t, ts)
 
@@ -230,7 +230,7 @@ func TestAliasReconcilerDeleteRemovesInternalRouteAndDropsTriggers(t *testing.T)
 	ts.fissionClient = fc
 
 	r := &functionAliasReconciler{logger: ts.logger, client: cl, ts: ts}
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	_, err = ts.applyTriggerIncremental(t.Context(), trigger)
 	require.NoError(t, err)
@@ -242,7 +242,7 @@ func TestAliasReconcilerDeleteRemovesInternalRouteAndDropsTriggers(t *testing.T)
 	require.True(t, muxMatches(internal, http.MethodPost, "/fission-function/hello:prod"))
 
 	require.NoError(t, cl.Delete(t.Context(), alias))
-	_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err = r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())
@@ -267,7 +267,7 @@ func TestVersionReconcilerMaterializesAndDeletes(t *testing.T) {
 	ts, cl := newIncrementalTS(t, fn, v)
 
 	r := &functionVersionReconciler{logger: ts.logger, client: cl, ts: ts}
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello-v1"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "hello-v1"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())
@@ -277,7 +277,7 @@ func TestVersionReconcilerMaterializesAndDeletes(t *testing.T) {
 	assert.True(t, muxMatches(internal, http.MethodPost, "/fission-function/default/hello:hello-v1"))
 
 	require.NoError(t, cl.Delete(t.Context(), v))
-	_, err = r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello-v1"}})
+	_, err = r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "hello-v1"})
 	require.NoError(t, err)
 	requireSignal(t, ts)
 	ts.materialize(t.Context())

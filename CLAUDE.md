@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Fission is a Kubernetes-native serverless framework, written in Go (`github.com/fission/fission`, Go 1.26).
+Fission is a Kubernetes-native serverless framework, written in Go (`github.com/fission/fission`, Go 1.27).
 The control plane is shipped as a single multi-headed binary (`fission-bundle`) that runs one of several subsystems based on flags.
 Functions execute inside per-environment pods that the executor manages; the user-facing CLI is `fission`.
 
@@ -14,7 +14,8 @@ Build / lint / test (run from repo root):
 - `make build-fission-cli` — build the `fission` CLI via goreleaser (snapshot, single target).
   `make install-fission-cli` copies it to `/usr/local/bin/fission`.
 - `make code-checks` — `golangci-lint run` (config in `.golangci.yaml`; goimports local prefix `github.com/fission/fission`), plus `make verify-gomod`.
-- `make verify-gomod` — fails if `go.mod` does not keep direct and indirect requirements in separate blocks (`go mod tidy` does NOT enforce this); runs in CI's "Verify dependencies" step.
+- `make verify-gomod` — fails if `go.mod` does not keep direct and indirect requirements in separate blocks; runs in CI's "Verify dependencies" step.
+  Since Go 1.27, `go mod tidy` maintains this layout itself (it relocates misfiled entries); the guard remains for tidy-less hand edits.
   See "Dependency management".
 - `make license` — add the SPDX header (`SPDX-FileCopyrightText` + `SPDX-License-Identifier: Apache-2.0`) to any in-scope source file (`.go`/`.sh`/`.py`/`Dockerfile*`) missing one.
   `make license-check` is the CI gate (runs in `lint.yaml`); run it before pushing.
@@ -60,7 +61,8 @@ Key points: use `testify` (`require` for preconditions, `assert` for independent
 ## Dependency management
 
 When adding, upgrading, or removing Go dependencies, follow `.claude/resources/go-mod-conventions.md`.
-Key point: `go.mod` keeps **direct** requirements in the first `require (...)` block and **indirect** (`// indirect`) ones in a second block — `go mod tidy` does NOT move entries between blocks, so a `go get` that lands a direct dep in the indirect block must be moved by hand.
+Key point: `go.mod` keeps **direct** requirements in the first `require (...)` block and **indirect** (`// indirect`) ones in a second block.
+Since Go 1.27, `go mod tidy` maintains this layout itself (it moves a direct dep that landed in the indirect block into the direct block); run it after any `go get`.
 `make verify-gomod` (CI-enforced in `lint.yaml`) guards the layout.
 
 ## Repo-specific playbooks

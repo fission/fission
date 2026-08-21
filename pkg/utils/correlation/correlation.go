@@ -12,8 +12,7 @@ package correlation
 import (
 	"context"
 	"net/http"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Header names used to correlate and attribute a single function invocation.
@@ -64,7 +63,7 @@ func ID(inbound string) string {
 	if validInbound(inbound) {
 		return inbound
 	}
-	return uuid.NewString()
+	return uuid.NewV4().String()
 }
 
 // NewContext returns a copy of ctx carrying the request id.

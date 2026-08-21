@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	k8stesting "k8s.io/client-go/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -81,8 +80,8 @@ func TestSweepVersions_AliasedOldVersionSurvives(t *testing.T) {
 
 	newAlias := func(refField, fnName, target string) *fv1.FunctionAlias {
 		a := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod-" + refField, Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: fnName},
+			Name: "prod-" + refField, Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: fnName},
 		}
 		switch refField {
 		case "version":
@@ -184,8 +183,8 @@ func TestSweepVersions_InterleavedAliasCreateSkipsCandidate(t *testing.T) {
 		listCalls++
 		if listCalls == 2 {
 			racer := &fv1.FunctionAlias{
-				ObjectMeta: metav1.ObjectMeta{Name: "racer", Namespace: ns},
-				Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: names[0]},
+				Name: "racer", Namespace: ns,
+				Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: names[0]},
 			}
 			if err := tracker.Add(racer); err != nil {
 				return true, nil, fmt.Errorf("test setup: seeding racing alias: %w", err)
@@ -294,7 +293,7 @@ func newRetentionGCReconciler(t *testing.T, cs *fakeversioned.Clientset, ctrlObj
 
 func reconcileGC(t *testing.T, r *RetentionGCReconciler, ns, name string) reconcile.Result {
 	t.Helper()
-	res, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ns, Name: name}})
+	res, err := r.Reconcile(t.Context(), reconcile.Request{Namespace: ns, Name: name})
 	require.NoError(t, err)
 	return res
 }
@@ -398,8 +397,8 @@ func TestRetentionGCReconcile_AliasWatchMapsToFunction(t *testing.T) {
 	r := newRetentionGCReconciler(t, cs)
 
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "fn"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "fn"},
 	}
 	reqs := r.mapAliasToFunction(t.Context(), alias)
 	require.Len(t, reqs, 1)

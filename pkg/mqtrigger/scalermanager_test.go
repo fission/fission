@@ -29,8 +29,8 @@ func secretEnv(name, secretName, key string) apiv1.EnvVar {
 		Name: name,
 		ValueFrom: &apiv1.EnvVarSource{
 			SecretKeyRef: &apiv1.SecretKeySelector{
-				LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
-				Key:                  key,
+				Name: secretName,
+				Key:  key,
 			},
 		},
 	}
@@ -46,7 +46,7 @@ func TestGetEnvVarlistDoesNotMaterializeSecretValues(t *testing.T) {
 	maxReplicaCount := int32(100)
 
 	mqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "mqt-1"},
+		Namespace: ns, Name: "mqt-1",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -64,7 +64,7 @@ func TestGetEnvVarlistDoesNotMaterializeSecretValues(t *testing.T) {
 		},
 	}
 	kubeClient := fake.NewClientset(&apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: secretName},
+		Namespace: ns, Name: secretName,
 		Data: map[string][]byte{
 			"saslUsername": []byte("alice"),
 			"saslPassword": []byte("REDACTED"),
@@ -122,10 +122,8 @@ func Test_getEnvVarlist(t *testing.T) {
 	maxReplicaCount := int32(100)
 
 	mqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-		},
+		Name:      "Test",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -164,11 +162,9 @@ func Test_getEnvVarlist(t *testing.T) {
 	routerURL := "http://router.fission/fission-function"
 
 	secret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-kafka-secrets",
-			Namespace: namespace,
-		},
-		Data: data,
+		Name:      "test-kafka-secrets",
+		Namespace: namespace,
+		Data:      data,
 	}
 
 	kubeClient := fake.NewClientset()
@@ -228,10 +224,8 @@ func Test_getEnvVarlist(t *testing.T) {
 
 	// Kafka Test with Invalid Secret Name
 	mqt2 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test2",
-			Namespace: "default",
-		},
+		Name:      "Test2",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -300,10 +294,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 
 	// Test 1 with difference
 	mqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-		},
+		Name:      "Test",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -329,10 +321,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 		},
 	}
 	newMqt1 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-		},
+		Name:      "Test",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -360,10 +350,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 
 	// Test 2 with no difference
 	mqt2 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-		},
+		Name:      "Test",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -389,10 +377,8 @@ func Test_checkAndUpdateTriggerFields(t *testing.T) {
 		},
 	}
 	newMqt2 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-		},
+		Name:      "Test",
+		Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -436,11 +422,9 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 	maxReplicaCount := int32(200)
 
 	mqt1 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-			UID:       "test123",
-		},
+		Name:      "Test",
+		Namespace: "default",
+		UID:       "test123",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -477,11 +461,9 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 
 	namespace := apiv1.NamespaceDefault
 	secret := &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-kafka-secrets",
-			Namespace: namespace,
-		},
-		Data: data,
+		Name:      "test-kafka-secrets",
+		Namespace: namespace,
+		Data:      data,
 	}
 
 	kubeClient := fake.NewClientset()
@@ -494,17 +476,15 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 
 	blockOwnerDeletion := true
 	expectedAuthTriggerObj := &kedav1alpha1.TriggerAuthentication{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      authenticationRef,
-			Namespace: mqt1.Namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				{
-					Kind:               "MessageQueueTrigger",
-					APIVersion:         "fission.io/v1",
-					Name:               mqt1.Name,
-					UID:                mqt1.UID,
-					BlockOwnerDeletion: &blockOwnerDeletion,
-				},
+		Name:      authenticationRef,
+		Namespace: mqt1.Namespace,
+		OwnerReferences: []metav1.OwnerReference{
+			{
+				Kind:               "MessageQueueTrigger",
+				APIVersion:         "fission.io/v1",
+				Name:               mqt1.Name,
+				UID:                mqt1.UID,
+				BlockOwnerDeletion: &blockOwnerDeletion,
 			},
 		},
 		Spec: kedav1alpha1.TriggerAuthenticationSpec{
@@ -545,11 +525,9 @@ func Test_getAuthTriggerSpec(t *testing.T) {
 
 	// Invalid without secret
 	mqt2 := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Test",
-			Namespace: "default",
-			UID:       "test123",
-		},
+		Name:      "Test",
+		Namespace: "default",
+		UID:       "test123",
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,

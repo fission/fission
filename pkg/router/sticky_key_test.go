@@ -9,14 +9,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func stickyFn(source fv1.StickySource, name string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		Name: "fn", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			State: &fv1.StateConfig{Sticky: &fv1.StickyConfig{Source: source, Name: name}},
 		},

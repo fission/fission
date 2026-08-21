@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ func TestID(t *testing.T) {
 		wantSame bool // true => inbound is honored verbatim
 	}{
 		{name: "honors a plain token", inbound: "req-abc_123.456", wantSame: true},
-		{name: "honors a uuid", inbound: uuid.NewString(), wantSame: true},
+		{name: "honors a uuid", inbound: uuid.NewV4().String(), wantSame: true},
 		{name: "mints when empty", inbound: "", wantSame: false},
 		{name: "mints when too long", inbound: strings.Repeat("a", 300), wantSame: false},
 		{name: "mints when it carries a control char", inbound: "abc\ndef", wantSame: false},

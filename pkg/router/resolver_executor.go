@@ -175,7 +175,7 @@ func (r *executorResolver) resolveUncached(ctx context.Context, fn *fv1.Function
 // passes them through without a re-read, so the throttler key and the
 // specialized object always agree.
 func (r *executorResolver) coalescedResolve(ctx context.Context, fn *fv1.Function) (svcEntryRecord, error) {
-	return throttler.RunOnce(r.throttler,
+	return r.throttler.RunOnce(
 		crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(),
 		func(firstToTheLock bool) (svcEntryRecord, error) {
 			if !firstToTheLock {

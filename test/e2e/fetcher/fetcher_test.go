@@ -355,11 +355,9 @@ func (f *FetcherTestSuite) TestFetcherSpecialize() {
 	configMapName := "test-configmap"
 
 	configMap := &v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: metav1.NamespaceDefault,
-		},
-		Data: configMapData,
+		Name:      configMapName,
+		Namespace: metav1.NamespaceDefault,
+		Data:      configMapData,
 	}
 
 	cfgMap, err := f.k8sClient.CoreV1().ConfigMaps(metav1.NamespaceDefault).Create(f.ctx, configMap, metav1.CreateOptions{})
@@ -371,11 +369,9 @@ func (f *FetcherTestSuite) TestFetcherSpecialize() {
 	}
 
 	secret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: metav1.NamespaceDefault,
-		},
-		Data: secretData,
+		Name:      secretName,
+		Namespace: metav1.NamespaceDefault,
+		Data:      secretData,
 	}
 
 	secret, err = f.k8sClient.CoreV1().Secrets(metav1.NamespaceDefault).Create(f.ctx, secret, metav1.CreateOptions{})

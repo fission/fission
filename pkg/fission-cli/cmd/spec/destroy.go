@@ -52,8 +52,8 @@ func (opts *DestroySubCommand) run(input cli.Input) error {
 	} else {
 		// if force delete set to true we fetch all resources with our deployment ID and delete them
 		// set desired state to nothing, but keep the UID so "apply" can find it
-		emptyFr := FissionResources{}
-		emptyFr.DeploymentConfig = fr.DeploymentConfig
+		emptyFr := FissionResources{
+			DeploymentConfig: fr.DeploymentConfig}
 
 		// "apply" the empty state
 		err = forceDeleteResources(input.Context(), opts.Client(), &emptyFr)

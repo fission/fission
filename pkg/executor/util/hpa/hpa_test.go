@@ -15,7 +15,6 @@ import (
 	asv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -60,25 +59,21 @@ func TestHpaOps(t *testing.T) {
 	// Test CreateHPA
 	hpa, err := hpaops.CreateOrGetHpa(ctx,
 		&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-fn",
-				UID:  uuid.NewUUID(),
-			},
+			Name: "test-fn",
+			UID:  uuid.NewUUID(),
 		},
 		"test-hpa",
 		&fv1.ExecutionStrategy{
 			ExecutorType:          fv1.ExecutorTypeNewdeploy,
 			MinScale:              1,
 			MaxScale:              5,
-			TargetCPUPercent:      50,
+			TargetCPUPercent:      50, //nolint:staticcheck // exercises the deprecated field's compatibility path
 			SpecializationTimeout: 300,
 		},
 		"test-fn",
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-deployment",
-				Namespace: ns,
-			},
+			Name:      "test-deployment",
+			Namespace: ns,
 		},
 		deployLabels,
 		deployAnnotations)
@@ -289,7 +284,7 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 	ns := "test-namespace"
 	util50 := int32(50)
 
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "test-fn", UID: uuid.NewUUID()}}
+	fn := &fv1.Function{Name: "test-fn", UID: uuid.NewUUID()}
 	execStrategy := &fv1.ExecutionStrategy{
 		ExecutorType: fv1.ExecutorTypeNewdeploy,
 		MinScale:     1,
@@ -298,7 +293,7 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 			Type: asv2.UtilizationMetricType, AverageUtilization: &util50,
 		})},
 	}
-	depl := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "test-deployment", Namespace: ns}}
+	depl := &appsv1.Deployment{Name: "test-deployment", Namespace: ns}
 
 	t.Run("create new uses container resource metric", func(t *testing.T) {
 		client := fake.NewClientset()
@@ -314,11 +309,9 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 
 	t.Run("existing pod-wide metric reconciled to container resource", func(t *testing.T) {
 		seeded := &asv2.HorizontalPodAutoscaler{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "test-hpa",
-				Namespace:   ns,
-				Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
-			},
+			Name:        "test-hpa",
+			Namespace:   ns,
+			Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
 			Spec: asv2.HorizontalPodAutoscalerSpec{
 				ScaleTargetRef: getScaleTargetRef(depl),
 				MinReplicas:    &util50,
@@ -353,11 +346,9 @@ func TestCreateOrGetHpaMetricsReconcile(t *testing.T) {
 		// bounds drift being ignored — the exact swallowed-update bug).
 		minRepl := int32(execStrategy.MinScale)
 		seeded := &asv2.HorizontalPodAutoscaler{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "test-hpa",
-				Namespace:   ns,
-				Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
-			},
+			Name:        "test-hpa",
+			Namespace:   ns,
+			Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
 			Spec: asv2.HorizontalPodAutoscalerSpec{
 				ScaleTargetRef: getScaleTargetRef(depl),
 				MinReplicas:    &minRepl,
@@ -395,9 +386,9 @@ func TestCreateOrGetHpaScaleBoundsReconcile(t *testing.T) {
 	instanceID := strings.ToLower(uniuri.NewLen(8))
 	ns := "test-namespace"
 
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "test-fn", UID: uuid.NewUUID()}}
+	fn := &fv1.Function{Name: "test-fn", UID: uuid.NewUUID()}
 	execStrategy := &fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypeNewdeploy, MinScale: 5, MaxScale: 10}
-	depl := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "test-deployment", Namespace: ns}}
+	depl := &appsv1.Deployment{Name: "test-deployment", Namespace: ns}
 	// The instanceID annotation is what routes CreateOrGetHpa into the adopt
 	// branch; production passes it via getDeployAnnotations.
 	annotations := map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID}

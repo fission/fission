@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"syscall"
@@ -38,10 +39,8 @@ func TestProxyErrorHandler(t *testing.T) {
 	fh := &functionHandler{
 		logger: logger,
 		function: &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy",
-				Namespace: "dummy-bar",
-			},
+			Name:      "dummy",
+			Namespace: "dummy-bar",
 		},
 	}
 
@@ -108,7 +107,7 @@ func TestClassifyFunctionError(t *testing.T) {
 // failure. Verbose Message is gated behind debug.
 func TestProxyErrorHandlerStructuredBody(t *testing.T) {
 	logger := loggerfactory.GetLogger()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "dummy", Namespace: "dummy-bar"}}
+	fn := &fv1.Function{Name: "dummy", Namespace: "dummy-bar"}
 
 	newHandler := func(debug bool) func(http.ResponseWriter, *http.Request, error) {
 		fh := &functionHandler{logger: logger, function: fn, structuredErrors: true, isDebugEnv: debug}
@@ -183,7 +182,7 @@ func (r *recordingExecutor) EnsureCapacity(context.Context, *fv1.Function, int, 
 }
 
 func fnWithPkg(rv, pkg string) *fv1.Function {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", ResourceVersion: rv}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default", ResourceVersion: rv}
 	fn.Spec.Package.PackageRef.Name = pkg
 	return fn
 }
@@ -309,11 +308,11 @@ func TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID(t *testing.T) {
 	sharedUID := k8stypes.UID("shared-fn-uid")
 
 	primary := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 1},
-		Spec:       fv1.FunctionSpec{FunctionTimeout: 10},
+		Name: "hello", Namespace: "default", UID: sharedUID, Generation: 1,
+		Spec: fv1.FunctionSpec{FunctionTimeout: 10},
 	}
 	secondary := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 2},
+		Name: "hello", Namespace: "default", UID: sharedUID, Generation: 2,
 		Spec: fv1.FunctionSpec{
 			FunctionTimeout: 99,
 			Streaming:       &fv1.StreamingConfig{IdleTimeoutSeconds: 3},
@@ -348,4 +347,99 @@ func TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID(t *testing.T) {
 	assert.False(t, primaryPolicy.streaming, "primary snapshot has no Streaming config")
 	assert.True(t, secondaryPolicy.streaming, "secondary snapshot's Streaming config must not be shadowed by primary's")
 	assert.Equal(t, 3*time.Second, secondaryPolicy.idleTimeout, "secondary's own idle timeout, not collapsed with primary's (no streaming)")
+}
+
+// roundTripperFunc adapts a func to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestDirectorParityRewrite pins what a function actually receives through the
+// proxy. It exists because the Director -> Rewrite migration silently changed
+// three things, and nothing caught it: httputil.ReverseProxy deletes the whole
+// forwarding set before calling a Rewrite hook (Director passed it through) and
+// runs cleanQueryParams unconditionally (Director ran it only when outreq.Form
+// was non-nil, which the router never sets). The pre-existing coverage tested
+// addForwardedHostHeader on a hand-built request, never through a proxy, so an
+// ingress's X-Forwarded-Host silently became the router's own host.
+//
+// The assertions below are the DIRECTOR-era values. Anything that changes what
+// reaches the function must fail here.
+func TestDirectorParityRewrite(t *testing.T) {
+	t.Parallel()
+
+	// captureRT stands in for RetryingRoundTripper, which calls
+	// addForwardedHostHeader (transport.go) after the Rewrite hook has run.
+	type captured struct {
+		header http.Header
+		query  string
+	}
+	proxyThrough := func(t *testing.T, in *http.Request) captured {
+		t.Helper()
+		var got captured
+		rt := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			addForwardedHostHeader(req)
+			got = captured{header: req.Header.Clone(), query: req.URL.RawQuery}
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Header: http.Header{}}, nil
+		})
+		proxy := &httputil.ReverseProxy{Rewrite: directorParityRewrite, Transport: rt}
+		proxy.ServeHTTP(httptest.NewRecorder(), in)
+		return got
+	}
+
+	t.Run("an ingress's forwarding headers reach the function untouched", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest(http.MethodGet, "http://router.fission/fission-function/hello", nil)
+		req.Host = "router.fission"
+		req.RemoteAddr = "10.0.0.9:1234"
+		req.Header.Set("X-Forwarded-Host", "myapp.example.com")
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("Forwarded", "host=myapp.example.com;proto=https")
+		req.Header.Set("X-Forwarded-For", "203.0.113.7")
+		req.URL.Scheme, req.URL.Host = "http", "backend.local"
+
+		got := proxyThrough(t, req)
+
+		// The user-facing host, NOT router.fission: a function building an
+		// absolute callback or OAuth redirect URI depends on these.
+		assert.Equal(t, "myapp.example.com", got.header.Get("X-Forwarded-Host"))
+		assert.Equal(t, "https", got.header.Get("X-Forwarded-Proto"))
+		assert.Equal(t, "host=myapp.example.com;proto=https", got.header.Get("Forwarded"))
+		// The client IP is appended to the inbound chain, not replacing it.
+		assert.Equal(t, "203.0.113.7, 10.0.0.9", got.header.Get("X-Forwarded-For"))
+	})
+
+	t.Run("without an upstream proxy the router synthesizes its own host", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest(http.MethodGet, "http://router.fission/fission-function/hello", nil)
+		req.Host = "router.fission"
+		req.RemoteAddr = "10.0.0.9:1234"
+		req.URL.Scheme, req.URL.Host = "http", "backend.local"
+
+		got := proxyThrough(t, req)
+
+		// addForwardedHostHeader fills these in when no external proxy did.
+		assert.Equal(t, "router.fission", got.header.Get("X-Forwarded-Host"))
+		assert.Equal(t, "host=router.fission;", got.header.Get("Forwarded"))
+		assert.Empty(t, got.header.Get("X-Forwarded-Proto"), "nothing synthesizes a scheme")
+		assert.Equal(t, "10.0.0.9", got.header.Get("X-Forwarded-For"))
+	})
+
+	t.Run("query strings reach the function verbatim", func(t *testing.T) {
+		t.Parallel()
+		// Each of these trips httputil's cleanQueryParams, which re-encodes via
+		// url.ParseQuery: pairs get dropped and the survivors sorted.
+		for _, raw := range []string{"a=1;b=2", "z=9&a=1&bad=%zz", "b=2&a=1"} {
+			t.Run(raw, func(t *testing.T) {
+				t.Parallel()
+				req := httptest.NewRequest(http.MethodGet, "http://router.fission/fission-function/hello?"+raw, nil)
+				req.Host = "router.fission"
+				req.RemoteAddr = "10.0.0.9:1234"
+				req.URL.Scheme, req.URL.Host = "http", "backend.local"
+
+				assert.Equal(t, raw, proxyThrough(t, req).query,
+					"the function must receive the query byte-for-byte, unsorted and unfiltered")
+			})
+		}
+	})
 }

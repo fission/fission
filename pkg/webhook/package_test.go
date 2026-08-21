@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
@@ -17,10 +15,8 @@ import (
 // so the cross-namespace branch is the only thing under test.
 func makeValidPackage(pkgNs, envNs string) *v1.Package {
 	return &v1.Package{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pkg-1",
-			Namespace: pkgNs,
-		},
+		Name:      "pkg-1",
+		Namespace: pkgNs,
 		Spec: v1.PackageSpec{
 			Environment: v1.EnvironmentReference{
 				Name:      "env-1",

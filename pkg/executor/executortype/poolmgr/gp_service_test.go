@@ -31,12 +31,10 @@ import (
 
 func fnForService(name string, generation int64) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       name,
-			Namespace:  "default",
-			UID:        "uid-1234",
-			Generation: generation,
-		},
+		Name:       name,
+		Namespace:  "default",
+		UID:        "uid-1234",
+		Generation: generation,
 	}
 }
 
@@ -122,10 +120,8 @@ func TestFunctionServiceNameLengthBound(t *testing.T) {
 		seq := rapid.Int64Range(1, math.MaxInt64).Draw(rt, "seq")
 
 		fn := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name,
-				UID:  types.UID(uid),
-			},
+			Name: name,
+			UID:  types.UID(uid),
 		}
 		unversioned := functionServiceName(fn)
 		require.LessOrEqual(rt, len(unversioned), 63, "unversioned name must fit the 63-char limit")
@@ -438,7 +434,7 @@ func TestDeleteFnSvcEnsuredForUID(t *testing.T) {
 func TestSpecializedPodLabels(t *testing.T) {
 	t.Parallel()
 	gp := &GenericPool{
-		env: &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env", Namespace: "default", UID: "env-uid"}},
+		env: &fv1.Environment{Name: "env", Namespace: "default", UID: "env-uid"},
 	}
 	meta := &metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "uid-1", Generation: 7}
 

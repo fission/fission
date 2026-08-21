@@ -10,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -27,7 +26,7 @@ import (
 
 func TestKubernetesWatchTriggerReconciler(t *testing.T) {
 	w := &fv1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kwt1", Namespace: "default", Generation: 1},
+		Name: "kwt1", Namespace: "default", Generation: 1,
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Type:              "POD",
 			FunctionReference: fv1.FunctionReference{Name: "fn"},
@@ -87,7 +86,7 @@ func TestKubernetesWatchTriggerReconciler_FailedRestartStopsStaleWatch(t *testin
 	t.Cleanup(func() { watchStartRetries = orig })
 
 	w := &fv1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kwt1", Namespace: "default", Generation: 1},
+		Name: "kwt1", Namespace: "default", Generation: 1,
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Type:              "POD",
 			FunctionReference: fv1.FunctionReference{Name: "fn"},

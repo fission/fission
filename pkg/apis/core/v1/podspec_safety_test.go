@@ -36,10 +36,8 @@ func TestValidatePodSpecSafety_Benign(t *testing.T) {
 		}},
 		Volumes: []apiv1.Volume{{
 			Name: "cm",
-			VolumeSource: apiv1.VolumeSource{
-				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "my-cm"},
-				},
+			ConfigMap: &apiv1.ConfigMapVolumeSource{
+				Name: "my-cm",
 			},
 		}},
 		NodeSelector: map[string]string{"role": "fn"},
@@ -85,10 +83,8 @@ func TestValidatePodSpecSafety_DangerousFields(t *testing.T) {
 			name: "hostPath volume",
 			mutate: func(ps *apiv1.PodSpec) {
 				ps.Volumes = []apiv1.Volume{{
-					Name: "host-root",
-					VolumeSource: apiv1.VolumeSource{
-						HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-					},
+					Name:     "host-root",
+					HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
 				}}
 			},
 			wantInErr: "hostPath",

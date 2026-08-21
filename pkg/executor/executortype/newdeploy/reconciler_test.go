@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
@@ -60,13 +59,13 @@ func (f *fakeEnvUpdater) updateEnvFunctions(_ context.Context, env *fv1.Environm
 }
 
 func fnOfType(name string, et fv1.ExecutorType) *fv1.Function {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	fn := &fv1.Function{Name: name, Namespace: "default"}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = et
 	return fn
 }
 
 func envWithImage(name, image string) *fv1.Environment {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	env := &fv1.Environment{Name: name, Namespace: "default"}
 	env.Spec.Runtime.Image = image
 	return env
 }

@@ -116,14 +116,9 @@ func SweepVersions(ctx context.Context, cl versioned.Interface, fnNS, fnName str
 	}
 	sort.Slice(versions, func(i, j int) bool { return versions[i].Spec.Sequence < versions[j].Spec.Sequence })
 
-	keep := retain
-	if keep < 1 {
-		keep = 1
-	}
 	n := len(versions)
-	if keep > n {
-		keep = n
-	}
+	// At least one version is always retained, never more than exist.
+	keep := min(max(retain, 1), n)
 	keepStart := n - keep
 
 	initialRefs, err := aliasReferencedVersions(ctx, cl, fnNS)
@@ -132,7 +127,7 @@ func SweepVersions(ctx context.Context, cl versioned.Interface, fnNS, fnName str
 	}
 
 	var candidates []fv1.FunctionVersion
-	for i := 0; i < keepStart; i++ {
+	for i := range keepStart {
 		v := versions[i]
 		if initialRefs[v.Name] {
 			result.Retained = append(result.Retained, v.Name)
@@ -311,7 +306,7 @@ func (r *RetentionGCReconciler) mapVersionToFunction(_ context.Context, obj clie
 	if fnName == "" {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: v.Namespace, Name: fnName}}}
+	return []reconcile.Request{{Namespace: v.Namespace, Name: fnName}}
 }
 
 // mapAliasToFunction enqueues the Function a FunctionAlias event names via
@@ -324,7 +319,7 @@ func (r *RetentionGCReconciler) mapAliasToFunction(_ context.Context, obj client
 	if a.Spec.FunctionName == "" {
 		return nil
 	}
-	return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: a.Namespace, Name: a.Spec.FunctionName}}}
+	return []reconcile.Request{{Namespace: a.Namespace, Name: a.Spec.FunctionName}}
 }
 
 // Reconcile sweeps req's Function's FunctionVersions down to its configured

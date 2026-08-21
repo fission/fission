@@ -9,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	appsv1 "k8s.io/api/apps/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -19,21 +17,20 @@ import (
 
 func TestOwnedObjectToFunction(t *testing.T) {
 	t.Run("maps a managed object back to its owning Function by label", func(t *testing.T) {
-		obj := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		obj := &appsv1.Deployment{
 			Name:      "newdeploy-fn-default-abc", // workload name, not the function name
 			Namespace: "fission-function",         // workload namespace, not the function namespace
 			Labels: map[string]string{
 				fv1.FUNCTION_NAME:      "fn",
 				fv1.FUNCTION_NAMESPACE: "default",
-			},
-		}}
+			}}
 		reqs := ownedObjectToFunction(t.Context(), obj)
-		assert.Equal(t, []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "fn", Namespace: "default"}}}, reqs,
+		assert.Equal(t, []reconcile.Request{{Name: "fn", Namespace: "default"}}, reqs,
 			"must point at the Function CR (from labels), not the workload name/namespace")
 	})
 
 	t.Run("returns nil for an object without the function labels", func(t *testing.T) {
-		obj := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "x", Namespace: "y"}}
+		obj := &appsv1.Deployment{Name: "x", Namespace: "y"}
 		assert.Nil(t, ownedObjectToFunction(t.Context(), obj))
 	})
 }

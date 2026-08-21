@@ -38,7 +38,7 @@ func deleteFlags(fnName string) dummy.Cli {
 // output at all, byte-identical to the command's behavior before the
 // cascade warning existed.
 func TestDeleteCommand_Unversioned(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	setDeleteClient(fn)
 
 	out := captureStdout(t, func() error { return Delete(deleteFlags("hello")) })
@@ -50,7 +50,7 @@ func TestDeleteCommand_Unversioned(t *testing.T) {
 // aliases warns about the version count, singular grammar included, and
 // mentions no aliases or triggers.
 func TestDeleteCommand_VersionsOnly(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	v1 := gcVersion("hello", 1)
 	v2 := gcVersion("hello", 2)
 	setDeleteClient(fn, v1, v2)
@@ -65,7 +65,7 @@ func TestDeleteCommand_VersionsOnly(t *testing.T) {
 // TestDeleteCommand_SingleVersionSingularGrammar exercises the "1 version"
 // singular phrasing, not "1 versions".
 func TestDeleteCommand_SingleVersionSingularGrammar(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	setDeleteClient(fn, gcVersion("hello", 1))
 
 	out := captureStdout(t, func() error { return Delete(deleteFlags("hello")) })
@@ -78,20 +78,20 @@ func TestDeleteCommand_SingleVersionSingularGrammar(t *testing.T) {
 // with alias names sorted regardless of creation order, and no
 // HTTPTriggers referencing them.
 func TestDeleteCommand_VersionsAndAliases(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	v1 := gcVersion("hello", 1)
 	devAlias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "dev", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "dev", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	prodAlias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	// Unrelated alias for a different function must not be counted.
 	other := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "not-hello", Version: "not-hello-v1"},
+		Name: "other", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "not-hello", Version: "not-hello-v1"},
 	}
 	setDeleteClient(fn, v1, devAlias, prodAlias, other)
 
@@ -107,36 +107,36 @@ func TestDeleteCommand_VersionsAndAliases(t *testing.T) {
 // trigger referencing an unrelated alias, and a trigger referencing the
 // function by name (not alias), must not appear.
 func TestDeleteCommand_AliasesWithReferencingTriggers(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	prodAlias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	unrelatedAlias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "staging", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
+		Name: "staging", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
 	}
 
 	trigZ := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "trig-z", Namespace: "default"},
+		Name: "trig-z", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Alias: "prod"},
 		},
 	}
 	trigA := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "trig-a", Namespace: "default"},
+		Name: "trig-a", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Alias: "prod"},
 		},
 	}
 	trigOtherAlias := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "trig-other-alias", Namespace: "default"},
+		Name: "trig-other-alias", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Alias: "staging"},
 		},
 	}
 	trigByName := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "trig-by-name", Namespace: "default"},
+		Name: "trig-by-name", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "hello"},
 		},
@@ -157,7 +157,7 @@ func TestDeleteCommand_AliasesWithReferencingTriggers(t *testing.T) {
 // still succeed with no warning and no failure -- the preflight is
 // advisory only.
 func TestDeleteCommand_PreflightListErrorDoesNotBlockDelete(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	fc := setDeleteClient(fn)
 	fc.PrependReactor("list", "functionversions", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, assert.AnError

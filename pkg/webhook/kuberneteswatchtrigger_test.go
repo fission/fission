@@ -8,17 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func makeValidKWT(triggerNs, specNs string) *v1.KubernetesWatchTrigger {
 	return &v1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "kwt-1",
-			Namespace: triggerNs,
-		},
+		Name:      "kwt-1",
+		Namespace: triggerNs,
 		Spec: v1.KubernetesWatchTriggerSpec{
 			Namespace: specNs,
 			Type:      "POD",

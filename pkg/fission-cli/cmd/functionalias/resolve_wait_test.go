@@ -23,8 +23,8 @@ import (
 
 func resolvedAlias(version string) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: version},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: version},
 		Status: fv1.FunctionAliasStatus{
 			ResolvedVersion: version,
 			Conditions: []metav1.Condition{
@@ -36,8 +36,8 @@ func resolvedAlias(version string) *fv1.FunctionAlias {
 
 func unresolvedAlias(version string) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: version},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: version},
 		Status: fv1.FunctionAliasStatus{
 			Conditions: []metav1.Condition{
 				{Type: fv1.FunctionAliasConditionResolved, Status: metav1.ConditionFalse, Reason: fv1.FunctionAliasReasonVersionNotFound},

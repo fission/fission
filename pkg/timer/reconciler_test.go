@@ -24,8 +24,8 @@ import (
 
 func TestTimeTriggerReconciler(t *testing.T) {
 	tt := &fv1.TimeTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "cron1", Namespace: "default", Generation: 1},
-		Spec:       fv1.TimeTriggerSpec{Cron: "0 0 * * *", FunctionReference: fv1.FunctionReference{Name: "fn"}},
+		Name: "cron1", Namespace: "default", Generation: 1,
+		Spec: fv1.TimeTriggerSpec{Cron: "0 0 * * *", FunctionReference: fv1.FunctionReference{Name: "fn"}},
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -71,8 +71,8 @@ func TestTimeTriggerReconciler(t *testing.T) {
 // must surface as Scheduled=False / InvalidCron rather than a silent dead trigger.
 func TestTimeTriggerReconciler_InvalidCron(t *testing.T) {
 	tt := &fv1.TimeTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "bad-cron", Namespace: "default", Generation: 1},
-		Spec:       fv1.TimeTriggerSpec{Cron: "not a cron", FunctionReference: fv1.FunctionReference{Name: "fn"}},
+		Name: "bad-cron", Namespace: "default", Generation: 1,
+		Spec: fv1.TimeTriggerSpec{Cron: "not a cron", FunctionReference: fv1.FunctionReference{Name: "fn"}},
 	}
 	c := fake.NewClientBuilder().
 		WithScheme(scheme.Scheme).

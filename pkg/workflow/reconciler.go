@@ -28,6 +28,12 @@ const runResyncInterval = 60 * time.Second
 // (GitOps applies in arbitrary order, but not forever).
 const workflowRefGrace = 10 * time.Minute
 
+// terminalFoldRequeueInterval paces the one requeue taken after
+// FailUnstartable appends the terminal event, so the next pass folds it into
+// status. Bounded by construction: foldTail runs before fetch, so that pass
+// terminates the run and no further requeue follows.
+const terminalFoldRequeueInterval = time.Second
+
 // WorkflowRunReconciler drives runs through the engine and mirrors the fold
 // into status. All correctness lives in the CAS-protected log; status is a
 // best-effort view.
@@ -72,7 +78,7 @@ func (r *WorkflowRunReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if apierrors.IsNotFound(err) && time.Since(run.CreationTimestamp.Time) > workflowRefGrace {
 			if failErr := r.engine.FailUnstartable(ctx, run,
 				fmt.Sprintf("workflow %q did not appear within %s of run creation", run.Spec.WorkflowRef, workflowRefGrace)); failErr == nil {
-				return ctrl.Result{Requeue: true}, nil // fold the terminal event into status
+				return ctrl.Result{RequeueAfter: terminalFoldRequeueInterval}, nil // fold the terminal event into status
 			}
 		}
 		controller.SetConditions(ctx, r.logger, r.client, run, metav1.Condition{

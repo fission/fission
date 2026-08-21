@@ -41,14 +41,12 @@ func specializedAdoptPod(name, ns, fnUID, generation string) *apiv1.Pod {
 		labels[fv1.FUNCTION_GENERATION] = generation
 	}
 	return &apiv1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels:    labels,
-			Annotations: map[string]string{
-				fv1.FUNCTION_RESOURCE_VERSION: "100",
-				fv1.ANNOTATION_SVC_HOST:       "10.9.9.9:8888",
-			},
+		Name:      name,
+		Namespace: ns,
+		Labels:    labels,
+		Annotations: map[string]string{
+			fv1.FUNCTION_RESOURCE_VERSION: "100",
+			fv1.ANNOTATION_SVC_HOST:       "10.9.9.9:8888",
 		},
 		Status: apiv1.PodStatus{
 			PodIP:             "10.9.9.9",
@@ -63,7 +61,7 @@ func specializedAdoptPod(name, ns, fnUID, generation string) *apiv1.Pod {
 // adoptSpecializedPods to completion, and returns the fsCache it populated.
 func runAdopt(t *testing.T, pod *apiv1.Pod, fissionObjs ...runtime.Object) *fscache.FunctionServiceCache {
 	t.Helper()
-	env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: pod.Namespace}}
+	env := fv1.Environment{Name: "env1", Namespace: pod.Namespace}
 	return runAdoptWithEnv(t, pod, env, fissionObjs...).fsCache
 }
 
@@ -114,12 +112,10 @@ func TestAdoptSpecializedPodsPopulatesGeneration(t *testing.T) {
 // liveFn builds the live Function object the missing-label fallback fetches.
 func liveFn(uid string, generation int64) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:       "fn1",
-			Namespace:  "default",
-			UID:        k8sTypes.UID(uid),
-			Generation: generation,
-		},
+		Name:       "fn1",
+		Namespace:  "default",
+		UID:        k8sTypes.UID(uid),
+		Generation: generation,
 	}
 }
 
@@ -196,7 +192,7 @@ func TestAdoptActiveNotReadyPod(t *testing.T) {
 	pod.Status.ContainerStatuses = []apiv1.ContainerStatus{{Ready: false}}
 	pod.Status.Phase = apiv1.PodRunning
 
-	gpm := runAdoptWithEnv(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+	gpm := runAdoptWithEnv(t, pod, fv1.Environment{Name: "env1", Namespace: "default"})
 
 	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
 	require.Equal(t, "inst-1", after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
@@ -211,7 +207,7 @@ func TestAdoptSkipsTerminalPod(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	pod.Status.Phase = apiv1.PodSucceeded
 
-	gpm := runAdoptWithEnv(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+	gpm := runAdoptWithEnv(t, pod, fv1.Environment{Name: "env1", Namespace: "default"})
 
 	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
 	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL], "a terminal pod must not be claimed")
@@ -228,7 +224,7 @@ func TestAdoptHalfSpecializedPodNotStamped(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	delete(pod.Annotations, fv1.ANNOTATION_SVC_HOST)
 
-	gpm := runAdoptWithEnv(t, pod, fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"}})
+	gpm := runAdoptWithEnv(t, pod, fv1.Environment{Name: "env1", Namespace: "default"})
 
 	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
 	require.Empty(t, after.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL],
@@ -242,13 +238,13 @@ func TestAdoptHalfSpecializedPodNotStamped(t *testing.T) {
 func TestAdoptSkipsStaleEnvRuntime(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	env := fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"},
-		Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
+		Name: "env1", Namespace: "default",
+		Spec: fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
 	}
 	// The pod was born under a DIFFERENT runtime revision of the same env.
 	pod.Labels[fv1.ENVIRONMENT_RUNTIME_HASH] = envRuntimeHash(&fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"},
-		Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v1"}},
+		Name: "env1", Namespace: "default",
+		Spec: fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v1"}},
 	})
 	gpm := runAdoptWithEnv(t, pod, env)
 
@@ -266,7 +262,7 @@ func TestAdoptSkipsRecreatedEnv(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	pod.Labels[fv1.ENVIRONMENT_UID] = "old-env-uid"
 
-	env := fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", UID: "new-env-uid"}}
+	env := fv1.Environment{Name: "env1", Namespace: "default", UID: "new-env-uid"}
 	gpm := runAdoptWithEnv(t, pod, env)
 
 	after := podAfterAdopt(t, gpm, "default", "fn1-pod")
@@ -280,8 +276,8 @@ func TestAdoptSkipsRecreatedEnv(t *testing.T) {
 func TestAdoptMatchingEnvRuntime(t *testing.T) {
 	pod := specializedAdoptPod("fn1-pod", "default", "fn-uid-1", "3")
 	env := fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", UID: "env-uid-1"},
-		Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
+		Name: "env1", Namespace: "default", UID: "env-uid-1",
+		Spec: fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
 	}
 	pod.Labels[fv1.ENVIRONMENT_UID] = "env-uid-1"
 	pod.Labels[fv1.ENVIRONMENT_RUNTIME_HASH] = envRuntimeHash(&env)

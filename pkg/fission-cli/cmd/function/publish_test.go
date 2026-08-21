@@ -14,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ktesting "k8s.io/client-go/testing"
 
@@ -25,8 +24,8 @@ import (
 
 func publishedVersion() *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1},
+		Name: "hello-v1", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1},
 	}
 }
 
@@ -76,8 +75,8 @@ func TestPrintPublishResultInvalidFormatErrors(t *testing.T) {
 
 func packageWithStatus(status fv1.BuildStatus) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-pkg", Namespace: "default"},
-		Status:     fv1.PackageStatus{BuildStatus: status},
+		Name: "hello-pkg", Namespace: "default",
+		Status: fv1.PackageStatus{BuildStatus: status},
 	}
 }
 

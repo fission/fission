@@ -101,11 +101,11 @@ func (f *fakeFailureClient) GetFunctionFailurePercentage(_ context.Context, q fa
 }
 
 func canaryFixtures(weights map[string]int, increment int) (*fv1.HTTPTrigger, *fv1.CanaryConfig) {
-	trigger := &fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: "trig", Namespace: "default"}}
+	trigger := &fv1.HTTPTrigger{Name: "trig", Namespace: "default"}
 	trigger.Spec.FunctionReference.Type = fv1.FunctionReferenceTypeFunctionWeights
 	trigger.Spec.FunctionReference.FunctionWeights = weights
 	cc := &fv1.CanaryConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: "cc", Namespace: "default", Generation: 1},
+		Name: "cc", Namespace: "default", Generation: 1,
 		Spec: fv1.CanaryConfigSpec{
 			Trigger: "trig", NewFunction: "new", OldFunction: "old",
 			WeightIncrement:         increment,
@@ -333,7 +333,7 @@ func TestStep(t *testing.T) {
 
 func reconcileCC(t *testing.T, r *CanaryConfigReconciler) (ctrl.Result, error) {
 	t.Helper()
-	return r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "cc"}})
+	return r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "cc"})
 }
 
 func TestReconcile(t *testing.T) {
@@ -463,22 +463,22 @@ func TestReconcile(t *testing.T) {
 // mapping (docs/rfc/0025-function-versions-aliases-rollback.md L182).
 func aliasCanaryFixtures(increment, failureThreshold int) (trigger *fv1.HTTPTrigger, cc *fv1.CanaryConfig, alias *fv1.FunctionAlias, oldVer, newVer *fv1.FunctionVersion) {
 	oldVer = &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "orders-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "orders", Sequence: 1},
+		Name: "orders-v1", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "orders", Sequence: 1},
 	}
 	newVer = &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "orders-v2", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "orders", Sequence: 2},
+		Name: "orders-v2", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "orders", Sequence: 2},
 	}
 	alias = &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default", Generation: 1},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
+		Name: "prod", Namespace: "default", Generation: 1,
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
 	}
-	trigger = &fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: "trig", Namespace: "default"}}
+	trigger = &fv1.HTTPTrigger{Name: "trig", Namespace: "default"}
 	trigger.Spec.FunctionReference.Type = fv1.FunctionReferenceTypeFunctionName
 	trigger.Spec.FunctionReference.Alias = "prod"
 	cc = &fv1.CanaryConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: "cc", Namespace: "default", Generation: 1},
+		Name: "cc", Namespace: "default", Generation: 1,
 		Spec: fv1.CanaryConfigSpec{
 			Trigger: "trig", NewFunction: "orders-v2", OldFunction: "orders-v1",
 			WeightIncrement:         increment,

@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -21,15 +20,13 @@ import (
 // managed-by label set, instanceID annotation set, a concrete selector/ports.
 func desiredService(name, instanceID string) *apiv1.Service {
 	return &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
-				"app":                "desired",
-			},
-			Annotations: map[string]string{
-				fv1.EXECUTOR_INSTANCEID_LABEL: instanceID,
-			},
+		Name: name,
+		Labels: map[string]string{
+			fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE,
+			"app":                "desired",
+		},
+		Annotations: map[string]string{
+			fv1.EXECUTOR_INSTANCEID_LABEL: instanceID,
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: map[string]string{"fn": name},
@@ -71,12 +68,10 @@ func TestCreateOrAdoptService(t *testing.T) {
 	t.Run("adopts orphan missing managed-by label", func(t *testing.T) {
 		t.Parallel()
 		orphan := &apiv1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: name, Namespace: ns,
-				Labels:      map[string]string{"app": "old"}, // no managed-by label -> orphan
-				Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
-			},
-			Spec: apiv1.ServiceSpec{Selector: map[string]string{"fn": "stale"}, Type: apiv1.ServiceTypeClusterIP},
+			Name: name, Namespace: ns,
+			Labels:      map[string]string{"app": "old"}, // no managed-by label -> orphan
+			Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: instanceID},
+			Spec:        apiv1.ServiceSpec{Selector: map[string]string{"fn": "stale"}, Type: apiv1.ServiceTypeClusterIP},
 		}
 		client := fake.NewClientset(orphan)
 

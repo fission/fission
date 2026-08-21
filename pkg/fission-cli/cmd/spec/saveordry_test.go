@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -36,7 +35,7 @@ func captureSpecStdout(t *testing.T, fn func() error) string {
 }
 
 func TestSaveOrDry(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "ydry"}}
+	fn := &fv1.Function{Name: "ydry"}
 
 	t.Run("no spec flag is not handled", func(t *testing.T) {
 		in := dummy.TestFlagSet()

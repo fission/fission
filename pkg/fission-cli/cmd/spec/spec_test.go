@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/util"
 )
@@ -142,8 +140,8 @@ func TestParseYamlFunctionAliasRoundTrip(t *testing.T) {
 // other spec kind does.
 func TestCrdToYamlFunctionAlias(t *testing.T) {
 	fa := fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	meta, kind, data, err := crdToYaml(&fa)
 	if err != nil {

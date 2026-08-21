@@ -28,7 +28,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -85,7 +84,7 @@ func newOCITestFetcher(t *testing.T) *Fetcher {
 
 func ociPackage(image, digest string) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "oci-pkg", Namespace: "fn-ns"},
+		Name: "oci-pkg", Namespace: "fn-ns",
 		Spec: fv1.PackageSpec{
 			Deployment: fv1.Archive{
 				Type: fv1.ArchiveTypeOCI,

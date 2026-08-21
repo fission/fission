@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -97,8 +96,8 @@ func TestEnsureNamespaceAuthSecretWritesAlongsideChartMaster(t *testing.T) {
 	// Pre-seed the chart's master-bearing Secret, exactly as a prior helm render
 	// left it in the namespace.
 	require.NoError(t, c.Create(ctx, &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "team-a", Name: "fission-internal-auth"},
-		Data:       map[string][]byte{"secret": master},
+		Namespace: "team-a", Name: "fission-internal-auth",
+		Data: map[string][]byte{"secret": master},
 	}))
 
 	require.NoError(t, EnsureNamespaceAuthSecret(ctx, c, master, "team-a"))

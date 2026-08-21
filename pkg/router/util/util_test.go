@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	v1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -31,10 +30,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						Host:        "test.com",
 						RelativeURL: "/foo/bar",
@@ -48,35 +45,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "test.com",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -90,10 +83,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/bar",
 						FunctionReference: fv1.FunctionReference{
@@ -108,37 +99,33 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:      "foo",
-					Namespace: "foobarNS",
-					Annotations: map[string]string{
-						"key": "value",
-					},
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
+				},
+				Name:      "foo",
+				Namespace: "foobarNS",
+				Annotations: map[string]string{
+					"key": "value",
 				},
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -152,10 +139,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/{bar}",
 						FunctionReference: fv1.FunctionReference{
@@ -170,35 +155,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "test.com",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -212,10 +193,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/{bar}",
 						FunctionReference: fv1.FunctionReference{
@@ -230,35 +209,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/{bar}",
-											PathType: &pathType,
 										},
+										Path:     "/foo/{bar}",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -272,10 +247,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/{bar}",
 						FunctionReference: fv1.FunctionReference{
@@ -290,35 +263,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/{bar}",
-											PathType: &pathType,
 										},
+										Path:     "/foo/{bar}",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -332,10 +301,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						Host:        "example.com",
 						RelativeURL: "/foo/{bar}",
@@ -351,35 +318,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "test.com",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -393,10 +356,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/{bar}",
 						FunctionReference: fv1.FunctionReference{
@@ -411,35 +372,31 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:        "foo",
-					Namespace:   "foobarNS",
-					Annotations: nil,
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
 				},
+				Name:        "foo",
+				Namespace:   "foobarNS",
+				Annotations: nil,
 				Spec: v1.IngressSpec{
 					Rules: []v1.IngressRule{
 						{
 							Host: "",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -453,10 +410,8 @@ func TestGetIngressSpec(t *testing.T) {
 			args: args{
 				ingressNS: "foobarNS",
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						RelativeURL: "/foo/bar",
 						FunctionReference: fv1.FunctionReference{
@@ -473,17 +428,15 @@ func TestGetIngressSpec(t *testing.T) {
 				},
 			},
 			want: &v1.Ingress{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"triggerName":      "foo",
-						"functionName":     "foofunc",
-						"triggerNamespace": "bar",
-					},
-					Name:      "foo",
-					Namespace: "foobarNS",
-					Annotations: map[string]string{
-						"key": "value",
-					},
+				Labels: map[string]string{
+					"triggerName":      "foo",
+					"functionName":     "foofunc",
+					"triggerNamespace": "bar",
+				},
+				Name:      "foo",
+				Namespace: "foobarNS",
+				Annotations: map[string]string{
+					"key": "value",
 				},
 				Spec: v1.IngressSpec{
 					TLS: []v1.IngressTLS{
@@ -497,21 +450,19 @@ func TestGetIngressSpec(t *testing.T) {
 					Rules: []v1.IngressRule{
 						{
 							Host: "",
-							IngressRuleValue: v1.IngressRuleValue{
-								HTTP: &v1.HTTPIngressRuleValue{
-									Paths: []v1.HTTPIngressPath{
-										{
-											Backend: v1.IngressBackend{
-												Service: &v1.IngressServiceBackend{
-													Name: "router",
-													Port: v1.ServiceBackendPort{
-														Number: 80,
-													},
+							HTTP: &v1.HTTPIngressRuleValue{
+								Paths: []v1.HTTPIngressPath{
+									{
+										Backend: v1.IngressBackend{
+											Service: &v1.IngressServiceBackend{
+												Name: "router",
+												Port: v1.ServiceBackendPort{
+													Number: 80,
 												},
 											},
-											Path:     "/foo/bar",
-											PathType: &pathType,
 										},
+										Path:     "/foo/bar",
+										PathType: &pathType,
 									},
 								},
 							},
@@ -544,10 +495,8 @@ func TestGetDeployLabels(t *testing.T) {
 			name: "getdeploylabels",
 			args: args{
 				trigger: &fv1.HTTPTrigger{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "foo",
-						Namespace: "bar",
-					},
+					Name:      "foo",
+					Namespace: "bar",
 					Spec: fv1.HTTPTriggerSpec{
 						FunctionReference: fv1.FunctionReference{
 							Type:            "name",
@@ -618,8 +567,8 @@ func TestGetHTTPRouteSpec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			trigger := &fv1.HTTPTrigger{
-				ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "default"},
-				Spec:       fv1.HTTPTriggerSpec{RouteConfig: tt.rc},
+				Name: "t1", Namespace: "default",
+				Spec: fv1.HTTPTriggerSpec{RouteConfig: tt.rc},
 			}
 			hr := GetHTTPRouteSpec("fission", trigger, defaultRefs)
 
@@ -655,7 +604,7 @@ func TestGetHTTPRouteSpec(t *testing.T) {
 
 func TestGetHTTPRouteSpecParentRefFields(t *testing.T) {
 	trigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+		Name: "t", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{RouteConfig: &fv1.RouteConfig{
 			Provider: fv1.RouteProviderGateway,
 			Gateway: &fv1.GatewayRouteConfig{ParentRefs: []fv1.GatewayParentRef{

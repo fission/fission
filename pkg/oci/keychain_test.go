@@ -12,16 +12,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func dockerConfigSecret(name, ns, registry, user, password string) *apiv1.Secret {
 	cfg := fmt.Sprintf(`{"auths":{"%s":{"username":"%s","password":"%s"}}}`, registry, user, password)
 	return &apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Type:       apiv1.SecretTypeDockerConfigJson,
-		Data:       map[string][]byte{apiv1.DockerConfigJsonKey: []byte(cfg)},
+		Name: name, Namespace: ns,
+		Type: apiv1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{apiv1.DockerConfigJsonKey: []byte(cfg)},
 	}
 }
 
@@ -32,7 +31,7 @@ func TestKeychainResolvesSAAndExplicitSecrets(t *testing.T) {
 	client := k8sfake.NewSimpleClientset(
 		// The fetcher SA carries an imagePullSecret for registry A.
 		&apiv1.ServiceAccount{
-			ObjectMeta:       metav1.ObjectMeta{Name: "fission-fetcher", Namespace: ns},
+			Name: "fission-fetcher", Namespace: ns,
 			ImagePullSecrets: []apiv1.LocalObjectReference{{Name: "sa-pull-secret"}},
 		},
 		dockerConfigSecret("sa-pull-secret", ns, "registry-a.example.com", "sa-user", "sa-pass"),
@@ -67,7 +66,7 @@ func TestKeychainFallsBackToAnonymous(t *testing.T) {
 	t.Parallel()
 	client := k8sfake.NewSimpleClientset(
 		&apiv1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: "fission-fetcher", Namespace: "ns"},
+			Name: "fission-fetcher", Namespace: "ns",
 		},
 	)
 	kc, err := Keychain(t.Context(), client, "ns", "fission-fetcher", nil)

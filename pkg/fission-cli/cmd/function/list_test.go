@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -48,8 +46,8 @@ func captureStdout(t *testing.T, fn func() error) string {
 // fake set here is shared by the subtests below.
 func TestFunctionListOutput(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "listfn", Namespace: "default"},
-		Spec:       fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
+		Name: "listfn", Namespace: "default",
+		Spec: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
 	}
 	// Reset the sync.Once-guarded client so this test deterministically installs
 	// its own fake regardless of test order.

@@ -19,18 +19,18 @@ Additional rules:
   Don't split direct or indirect requirements across multiple blocks.
 - The `tool (...)`, `replace (...)`, `exclude (...)`, and `retract` directives are unaffected — this convention is only about the `require` blocks.
 
-## Why a guard is needed
+## Why a guard is still needed
 
-`go mod tidy` keeps the `// indirect` annotations correct, but it does **not** move entries between blocks.
-A dependency added by `go get` (or promoted from indirect to direct when you start importing it) stays in whatever block it landed in, so a direct dependency silently accumulates inside the indirect block over time.
-The guard catches that drift; `go mod tidy` alone will not.
+Since Go 1.27 (this module's `go` directive), `go mod tidy` maintains the two-block layout itself:
+it keeps the `// indirect` annotations correct **and** relocates a direct dependency that landed in the indirect block (or vice versa) into the right block.
+The guard remains for edits that skip tidy — a hand-edited `go.mod`, or a `go get` without a follow-up tidy — and as the CI backstop.
+One formatter quirk to know: a require block reduced to a **single entry** is collapsed to a single-line `require` directive, which the guard rejects; at this module's block sizes that never happens, but if it ever does, fold the line back into a block.
 
 ## Adding or changing a dependency
 
-1. `go get <module>@<version>` (or start importing it), then `go mod tidy`.
-2. If the new or newly-direct dependency landed in the indirect block, move its line into the direct block.
-3. `go mod edit -fmt` to re-sort each block, then `go mod tidy` again to confirm nothing else changed.
-4. `make verify-gomod` to check the layout.
+1. `go get <module>@<version>` (or start importing it), then `go mod tidy` — tidy places the entry in the correct block.
+2. `go mod edit -fmt` to re-sort each block, then `go mod tidy` again to confirm nothing else changed.
+3. `make verify-gomod` to check the layout.
 
 ## Checking
 

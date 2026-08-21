@@ -75,10 +75,8 @@ func TestMqtManager(t *testing.T) {
 	mgr.bind(ctx)
 
 	trigger := fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test",
-			Namespace: "default",
-		},
+		Name:      "test",
+		Namespace: "default",
 	}
 	if mgr.checkTriggerSubscription(&trigger) {
 		t.Errorf("checkTrigger should return false")
@@ -147,8 +145,8 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	ctx := t.Context()
 	mqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "mqt1", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
+		Name: "mqt1", Namespace: metav1.NamespaceDefault, Generation: 1,
+		Spec: fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
 	}
 	c := crfake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -162,7 +160,7 @@ func TestMessageQueueTriggerReconciler(t *testing.T) {
 	mgr.bind(ctx)
 
 	r := NewMessageQueueTriggerReconciler(logger, c, mgr)
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: "mqt1"}}
+	req := ctrl.Request{Namespace: metav1.NamespaceDefault, Name: "mqt1"}
 
 	// Create: subscribes and records the trigger.
 	_, err := r.Reconcile(ctx, req)
@@ -193,16 +191,16 @@ func TestReconcilerOwnership(t *testing.T) {
 	logger := loggerfactory.GetLogger()
 	ctx := t.Context()
 	kafkaMqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kafka-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
+		Name: "kafka-mqt", Namespace: metav1.NamespaceDefault, Generation: 1,
+		Spec: fv1.MessageQueueTriggerSpec{Topic: "topic-a", MessageQueueType: fv1.MessageQueueTypeKafka},
 	}
 	otherType := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "ss-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-b", MessageQueueType: fv1.MessageQueueTypeStatestore},
+		Name: "ss-mqt", Namespace: metav1.NamespaceDefault, Generation: 1,
+		Spec: fv1.MessageQueueTriggerSpec{Topic: "topic-b", MessageQueueType: fv1.MessageQueueTypeStatestore},
 	}
 	kedaKind := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "keda-mqt", Namespace: metav1.NamespaceDefault, Generation: 1},
-		Spec:       fv1.MessageQueueTriggerSpec{Topic: "topic-c", MessageQueueType: fv1.MessageQueueTypeKafka, MqtKind: MqtKindKeda},
+		Name: "keda-mqt", Namespace: metav1.NamespaceDefault, Generation: 1,
+		Spec: fv1.MessageQueueTriggerSpec{Topic: "topic-c", MessageQueueType: fv1.MessageQueueTypeKafka, MqtKind: MqtKindKeda},
 	}
 	c := crfake.NewClientBuilder().
 		WithScheme(scheme.Scheme).
@@ -219,7 +217,7 @@ func TestReconcilerOwnership(t *testing.T) {
 
 	reconcile := func(name string) {
 		t.Helper()
-		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: metav1.NamespaceDefault, Name: name}})
+		_, err := r.Reconcile(ctx, ctrl.Request{Namespace: metav1.NamespaceDefault, Name: name})
 		require.NoError(t, err)
 	}
 

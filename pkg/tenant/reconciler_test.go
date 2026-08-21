@@ -44,13 +44,13 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 }
 
 func ns(name string, labels map[string]string) *corev1.Namespace {
-	return &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: labels, UID: types.UID(name + "-uid")}}
+	return &corev1.Namespace{Name: name, Labels: labels, UID: types.UID(name + "-uid")}
 }
 
 func tenant(name, namespace string) *fv1.FissionTenant {
 	return &fv1.FissionTenant{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Generation: 1},
-		Spec:       fv1.FissionTenantSpec{Namespace: namespace},
+		Name: name, Generation: 1,
+		Spec: fv1.FissionTenantSpec{Namespace: namespace},
 	}
 }
 
@@ -59,7 +59,7 @@ func TestTenantReconcilerNamespaceExistsSetsReady(t *testing.T) {
 	c := newFakeClient(t, ft, ns("team-a", nil))
 	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-a"})
 	require.NoError(t, err)
 
 	got := &fv1.FissionTenant{}
@@ -76,7 +76,7 @@ func TestTenantReconcilerSetsObservedGeneration(t *testing.T) {
 	c := newFakeClient(t, ft, ns("team-a", nil))
 	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-a"})
 	require.NoError(t, err)
 
 	got := &fv1.FissionTenant{}
@@ -119,7 +119,7 @@ func TestTenantReconcilerOffboardTearsDownRBAC(t *testing.T) {
 	require.NoError(t, c.Get(ctx, types.NamespacedName{Name: "team-a"}, cur))
 	require.NoError(t, c.Delete(ctx, cur))
 
-	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	_, err := r.Reconcile(ctx, ctrl.Request{Name: "team-a"})
 	require.NoError(t, err)
 
 	notFound := func(obj client.Object, name string, ns string) bool {
@@ -136,7 +136,7 @@ func TestTenantReconcilerProvisionsAuthSecret(t *testing.T) {
 	c := newFakeClient(t, ft, ns("team-a", nil))
 	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}, master: []byte("master-bytes-for-test")}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-a"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-a"})
 	require.NoError(t, err)
 
 	// The derived-key secret is provisioned in the tenant namespace.
@@ -157,7 +157,7 @@ func TestTenantReconcilerNamespaceMissingSetsNotReady(t *testing.T) {
 	c := newFakeClient(t, ft)
 	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: &utils.NamespaceResolver{}}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "ghost"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "ghost"})
 	require.NoError(t, err)
 
 	got := &fv1.FissionTenant{}
@@ -175,7 +175,7 @@ func TestTenantReconcilerDeletedDropsFromResolver(t *testing.T) {
 	res.SetTenants(map[string]string{"default": "default", "stale": "stale"})
 	r := &TenantReconciler{logger: logr.Discard(), client: c, resolver: res}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "stale"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "stale"})
 	require.NoError(t, err)
 
 	assert.NotContains(t, r.resolver.FissionResourceNamespaces(), "stale", "deleted tenant must drop from the resolver")
@@ -185,7 +185,7 @@ func TestNamespaceReconcilerLabeledMaterializesCR(t *testing.T) {
 	c := newFakeClient(t, ns("team-b", map[string]string{EnabledLabel: "true"}))
 	r := &NamespaceReconciler{logger: logr.Discard(), client: c}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-b"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-b"})
 	require.NoError(t, err)
 
 	got := &fv1.FissionTenant{}
@@ -203,7 +203,7 @@ func TestNamespaceReconcilerAlreadyOnboardedNoDuplicate(t *testing.T) {
 	)
 	r := &NamespaceReconciler{logger: logr.Discard(), client: c}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-c"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-c"})
 	require.NoError(t, err)
 
 	list := &fv1.FissionTenantList{}
@@ -215,7 +215,7 @@ func TestNamespaceReconcilerUnlabeledNoCR(t *testing.T) {
 	c := newFakeClient(t, ns("plain", nil))
 	r := &NamespaceReconciler{logger: logr.Discard(), client: c}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "plain"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "plain"})
 	require.NoError(t, err)
 
 	list := &fv1.FissionTenantList{}
@@ -230,7 +230,7 @@ func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
 	reconcile := func(t *testing.T, c client.Client, name string) {
 		t.Helper()
 		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
-		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		_, err := r.Reconcile(t.Context(), ctrl.Request{Name: name})
 		require.NoError(t, err)
 	}
 
@@ -259,16 +259,14 @@ func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
 	// reaps the stale CR.
 	t.Run("requeues on a stale managed tenant from a recreated namespace", func(t *testing.T) {
 		staleFT := &fv1.FissionTenant{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            "team-x",
-				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
-				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-x", UID: "team-x-OLD-uid"}},
-			},
-			Spec: fv1.FissionTenantSpec{Namespace: "team-x"},
+			Name:            "team-x",
+			Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-x", UID: "team-x-OLD-uid"}},
+			Spec:            fv1.FissionTenantSpec{Namespace: "team-x"},
 		}
 		c := newFakeClient(t, ns("team-x", nil), staleFT) // ns("team-x") has UID "team-x-uid" != stale
 		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
-		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-x"}})
+		res, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-x"})
 		require.NoError(t, err)
 		assert.Positive(t, res.RequeueAfter, "stale managed tenant must trigger a requeue, not an early return")
 		list := &fv1.FissionTenantList{}
@@ -281,7 +279,7 @@ func TestNamespaceReconcilerAutoOnboardAll(t *testing.T) {
 	t.Run("respects a user-authored tenant under a different name", func(t *testing.T) {
 		c := newFakeClient(t, ns("team-y", nil), tenant("custom", "team-y"))
 		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
-		res, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "team-y"}})
+		res, err := r.Reconcile(t.Context(), ctrl.Request{Name: "team-y"})
 		require.NoError(t, err)
 		assert.Zero(t, res.RequeueAfter, "a user-authored tenant is not stale; no requeue")
 		list := &fv1.FissionTenantList{}
@@ -298,7 +296,7 @@ func TestNamespaceReconcilerClusterOptOut(t *testing.T) {
 	reconcile := func(t *testing.T, c client.Client, name string) {
 		t.Helper()
 		r := &NamespaceReconciler{logger: logr.Discard(), client: c, autoOnboardAll: true, releaseNamespace: "fission"}
-		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name}})
+		_, err := r.Reconcile(t.Context(), ctrl.Request{Name: name})
 		require.NoError(t, err)
 	}
 	optedOut := map[string]string{EnabledLabel: EnabledLabelOptOut}
@@ -313,12 +311,10 @@ func TestNamespaceReconcilerClusterOptOut(t *testing.T) {
 
 	t.Run("opting out a live namespace offboards its managed tenant", func(t *testing.T) {
 		managedFT := &fv1.FissionTenant{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:            "team-w",
-				Annotations:     map[string]string{managedByAnnotation: managedByLabel},
-				OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-w", UID: "team-w-uid"}},
-			},
-			Spec: fv1.FissionTenantSpec{Namespace: "team-w"},
+			Name:            "team-w",
+			Annotations:     map[string]string{managedByAnnotation: managedByLabel},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Namespace", Name: "team-w", UID: "team-w-uid"}},
+			Spec:            fv1.FissionTenantSpec{Namespace: "team-w"},
 		}
 		c := newFakeClient(t, ns("team-w", optedOut), managedFT)
 		reconcile(t, c, "team-w")
