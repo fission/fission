@@ -7,8 +7,6 @@ package functionalias
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -30,14 +28,12 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 	}
 
 	name := input.String(flagkey.AliasName)
-	err = opts.Client().FissionClientSet.CoreV1().FunctionAliases(namespace).Delete(input.Context(), name, metav1.DeleteOptions{})
+	deleted, err := util.DeleteOne(input, opts.Client().FissionClientSet.CoreV1().FunctionAliases(namespace), name, "function alias")
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("error deleting function alias: %w", err)
+		return err
 	}
-
-	fmt.Printf("function alias '%v' deleted\n", name)
+	if deleted {
+		fmt.Printf("function alias '%v' deleted\n", name)
+	}
 	return nil
 }

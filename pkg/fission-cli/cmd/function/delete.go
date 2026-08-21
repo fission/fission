@@ -10,12 +10,12 @@ import (
 	"sort"
 	"strings"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/versioning"
 )
@@ -43,7 +43,7 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 
 	err = opts.Client().FissionClientSet.CoreV1().Functions(namespace).Delete(input.Context(), input.String(flagkey.FnName), metav1.DeleteOptions{})
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
+		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("delete function '%s': %w", m.Name, err)

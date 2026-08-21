@@ -7,12 +7,12 @@ package mqtrigger
 import (
 	"fmt"
 
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -47,14 +47,12 @@ func (opts *DeleteSubCommand) complete(input cli.Input) (err error) {
 }
 
 func (opts *DeleteSubCommand) run(input cli.Input) error {
-	err := opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.metadata.Namespace).Delete(input.Context(), opts.metadata.Name, metav1.DeleteOptions{})
+	deleted, err := util.DeleteOne(input, opts.Client().FissionClientSet.CoreV1().MessageQueueTriggers(opts.metadata.Namespace), opts.metadata.Name, "message queue trigger")
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("error deleting message queue trigger: %w", err)
+		return err
 	}
-
-	fmt.Printf("trigger '%v' deleted\n", opts.metadata.Name)
+	if deleted {
+		fmt.Printf("trigger '%v' deleted\n", opts.metadata.Name)
+	}
 	return nil
 }

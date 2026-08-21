@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
-	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -78,7 +78,7 @@ func (opts *DeleteSubCommand) run(input cli.Input) error {
 		switch {
 		case err == nil:
 			fmt.Printf("trigger '%v' deleted\n", name)
-		case ignoreNotFound && util.IsNotFound(err):
+		case ignoreNotFound && kerrors.IsNotFound(err):
 			// already gone; treat as a successful delete
 		default:
 			errs = errors.Join(errs, err)
