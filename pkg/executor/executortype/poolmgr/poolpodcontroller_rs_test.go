@@ -310,8 +310,12 @@ func TestPoolSelectorStaysHashFree(t *testing.T) {
 		// allocates a fresh map and the aliasing bug is invisible. A labelled
 		// env is the case where writing pool/hash labels back into env.Labels
 		// leaked them into Service selectors.
-		Labels: map[string]string{"team": "core"},
-		Spec:   fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
+		Name:       "e",
+		Namespace:  "default",
+		UID:        "u",
+		Generation: 7,
+		Labels:     map[string]string{"team": "core"},
+		Spec:       fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
 	}
 	fetcherCfg, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	require.NoError(t, err)
