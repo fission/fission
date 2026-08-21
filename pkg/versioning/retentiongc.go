@@ -116,11 +116,9 @@ func SweepVersions(ctx context.Context, cl versioned.Interface, fnNS, fnName str
 	}
 	sort.Slice(versions, func(i, j int) bool { return versions[i].Spec.Sequence < versions[j].Spec.Sequence })
 
-	keep := max(retain, 1)
 	n := len(versions)
-	if keep > n {
-		keep = n
-	}
+	// At least one version is always retained, never more than exist.
+	keep := min(max(retain, 1), n)
 	keepStart := n - keep
 
 	initialRefs, err := aliasReferencedVersions(ctx, cl, fnNS)

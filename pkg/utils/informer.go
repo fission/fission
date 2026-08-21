@@ -18,7 +18,12 @@ import (
 	metricsapi "k8s.io/metrics/pkg/apis/metrics"
 )
 
-func GetInformerEventChecker(ctx context.Context, client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
+// GetInformerEventChecker builds one Event informer per watched namespace.
+// The list/watch closures receive their context from the reflector that drives
+// them, so this function takes none: an outer context here would be shadowed
+// and silently ignored. Cancellation is the caller's, via the channel it hands
+// to informer.Run.
+func GetInformerEventChecker(client kubernetes.Interface, reason string) map[string]cache.SharedInformer {
 	informers := make(map[string]cache.SharedInformer)
 	// Cluster mode: function pods (and their websocket-connection events) live in
 	// any namespace, so watch Events cluster-wide via a single informer keyed ""

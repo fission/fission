@@ -1288,7 +1288,7 @@ func (gpm *GenericPoolManager) SetVersionRetain(retained func(uid k8sTypes.UID, 
 // WebsocketStartEventChecker checks if the pod has emitted a websocket connection start event
 func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, kubeClient kubernetes.Interface) error {
 	var wg wait.Group
-	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "WsConnectionStarted") {
+	for _, informer := range utils.GetInformerEventChecker(kubeClient, "WsConnectionStarted") {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				mObj := obj.(metav1.Object)
@@ -1318,7 +1318,7 @@ func (gpm *GenericPoolManager) WebsocketStartEventChecker(ctx context.Context, k
 // NoActiveConnectionEventChecker checks if the pod has emitted an inactive event
 func (gpm *GenericPoolManager) NoActiveConnectionEventChecker(ctx context.Context, kubeClient kubernetes.Interface) error {
 	var wg wait.Group
-	for _, informer := range utils.GetInformerEventChecker(ctx, kubeClient, "NoActiveConnections") {
+	for _, informer := range utils.GetInformerEventChecker(kubeClient, "NoActiveConnections") {
 		_, err := informer.AddEventHandler(k8sCache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				mObj := obj.(metav1.Object)

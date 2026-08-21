@@ -58,9 +58,6 @@ func MakeThrottler(timeExpiry time.Duration) *Throttler {
 //		}
 //		return readFromCache()
 //	})
-//
-// This was a package function taking *Throttler as its first argument until
-// Go 1.27 let methods declare their own type parameters.
 func (t *Throttler) RunOnce[T any](resourceKey string, callbackFunc func(bool) (T, error)) (T, error) {
 	t.mu.Lock()
 	e, ok := t.locks[resourceKey]
