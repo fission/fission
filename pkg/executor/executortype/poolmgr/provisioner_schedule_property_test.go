@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"

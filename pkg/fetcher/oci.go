@@ -12,8 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	apiv1 "k8s.io/api/core/v1"
+
+	"github.com/fission/fission/pkg/utils/uuid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/oci"
