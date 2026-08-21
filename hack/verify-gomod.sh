@@ -6,7 +6,8 @@
 # Verifies go.mod keeps direct and indirect requirements in separate blocks:
 # exactly one direct `require (...)` block, one indirect (`// indirect`) block,
 # no block mixing the two, and no single-line `require` directives.
-# `go mod tidy` does NOT enforce this layout, so this guard does.
+# Since Go 1.27 `go mod tidy` maintains this layout itself; this guard remains
+# as the CI backstop for tidy-less hand edits.
 # Convention: .claude/resources/go-mod-conventions.md
 
 set -euo pipefail
