@@ -297,7 +297,7 @@ func (caaf *Container) createFunction(ctx context.Context, fn *fv1.Function) (*f
 	// per-version Deployments, so their creates must neither serialize
 	// behind each other nor have a loser handed another generation's fsvc
 	// from the cache fallback.
-	fsvc, err := throttler.RunOnce(caaf.throttler, crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
+	fsvc, err := caaf.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
 		if ableToCreate {
 			return caaf.fnCreate(ctx, fn)
 		}

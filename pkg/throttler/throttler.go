@@ -52,13 +52,16 @@ func MakeThrottler(timeExpiry time.Duration) *Throttler {
 // The result type is the callback's own, so callers never round-trip through
 // an untyped value:
 //
-//	rec, err := throttler.RunOnce(t, key, func(leader bool) (svcRecord, error) {
+//	rec, err := t.RunOnce(key, func(leader bool) (svcRecord, error) {
 //		if leader {
 //			return fetchFromBackend()
 //		}
 //		return readFromCache()
 //	})
-func RunOnce[T any](t *Throttler, resourceKey string, callbackFunc func(bool) (T, error)) (T, error) {
+//
+// This was a package function taking *Throttler as its first argument until
+// Go 1.27 let methods declare their own type parameters.
+func (t *Throttler) RunOnce[T any](resourceKey string, callbackFunc func(bool) (T, error)) (T, error) {
 	t.mu.Lock()
 	e, ok := t.locks[resourceKey]
 

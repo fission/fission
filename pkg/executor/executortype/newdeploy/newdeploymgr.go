@@ -372,7 +372,7 @@ func (deploy *NewDeploy) createFunction(ctx context.Context, fn *fv1.Function) (
 	// per-version Deployments, so their creates must neither serialize
 	// behind each other nor have a loser handed another generation's fsvc
 	// from the cache fallback.
-	fsvc, err := throttler.RunOnce(deploy.throttler, crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
+	fsvc, err := deploy.throttler.RunOnce(crd.CacheKeyUGFromMeta(&fn.ObjectMeta).String(), func(ableToCreate bool) (*fscache.FuncSvc, error) {
 		if ableToCreate {
 			return deploy.fnCreate(ctx, fn)
 		}

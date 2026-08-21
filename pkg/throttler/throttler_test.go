@@ -17,7 +17,7 @@ import (
 func TestThrottler_RunOnce_Sequential(t *testing.T) {
 	throttler := MakeThrottler(1 * time.Second)
 	var executed bool
-	got, err := RunOnce(throttler, "key1", func(first bool) (string, error) {
+	got, err := throttler.RunOnce("key1", func(first bool) (string, error) {
 		executed = true
 		return "result", nil
 	})
@@ -36,7 +36,7 @@ func TestThrottler_RunOnce_Concurrent(t *testing.T) {
 	// G1
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key", func(first bool) (struct{}, error) {
 			g1First = first
 			time.Sleep(100 * time.Millisecond)
 			return struct{}{}, nil
@@ -50,7 +50,7 @@ func TestThrottler_RunOnce_Concurrent(t *testing.T) {
 	// G2
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key", func(first bool) (struct{}, error) {
 			g2First = first
 			return struct{}{}, nil
 		})
@@ -74,7 +74,7 @@ func TestThrottler_RunOnce_Expiry(t *testing.T) {
 	// G1 takes longer than TTL
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key", func(first bool) (struct{}, error) {
 			g1First = first
 			time.Sleep(100 * time.Millisecond)
 			return struct{}{}, nil
@@ -87,7 +87,7 @@ func TestThrottler_RunOnce_Expiry(t *testing.T) {
 	// G2 should see it as expired and take over
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key", func(first bool) (struct{}, error) {
 			g2First = first
 			return struct{}{}, nil
 		})
@@ -109,7 +109,7 @@ func TestThrottler_RunOnce_DifferentKeys(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key1", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key1", func(first bool) (struct{}, error) {
 			time.Sleep(100 * time.Millisecond)
 			return struct{}{}, nil
 		})
@@ -118,7 +118,7 @@ func TestThrottler_RunOnce_DifferentKeys(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		_, err := RunOnce(throttler, "key2", func(first bool) (struct{}, error) {
+		_, err := throttler.RunOnce("key2", func(first bool) (struct{}, error) {
 			time.Sleep(100 * time.Millisecond)
 			return struct{}{}, nil
 		})
@@ -138,14 +138,14 @@ func TestThrottler_Stress(t *testing.T) {
 	count := 100
 	wg.Add(count)
 
-	var firstCount int32
+	var firstCount atomic.Int32
 
 	for range count {
 		go func() {
 			defer wg.Done()
-			_, err := RunOnce(throttler, "key", func(first bool) (struct{}, error) {
+			_, err := throttler.RunOnce("key", func(first bool) (struct{}, error) {
 				if first {
-					atomic.AddInt32(&firstCount, 1)
+					firstCount.Add(1)
 					time.Sleep(10 * time.Millisecond)
 				}
 				return struct{}{}, nil
@@ -157,7 +157,7 @@ func TestThrottler_Stress(t *testing.T) {
 	wg.Wait()
 	// We can't assert exact count because of timing, but it shouldn't be 100
 	// and it shouldn't be 0.
-	fc := atomic.LoadInt32(&firstCount)
+	fc := firstCount.Load()
 	require.True(t, fc > 0)
 	require.True(t, fc < int32(count))
 }
@@ -175,7 +175,7 @@ func TestThrottler_RunOnce_FollowerTimeout(t *testing.T) {
 		leaderStarted := make(chan struct{})
 		leaderRelease := make(chan struct{})
 		go func() {
-			_, _ = RunOnce(th, "key", func(first bool) (int, error) {
+			_, _ = th.RunOnce("key", func(first bool) (int, error) {
 				close(leaderStarted)
 				<-leaderRelease
 				return 1, nil
@@ -186,7 +186,7 @@ func TestThrottler_RunOnce_FollowerTimeout(t *testing.T) {
 		// The entry is younger than the TTL, so this caller is a follower; the
 		// leader never releases within the TTL, so the follower must time out.
 		followerRan := false
-		got, err := RunOnce(th, "key", func(first bool) (int, error) {
+		got, err := th.RunOnce("key", func(first bool) (int, error) {
 			followerRan = true
 			return 2, nil
 		})
