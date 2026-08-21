@@ -16,6 +16,7 @@ import (
 
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statesvc/stateapi"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // maxListLimit bounds one listing page; larger requests are clamped. Listing
@@ -27,9 +28,7 @@ const (
 )
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(stateapi.Error{Error: msg, Code: code})
+	_ = httpx.WriteJSON(w, status, stateapi.Error{Error: msg, Code: code})
 }
 
 // writeStoreErr maps substrate errors onto the HTTP surface. ErrQuotaExceeded
@@ -243,6 +242,5 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
+	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
 }

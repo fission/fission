@@ -6,7 +6,6 @@ package router
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -17,6 +16,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils/httpx"
 
 	// Register the statestore drivers the router opens for async invocation: the
 	// HTTP client (embedded statestore mode → svc/statestore) and Postgres
@@ -84,10 +84,8 @@ func (a *asyncInvoker) handle(w http.ResponseWriter, r *http.Request, fn *fv1.Fu
 		http.Error(w, "async invocation store unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set(asyncinvoke.HeaderInvocationID, id)
-	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(map[string]string{"invocationId": id})
+	_ = httpx.WriteJSON(w, http.StatusAccepted, map[string]string{"invocationId": id})
 }
 
 // funcConfigFromSpec is the single mapper from a Function to its resolved async

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // NewHandler serves caps over the HTTP wire contract. The returned handler is
@@ -69,14 +70,11 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func writeCode(w http.ResponseWriter, status int, e Error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(e)
+	_ = httpx.WriteJSON(w, status, e)
 }
 
 func writeJSON[T any](w http.ResponseWriter, v T) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
+	_ = httpx.WriteJSON(w, http.StatusOK, v)
 }
 
 // cap accessors that translate an unavailable capability into a wire error.

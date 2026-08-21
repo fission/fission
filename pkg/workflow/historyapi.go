@@ -6,7 +6,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 
@@ -14,6 +13,7 @@ import (
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // HistoryEvent is one decoded log entry as served to the CLI; Seq/At come
@@ -94,8 +94,7 @@ func registerHistoryAPI(mux *http.ServeMux, logger logr.Logger, el statestore.Ev
 			http.Error(w, "no history for this run (not started, or trimmed)", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
+		_ = httpx.WriteJSON(w, http.StatusOK, out)
 	})
 
 	verifier := hmacauth.ServiceVerifier(master, []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD")),

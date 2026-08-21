@@ -16,6 +16,7 @@ import (
 	"github.com/fission/fission/pkg/router/asyncinvoke"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils/httpmux"
+	"github.com/fission/fission/pkg/utils/httpx"
 )
 
 // RFC-0024 async dead-letter-queue admin API. It lives on the INTERNAL listener
@@ -330,8 +331,7 @@ func dlqDecodeJSON[T any](w http.ResponseWriter, r *http.Request, v *T) bool {
 }
 
 func dlqWriteJSON[T any](w http.ResponseWriter, ts *HTTPTriggerSet, v T) {
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(v); err != nil {
+	if err := httpx.WriteJSON(w, http.StatusOK, v); err != nil {
 		ts.logger.Error(err, "encoding async DLQ response")
 	}
 }
