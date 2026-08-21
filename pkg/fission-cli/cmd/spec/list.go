@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -162,96 +161,97 @@ func filterByDeployID[T any, PT Object[T]](items []T, deployID string) []T {
 	return out
 }
 
+// showSection prints one titled table of the spec-list summary, skipping the
+// kind entirely when it has no items (the historical behavior). The title
+// shares the table's tabwriter — a tab-less line is its own alignment block,
+// so columns are unaffected — and a trailing blank line separates sections.
+func showSection[T any](title string, headers []string, items []T, row func(T) []string) {
+	if len(items) == 0 {
+		return
+	}
+	w := util.NewTabWriter(os.Stdout)
+	fmt.Fprintf(w, "%v\n", title)
+	fmt.Fprintln(w, strings.Join(headers, "\t"))
+	for _, it := range items {
+		fmt.Fprintln(w, strings.Join(row(it), "\t"))
+	}
+	fmt.Fprintf(w, "\n")
+	w.Flush()
+}
+
 // ShowFunctions displays info of Functions
 func ShowFunctions(fns []fv1.Function) {
-	if len(fns) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v\n", "Functions:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS")
-
-		for _, f := range fns {
-			secrets := f.Spec.Secrets
-			configMaps := f.Spec.ConfigMaps
+	showSection("Functions:",
+		[]string{"NAME", "ENV", "EXECUTORTYPE", "MINSCALE", "MAXSCALE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "SECRETS", "CONFIGMAPS"},
+		fns, func(f fv1.Function) []string {
 			var secretsList, configMapList []string
-			for _, secret := range secrets {
+			for _, secret := range f.Spec.Secrets {
 				secretsList = append(secretsList, secret.Name)
 			}
-			for _, configMap := range configMaps {
+			for _, configMap := range f.Spec.ConfigMaps {
 				configMapList = append(configMapList, configMap.Name)
 			}
-
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
+			es := f.Spec.InvokeStrategy.ExecutionStrategy
+			return []string{
 				f.Name, f.Spec.Environment.Name,
-				f.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType,
-				f.Spec.InvokeStrategy.ExecutionStrategy.MinScale,
-				f.Spec.InvokeStrategy.ExecutionStrategy.MaxScale,
+				fmt.Sprintf("%v", es.ExecutorType),
+				fmt.Sprintf("%v", es.MinScale),
+				fmt.Sprintf("%v", es.MaxScale),
 				f.Spec.Resources.Requests.Cpu().String(),
 				f.Spec.Resources.Limits.Cpu().String(),
 				f.Spec.Resources.Requests.Memory().String(),
 				f.Spec.Resources.Limits.Memory().String(),
 				strings.Join(secretsList, ","),
-				strings.Join(configMapList, ","))
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+				strings.Join(configMapList, ","),
+			}
+		})
 }
 
 // ShowEnvironments displays info of Environments
 func ShowEnvironments(envs []fv1.Environment) {
-	if len(envs) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v\n", "Environments:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME")
-		for _, env := range envs {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image, env.Spec.Poolsize,
-				env.Spec.Resources.Requests.Cpu(), env.Spec.Resources.Limits.Cpu(),
-				env.Spec.Resources.Requests.Memory(), env.Spec.Resources.Limits.Memory(),
-				env.Spec.AllowAccessToExternalNetwork, env.Spec.EffectiveTerminationGracePeriod())
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Environments:",
+		[]string{"NAME", "IMAGE", "BUILDER_IMAGE", "POOLSIZE", "MINCPU", "MAXCPU", "MINMEMORY", "MAXMEMORY", "EXTNET", "GRACETIME"},
+		envs, func(env fv1.Environment) []string {
+			return []string{
+				env.Name, env.Spec.Runtime.Image, env.Spec.Builder.Image,
+				fmt.Sprintf("%v", env.Spec.Poolsize),
+				fmt.Sprintf("%v", env.Spec.Resources.Requests.Cpu()),
+				fmt.Sprintf("%v", env.Spec.Resources.Limits.Cpu()),
+				fmt.Sprintf("%v", env.Spec.Resources.Requests.Memory()),
+				fmt.Sprintf("%v", env.Spec.Resources.Limits.Memory()),
+				fmt.Sprintf("%v", env.Spec.AllowAccessToExternalNetwork),
+				fmt.Sprintf("%v", env.Spec.EffectiveTerminationGracePeriod()),
+			}
+		})
 }
 
 // ShowPackages displays info of Packages
 func ShowPackages(pkgList []fv1.Package) {
-	if len(pkgList) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v\n", "Packages:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", "NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT")
-		for _, pkg := range pkgList {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\n", pkg.Name, pkg.Status.BuildStatus, pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822))
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Packages:",
+		[]string{"NAME", "BUILD_STATUS", "ENV", "LASTUPDATEDAT"},
+		pkgList, func(pkg fv1.Package) []string {
+			return []string{pkg.Name, fmt.Sprintf("%v", pkg.Status.BuildStatus), pkg.Spec.Environment.Name, pkg.Status.LastUpdateTimestamp.Format(time.RFC822)}
+		})
 }
 
 // ShowCanaryConfigs displays info of Canary Configs
 func ShowCanaryConfigs(canaryCfgs []fv1.CanaryConfig) {
-	if len(canaryCfgs) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v\n", "Canary Config:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS")
-		for _, canaryCfg := range canaryCfgs {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				canaryCfg.Name, canaryCfg.Spec.Trigger, canaryCfg.Spec.NewFunction, canaryCfg.Spec.OldFunction, canaryCfg.Spec.WeightIncrement, canaryCfg.Spec.WeightIncrementDuration,
-				canaryCfg.Spec.FailureThreshold, canaryCfg.Spec.FailureType, canaryCfg.Status.Status)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Canary Config:",
+		[]string{"NAME", "TRIGGER", "FUNCTION-N", "FUNCTION-N-1", "WEIGHT-INCREMENT", "INTERVAL", "FAILURE-THRESHOLD", "FAILURE-TYPE", "STATUS"},
+		canaryCfgs, func(c fv1.CanaryConfig) []string {
+			return []string{
+				c.Name, c.Spec.Trigger, c.Spec.NewFunction, c.Spec.OldFunction,
+				fmt.Sprintf("%v", c.Spec.WeightIncrement), c.Spec.WeightIncrementDuration,
+				fmt.Sprintf("%v", c.Spec.FailureThreshold), fmt.Sprintf("%v", c.Spec.FailureType), c.Status.Status,
+			}
+		})
 }
 
 // ShowHTTPTriggers displays info of HTTP Triggers
 func ShowHTTPTriggers(hts []fv1.HTTPTrigger) {
-	if len(hts) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v\n", "HTTP Triggers:")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS")
-		for _, trigger := range hts {
+	showSection("HTTP Triggers:",
+		[]string{"NAME", "METHOD", "URL", "FUNCTION(s)", "INGRESS", "HOST", "PATH", "TLS", "ANNOTATIONS"},
+		hts, func(trigger fv1.HTTPTrigger) []string {
 			function := ""
 			if trigger.Spec.FunctionReference.Type == fv1.FunctionReferenceTypeFunctionName {
 				function = trigger.Spec.FunctionReference.Name
@@ -286,89 +286,59 @@ func ShowHTTPTriggers(hts []fv1.HTTPTrigger) {
 				methods = trigger.Spec.Methods
 			}
 
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				trigger.Name, methods, trigger.Spec.RelativeURL, function, trigger.Spec.CreateIngress, host, path, trigger.Spec.IngressConfig.TLS, ann)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+			return []string{
+				trigger.Name, fmt.Sprintf("%v", methods), trigger.Spec.RelativeURL, function,
+				fmt.Sprintf("%v", trigger.Spec.CreateIngress), host, path, trigger.Spec.IngressConfig.TLS, ann,
+			}
+		})
 }
 
 // ShowMQTriggers displays info of MessageQueue Triggers
 func ShowMQTriggers(mqts []fv1.MessageQueueTrigger) {
-	if len(mqts) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Printf("\nMessageQueue Triggers:\n")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n", "NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE")
-		for _, mqt := range mqts {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\t%v\t%v\t%v\n",
-				mqt.Name, mqt.Spec.FunctionReference.Name, mqt.Spec.MessageQueueType, mqt.Spec.Topic, mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, mqt.Spec.MaxRetries, mqt.Spec.ContentType)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("MessageQueue Triggers:",
+		[]string{"NAME", "FUNCTION_NAME", "MESSAGE_QUEUE_TYPE", "TOPIC", "RESPONSE_TOPIC", "ERROR_TOPIC", "MAX_RETRIES", "PUB_MSG_CONTENT_TYPE"},
+		mqts, func(mqt fv1.MessageQueueTrigger) []string {
+			return []string{
+				mqt.Name, mqt.Spec.FunctionReference.Name, fmt.Sprintf("%v", mqt.Spec.MessageQueueType), mqt.Spec.Topic,
+				mqt.Spec.ResponseTopic, mqt.Spec.ErrorTopic, fmt.Sprintf("%v", mqt.Spec.MaxRetries), mqt.Spec.ContentType,
+			}
+		})
 }
 
 // ShowTimeTriggers displays info of Time Triggers
 func ShowTimeTriggers(tts []fv1.TimeTrigger) {
-	if len(tts) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v", "Time Triggers:\n")
-		fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "CRON", "FUNCTION_NAME")
-		for _, tt := range tts {
-
-			fmt.Fprintf(w, "%v\t%v\t%v\n",
-				tt.Name, tt.Spec.Cron, tt.Spec.Name)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Time Triggers:",
+		[]string{"NAME", "CRON", "FUNCTION_NAME"},
+		tts, func(tt fv1.TimeTrigger) []string {
+			return []string{tt.Name, tt.Spec.Cron, tt.Spec.Name}
+		})
 }
 
 // ShowWorkflows displays info of Workflows
 func ShowWorkflows(wfs []fv1.Workflow) {
-	if len(wfs) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v", "Workflows:\n")
-		fmt.Fprintf(w, "%v\t%v\t%v\n", "NAME", "STARTAT", "STATES")
-		for _, wf := range wfs {
-			fmt.Fprintf(w, "%v\t%v\t%v\n",
-				wf.Name, wf.Spec.StartAt, len(wf.Spec.States))
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Workflows:",
+		[]string{"NAME", "STARTAT", "STATES"},
+		wfs, func(wf fv1.Workflow) []string {
+			return []string{wf.Name, wf.Spec.StartAt, fmt.Sprintf("%v", len(wf.Spec.States))}
+		})
 }
 
 // ShowFunctionAliases displays info of FunctionAliases
 func ShowFunctionAliases(aliases []fv1.FunctionAlias) {
-	if len(aliases) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v", "FunctionAliases:\n")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "FUNCTION", "VERSION", "PACKAGEDIGEST", "RESOLVEDVERSION")
-		for _, a := range aliases {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-				a.Name, a.Spec.FunctionName, a.Spec.Version, a.Spec.PackageDigest, a.Status.ResolvedVersion)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("FunctionAliases:",
+		[]string{"NAME", "FUNCTION", "VERSION", "PACKAGEDIGEST", "RESOLVEDVERSION"},
+		aliases, func(a fv1.FunctionAlias) []string {
+			return []string{a.Name, a.Spec.FunctionName, a.Spec.Version, a.Spec.PackageDigest, a.Status.ResolvedVersion}
+		})
 }
 
 // ShowAppliedKubeWatchers displays info of kube watchers
 func ShowAppliedKubeWatchers(ws []fv1.KubernetesWatchTrigger) {
-	if len(ws) > 0 {
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintf(w, "%v", "Kube Watchers:\n")
-		fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n", "NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME")
-
-		for _, wa := range ws {
-			fmt.Fprintf(w, "%v\t%v\t%v\t%v\t%v\n",
-				wa.Name, wa.Spec.Namespace, wa.Spec.Type, wa.Spec.LabelSelector, wa.Spec.FunctionReference.Name)
-		}
-		fmt.Fprintf(w, "\n")
-		w.Flush()
-	}
+	showSection("Kube Watchers:",
+		[]string{"NAME", "NAMESPACE", "OBJTYPE", "LABELS", "FUNCTION_NAME"},
+		ws, func(wa fv1.KubernetesWatchTrigger) []string {
+			return []string{wa.Name, wa.Spec.Namespace, wa.Spec.Type, fmt.Sprintf("%v", wa.Spec.LabelSelector), wa.Spec.FunctionReference.Name}
+		})
 }
 
 // getAllFunctions get lists of functions in provided namespaces
