@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -34,7 +33,7 @@ func captureWatchedNamespace(t *testing.T, w *fv1.KubernetesWatchTrigger) (strin
 
 func TestCreateKubernetesWatch_RejectsCrossNamespace(t *testing.T) {
 	w := &fv1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kwt-1", Namespace: "ns-attacker"},
+		Name: "kwt-1", Namespace: "ns-attacker",
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: "ns-victim",
 			Type:      "POD",
@@ -60,7 +59,7 @@ func TestCreateKubernetesWatch_RejectsCrossNamespace(t *testing.T) {
 
 func TestCreateKubernetesWatch_EmptySpecNamespaceCoercedToTriggerNamespace(t *testing.T) {
 	w := &fv1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kwt-1", Namespace: "ns-attacker"},
+		Name: "kwt-1", Namespace: "ns-attacker",
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: "",
 			Type:      "POD",
@@ -79,7 +78,7 @@ func TestCreateKubernetesWatch_EmptySpecNamespaceCoercedToTriggerNamespace(t *te
 
 func TestCreateKubernetesWatch_SameNamespaceAccepted(t *testing.T) {
 	w := &fv1.KubernetesWatchTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "kwt-1", Namespace: "default"},
+		Name: "kwt-1", Namespace: "default",
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: "default",
 			Type:      "POD",

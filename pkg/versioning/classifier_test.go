@@ -65,8 +65,8 @@ var notAffectingFields = map[string]struct{}{
 func TestRuntimeAffecting_FieldCoverage(t *testing.T) {
 	rt := reflect.TypeFor[fv1.FunctionSpec]()
 	seen := map[string]struct{}{}
-	for i := range rt.NumField() {
-		name := rt.Field(i).Name
+	for field := range rt.Fields() {
+		name := field.Name
 		seen[name] = struct{}{}
 
 		_, isAffecting := affectingFields[name]
@@ -195,7 +195,7 @@ func goldenTableCases() []goldenTableCase {
 		}, true},
 		{"EnvFrom", func(s *fv1.FunctionSpec) {
 			s.EnvFrom = append(s.EnvFrom, apiv1.EnvFromSource{
-				SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}},
+				SecretRef: &apiv1.SecretEnvSource{Name: "creds"},
 			})
 		}, true},
 		{"Resources", func(s *fv1.FunctionSpec) {

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -16,7 +15,7 @@ import (
 
 func version(ns, name string, uid types.UID, gen int64) fv1.FunctionVersion {
 	return fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+		Namespace: ns, Name: name,
 		Spec: fv1.FunctionVersionSpec{
 			FunctionUID:        uid,
 			FunctionGeneration: gen,
@@ -33,8 +32,8 @@ func TestView_Rebuild_VersionRetainedBySpecVersion(t *testing.T) {
 	v := New()
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		},
 	}
 	versions := []fv1.FunctionVersion{
@@ -52,7 +51,7 @@ func TestView_Rebuild_SecondaryVersionRetained(t *testing.T) {
 	weight := 50
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "canary"},
+			Namespace: "ns1", Name: "canary",
 			Spec: fv1.FunctionAliasSpec{
 				FunctionName:     "fn",
 				Version:          "fn-v2",
@@ -75,9 +74,9 @@ func TestView_Rebuild_DigestAliasUsesResolvedVersion(t *testing.T) {
 	v := New()
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", PackageDigest: "sha256:deadbeef"},
-			Status:     fv1.FunctionAliasStatus{ResolvedVersion: "fn-v7"},
+			Namespace: "ns1", Name: "prod",
+			Spec:   fv1.FunctionAliasSpec{FunctionName: "fn", PackageDigest: "sha256:deadbeef"},
+			Status: fv1.FunctionAliasStatus{ResolvedVersion: "fn-v7"},
 		},
 	}
 	versions := []fv1.FunctionVersion{
@@ -92,8 +91,8 @@ func TestView_Rebuild_MissingVersionRetainsNothing(t *testing.T) {
 	v := New()
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v-missing"},
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v-missing"},
 		},
 	}
 	// No matching FunctionVersion for fn-v-missing.
@@ -106,8 +105,8 @@ func TestView_Rebuild_NamespaceScoped(t *testing.T) {
 	v := New()
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		},
 	}
 	// Same version name, different namespace — must not resolve.
@@ -134,8 +133,8 @@ func TestView_Rebuild_AliasRepointChangesTheSet(t *testing.T) {
 	// Alias initially points at v2 (latest).
 	v.Rebuild([]fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v2"},
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v2"},
 		},
 	}, versions)
 	assert.True(t, v.Retained("fn-uid", 2))
@@ -144,8 +143,8 @@ func TestView_Rebuild_AliasRepointChangesTheSet(t *testing.T) {
 	// Rollback: alias repointed at v1 (an older generation).
 	v.Rebuild([]fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		},
 	}, versions)
 	assert.True(t, v.Retained("fn-uid", 1), "rollback target is now retained")
@@ -156,8 +155,8 @@ func TestView_Rebuild_EmptyReferenceNamesIgnored(t *testing.T) {
 	v := New()
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "ns1", Name: "prod"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn"}, // no Version/SecondaryVersion/ResolvedVersion
+			Namespace: "ns1", Name: "prod",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn"}, // no Version/SecondaryVersion/ResolvedVersion
 		},
 	}
 	v.Rebuild(aliases, []fv1.FunctionVersion{version("ns1", "", "fn-uid", 1)})

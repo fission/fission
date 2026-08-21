@@ -34,11 +34,10 @@ import (
 // a missed isolation boundary), so it is exercised directly.
 func TestFetcherSigningNamespace(t *testing.T) {
 	const podNS = "team-a"
-	nsPod := &apiv1.Pod{ObjectMeta: metav1.ObjectMeta{
+	nsPod := &apiv1.Pod{
 		Namespace:   podNS,
-		Annotations: map[string]string{fv1.AuthKeySchemeAnnotation: fv1.AuthKeySchemeNamespace},
-	}}
-	plainPod := &apiv1.Pod{ObjectMeta: metav1.ObjectMeta{Namespace: podNS}}
+		Annotations: map[string]string{fv1.AuthKeySchemeAnnotation: fv1.AuthKeySchemeNamespace}}
+	plainPod := &apiv1.Pod{Namespace: podNS}
 
 	tests := []struct {
 		name       string
@@ -108,7 +107,7 @@ func tenancyModeEnv(dynamic bool) string {
 func TestExistsInFnNamespace(t *testing.T) {
 	const ns = "fn-ns"
 	configMap := func(name string) *apiv1.ConfigMap {
-		return &apiv1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+		return &apiv1.ConfigMap{Namespace: ns, Name: name}
 	}
 	// newGP builds a pool whose cache holds cacheObjs and whose API client holds
 	// apiObjs, so a test can place an object in only one of the two.

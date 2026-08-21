@@ -29,14 +29,12 @@ import (
 func fnSlice(name, fnName, fnNamespace string, addrs ...string) *discoveryv1.EndpointSlice {
 	port := int32(8888)
 	es := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "fn-ns",
-			Labels: map[string]string{
-				fv1.FUNCTION_NAME:      fnName,
-				fv1.FUNCTION_NAMESPACE: fnNamespace,
-				fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
-			},
+		Name:      name,
+		Namespace: "fn-ns",
+		Labels: map[string]string{
+			fv1.FUNCTION_NAME:      fnName,
+			fv1.FUNCTION_NAMESPACE: fnNamespace,
+			fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
 		},
 		Ports: []discoveryv1.EndpointPort{{Port: &port}},
 	}
@@ -94,7 +92,7 @@ func newFallbackForTest(t *testing.T, ix *endpointcache.Index, exec *stubExecuto
 }
 
 func poolFn(name string) *fv1.Function {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: "u1"}}
+	fn := &fv1.Function{Name: name, Namespace: "default", UID: "u1"}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypePoolmgr
 	return fn
 }

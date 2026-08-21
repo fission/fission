@@ -8,16 +8,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func TestFilterByFunction(t *testing.T) {
 	items := []fv1.FunctionAlias{
-		{ObjectMeta: metav1.ObjectMeta{Name: "a"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "b"}, Spec: fv1.FunctionAliasSpec{FunctionName: "other"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "c"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello"}},
+		{Name: "a", Spec: fv1.FunctionAliasSpec{FunctionName: "hello"}},
+		{Name: "b", Spec: fv1.FunctionAliasSpec{FunctionName: "other"}},
+		{Name: "c", Spec: fv1.FunctionAliasSpec{FunctionName: "hello"}},
 	}
 
 	t.Run("empty filter returns everything", func(t *testing.T) {
@@ -43,7 +42,7 @@ func TestFilterByFunction(t *testing.T) {
 func TestAliasRow(t *testing.T) {
 	weight := 60
 	a := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
+		Name: "prod",
 		Spec: fv1.FunctionAliasSpec{
 			FunctionName:     "hello",
 			Version:          "hello-v1",
@@ -58,8 +57,8 @@ func TestAliasRow(t *testing.T) {
 
 func TestAliasRowNoWeightOrResolution(t *testing.T) {
 	a := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Name: "prod",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 	}
 	row := aliasRow(a)
 	assert.Equal(t, "<none>", row[4], "weight column should show <none> when unset")

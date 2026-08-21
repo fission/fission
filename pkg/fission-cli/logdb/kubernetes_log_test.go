@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -22,7 +21,7 @@ const fnNamespace = "fns"
 
 func testFunction() *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: fnNamespace, UID: "uid-1"},
+		Name: "hello", Namespace: fnNamespace, UID: "uid-1",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "node-env", Namespace: fnNamespace},
 			InvokeStrategy: fv1.InvokeStrategy{
@@ -34,15 +33,13 @@ func testFunction() *fv1.Function {
 
 func functionPod(name, resourceVersion string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            name,
-			Namespace:       fnNamespace,
-			ResourceVersion: resourceVersion,
-			Labels: map[string]string{
-				fv1.FUNCTION_UID:          "uid-1",
-				fv1.ENVIRONMENT_NAME:      "node-env",
-				fv1.ENVIRONMENT_NAMESPACE: fnNamespace,
-			},
+		Name:            name,
+		Namespace:       fnNamespace,
+		ResourceVersion: resourceVersion,
+		Labels: map[string]string{
+			fv1.FUNCTION_UID:          "uid-1",
+			fv1.ENVIRONMENT_NAME:      "node-env",
+			fv1.ENVIRONMENT_NAMESPACE: fnNamespace,
 		},
 		Spec: corev1.PodSpec{
 			NodeName: "node1",

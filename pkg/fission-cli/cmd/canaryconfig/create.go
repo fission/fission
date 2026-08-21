@@ -99,10 +99,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 
 	// finally create canaryCfg in the same namespace as the functions referenced
 	opts.canary = &fv1.CanaryConfig{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: fnNs,
-		},
+		Name:      name,
+		Namespace: fnNs,
 		Spec: fv1.CanaryConfigSpec{
 			Trigger:                 ht,
 			NewFunction:             newFunc,

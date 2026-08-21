@@ -203,7 +203,7 @@ func (opts *stateSubCommand) call(input cli.Input, method, key, rawQuery string,
 	if err != nil {
 		return nil, fmt.Errorf("connecting to statesvc: %w", err)
 	}
-	u := *baseURL
+	u := baseURL.Clone()
 	u.Path = "/v1/state"
 	if key != "" {
 		u.Path += "/" + key

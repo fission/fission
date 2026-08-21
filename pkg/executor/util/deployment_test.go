@@ -14,7 +14,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -24,11 +23,11 @@ import (
 )
 
 func secret(ns, name, rv string) *apiv1.Secret {
-	return &apiv1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv}}
+	return &apiv1.Secret{Namespace: ns, Name: name, ResourceVersion: rv}
 }
 
 func configMap(ns, name, rv string) *apiv1.ConfigMap {
-	return &apiv1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, ResourceVersion: rv}}
+	return &apiv1.ConfigMap{Namespace: ns, Name: name, ResourceVersion: rv}
 }
 
 func secretRef(ns, name string) fv1.SecretReference {
@@ -98,9 +97,9 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 			spec: fv1.FunctionSpec{
 				Env: []apiv1.EnvVar{
 					{Name: "A", ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
-						LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}, Key: "k"}}},
+						Name: "s1", Key: "k"}}},
 					{Name: "B", ValueFrom: &apiv1.EnvVarSource{ConfigMapKeyRef: &apiv1.ConfigMapKeySelector{
-						LocalObjectReference: apiv1.LocalObjectReference{Name: "c1"}, Key: "k"}}},
+						Name: "c1", Key: "k"}}},
 				},
 			},
 			want: 30,
@@ -110,8 +109,8 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 			objects: []runtime.Object{secret(ns, "s1", "10"), configMap(ns, "c1", "20")},
 			spec: fv1.FunctionSpec{
 				EnvFrom: []apiv1.EnvFromSource{
-					{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}}},
-					{ConfigMapRef: &apiv1.ConfigMapEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "c1"}}},
+					{SecretRef: &apiv1.SecretEnvSource{Name: "s1"}},
+					{ConfigMapRef: &apiv1.ConfigMapEnvSource{Name: "c1"}},
 				},
 			},
 			want: 30,
@@ -122,7 +121,7 @@ func TestReferencedResourcesRVSum(t *testing.T) {
 			spec: fv1.FunctionSpec{
 				Secrets: []fv1.SecretReference{secretRef(ns, "s1")},
 				EnvFrom: []apiv1.EnvFromSource{
-					{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s1"}}},
+					{SecretRef: &apiv1.SecretEnvSource{Name: "s1"}},
 				},
 			},
 			want: 10,
@@ -146,8 +145,8 @@ func TestScaleDeployment(t *testing.T) {
 	const ns, name = "default", "dep1"
 	replicas := int32(1)
 	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
-		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+		Namespace: ns, Name: name,
+		Spec: appsv1.DeploymentSpec{Replicas: &replicas},
 	}
 	client := fake.NewClientset(dep)
 
@@ -180,8 +179,8 @@ func TestWaitForDeployment(t *testing.T) {
 	t.Run("returns once available replicas meet the target", func(t *testing.T) {
 		t.Parallel()
 		dep := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ready"},
-			Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			Namespace: ns, Name: "ready",
+			Status: appsv1.DeploymentStatus{AvailableReplicas: 1},
 		}
 		client := fake.NewClientset(dep)
 
@@ -198,7 +197,7 @@ func TestWaitForDeployment(t *testing.T) {
 	t.Run("surfaces a get error", func(t *testing.T) {
 		t.Parallel()
 		client := fake.NewClientset()
-		missing := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ghost"}}
+		missing := &appsv1.Deployment{Namespace: ns, Name: "ghost"}
 
 		got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), missing, 1, 1)
 		require.Error(t, err)
@@ -211,8 +210,8 @@ func TestWaitForDeployment(t *testing.T) {
 		// otherwise sleep; a cancelled context must short-circuit instead of
 		// blocking for the (floored) timeout window.
 		dep := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "pending"},
-			Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+			Namespace: ns, Name: "pending",
+			Status: appsv1.DeploymentStatus{AvailableReplicas: 0},
 		}
 		client := fake.NewClientset(dep)
 		ctx, cancel := context.WithCancel(t.Context())

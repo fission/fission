@@ -49,8 +49,8 @@ func TestAdoptSecretsForKeep(t *testing.T) {
 
 	secret := func(name string, annotations map[string]string) *corev1.Secret {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Annotations: annotations},
-			Data:       map[string][]byte{"secret": []byte("master-value")},
+			Name: name, Namespace: ns, Annotations: annotations,
+			Data: map[string][]byte{"secret": []byte("master-value")},
 		}
 	}
 
@@ -103,7 +103,7 @@ func TestAdoptSecretsForKeep(t *testing.T) {
 		// missing them causes.
 		client := fake.NewClientset(
 			secret("fission-internal-auth", nil),
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "fission-internal-auth", Namespace: "default"}},
+			&corev1.Secret{Name: "fission-internal-auth", Namespace: "default"},
 		)
 		require.NoError(t, AdoptSecretsForKeep(t.Context(), client, logger,
 			[]string{ns, "default"}, []string{"fission-internal-auth"}))

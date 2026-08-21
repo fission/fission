@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
@@ -25,7 +24,7 @@ func TestMqtCleanMasksMetadataCredentials(t *testing.T) {
 	// masking it in only one of the two dumpers would leave the value in the
 	// bundle regardless.
 	mqt := fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-mqt", Namespace: "default"},
+		Name: "my-mqt", Namespace: "default",
 		Spec: fv1.MessageQueueTriggerSpec{
 			Metadata: map[string]string{
 				"host":      "amqp://user:hunter2@rabbit:5672/",
@@ -61,7 +60,7 @@ func TestCrdDumperMasksMessageQueueTriggerMetadata(t *testing.T) {
 	// Guards the wiring, not the helper: without mqtClean at the call site the
 	// masking function can be perfectly correct and still never run.
 	mqt := &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-mqt", Namespace: "default", ResourceVersion: "1"},
+		Name: "my-mqt", Namespace: "default", ResourceVersion: "1",
 		Spec: fv1.MessageQueueTriggerSpec{
 			Metadata: map[string]string{
 				"host":      "amqp://user:hunter2@rabbit:5672/",

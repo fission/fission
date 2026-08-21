@@ -27,11 +27,9 @@ import (
 // slices the last 17 chars of fn.UID, matching every real Kubernetes UID).
 func fnForObjName(name, namespace string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			UID:       "83c82da2-81e9-4ebd-867e-f383e65e603f",
-		},
+		Name:      name,
+		Namespace: namespace,
+		UID:       "83c82da2-81e9-4ebd-867e-f383e65e603f",
 	}
 }
 
@@ -107,10 +105,8 @@ func TestGetFuncSvcFromCacheVersionPinned(t *testing.T) {
 	ctx := t.Context()
 
 	liveFn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "hello", Namespace: "default",
-			UID: "83c82da2-81e9-4ebd-867e-f383e65e603f", Generation: 5,
-		},
+		Name: "hello", Namespace: "default",
+		UID: "83c82da2-81e9-4ebd-867e-f383e65e603f", Generation: 5,
 	}
 	// Versioned projection: same UID, pinned older Generation, version label
 	// (the shape versioning.VersionedFunction produces).

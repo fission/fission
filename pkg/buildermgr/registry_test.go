@@ -92,7 +92,7 @@ func TestOCIPushSpecFor(t *testing.T) {
 		pushSecret:        "push-cred",
 		fallbackToStorage: true,
 	}
-	pkg := &fv1.Package{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "team-a"}}
+	pkg := &fv1.Package{Name: "hello", Namespace: "team-a"}
 	env := &fv1.Environment{Spec: fv1.EnvironmentSpec{Version: 2}}
 
 	t.Run("eligible package gets the namespaced repository", func(t *testing.T) {

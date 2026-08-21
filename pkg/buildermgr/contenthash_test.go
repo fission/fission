@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -167,7 +166,7 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 	// of content so each case isolates one signal.
 	digest := func(gen int64, status fv1.BuildStatus, d string) *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "p", Namespace: "default", Generation: gen},
+			Name: "p", Namespace: "default", Generation: gen,
 			Spec: fv1.PackageSpec{Deployment: fv1.Archive{
 				Type: fv1.ArchiveTypeOCI,
 				OCI:  &fv1.OCIArchive{Image: "registry/app:v1", Digest: "sha256:" + repeat(d, 64)},
@@ -179,7 +178,7 @@ func TestBuildTriggerPredicateFiresOnSpecChange(t *testing.T) {
 	// output — changing it must not enqueue, or the reconciler triggers itself.
 	srcPkg := func(gen int64, status fv1.BuildStatus, deployURL string) *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "default", Generation: gen},
+			Name: "s", Namespace: "default", Generation: gen,
 			Spec: fv1.PackageSpec{
 				Source:     fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/src"},
 				Deployment: fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: deployURL},

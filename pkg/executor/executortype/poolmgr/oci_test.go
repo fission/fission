@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -55,11 +54,11 @@ func TestOCIPoolHashStable(t *testing.T) {
 
 func ociEligibilityFixtures(envVersion int, secrets []fv1.SecretReference, cfgmaps []fv1.ConfigMapReference, deployment fv1.Archive) (*fv1.Function, *fv1.Environment, *fv1.Package) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "pkg", Namespace: "fn-ns"},
-		Spec:       fv1.PackageSpec{Deployment: deployment},
+		Name: "pkg", Namespace: "fn-ns",
+		Spec: fv1.PackageSpec{Deployment: deployment},
 	}
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "fn-ns"},
+		Name: "fn", Namespace: "fn-ns",
 		Spec: fv1.FunctionSpec{
 			Package: fv1.FunctionPackageRef{
 				PackageRef: fv1.PackageRef{Name: "pkg", Namespace: "fn-ns"},
@@ -69,8 +68,8 @@ func ociEligibilityFixtures(envVersion int, secrets []fv1.SecretReference, cfgma
 		},
 	}
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env", Namespace: "fn-ns"},
-		Spec:       fv1.EnvironmentSpec{Version: envVersion},
+		Name: "env", Namespace: "fn-ns",
+		Spec: fv1.EnvironmentSpec{Version: envVersion},
 	}
 	return fn, env, pkg
 }

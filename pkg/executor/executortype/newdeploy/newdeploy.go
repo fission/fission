@@ -213,10 +213,8 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	// See GHSA-85g2-pmrx-r49q.
 	automountSAToken := false
 	pod := apiv1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:      podLabels,
-			Annotations: podAnnotations,
-		},
+		Labels:      podLabels,
+		Annotations: podAnnotations,
 		Spec: apiv1.PodSpec{
 			Containers:                    []apiv1.Container{*container},
 			ServiceAccountName:            fv1.FissionFetcherSA,
@@ -253,12 +251,10 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 	}
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            deployName,
-			Labels:          deployLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerReferences,
-		},
+		Name:            deployName,
+		Labels:          deployLabels,
+		Annotations:     deployAnnotations,
+		OwnerReferences: ownerReferences,
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
@@ -426,12 +422,10 @@ func (deploy *NewDeploy) createOrGetSvc(ctx context.Context, fn *fv1.Function, d
 	svcLabels[fv1.MANAGED_BY_LABEL] = fv1.MANAGED_BY_VALUE
 
 	service := &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            svcName,
-			Labels:          svcLabels,
-			Annotations:     deployAnnotations,
-			OwnerReferences: ownerReferences,
-		},
+		Name:            svcName,
+		Labels:          svcLabels,
+		Annotations:     deployAnnotations,
+		OwnerReferences: ownerReferences,
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{

@@ -45,8 +45,8 @@ func newReconciler(t *testing.T, objs ...client.Object) (*FunctionToolReconciler
 
 func exposedFn(name string, tool *fv1.ToolConfig) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Generation: 1},
-		Spec:       fv1.FunctionSpec{Tool: tool},
+		Name: name, Namespace: "default", Generation: 1,
+		Spec: fv1.FunctionSpec{Tool: tool},
 	}
 }
 
@@ -147,7 +147,7 @@ func conflictStatus(t *testing.T, c client.Client, ctx context.Context, name str
 func TestFunctionToolReconcilerNameConflict(t *testing.T) {
 	rec := func(t *testing.T, r *FunctionToolReconciler, name string) {
 		t.Helper()
-		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}})
+		_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: name})
 		require.NoError(t, err)
 	}
 
@@ -185,7 +185,7 @@ func TestFunctionToolReconcilerNameConflict(t *testing.T) {
 // itself reads (FunctionName, Snapshot) need to be populated.
 func mkVersion(name, fnName string, snapshot fv1.FunctionSpec) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Name: name, Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:  fnName,
 			Sequence:      1,
@@ -201,9 +201,9 @@ func mkVersion(name, fnName string, snapshot fv1.FunctionSpec) *fv1.FunctionVers
 // Status.ResolvedVersion precedence resolveEntry applies.
 func mkAlias(name, fnName, version, resolved string) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: fnName, Version: version},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: resolved},
+		Name: name, Namespace: "default",
+		Spec:   fv1.FunctionAliasSpec{FunctionName: fnName, Version: version},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: resolved},
 	}
 }
 

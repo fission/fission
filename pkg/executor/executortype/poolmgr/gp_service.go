@@ -38,10 +38,8 @@ func (gp *GenericPool) createSvc(ctx context.Context, name string, labels map[st
 		"name": name,
 	})...)
 	service := apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
-		},
+		Name:   name,
+		Labels: labels,
 		Spec: apiv1.ServiceSpec{
 			Type: apiv1.ServiceTypeClusterIP,
 			Ports: []apiv1.ServicePort{
@@ -158,13 +156,11 @@ func (gpm *GenericPoolManager) ensureFunctionService(ctx context.Context, fn *fv
 	copyVersionLabel(labels, fn.Labels)
 
 	desired := &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels:    labels,
-			Annotations: map[string]string{
-				fv1.EXECUTOR_INSTANCEID_LABEL: gpm.instanceID,
-			},
+		Name:      name,
+		Namespace: ns,
+		Labels:    labels,
+		Annotations: map[string]string{
+			fv1.EXECUTOR_INSTANCEID_LABEL: gpm.instanceID,
 		},
 		Spec: apiv1.ServiceSpec{
 			ClusterIP: apiv1.ClusterIPNone,

@@ -36,26 +36,24 @@ const FetcherContainerName = "fetcher"
 func FetcherSATokenProjectedVolume() apiv1.Volume {
 	return apiv1.Volume{
 		Name: FetcherSATokenVolumeName,
-		VolumeSource: apiv1.VolumeSource{
-			Projected: &apiv1.ProjectedVolumeSource{
-				Sources: []apiv1.VolumeProjection{
-					{
-						ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
-							Path:              "token",
-							ExpirationSeconds: new(int64(3600)),
-						},
+		Projected: &apiv1.ProjectedVolumeSource{
+			Sources: []apiv1.VolumeProjection{
+				{
+					ServiceAccountToken: &apiv1.ServiceAccountTokenProjection{
+						Path:              "token",
+						ExpirationSeconds: new(int64(3600)),
 					},
-					{
-						ConfigMap: &apiv1.ConfigMapProjection{
-							LocalObjectReference: apiv1.LocalObjectReference{Name: "kube-root-ca.crt"},
-							Items:                []apiv1.KeyToPath{{Key: "ca.crt", Path: "ca.crt"}},
-						},
+				},
+				{
+					ConfigMap: &apiv1.ConfigMapProjection{
+						Name:  "kube-root-ca.crt",
+						Items: []apiv1.KeyToPath{{Key: "ca.crt", Path: "ca.crt"}},
 					},
-					{
-						DownwardAPI: &apiv1.DownwardAPIProjection{
-							Items: []apiv1.DownwardAPIVolumeFile{
-								{Path: "namespace", FieldRef: &apiv1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
-							},
+				},
+				{
+					DownwardAPI: &apiv1.DownwardAPIProjection{
+						Items: []apiv1.DownwardAPIVolumeFile{
+							{Path: "namespace", FieldRef: &apiv1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
 						},
 					},
 				},

@@ -111,14 +111,13 @@ func requireNoSignal(t *testing.T, ts *HTTPTriggerSet) {
 }
 
 func incrFn(name, ns string, gen int64) *fv1.Function {
-	return &fv1.Function{ObjectMeta: metav1.ObjectMeta{
-		Name: name, Namespace: ns, Generation: gen, UID: types.UID("fn-" + name),
-	}}
+	return &fv1.Function{
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("fn-" + name)}
 }
 
 func incrTrigger(name, ns string, gen int64, url, fnName string) *fv1.HTTPTrigger {
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name)},
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name),
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: url,
 			Methods:     []string{http.MethodGet},
@@ -170,7 +169,7 @@ func TestIncrementalCanaryTickIsHandlerSwapOnly(t *testing.T) {
 	fnA := incrFn("fn-a", "default", 1)
 	fnB := incrFn("fn-b", "default", 1)
 	canary := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default", Generation: 1, UID: "trig-canary"},
+		Name: "canary", Namespace: "default", Generation: 1, UID: "trig-canary",
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/canary",
 			Methods:     []string{http.MethodGet},
@@ -261,7 +260,7 @@ func TestIncrementalConditionsViaReconciler(t *testing.T) {
 
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts}
 	for _, name := range []string{"good", "orphan"} {
-		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}})
+		_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: name})
 		require.NoError(t, err)
 	}
 	requireSignal(t, ts)
@@ -346,7 +345,7 @@ func TestBuildMuxesIncrementalParity(t *testing.T) {
 		*incrTrigger("exact", "default", 1, "/hello", "fn"),
 		*incrTrigger("home", "default", 1, "/", "fn"),
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "dual", Namespace: "default", Generation: 1, UID: "trig-dual"},
+			Name: "dual", Namespace: "default", Generation: 1, UID: "trig-dual",
 			Spec: fv1.HTTPTriggerSpec{
 				Prefix:            &prefix,
 				Methods:           []string{http.MethodGet, http.MethodPost},
@@ -354,7 +353,7 @@ func TestBuildMuxesIncrementalParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "slashpfx", Namespace: "default", Generation: 1, UID: "trig-slashpfx"},
+			Name: "slashpfx", Namespace: "default", Generation: 1, UID: "trig-slashpfx",
 			Spec: fv1.HTTPTriggerSpec{
 				Prefix:            &slashPrefix,
 				Methods:           []string{http.MethodGet},
@@ -362,7 +361,7 @@ func TestBuildMuxesIncrementalParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hosted", Namespace: "default", Generation: 1, UID: "trig-hosted"},
+			Name: "hosted", Namespace: "default", Generation: 1, UID: "trig-hosted",
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL:       "/hosted",
 				Host:              "api.example.com",
@@ -371,7 +370,7 @@ func TestBuildMuxesIncrementalParity(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "cors", Namespace: "default", Generation: 1, UID: "trig-cors"},
+			Name: "cors", Namespace: "default", Generation: 1, UID: "trig-cors",
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL: "/cors",
 				Methods:     []string{http.MethodGet},

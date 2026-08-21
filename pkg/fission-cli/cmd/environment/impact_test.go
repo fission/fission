@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -47,8 +46,8 @@ func captureStdout(t *testing.T, fn func() error) string {
 
 func impactFn(name, envName, envNS string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Spec:       fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: envName, Namespace: envNS}},
+		Name: name, Namespace: "default",
+		Spec: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: envName, Namespace: envNS}},
 	}
 }
 
@@ -70,7 +69,7 @@ func TestFilterFunctionsByEnvironment(t *testing.T) {
 }
 
 func TestBuildImpactRowsFunctionWithNoAliases(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 3}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 3}
 	fns := []fv1.Function{*impactFn("hello", "nodejs", "")}
 
 	rows := buildImpactRows(t.Context(), fissionfake.NewClientset(), "default", env, fns, nil)
@@ -84,11 +83,11 @@ func TestBuildImpactRowsFunctionWithNoAliases(t *testing.T) {
 }
 
 func TestBuildImpactRowsUnresolvedAlias(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 1}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 1}
 	fns := []fv1.Function{*impactFn("hello", "nodejs", "")}
 	aliases := []fv1.FunctionAlias{{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v9"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v9"},
 		// Status.ResolvedVersion left empty: never resolved.
 	}}
 
@@ -101,29 +100,29 @@ func TestBuildImpactRowsUnresolvedAlias(t *testing.T) {
 }
 
 func TestBuildImpactRowsResolvedDriftedAndCurrent(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 2}
 	fns := []fv1.Function{*impactFn("hello", "nodejs", "")}
 	aliases := []fv1.FunctionAlias{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-			Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+			Name: "prod", Namespace: "default",
+			Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+			Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
-			Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v2"},
+			Name: "canary", Namespace: "default",
+			Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
+			Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v2"},
 		},
 	}
 	v1 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1, // stale
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
 		},
 	}
 	v2 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v2", Namespace: "default"},
+		Name: "hello-v2", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello", Sequence: 2, EnvObservedGeneration: 2, // current
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
@@ -144,7 +143,7 @@ func TestBuildImpactRowsResolvedDriftedAndCurrent(t *testing.T) {
 }
 
 func TestSnapshotEnvMatches(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default"}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default"}
 
 	cases := []struct {
 		name    string
@@ -174,16 +173,16 @@ func TestSnapshotEnvMatches(t *testing.T) {
 // cross-environment comparison; the row must report driftOtherEnv instead
 // of a misleading True/False.
 func TestBuildImpactRowsAliasResolvedToVersionFromDifferentEnvironment(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "env-b", Namespace: "default", Generation: 5}}
+	env := &fv1.Environment{Name: "env-b", Namespace: "default", Generation: 5}
 	fn := impactFn("hello", "env-b", "") // hello's CURRENT environment reference
 	aliases := []fv1.FunctionAlias{{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 	}}
 	// hello-v1 predates the env-a -> env-b move: its snapshot still names env-a.
 	v1 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 9,
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "env-a"}},
@@ -204,15 +203,15 @@ func TestBuildImpactRowsAliasResolvedToVersionFromDifferentEnvironment(t *testin
 // True/False rather than driftOtherEnv, now that snapshotEnvMatches gates
 // the comparison.
 func TestBuildImpactRowsResolvedDriftedAndCurrentIsTheNormalCase(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 2}
 	fn := impactFn("hello", "nodejs", "")
 	aliases := []fv1.FunctionAlias{{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 	}}
 	v1 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1,
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
@@ -227,12 +226,12 @@ func TestBuildImpactRowsResolvedDriftedAndCurrentIsTheNormalCase(t *testing.T) {
 }
 
 func TestBuildImpactRowsResolvedVersionMissingIsNotAssessable(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 1}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 1}
 	fns := []fv1.Function{*impactFn("hello", "nodejs", "")}
 	aliases := []fv1.FunctionAlias{{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"}, // no such FunctionVersion object
+		Name: "prod", Namespace: "default",
+		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"}, // no such FunctionVersion object
 	}}
 
 	rows := buildImpactRows(t.Context(), fissionfake.NewClientset(), "default", env, fns, aliases)
@@ -249,15 +248,15 @@ func impactFlags(envName string) dummy.Cli {
 }
 
 func TestImpactCommandEndToEnd(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 2}
 	fn := impactFn("hello", "nodejs", "")
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
-		Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
+		Name: "prod", Namespace: "default",
+		Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+		Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v1"},
 	}
 	v1 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
+		Name: "hello-v1", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName: "hello", Sequence: 1, EnvObservedGeneration: 1,
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs"}},
@@ -281,7 +280,7 @@ func TestImpactCommandEndToEnd(t *testing.T) {
 }
 
 func TestImpactCommandJSONOutput(t *testing.T) {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 1}}
+	env := &fv1.Environment{Name: "nodejs", Namespace: "default", Generation: 1}
 	fn := impactFn("hello", "nodejs", "")
 
 	cmd.ResetClientsetForTest()

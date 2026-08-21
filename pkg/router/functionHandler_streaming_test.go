@@ -64,7 +64,7 @@ func chunkedUpstream(n int, gap time.Duration) *httptest.Server {
 
 func streamingFn(uid string, sc *fv1.StreamingConfig) *fv1.Function {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: k8stypes.UID(uid)},
+		Name: "fn", Namespace: "default", UID: k8stypes.UID(uid),
 	}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypePoolmgr
 	fn.Spec.Streaming = sc

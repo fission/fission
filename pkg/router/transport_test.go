@@ -20,7 +20,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/error/network"
@@ -84,7 +83,7 @@ func (n *nopTapper) UnTap(_ context.Context, _ *fv1.Function, u *url.URL) error 
 }
 
 func poolmgrFnForTransport() *fv1.Function {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypePoolmgr
 	return fn
 }

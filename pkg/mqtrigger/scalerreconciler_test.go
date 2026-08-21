@@ -37,11 +37,9 @@ func mqtForKind(name, kind string) *fv1.MessageQueueTrigger {
 	minReplicaCount := int32(0)
 	maxReplicaCount := int32(100)
 	return &fv1.MessageQueueTrigger{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: metav1.NamespaceDefault,
-			UID:       types.UID(name + "-uid"),
-		},
+		Name:      name,
+		Namespace: metav1.NamespaceDefault,
+		UID:       types.UID(name + "-uid"),
 		Spec: fv1.MessageQueueTriggerSpec{
 			FunctionReference: fv1.FunctionReference{
 				Type: fv1.FunctionReferenceTypeFunctionName,
@@ -175,8 +173,8 @@ func TestScalerReconciler(t *testing.T) {
 	t.Run("non-secret update on a secret-bearing trigger keeps the AuthenticationRef", func(t *testing.T) {
 		t.Parallel()
 		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "kafka-secret", Namespace: metav1.NamespaceDefault},
-			Data:       map[string][]byte{"password": []byte("s3cr3t")},
+			Name: "kafka-secret", Namespace: metav1.NamespaceDefault,
+			Data: map[string][]byte{"password": []byte("s3cr3t")},
 		}
 		mqt := mqtForKind("mqt", MqtKindKeda)
 		mqt.Spec.Secret = "kafka-secret"
@@ -219,7 +217,7 @@ func TestScalerReconciler(t *testing.T) {
 		// A connector Deployment already exists (e.g. left over from a prior run, so
 		// createDeployment returns AlreadyExists rather than creating it here).
 		preExisting := &appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "mqt", Namespace: metav1.NamespaceDefault},
+			Name: "mqt", Namespace: metav1.NamespaceDefault,
 		}
 		kube := k8sfake.NewClientset(preExisting)
 		keda := kedafake.NewSimpleClientset()

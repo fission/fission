@@ -23,7 +23,7 @@ func TestFunctionVersionTypesRegistered(t *testing.T) {
 	c := fakeversioned.NewSimpleClientset()
 
 	_, err := c.CoreV1().FunctionVersions("default").Create(t.Context(), &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1"},
+		Name: "fn-v1",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       "fn",
 			FunctionUID:        types.UID("fn-uid"),
@@ -37,7 +37,7 @@ func TestFunctionVersionTypesRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = c.CoreV1().FunctionAliases("default").Create(t.Context(), &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-live"},
+		Name: "fn-live",
 		Spec: fv1.FunctionAliasSpec{
 			FunctionName: "fn",
 			Version:      "fn-v1",
@@ -59,7 +59,7 @@ func TestFunctionVersionDeepCopy(t *testing.T) {
 	retain := 5
 	weight := 50
 	fv := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1"},
+		Name: "fn-v1",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       "fn",
 			FunctionUID:        types.UID("fn-uid"),
@@ -83,7 +83,7 @@ func TestFunctionVersionDeepCopy(t *testing.T) {
 	require.EqualValues(t, fvList, dupList)
 
 	fa := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-live"},
+		Name: "fn-live",
 		Spec: fv1.FunctionAliasSpec{
 			FunctionName:     "fn",
 			Version:          "fn-v1",

@@ -721,8 +721,8 @@ func prepareEnvSource(ctx context.Context, rt localRuntime, cfg runConfig, stder
 	// remember to clean up by hand.
 	var cleanups []func()
 	cleanup = func() {
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
+		for _, cleanup := range slices.Backward(cleanups) {
+			cleanup()
 		}
 	}
 	defer func() {

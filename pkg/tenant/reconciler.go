@@ -222,7 +222,7 @@ func (r *TenantReconciler) namespaceToRequests(ctx context.Context, obj client.O
 	var reqs []ctrl.Request
 	for i := range list.Items {
 		if list.Items[i].Spec.Namespace == obj.GetName() {
-			reqs = append(reqs, ctrl.Request{NamespacedName: types.NamespacedName{Name: list.Items[i].Name}})
+			reqs = append(reqs, ctrl.Request{Name: list.Items[i].Name})
 		}
 	}
 	return reqs
@@ -293,16 +293,14 @@ func (r *NamespaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	ft := &fv1.FissionTenant{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        target.Name,
-			Annotations: map[string]string{managedByAnnotation: managedByLabel},
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "v1",
-				Kind:       "Namespace",
-				Name:       target.Name,
-				UID:        target.UID,
-			}},
-		},
+		Name:        target.Name,
+		Annotations: map[string]string{managedByAnnotation: managedByLabel},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "v1",
+			Kind:       "Namespace",
+			Name:       target.Name,
+			UID:        target.UID,
+		}},
 		Spec: fv1.FissionTenantSpec{Namespace: target.Name},
 	}
 	if err := r.client.Create(ctx, ft); err != nil {

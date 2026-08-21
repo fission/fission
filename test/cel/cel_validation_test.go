@@ -104,7 +104,7 @@ func TestCELFunctionValidation(t *testing.T) {
 
 	fn := func(name string, mut func(*fv1.Function)) *fv1.Function {
 		f := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.FunctionSpec{
 				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
 				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},
@@ -148,8 +148,8 @@ func TestCELEnvironmentValidation(t *testing.T) {
 
 	env := func(name string, mut func(*fv1.Environment)) *fv1.Environment {
 		e := &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec:       fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: "img"}},
+			Name: name, Namespace: ns,
+			Spec: fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: "img"}},
 		}
 		if mut != nil {
 			mut(e)
@@ -189,8 +189,8 @@ func TestCELEnvironmentVersionImmutable(t *testing.T) {
 
 	created, err := fc.CoreV1().Environments(ns).Create(t.Context(),
 		&fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: "e-immutable", Namespace: ns},
-			Spec:       fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: "img"}},
+			Name: "e-immutable", Namespace: ns,
+			Spec: fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: "img"}},
 		}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
@@ -208,7 +208,7 @@ func TestCELReferenceNamePatterns(t *testing.T) {
 
 	fn := func(name string, mut func(*fv1.Function)) *fv1.Function {
 		f := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.FunctionSpec{
 				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
 				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},
@@ -260,8 +260,8 @@ func TestCELPackageEnvironmentName(t *testing.T) {
 	fc := client(t)
 	pkg := func(name, envName string) *fv1.Package {
 		return &fv1.Package{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: envName, Namespace: ns}},
+			Name: name, Namespace: ns,
+			Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: envName, Namespace: ns}},
 		}
 	}
 	_, err := fc.CoreV1().Packages(ns).Create(t.Context(), pkg("pkg-env-ok", "env"), metav1.CreateOptions{})
@@ -276,7 +276,7 @@ func TestCELKubernetesWatchTriggerNamespace(t *testing.T) {
 	fc := client(t)
 	kwt := func(name, specNs string) *fv1.KubernetesWatchTrigger {
 		return &fv1.KubernetesWatchTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.KubernetesWatchTriggerSpec{
 				Namespace:         specNs,
 				Type:              "POD",
@@ -320,7 +320,7 @@ func TestCELFunctionVersionAndAliasInstall(t *testing.T) {
 	fc := client(t)
 
 	fv := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fv-valid", Namespace: ns},
+		Name: "fv-valid", Namespace: ns,
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       "fn",
 			FunctionUID:        apitypes.UID("fn-uid"),
@@ -339,8 +339,8 @@ func TestCELFunctionVersionAndAliasInstall(t *testing.T) {
 
 	alias := func(name string, mut func(*fv1.FunctionAlias)) *fv1.FunctionAlias {
 		a := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fv-valid"},
+			Name: name, Namespace: ns,
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fv-valid"},
 		}
 		if mut != nil {
 			mut(a)
@@ -398,7 +398,7 @@ func TestCELFunctionVersionAndAliasInstall(t *testing.T) {
 	// a Function cannot opt into retaining zero unaliased versions.
 	retainFn := func(name string, retain int) *fv1.Function {
 		return &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.FunctionSpec{
 				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
 				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},
@@ -434,7 +434,7 @@ func TestCELHTTPTriggerRouteConfig(t *testing.T) {
 
 	ht := func(name string, mut func(*fv1.HTTPTrigger)) *fv1.HTTPTrigger {
 		h := &fv1.HTTPTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL:       "/" + name,
 				Methods:           []string{"GET"},
@@ -507,7 +507,7 @@ func TestCELFunctionReferenceAliasVersion(t *testing.T) {
 
 	ht := func(name string, ref fv1.FunctionReference) *fv1.HTTPTrigger {
 		return &fv1.HTTPTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.HTTPTriggerSpec{
 				RelativeURL:       "/" + name,
 				Methods:           []string{"GET"},
@@ -577,7 +577,7 @@ func TestCELToolConfigAlias(t *testing.T) {
 
 	fn := func(name string, alias string) *fv1.Function {
 		return &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+			Name: name, Namespace: ns,
 			Spec: fv1.FunctionSpec{
 				Environment:    fv1.EnvironmentReference{Name: "env", Namespace: ns},
 				InvokeStrategy: fv1.InvokeStrategy{ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr}},

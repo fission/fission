@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -28,7 +27,7 @@ func TestGetFunctionEnvStatusOnlyResourceVersionBump(t *testing.T) {
 	t.Parallel()
 
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default"},
+		Name: "env1", Namespace: "default",
 	}
 	crClient := crfake.NewClientBuilder().WithScheme(scheme()).WithObjects(env).Build()
 
@@ -39,13 +38,11 @@ func TestGetFunctionEnvStatusOnlyResourceVersionBump(t *testing.T) {
 	}
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "fn1",
-			Namespace:       "default",
-			UID:             "fn-uid-1",
-			Generation:      1,
-			ResourceVersion: "100",
-		},
+		Name:            "fn1",
+		Namespace:       "default",
+		UID:             "fn-uid-1",
+		Generation:      1,
+		ResourceVersion: "100",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "env1", Namespace: "default"},
 		},

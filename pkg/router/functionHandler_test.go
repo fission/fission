@@ -38,10 +38,8 @@ func TestProxyErrorHandler(t *testing.T) {
 	fh := &functionHandler{
 		logger: logger,
 		function: &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "dummy",
-				Namespace: "dummy-bar",
-			},
+			Name:      "dummy",
+			Namespace: "dummy-bar",
 		},
 	}
 
@@ -108,7 +106,7 @@ func TestClassifyFunctionError(t *testing.T) {
 // failure. Verbose Message is gated behind debug.
 func TestProxyErrorHandlerStructuredBody(t *testing.T) {
 	logger := loggerfactory.GetLogger()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "dummy", Namespace: "dummy-bar"}}
+	fn := &fv1.Function{Name: "dummy", Namespace: "dummy-bar"}
 
 	newHandler := func(debug bool) func(http.ResponseWriter, *http.Request, error) {
 		fh := &functionHandler{logger: logger, function: fn, structuredErrors: true, isDebugEnv: debug}
@@ -183,7 +181,7 @@ func (r *recordingExecutor) EnsureCapacity(context.Context, *fv1.Function, int, 
 }
 
 func fnWithPkg(rv, pkg string) *fv1.Function {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", ResourceVersion: rv}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default", ResourceVersion: rv}
 	fn.Spec.Package.PackageRef.Name = pkg
 	return fn
 }
@@ -309,11 +307,11 @@ func TestPerVersionTimeoutAndPolicyDoNotCollideOnSharedUID(t *testing.T) {
 	sharedUID := k8stypes.UID("shared-fn-uid")
 
 	primary := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 1},
-		Spec:       fv1.FunctionSpec{FunctionTimeout: 10},
+		Name: "hello", Namespace: "default", UID: sharedUID, Generation: 1,
+		Spec: fv1.FunctionSpec{FunctionTimeout: 10},
 	}
 	secondary := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: sharedUID, Generation: 2},
+		Name: "hello", Namespace: "default", UID: sharedUID, Generation: 2,
 		Spec: fv1.FunctionSpec{
 			FunctionTimeout: 99,
 			Streaming:       &fv1.StreamingConfig{IdleTimeoutSeconds: 3},

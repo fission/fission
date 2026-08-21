@@ -53,10 +53,8 @@ func newTestEnvironmentWatcher(t *testing.T) *EnvironmentReconciler {
 
 func newTestBuilderEnv() *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "py",
-			Namespace: "default",
-		},
+		Name:      "py",
+		Namespace: "default",
 		Spec: fv1.EnvironmentSpec{
 			Version: 2,
 			Runtime: fv1.Runtime{
@@ -240,7 +238,7 @@ func newTestEnvironmentReconciler(t *testing.T, k8sObjs []runtime.Object, crObjs
 }
 
 func envReq(env *fv1.Environment) ctrl.Request {
-	return ctrl.Request{NamespacedName: client.ObjectKey{Name: env.Name, Namespace: env.Namespace}}
+	return ctrl.Request{Name: env.Name, Namespace: env.Namespace}
 }
 
 // TestEnvironmentReconcileCreateIdempotentDelete walks the builder lifecycle:
@@ -311,10 +309,10 @@ func TestEnvironmentReconcilePrunesStaleGeneration(t *testing.T) {
 		LABEL_ENV_RESOURCEVERSION: "1",
 	}
 	_, err := r.kubernetesClient.CoreV1().Services(ns).Create(t.Context(),
-		&apiv1.Service{ObjectMeta: metav1.ObjectMeta{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}}, metav1.CreateOptions{})
+		&apiv1.Service{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}, metav1.CreateOptions{})
 	require.NoError(t, err)
 	_, err = r.kubernetesClient.AppsV1().Deployments(ns).Create(t.Context(),
-		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}}, metav1.CreateOptions{})
+		&appsv1.Deployment{Name: env.Name + "-1", Namespace: ns, Labels: staleLabels}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
 	_, err = r.Reconcile(t.Context(), envReq(env))

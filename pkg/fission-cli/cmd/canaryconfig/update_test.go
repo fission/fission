@@ -22,7 +22,7 @@ import (
 
 func newCanary() *fv1.CanaryConfig {
 	return &fv1.CanaryConfig{
-		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default"},
+		Name: "canary", Namespace: "default",
 		Spec: fv1.CanaryConfigSpec{
 			Trigger:                 "route",
 			NewFunction:             "new",

@@ -41,17 +41,15 @@ func newAliasReconciler(t *testing.T, objs ...client.Object) (*AliasReconciler, 
 
 func testFunction(name string, uid types.UID) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: uid, Generation: 1},
+		Name: name, Namespace: "default", UID: uid, Generation: 1,
 	}
 }
 
 func testVersion(fnName string, seq int64, digest string) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fnName + "-v" + strconv.FormatInt(seq, 10),
-			Namespace: "default",
-			Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
-		},
+		Name:      fnName + "-v" + strconv.FormatInt(seq, 10),
+		Namespace: "default",
+		Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:  fnName,
 			Sequence:      seq,
@@ -62,21 +60,21 @@ func testVersion(fnName string, seq int64, digest string) *fv1.FunctionVersion {
 
 func testAliasNamePinned(name, fnName, version string) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Generation: 1},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: fnName, Version: version},
+		Name: name, Namespace: "default", Generation: 1,
+		Spec: fv1.FunctionAliasSpec{FunctionName: fnName, Version: version},
 	}
 }
 
 func testAliasDigestPinned(name, fnName, digest string) *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", Generation: 1},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: fnName, PackageDigest: digest},
+		Name: name, Namespace: "default", Generation: 1,
+		Spec: fv1.FunctionAliasSpec{FunctionName: fnName, PackageDigest: digest},
 	}
 }
 
 func reconcileAlias(t *testing.T, r *AliasReconciler, name string) {
 	t.Helper()
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: name}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: name})
 	require.NoError(t, err)
 }
 
@@ -487,7 +485,7 @@ func TestMapVersionToAliasesEnqueuesResolvedNamePinnedAliasOnVersionEvent(t *tes
 
 func TestAliasReconcileNotFoundIsNotAnError(t *testing.T) {
 	r, _ := newAliasReconciler(t)
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "missing"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "missing"})
 	assert.NoError(t, err)
 }
 
@@ -495,8 +493,8 @@ func TestAliasReconcileNotFoundIsNotAnError(t *testing.T) {
 
 func testEnvironment(namespace, name string, generation int64, image string) *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace, Generation: generation},
-		Spec:       fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: image}},
+		Name: name, Namespace: namespace, Generation: generation,
+		Spec: fv1.EnvironmentSpec{Version: 1, Runtime: fv1.Runtime{Image: image}},
 	}
 }
 
@@ -719,7 +717,7 @@ func TestAliasReconcileEnvDriftForbiddenEnvironmentGetDoesNotErrorLoop(t *testin
 	c := forbiddenGetInterceptor(t, &fv1.Environment{}, fn, v, alias)
 	r := &AliasReconciler{logger: logr.Discard(), client: c}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err, "a Forbidden Environment Get must not error-loop the reconcile")
 
 	got := getAlias(t, c, "prod")
@@ -747,7 +745,7 @@ func TestAliasReconcileEnvDriftForbiddenVersionGetDoesNotErrorLoop(t *testing.T)
 	c := forbiddenGetInterceptor(t, &fv1.FunctionVersion{}, fn, v, alias)
 	r := &AliasReconciler{logger: logr.Discard(), client: c}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "prod"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Namespace: "default", Name: "prod"})
 	require.NoError(t, err, "a Forbidden FunctionVersion Get must not error-loop the reconcile")
 
 	got := getAlias(t, c, "prod")

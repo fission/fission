@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -39,7 +38,7 @@ func newAutopublishReconciler(t *testing.T, cs versioned.Interface, ctrlObjs ...
 
 func reconcileFn(t *testing.T, r *AutoPublishReconciler, ns, name string) reconcile.Result {
 	t.Helper()
-	res, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ns, Name: name}})
+	res, err := r.Reconcile(t.Context(), reconcile.Request{Namespace: ns, Name: name})
 	require.NoError(t, err)
 	return res
 }
@@ -196,7 +195,7 @@ func TestAutoPublishReconcile_PackagePendingDefersThenMintsAfterReady(t *testing
 	cs := fakeversioned.NewSimpleClientset(pkg, env, fn)
 	r := newAutopublishReconciler(t, cs, fn)
 
-	res, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ns, Name: "fn"}})
+	res, err := r.Reconcile(t.Context(), reconcile.Request{Namespace: ns, Name: "fn"})
 	require.NoError(t, err)
 	assert.Equal(t, packageNotReadyRequeueInterval, res.RequeueAfter, "must defer via RequeueAfter, not block or error")
 	assert.Empty(t, listVersions(t, cs, ns), "no version while the package is not build-ready")
@@ -308,6 +307,6 @@ func TestAutoPublishReconcile_NotFoundIsNotAnError(t *testing.T) {
 	cs := fakeversioned.NewSimpleClientset()
 	r := newAutopublishReconciler(t, cs)
 
-	_, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "missing"}})
+	_, err := r.Reconcile(t.Context(), reconcile.Request{Namespace: "default", Name: "missing"})
 	assert.NoError(t, err)
 }

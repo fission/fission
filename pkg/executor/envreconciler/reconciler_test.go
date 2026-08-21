@@ -12,7 +12,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,7 +50,7 @@ func crClient(objs ...client.Object) client.Client {
 }
 
 func envWithImage(name, image string) *fv1.Environment {
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: "e1"}}
+	env := &fv1.Environment{Name: name, Namespace: "default", UID: "e1"}
 	env.Spec.Runtime.Image = image
 	return env
 }

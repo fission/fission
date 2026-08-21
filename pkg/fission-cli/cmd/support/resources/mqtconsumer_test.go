@@ -25,11 +25,9 @@ import (
 
 func mqtDeployment(name, namespace string) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: namespace, ResourceVersion: "1",
-			Labels:          map[string]string{"app": name},
-			OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
-		},
+		Name: name, Namespace: namespace, ResourceVersion: "1",
+		Labels:          map[string]string{"app": name},
+		OwnerReferences: []metav1.OwnerReference{mqtOwnerRef()},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}},
 		},
@@ -38,10 +36,8 @@ func mqtDeployment(name, namespace string) *appsv1.Deployment {
 
 func appPod(name, namespace, app string, uid types.UID) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: namespace, UID: uid, ResourceVersion: "1",
-			Labels: map[string]string{"app": app},
-		},
+		Name: name, Namespace: namespace, UID: uid, ResourceVersion: "1",
+		Labels: map[string]string{"app": app},
 	}
 }
 
@@ -50,10 +46,8 @@ func TestMqtConsumerDumperDumpsOnlyOwnedDeployments(t *testing.T) {
 
 	ours := mqtDeployment("my-mqt", "default")
 	theirs := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "someone-elses", Namespace: "default", ResourceVersion: "1",
-			OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "rs"}},
-		},
+		Name: "someone-elses", Namespace: "default", ResourceVersion: "1",
+		OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "rs"}},
 	}
 
 	client := k8sfake.NewClientset(ours, theirs)
@@ -89,7 +83,7 @@ func TestMqtConsumerDumperWritesNothingWithoutKedaTriggers(t *testing.T) {
 	t.Parallel()
 
 	client := k8sfake.NewClientset(&appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "router", Namespace: "fission", ResourceVersion: "1"},
+		Name: "router", Namespace: "fission", ResourceVersion: "1",
 	})
 
 	dir := t.TempDir()
@@ -247,7 +241,7 @@ func TestDeploymentIndexPagesThroughEveryDeployment(t *testing.T) {
 	client.PrependReactor("list", "deployments", func(a clienttesting.Action) (bool, runtime.Object, error) {
 		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
-			return true, &appsv1.DeploymentList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
+			return true, &appsv1.DeploymentList{Continue: "page-2"}, nil
 		}
 		return true, &appsv1.DeploymentList{
 			Items: []appsv1.Deployment{*mqtDeployment("my-mqt", "default")},

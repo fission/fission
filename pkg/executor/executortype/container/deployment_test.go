@@ -36,7 +36,7 @@ func newTestContainer() *Container {
 func newTestContainerFunction() *fv1.Function {
 	grace := int64(30)
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "ctr-fn", Namespace: "default"},
+		Name: "ctr-fn", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			InvokeStrategy: fv1.InvokeStrategy{
 				ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypeContainer, MinScale: 1, MaxScale: 3},

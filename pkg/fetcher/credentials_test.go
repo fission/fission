@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -170,8 +169,8 @@ func TestClientForArchiveUsesSecretRef(t *testing.T) {
 	defer srv.Close()
 
 	kube := k8sfake.NewClientset(&apiv1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: "fn-ns"},
-		Data:       map[string][]byte{"token": []byte("tok")},
+		Name: "creds", Namespace: "fn-ns",
+		Data: map[string][]byte{"token": []byte("tok")},
 	})
 	f := &Fetcher{
 		logger:     logr.Discard(),

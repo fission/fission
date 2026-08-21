@@ -204,8 +204,8 @@ func (m *Mux) Handler() http.Handler {
 		methodNotAllowed: instrument(m.recorder, patternMethodNotAllowed, http.HandlerFunc(methodNotAllowedHandler)),
 	}
 	// Apply middleware so the first-added wraps outermost (runs first).
-	for i := len(m.middleware) - 1; i >= 0; i-- {
-		h = m.middleware[i](h)
+	for _, v := range slices.Backward(m.middleware) {
+		h = v(h)
 	}
 	return h
 }

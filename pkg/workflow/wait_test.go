@@ -55,8 +55,8 @@ func TestWaitStateVirtualTime(t *testing.T) {
 		})
 
 		run := &fv1.WorkflowRun{
-			ObjectMeta: metav1.ObjectMeta{Name: "waiter", Namespace: "default", UID: types.UID("uid-waiter")},
-			Spec:       fv1.WorkflowRunSpec{WorkflowRef: "wf", Input: &apiextensionsv1.JSON{Raw: []byte(`{"n":1}`)}},
+			Name: "waiter", Namespace: "default", UID: types.UID("uid-waiter"),
+			Spec: fv1.WorkflowRunSpec{WorkflowRef: "wf", Input: &apiextensionsv1.JSON{Raw: []byte(`{"n":1}`)}},
 		}
 		fetch := func(context.Context) (*fv1.WorkflowSpec, error) { return waitSpec(), nil }
 

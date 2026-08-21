@@ -33,7 +33,7 @@ const versionSample64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456
 
 func makeValidFunctionVersion() *v1.FunctionVersion {
 	return &v1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v1", Namespace: "default"},
+		Name: "fn-v1", Namespace: "default",
 		Spec: v1.FunctionVersionSpec{
 			FunctionName:       "fn",
 			FunctionUID:        types.UID("fn-uid"),
@@ -176,8 +176,8 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 
 	aliasReferencing := func(field string) *v1.FunctionAlias {
 		a := &v1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "alias-1", Namespace: "default"},
-			Spec:       v1.FunctionAliasSpec{FunctionName: "fn"},
+			Name: "alias-1", Namespace: "default",
+			Spec: v1.FunctionAliasSpec{FunctionName: "fn"},
 		}
 		switch field {
 		case "version":
@@ -220,8 +220,8 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 
 	t.Run("unreferenced allowed", func(t *testing.T) {
 		unrelated := &v1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "alias-2", Namespace: "default"},
-			Spec:       v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v2"},
+			Name: "alias-2", Namespace: "default",
+			Spec: v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v2"},
 		}
 		r := &FunctionVersion{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(unrelated).Build()}
 		if err := r.ValidateDeletion(t.Context(), fv); err != nil {
@@ -251,8 +251,8 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 
 	t.Run("different namespace alias does not block", func(t *testing.T) {
 		other := &v1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "alias-1", Namespace: "other-ns"},
-			Spec:       v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "alias-1", Namespace: "other-ns",
+			Spec: v1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		r := &FunctionVersion{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(other).Build()}
 		if err := r.ValidateDeletion(t.Context(), fv); err != nil {
@@ -277,12 +277,10 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 	t.Run("cascade escape: owning Function terminating, referenced version still deletable", func(t *testing.T) {
 		v := fvWithOwner("fn")
 		fn := &v1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              "fn",
-				Namespace:         "default",
-				DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
-				Finalizers:        []string{"keep-around-for-test"},
-			},
+			Name:              "fn",
+			Namespace:         "default",
+			DeletionTimestamp: &metav1.Time{Time: metav1.Now().Time},
+			Finalizers:        []string{"keep-around-for-test"},
 		}
 		r := &FunctionVersion{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(fn, aliasReferencing("version")).Build()}
 		if err := r.ValidateDeletion(t.Context(), v); err != nil {
@@ -292,7 +290,7 @@ func TestFunctionVersionDeleteGuard(t *testing.T) {
 
 	t.Run("owning Function present and live, referenced version rejected", func(t *testing.T) {
 		v := fvWithOwner("fn")
-		fn := &v1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+		fn := &v1.Function{Name: "fn", Namespace: "default"}
 		r := &FunctionVersion{reader: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(fn, aliasReferencing("version")).Build()}
 		err := r.ValidateDeletion(t.Context(), v)
 		if err == nil {
@@ -318,8 +316,8 @@ func TestFunctionVersionWebhook_MountPathOnInfiniteEnv(t *testing.T) {
 	envWith := func(policy v1.AllowedFunctionsPerContainer) func() *v1.Environment {
 		return func() *v1.Environment {
 			return &v1.Environment{
-				ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
-				Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
+				Name: "env-1", Namespace: "default",
+				Spec: v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
 			}
 		}
 	}

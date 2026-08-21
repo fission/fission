@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -19,7 +18,7 @@ import (
 
 func executorDeploymentWithSecretName(ns, name string) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "executor", Namespace: ns},
+		Name: "executor", Namespace: ns,
 		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{
 				Name: "executor",
@@ -31,8 +30,8 @@ func executorDeploymentWithSecretName(ns, name string) *appsv1.Deployment {
 
 func masterSecret(ns, name, value string) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Data:       map[string][]byte{internalAuthSecretKey: []byte(value)},
+		Name: name, Namespace: ns,
+		Data: map[string][]byte{internalAuthSecretKey: []byte(value)},
 	}
 }
 

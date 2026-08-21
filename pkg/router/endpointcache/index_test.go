@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -23,14 +22,12 @@ import (
 
 func slice(name, fnName, fnNamespace string, port int32, addrs ...string) *discoveryv1.EndpointSlice {
 	es := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: fnNamespace,
-			Labels: map[string]string{
-				fv1.FUNCTION_NAME:      fnName,
-				fv1.FUNCTION_NAMESPACE: fnNamespace,
-				fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
-			},
+		Name:      name,
+		Namespace: fnNamespace,
+		Labels: map[string]string{
+			fv1.FUNCTION_NAME:      fnName,
+			fv1.FUNCTION_NAMESPACE: fnNamespace,
+			fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
 		},
 		Ports: []discoveryv1.EndpointPort{{Port: &port}},
 	}

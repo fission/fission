@@ -71,10 +71,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 		}
 
 		exists, err := fr.ExistsInSpecs(&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      fnName,
-				Namespace: userProvidedNS,
-			},
+			Name:      fnName,
+			Namespace: userProvidedNS,
 		})
 		if err != nil {
 			return err

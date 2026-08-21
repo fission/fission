@@ -23,15 +23,15 @@ import (
 // TestSpecArchive is the Go port of test_specs/test_spec_archive.
 // Mirrors the bash flow:
 //
-//   1. Materialize the env + two Package + two Function spec yamls into
-//      a workdir, alongside a `func/` source tree (deploy.js, source.js,
-//      package.json) that the spec's ArchiveUploadSpec.include `func/*`
-//      refers to.
-//   2. `fission spec apply` from the workdir.
-//   3. The deployarchive function is a deploy archive (no build) — hit it
-//      immediately.
-//   4. The sourcearchive function is a source archive — wait for the
-//      buildermgr to flip its package status to succeeded, then hit it.
+//  1. Materialize the env + two Package + two Function spec yamls into
+//     a workdir, alongside a `func/` source tree (deploy.js, source.js,
+//     package.json) that the spec's ArchiveUploadSpec.include `func/*`
+//     refers to.
+//  2. `fission spec apply` from the workdir.
+//  3. The deployarchive function is a deploy archive (no build) — hit it
+//     immediately.
+//  4. The sourcearchive function is a source archive — wait for the
+//     buildermgr to flip its package status to succeeded, then hit it.
 //
 // MaterializeSpecs rewrites all hardcoded names + the deployment-config
 // UID, so this can run alongside other tests in `default`.
@@ -56,12 +56,12 @@ func TestSpecArchive(t *testing.T) {
 	uid := framework.NewSpecUID(t)
 
 	repls := map[string]string{
-		"dummyfoobarnode":           envName,
-		"deployarchive":             pkgDeploy,
-		"sourcearchive":             pkgSource,
-		"functions-deploy-archive":  archDeploy,
-		"functions-source-archive":  archSource,
-		"name: test-spec-archive":   "name: test-spec-archive-" + ns.ID,
+		"dummyfoobarnode":                      envName,
+		"deployarchive":                        pkgDeploy,
+		"sourcearchive":                        pkgSource,
+		"functions-deploy-archive":             archDeploy,
+		"functions-source-archive":             archSource,
+		"name: test-spec-archive":              "name: test-spec-archive-" + ns.ID,
 		"04b21526-8873-4dc2-b897-e87ed5347670": uid,
 	}
 

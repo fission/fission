@@ -30,8 +30,8 @@ func gatewayTrigger(name string, parentRefs ...fv1.GatewayParentRef) *fv1.HTTPTr
 		rc.Gateway = &fv1.GatewayRouteConfig{ParentRefs: parentRefs}
 	}
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/" + name, Methods: []string{"GET"}, RouteConfig: rc},
+		Name: name, Namespace: "default",
+		Spec: fv1.HTTPTriggerSpec{RelativeURL: "/" + name, Methods: []string{"GET"}, RouteConfig: rc},
 	}
 }
 

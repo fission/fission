@@ -287,7 +287,7 @@ func CheckFunctionReferencesInSpecs(input cli.Input, referrerKind, referrerName 
 	}
 	for _, fn := range fnNames {
 		exists, err := fr.ExistsInSpecs(&fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: fn, Namespace: namespace},
+			Name: fn, Namespace: namespace,
 		})
 		if err != nil {
 			return err

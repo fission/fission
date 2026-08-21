@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -97,7 +96,7 @@ func TestDoSyncUnauthorized(t *testing.T) {
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		Name: "fn", Namespace: "default",
 	}
 	fc := fissionfake.NewSimpleClientset(fn) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
@@ -132,7 +131,7 @@ func TestDoAsyncDispatch(t *testing.T) {
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		Name: "fn", Namespace: "default",
 	}
 	fc := fissionfake.NewSimpleClientset(fn) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
@@ -166,7 +165,7 @@ func TestDoSyncGenericFailure(t *testing.T) {
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+		Name: "fn", Namespace: "default",
 	}
 	fc := fissionfake.NewClientset(fn)
 	kc := k8sfake.NewClientset()
@@ -208,7 +207,7 @@ func TestDoSubPathHandling(t *testing.T) {
 			t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
 			fn := &fv1.Function{
-				ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
+				Name: "fn", Namespace: "default",
 			}
 			fc := fissionfake.NewClientset(fn)
 			cmd.ResetClientsetForTest()
@@ -248,8 +247,8 @@ func TestDoSyncSmallerTestTimeoutGoverns(t *testing.T) {
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
-		Spec:       fv1.FunctionSpec{FunctionTimeout: 60},
+		Name: "fn", Namespace: "default",
+		Spec: fv1.FunctionSpec{FunctionTimeout: 60},
 	}
 	fc := fissionfake.NewClientset(fn)
 	cmd.ResetClientsetForTest()
@@ -313,8 +312,8 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 
 	t.Run("alias targets a different function", func(t *testing.T) {
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-fn-v1"},
 		}
 		fc := fissionfake.NewSimpleClientset(alias) //nolint:staticcheck
 		cmd.ResetClientsetForTest()
@@ -330,8 +329,8 @@ func TestResolveTestRefSuffixAliasPreflight(t *testing.T) {
 
 	t.Run("matching alias resolves to its own name", func(t *testing.T) {
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		fc := fissionfake.NewSimpleClientset(alias) //nolint:staticcheck
 		cmd.ResetClientsetForTest()
@@ -367,8 +366,8 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 
 	t.Run("version targets a different function", func(t *testing.T) {
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "other-fn"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "other-fn"},
 		}
 		fc := fissionfake.NewSimpleClientset(version) //nolint:staticcheck
 		cmd.ResetClientsetForTest()
@@ -384,8 +383,8 @@ func TestResolveTestRefSuffixVersionPreflight(t *testing.T) {
 
 	t.Run("matching version resolves to its own name", func(t *testing.T) {
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "fn"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "fn"},
 		}
 		fc := fissionfake.NewSimpleClientset(version) //nolint:staticcheck
 		cmd.ResetClientsetForTest()
@@ -434,10 +433,10 @@ func TestDoAliasSuffixReachesRequestURL(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 	}
 	fc := fissionfake.NewSimpleClientset(fn, alias) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
@@ -471,10 +470,10 @@ func TestDoSyncSuffixedRouteNotFound(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 	}
 	fc := fissionfake.NewSimpleClientset(fn, alias) //nolint:staticcheck
 	cmd.ResetClientsetForTest()
@@ -507,10 +506,10 @@ func TestDoAsyncSuffixedRouteNotFound(t *testing.T) {
 	defer srv.Close()
 	t.Setenv("FISSION_ROUTER_INTERNAL_URL", srv.URL)
 
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "fn"},
+		Name: "fn-v3", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "fn"},
 	}
 	fc := fissionfake.NewSimpleClientset(fn, version) //nolint:staticcheck
 	cmd.ResetClientsetForTest()

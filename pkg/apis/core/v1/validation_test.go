@@ -317,7 +317,7 @@ func TestFunctionVersionSpecValidate(t *testing.T) {
 func TestFunctionVersionValidate(t *testing.T) {
 	validVersion := func() FunctionVersion {
 		return FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v1", Namespace: "default"},
+			Name: "fn-v1", Namespace: "default",
 			Spec: FunctionVersionSpec{
 				FunctionName:       "fn",
 				FunctionUID:        types.UID("fn-uid"),
@@ -486,8 +486,8 @@ func TestFunctionAliasSpecValidate(t *testing.T) {
 func TestFunctionAliasValidate(t *testing.T) {
 	t.Run("valid alias accepted", func(t *testing.T) {
 		fa := FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-live", Namespace: "default"},
-			Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "fn-live", Namespace: "default",
+			Spec: FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		if err := fa.Validate(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -496,8 +496,8 @@ func TestFunctionAliasValidate(t *testing.T) {
 
 	t.Run("invalid metadata name rejected", func(t *testing.T) {
 		fa := FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "Not_Valid", Namespace: "default"},
-			Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "Not_Valid", Namespace: "default",
+			Spec: FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		if err := fa.Validate(); err == nil {
 			t.Fatal("expected error, got nil")
@@ -506,8 +506,8 @@ func TestFunctionAliasValidate(t *testing.T) {
 
 	t.Run("invalid spec rejected", func(t *testing.T) {
 		fa := FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-live", Namespace: "default"},
-			Spec:       FunctionAliasSpec{FunctionName: "fn"},
+			Name: "fn-live", Namespace: "default",
+			Spec: FunctionAliasSpec{FunctionName: "fn"},
 		}
 		if err := fa.Validate(); err == nil {
 			t.Fatal("expected error, got nil")
@@ -522,8 +522,8 @@ func TestFunctionAliasValidate(t *testing.T) {
 	// well-formed object can never hit that ambiguity.
 	t.Run("alias name colliding with own function's version scheme rejected", func(t *testing.T) {
 		fa := FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		err := fa.Validate()
 		if err == nil {
@@ -538,8 +538,8 @@ func TestFunctionAliasValidate(t *testing.T) {
 		// "fn-v3" only collides for function "fn"; here the alias belongs to
 		// "other", so the exact same name is fine.
 		fa := FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn-v3", Namespace: "default"},
-			Spec:       FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
+			Name: "fn-v3", Namespace: "default",
+			Spec: FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
 		}
 		if err := fa.Validate(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -549,8 +549,8 @@ func TestFunctionAliasValidate(t *testing.T) {
 	t.Run("alias name that merely looks similar but isn't the scheme is allowed", func(t *testing.T) {
 		for _, name := range []string{"fn-version1", "fn-v", "fn-vabc", "prod", "fn-prod"} {
 			fa := FunctionAlias{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-				Spec:       FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+				Name: name, Namespace: "default",
+				Spec: FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 			}
 			if err := fa.Validate(); err != nil {
 				t.Errorf("name %q: unexpected error: %v", name, err)

@@ -24,15 +24,13 @@ import (
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
-func rbIntPtr(i int) *int { return &i }
-
 // aliasForRollback is name-pinned at hello-v3, with a two-entry History
 // (most recent last, per the FunctionAliasStatus.History contract) recording
 // hello-v1 then hello-v2 as prior targets — so a bare `fn rollback` (no
 // --to) lands on hello-v2.
 func aliasForRollback() *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Name: "prod", Namespace: "default",
 		Spec: fv1.FunctionAliasSpec{
 			FunctionName: "hello",
 			Version:      "hello-v3",
@@ -135,7 +133,7 @@ func TestRollbackSpecManagedWarnsAndErrorsWithoutDetach(t *testing.T) {
 // contract -- carrying the env-observation fields warnEnvDrift reads.
 func rollbackTargetVersion(envObservedGen int64) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v2", Namespace: "default"},
+		Name: "hello-v2", Namespace: "default",
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:          "hello",
 			Sequence:              2,
@@ -147,7 +145,7 @@ func rollbackTargetVersion(envObservedGen int64) *fv1.FunctionVersion {
 
 func rollbackEnvironment(generation int64) *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: generation},
+		Name: "nodejs", Namespace: "default", Generation: generation,
 	}
 }
 
@@ -214,7 +212,7 @@ func TestRollbackDetachStripsAnnotationsAndRepoints(t *testing.T) {
 
 func TestRollbackWeightedAliasClearsWeightAndSecondary(t *testing.T) {
 	alias := aliasForRollback()
-	alias.Spec.Weight = rbIntPtr(70)
+	alias.Spec.Weight = new(70)
 	alias.Spec.SecondaryVersion = "hello-v3-canary"
 	fc := setRollbackClient(alias)
 

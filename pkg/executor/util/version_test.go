@@ -11,7 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"pgregory.net/rapid"
 
@@ -23,11 +22,9 @@ import (
 // Kubernetes UID).
 func fnForObjName(name, namespace string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-			UID:       "83c82da2-81e9-4ebd-867e-f383e65e603f",
-		},
+		Name:      name,
+		Namespace: namespace,
+		UID:       "83c82da2-81e9-4ebd-867e-f383e65e603f",
 	}
 }
 
@@ -123,11 +120,9 @@ func TestVersionedObjNameLengthBound(t *testing.T) {
 				seq := rapid.Int64Range(1, math.MaxInt64).Draw(rt, "seq")
 
 				fn := &fv1.Function{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      name,
-						Namespace: namespace,
-						UID:       types.UID(uid),
-					},
+					Name:      name,
+					Namespace: namespace,
+					UID:       types.UID(uid),
 				}
 				unversioned := VersionedObjName(prefix, fn)
 				require.LessOrEqual(rt, len(unversioned), 63, "unversioned name must fit the 63-char limit")
@@ -251,10 +246,7 @@ func TestTruncateForSuffix(t *testing.T) {
 		suffix := rapid.StringN(0, 20, -1).Draw(rt, "suffix")
 
 		got := TruncateForSuffix(base, budget, suffix)
-		wantMax := budget - len(suffix)
-		if wantMax < 0 {
-			wantMax = 0
-		}
+		wantMax := max(budget-len(suffix), 0)
 		require.LessOrEqual(rt, len(got), wantMax, "result must fit the shrunken budget")
 		require.LessOrEqual(rt, len(got), len(base), "result must never be longer than the input")
 	})

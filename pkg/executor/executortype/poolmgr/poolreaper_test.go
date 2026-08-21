@@ -56,19 +56,18 @@ func newReaperGpm(t *testing.T, crObjs ...client.Object) *GenericPoolManager {
 // deployment in the fake clientset, so destroy() has something to delete.
 func addTestPool(t *testing.T, gpm *GenericPoolManager, envName, imageHash string, idleFor time.Duration) string {
 	t.Helper()
-	env := &fv1.Environment{ObjectMeta: metav1.ObjectMeta{
-		Name: envName, Namespace: metav1.NamespaceDefault, UID: types.UID("env-uid-" + envName),
-	}}
+	env := &fv1.Environment{
+		Name: envName, Namespace: metav1.NamespaceDefault, UID: types.UID("env-uid-" + envName)}
 	deployName := fmt.Sprintf("pool-%s-%s", envName, imageHash)
 	_, err := gpm.kubernetesClient.AppsV1().Deployments(metav1.NamespaceDefault).Create(t.Context(),
-		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deployName, Namespace: metav1.NamespaceDefault}},
+		&appsv1.Deployment{Name: deployName, Namespace: metav1.NamespaceDefault},
 		metav1.CreateOptions{})
 	require.NoError(t, err)
 	pool := &GenericPool{
 		logger:           gpm.logger,
 		env:              env,
 		fnNamespace:      metav1.NamespaceDefault,
-		deployment:       &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: deployName, Namespace: metav1.NamespaceDefault}},
+		deployment:       &appsv1.Deployment{Name: deployName, Namespace: metav1.NamespaceDefault},
 		kubernetesClient: gpm.kubernetesClient,
 		readyPodQueue:    workqueue.NewTypedDelayingQueueWithConfig(workqueue.TypedDelayingQueueConfig[string]{Name: "test"}),
 		ociImageHash:     imageHash,
@@ -83,13 +82,11 @@ func addTestPool(t *testing.T, gpm *GenericPoolManager, envName, imageHash strin
 
 func poolPod(name, imageHash, managed string, phase corev1.PodPhase) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: metav1.NamespaceDefault,
-			Labels: map[string]string{
-				fv1.POOL_OCI_IMAGE_HASH: imageHash,
-				"managed":               managed,
-			},
+		Name:      name,
+		Namespace: metav1.NamespaceDefault,
+		Labels: map[string]string{
+			fv1.POOL_OCI_IMAGE_HASH: imageHash,
+			"managed":               managed,
 		},
 		Status: corev1.PodStatus{Phase: phase},
 	}

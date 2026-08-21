@@ -15,7 +15,6 @@ import (
 	"github.com/bep/debounce"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -67,7 +66,7 @@ func TestPublicMuxDoesNotRegisterInternalFunctionRoute(t *testing.T) {
 	// /fission-function/<ns>/<name> form (utils.UrlForFunction folds
 	// the default namespace into /fission-function/<name>).
 	fn := fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"},
+		Name: "example", Namespace: "myns",
 	}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 
@@ -104,7 +103,7 @@ func TestPublicMuxDoesNotRegisterInternalFunctionRoute(t *testing.T) {
 // clean paths via utils.UrlForFunction. Non-canonical forms therefore simply
 // fail to match (404) rather than being silently rewritten onto a function.
 func TestInternalListenerLiteralPathMatching(t *testing.T) {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	fn := fv1.Function{Name: "example", Namespace: "myns"}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 	_, internalMux, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)
@@ -241,7 +240,7 @@ func TestInternalListenerRejectsUnsignedRequests(t *testing.T) {
 	// /fission-function/<ns>/<name> form (utils.UrlForFunction folds
 	// the default namespace into /fission-function/<name>).
 	fn := fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"},
+		Name: "example", Namespace: "myns",
 	}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 
@@ -392,7 +391,7 @@ func TestToAllowlistConfig(t *testing.T) {
 // must 403 before the HMAC verifier even reads the body.
 func TestInternalListener_RejectsCrossOriginPreflight(t *testing.T) {
 	fn := fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"},
+		Name: "example", Namespace: "myns",
 	}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 	_, internalMux, err := ts.buildMuxes(t.Context(), nil)
@@ -425,7 +424,7 @@ func TestInternalListener_RejectsCrossOriginPreflight(t *testing.T) {
 // version-pin fallback keys on — while non-function route misses and the
 // public listener's 404s stay unmarked.
 func TestInternalListenerRouteMissMarker(t *testing.T) {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	fn := fv1.Function{Name: "example", Namespace: "myns"}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 	publicMux, internalMux, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)
@@ -475,7 +474,7 @@ func TestInternalListenerRouteMissMarker(t *testing.T) {
 // matching — it must NOT become a marked 404 (the marker may only ever ride
 // the router's genuine not-found response to an authenticated caller).
 func TestInternalListenerRouteMissMarkerBehindHMAC(t *testing.T) {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "myns"}}
+	fn := fv1.Function{Name: "example", Namespace: "myns"}
 	ts := newTestTriggerSet(t, []fv1.Function{fn}, nil)
 	_, internalMux, err := ts.buildMuxes(t.Context(), nil)
 	require.NoError(t, err)

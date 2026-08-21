@@ -27,10 +27,8 @@ import (
 
 func fissionPod(name string, uid types.UID) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: "fission", UID: uid, ResourceVersion: "1",
-			Labels: map[string]string{"svc": "router"},
-		},
+		Name: name, Namespace: "fission", UID: uid, ResourceVersion: "1",
+		Labels: map[string]string{"svc": "router"},
 	}
 }
 
@@ -38,7 +36,7 @@ func fissionPod(name string, uid types.UID) *corev1.Pod {
 // writes them — kubelet's Pulled, Unhealthy, OOMKilled and friends.
 func podEvent(name string, uid types.UID, reason string, at time.Time) *corev1.Event {
 	return &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: name + "." + reason, Namespace: "fission"},
+		Name: name + "." + reason, Namespace: "fission",
 		InvolvedObject: corev1.ObjectReference{
 			Kind: "Pod", Name: name, Namespace: "fission", UID: uid,
 		},
@@ -67,10 +65,8 @@ func TestPodEventDumperWritesEventsForMatchingPods(t *testing.T) {
 
 	// A pod that does not match the selector, with events of its own.
 	other := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "unrelated", Namespace: "default", UID: "uid-other", ResourceVersion: "1",
-			Labels: map[string]string{"app": "someone-else"},
-		},
+		Name: "unrelated", Namespace: "default", UID: "uid-other", ResourceVersion: "1",
+		Labels: map[string]string{"app": "someone-else"},
 	}
 
 	// Reasons are named so that alphabetical order is the exact reverse of
@@ -130,7 +126,7 @@ func TestPodEventDumperIgnoresNonPodEvents(t *testing.T) {
 	// A Deployment event that happens to carry the pod's UID would be a bug to
 	// include; the involvedObject Kind is what decides.
 	deployEvent := &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: "deploy-evt", Namespace: "fission"},
+		Name: "deploy-evt", Namespace: "fission",
 		InvolvedObject: corev1.ObjectReference{
 			Kind: "Deployment", Name: "router", Namespace: "fission", UID: "uid-router",
 		},
@@ -275,7 +271,7 @@ func TestPodEventIndexPagesThroughEveryEvent(t *testing.T) {
 		switch token {
 		case "":
 			return true, &corev1.EventList{
-				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Continue: "page-2",
 				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Alpha", base)},
 			}, nil
 		case "page-2":
@@ -312,7 +308,7 @@ func TestPodEventIndexStopsOnARepeatedContinueToken(t *testing.T) {
 	client.PrependReactor("list", "events", func(clienttesting.Action) (bool, runtime.Object, error) {
 		calls.Add(1)
 		return true, &corev1.EventList{
-			ListMeta: metav1.ListMeta{Continue: "stuck"},
+			Continue: "stuck",
 			Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Looping", time.Now())},
 		}, nil
 	})
@@ -344,7 +340,7 @@ func TestPodEventIndexKeepsPagesCollectedBeforeAnExpiry(t *testing.T) {
 		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &corev1.EventList{
-				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Continue: "page-2",
 				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Kept", base)},
 			}, nil
 		}
@@ -381,7 +377,7 @@ func TestPodEventIndexKeepsPagesAfterANonExpiryFailure(t *testing.T) {
 		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
 			return true, &corev1.EventList{
-				ListMeta: metav1.ListMeta{Continue: "page-2"},
+				Continue: "page-2",
 				Items:    []corev1.Event{*podEvent("router-abc", "uid-router", "Kept", base)},
 			}, nil
 		}
@@ -432,7 +428,7 @@ func TestPodEventIndexKeepsWalkingPastAnEmptyPage(t *testing.T) {
 		// SAFETY: a "list" reactor receives a ListActionImpl.
 		switch a.(clienttesting.ListActionImpl).GetListOptions().Continue {
 		case "":
-			return true, &corev1.EventList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
+			return true, &corev1.EventList{Continue: "page-2"}, nil
 		case "page-2":
 			return true, &corev1.EventList{
 				Items: []corev1.Event{*podEvent("router-abc", "uid-router", "AfterTheGap", base)},

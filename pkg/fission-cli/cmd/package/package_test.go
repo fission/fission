@@ -100,7 +100,7 @@ func TestCreatePackageOCIGeneratedName(t *testing.T) {
 // instead of crashing.
 func TestGetDeployOCIRefusesCleanly(t *testing.T) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "oci-pkg", Namespace: "default"},
+		Name: "oci-pkg", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Deployment: fv1.Archive{
 				Type: fv1.ArchiveTypeOCI,
@@ -129,7 +129,7 @@ func TestGetDeployOCIRefusesCleanly(t *testing.T) {
 // package whose status is failed/pending/running.
 func TestUpdatePackageOCI(t *testing.T) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "conv-pkg", Namespace: "default"},
+		Name: "conv-pkg", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 			Source:      fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/src.zip"},
@@ -165,8 +165,8 @@ func TestUpdatePackageOCI(t *testing.T) {
 // TestUpdatePackageOCIMutualExclusion pins the flag guard.
 func TestUpdatePackageOCIMutualExclusion(t *testing.T) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "conv-pkg", Namespace: "default"},
-		Spec:       fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"}},
+		Name: "conv-pkg", Namespace: "default",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"}},
 	}
 	fc := fissionfake.NewSimpleClientset(pkg) //nolint:staticcheck
 	client := cmd.Client{FissionClientSet: fc, Namespace: "default"}
@@ -330,7 +330,7 @@ func TestCreatePackageSrcOCIWithDeployIsPending(t *testing.T) {
 // content hash, so nothing else would).
 func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "reb-pkg", Namespace: "default"},
+		Name: "reb-pkg", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "python", Namespace: "default"},
 			Source: fv1.Archive{
@@ -361,7 +361,7 @@ func TestUpdatePackageSrcSecretRequeuesBuild(t *testing.T) {
 // url package without re-specifying the archive.
 func TestUpdatePackageDeploySecretRotate(t *testing.T) {
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "rot-pkg", Namespace: "default"},
+		Name: "rot-pkg", Namespace: "default",
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
 			Deployment: fv1.Archive{

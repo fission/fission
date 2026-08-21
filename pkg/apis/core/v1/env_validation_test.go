@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestIsReservedEnvName(t *testing.T) {
@@ -34,7 +33,7 @@ func TestValidateFunctionEnv(t *testing.T) {
 
 	secretRef := func(name, key string) *apiv1.EnvVarSource {
 		return &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
-			LocalObjectReference: apiv1.LocalObjectReference{Name: name}, Key: key}}
+			Name: name, Key: key}}
 	}
 
 	cases := []struct {
@@ -65,11 +64,11 @@ func TestValidateFunctionEnv(t *testing.T) {
 		{name: "empty valueFrom rejected", env: []apiv1.EnvVar{
 			{Name: "A", ValueFrom: &apiv1.EnvVarSource{}}}, wantErr: true},
 		{name: "envFrom secret accepted", envFrom: []apiv1.EnvFromSource{
-			{SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s"}}}}},
+			{SecretRef: &apiv1.SecretEnvSource{Name: "s"}}}},
 		{name: "envFrom with neither ref rejected", envFrom: []apiv1.EnvFromSource{{}}, wantErr: true},
 		{name: "envFrom with both refs rejected", envFrom: []apiv1.EnvFromSource{{
-			SecretRef:    &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "s"}},
-			ConfigMapRef: &apiv1.ConfigMapEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "c"}},
+			SecretRef:    &apiv1.SecretEnvSource{Name: "s"},
+			ConfigMapRef: &apiv1.ConfigMapEnvSource{Name: "c"},
 		}}, wantErr: true},
 	}
 
@@ -112,8 +111,8 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 	t.Run("rules are enforced on the admission path the webhook uses", func(t *testing.T) {
 		t.Parallel()
 		fn := Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "f", Namespace: "default"},
-			Spec:       newdeploySpec(),
+			Name: "f", Namespace: "default",
+			Spec: newdeploySpec(),
 		}
 		fn.Spec.Env = []apiv1.EnvVar{{Name: "FISSION_STATE_URL", Value: "http://evil"}}
 		require.Error(t, fn.ValidateForAdmission(), "reserved name must be rejected at admission")
@@ -144,7 +143,7 @@ func TestFunctionSpecEnvPhaseGates(t *testing.T) {
 		s.InvokeStrategy.ExecutionStrategy.ExecutorType = ExecutorTypeContainer
 		s.PodSpec = &apiv1.PodSpec{Containers: []apiv1.Container{{Name: "c", Image: "img"}}}
 		s.EnvFrom = []apiv1.EnvFromSource{{
-			SecretRef: &apiv1.SecretEnvSource{LocalObjectReference: apiv1.LocalObjectReference{Name: "creds"}}}}
+			SecretRef: &apiv1.SecretEnvSource{Name: "creds"}}}
 		require.NoError(t, s.validateEnvForAdmission())
 
 		// The executor skips the legacy synthesis when EnvFrom is set, so

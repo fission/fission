@@ -36,10 +36,8 @@ func ScaleDeployment(ctx context.Context, kubeClient kubernetes.Interface, logge
 		"namespace", ns,
 		"replicas", replicas)
 	_, err := kubeClient.AppsV1().Deployments(ns).UpdateScale(ctx, name, &autoscalingv1.Scale{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-		},
+		Name:      name,
+		Namespace: ns,
 		Spec: autoscalingv1.ScaleSpec{
 			Replicas: replicas,
 		},

@@ -10,22 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
 func routerPod(ns, name string) *v1.Pod {
-	return &v1.Pod{ObjectMeta: metav1.ObjectMeta{
-		Name: name, Namespace: ns, Labels: map[string]string{"application": "fission-router"},
-	}}
+	return &v1.Pod{
+		Name: name, Namespace: ns, Labels: map[string]string{"application": "fission-router"}}
 }
 
 func routerSvc(ns string, ports ...v1.ServicePort) *v1.Service {
 	return &v1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "router", Namespace: ns, Labels: map[string]string{"application": "fission-router"},
-		},
+		Name: "router", Namespace: ns, Labels: map[string]string{"application": "fission-router"},
 		Spec: v1.ServiceSpec{Ports: ports},
 	}
 }

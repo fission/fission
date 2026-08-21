@@ -240,7 +240,7 @@ func TestGetSpecIgnoreParser(t *testing.T) {
 
 func TestCheckFunctionExistence(t *testing.T) {
 	t.Parallel()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "exists", Namespace: "default"}}
+	fn := &fv1.Function{Name: "exists", Namespace: "default"}
 	client := cmd.Client{FissionClientSet: fissionfake.NewClientset(fn)}
 
 	require.NoError(t, CheckFunctionExistence(t.Context(), client, []string{"exists"}, "default"))
@@ -253,23 +253,23 @@ func TestCheckFunctionExistence(t *testing.T) {
 func TestCheckHTTPTriggerDuplicates(t *testing.T) {
 	t.Parallel()
 	existing := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "default"},
-		Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/foo", Method: http.MethodGet},
+		Name: "t1", Namespace: "default",
+		Spec: fv1.HTTPTriggerSpec{RelativeURL: "/foo", Method: http.MethodGet},
 	}
 	client := cmd.Client{FissionClientSet: fissionfake.NewClientset(existing)}
 
 	t.Run("same host url method is a duplicate", func(t *testing.T) {
 		dup := &fv1.HTTPTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: "t2", Namespace: "default"},
-			Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/foo", Method: http.MethodGet},
+			Name: "t2", Namespace: "default",
+			Spec: fv1.HTTPTriggerSpec{RelativeURL: "/foo", Method: http.MethodGet},
 		}
 		require.Error(t, CheckHTTPTriggerDuplicates(t.Context(), client, dup))
 	})
 
 	t.Run("different url is not a duplicate", func(t *testing.T) {
 		ok := &fv1.HTTPTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: "t3", Namespace: "default"},
-			Spec:       fv1.HTTPTriggerSpec{RelativeURL: "/bar", Method: http.MethodGet},
+			Name: "t3", Namespace: "default",
+			Spec: fv1.HTTPTriggerSpec{RelativeURL: "/bar", Method: http.MethodGet},
 		}
 		require.NoError(t, CheckHTTPTriggerDuplicates(t.Context(), client, ok))
 	})
@@ -281,8 +281,8 @@ func TestCheckHTTPTriggerDuplicates(t *testing.T) {
 
 func TestSecretAndConfigMapExists(t *testing.T) {
 	t.Parallel()
-	secret := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "s", Namespace: "default"}}
-	cm := &v1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "default"}}
+	secret := &v1.Secret{Name: "s", Namespace: "default"}
+	cm := &v1.ConfigMap{Name: "c", Namespace: "default"}
 	kc := k8sfake.NewClientset(secret, cm)
 
 	require.NoError(t, SecretExists(t.Context(), &metav1.ObjectMeta{Name: "s", Namespace: "default"}, kc))
@@ -297,7 +297,7 @@ func TestGetSvcName(t *testing.T) {
 
 	t.Run("single matching service", func(t *testing.T) {
 		t.Parallel()
-		svc := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "router", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}}
+		svc := &v1.Service{Name: "router", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}
 		kc := k8sfake.NewClientset(svc)
 		name, err := GetSvcName(t.Context(), kc, "fission-router")
 		require.NoError(t, err)
@@ -313,8 +313,8 @@ func TestGetSvcName(t *testing.T) {
 
 	t.Run("multiple matching services error", func(t *testing.T) {
 		t.Parallel()
-		s1 := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "r1", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}}
-		s2 := &v1.Service{ObjectMeta: metav1.ObjectMeta{Name: "r2", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}}
+		s1 := &v1.Service{Name: "r1", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}
+		s2 := &v1.Service{Name: "r2", Namespace: "fission", Labels: map[string]string{"application": "fission-router"}}
 		kc := k8sfake.NewClientset(s1, s2)
 		_, err := GetSvcName(t.Context(), kc, "fission-router")
 		require.Error(t, err)
@@ -400,8 +400,8 @@ func TestFunctionPodLogs(t *testing.T) {
 	t.Run("no pods for function errors", func(t *testing.T) {
 		t.Parallel()
 		fn := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "uid-1"},
-			Spec:       fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"}},
+			Name: "fn", Namespace: "default", UID: "uid-1",
+			Spec: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"}},
 		}
 		client := cmd.Client{
 			FissionClientSet: fissionfake.NewClientset(fn),

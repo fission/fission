@@ -12,7 +12,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,8 +25,8 @@ import (
 
 func stateFn(name, ns string, sc *fv1.StateConfig) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       fv1.FunctionSpec{State: sc},
+		Name: name, Namespace: ns,
+		Spec: fv1.FunctionSpec{State: sc},
 	}
 }
 
@@ -51,7 +50,7 @@ func newTestReconciler(t *testing.T, objs ...client.Object) (*functionStateRecon
 
 func reconcile(t *testing.T, r *functionStateReconciler, name, ns string) {
 	t.Helper()
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: ns}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: name, Namespace: ns})
 	require.NoError(t, err)
 }
 
@@ -170,7 +169,7 @@ func TestReconcilerPurgeFailureKeepsFinalizer(t *testing.T) {
 	r.kv = erroringKV{KVStore: kv, listErr: errors.New("statestore unavailable")}
 
 	require.NoError(t, c.Delete(t.Context(), fn))
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "f1", Namespace: "ns"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "f1", Namespace: "ns"})
 	require.Error(t, err, "purge failure must surface so the delete retries")
 
 	got := &fv1.Function{}

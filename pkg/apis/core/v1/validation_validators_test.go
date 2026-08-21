@@ -457,12 +457,12 @@ func TestKubernetesWatchTriggerSpecValidate(t *testing.T) {
 func TestTimeTriggerSpecValidate(t *testing.T) {
 	t.Parallel()
 	require.NoError(t, TimeTriggerSpec{
-		Cron:              "0 * * * *",
-		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
+		Cron: "0 * * * *",
+		Type: FunctionReferenceTypeFunctionName, Name: "hello",
 	}.Validate())
 	require.Error(t, TimeTriggerSpec{
-		Cron:              "every-other-tuesday",
-		FunctionReference: FunctionReference{Type: FunctionReferenceTypeFunctionName, Name: "hello"},
+		Cron: "every-other-tuesday",
+		Type: FunctionReferenceTypeFunctionName, Name: "hello",
 	}.Validate())
 
 	// RFC-0025: TimeTriggerSpec has no Alias field of its own — the embedded
@@ -472,15 +472,11 @@ func TestTimeTriggerSpecValidate(t *testing.T) {
 	// TimeTriggerSpec.Validate via spec.FunctionReference.Validate().
 	require.NoError(t, TimeTriggerSpec{
 		Cron: "0 * * * *",
-		FunctionReference: FunctionReference{
-			Type: FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
-		},
+		Type: FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod",
 	}.Validate(), "valid alias on the embedded FunctionReference accepted")
 	require.Error(t, TimeTriggerSpec{
 		Cron: "0 * * * *",
-		FunctionReference: FunctionReference{
-			Type: FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod", Version: "hello-v1",
-		},
+		Type: FunctionReferenceTypeFunctionName, Name: "hello", Alias: "prod", Version: "hello-v1",
 	}.Validate(), "alias/version XOR must propagate through TimeTriggerSpec.Validate")
 }
 
@@ -515,7 +511,7 @@ func TestCRDValidate(t *testing.T) {
 		f.Spec.InvokeStrategy = InvokeStrategy{StrategyType: StrategyTypeExecution, ExecutionStrategy: ExecutionStrategy{ExecutorType: ExecutorTypePoolmgr}}
 		require.NoError(t, f.Validate())
 
-		bad := &Function{ObjectMeta: metav1.ObjectMeta{Name: "Bad_Name"}}
+		bad := &Function{Name: "Bad_Name"}
 		require.Error(t, bad.Validate())
 	})
 

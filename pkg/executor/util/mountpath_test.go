@@ -10,15 +10,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func fnWith(secrets []fv1.SecretReference, cms []fv1.ConfigMapReference) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"},
-		Spec:       fv1.FunctionSpec{Secrets: secrets, ConfigMaps: cms},
+		Name: "fn", Namespace: "default",
+		Spec: fv1.FunctionSpec{Secrets: secrets, ConfigMaps: cms},
 	}
 }
 

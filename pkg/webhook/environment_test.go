@@ -9,17 +9,14 @@ import (
 	"testing"
 
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func makeValidEnvironment() *v1.Environment {
 	return &v1.Environment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "py",
-			Namespace: "default",
-		},
+		Name:      "py",
+		Namespace: "default",
 		Spec: v1.EnvironmentSpec{
 			Version: 2,
 			Runtime: v1.Runtime{
@@ -58,10 +55,8 @@ func TestEnvironmentWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
 			mutate: func(e *v1.Environment) {
 				e.Spec.Runtime.PodSpec = &apiv1.PodSpec{
 					Volumes: []apiv1.Volume{{
-						Name: "host-root",
-						VolumeSource: apiv1.VolumeSource{
-							HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-						},
+						Name:     "host-root",
+						HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
 					}},
 				}
 			},
@@ -178,10 +173,8 @@ func TestEnvironmentWebhook_Validate_AcceptsBenignPodSpec(t *testing.T) {
 		Tolerations:  []apiv1.Toleration{{Key: "dedicated", Operator: apiv1.TolerationOpEqual, Value: "fn"}},
 		Volumes: []apiv1.Volume{{
 			Name: "cm",
-			VolumeSource: apiv1.VolumeSource{
-				ConfigMap: &apiv1.ConfigMapVolumeSource{
-					LocalObjectReference: apiv1.LocalObjectReference{Name: "my-cm"},
-				},
+			ConfigMap: &apiv1.ConfigMapVolumeSource{
+				Name: "my-cm",
 			},
 		}},
 	}

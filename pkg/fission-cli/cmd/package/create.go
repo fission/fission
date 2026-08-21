@@ -93,10 +93,8 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 			return fmt.Errorf("error reading spec in '%v': %w", specDir, err)
 		}
 		exists, err := fr.ExistsInSpecs(&fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      envName,
-				Namespace: userProvidedNS,
-			},
+			Name:      envName,
+			Namespace: userProvidedNS,
 		})
 		if err != nil {
 			return err
@@ -305,11 +303,9 @@ func CreatePackage(input cli.Input, client cmd.Client, pkgName string, pkgNamesp
 	}
 
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pkgName,
-			Namespace: userProvidedNS,
-		},
-		Spec: pkgSpec,
+		Name:      pkgName,
+		Namespace: userProvidedNS,
+		Spec:      pkgSpec,
 		Status: fv1.PackageStatus{
 			BuildStatus:         pkgStatus,
 			LastUpdateTimestamp: metav1.Time{Time: time.Now().UTC()},

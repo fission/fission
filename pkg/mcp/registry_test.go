@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -139,8 +138,8 @@ func TestToolEntryFromFunction(t *testing.T) {
 
 	mkFn := func(tc *fv1.ToolConfig) *fv1.Function {
 		return &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{Name: "myfn", Namespace: "default"},
-			Spec:       fv1.FunctionSpec{Tool: tc},
+			Name: "myfn", Namespace: "default",
+			Spec: fv1.FunctionSpec{Tool: tc},
 		}
 	}
 

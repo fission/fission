@@ -45,14 +45,14 @@ func newCreateFlagSet(name, trigger, newFn, oldFn string) dummy.Cli {
 }
 
 func weightedTrigger(name string, weights map[string]int) *fv1.HTTPTrigger {
-	t := &fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	t := &fv1.HTTPTrigger{Name: name, Namespace: "default"}
 	t.Spec.FunctionReference.Type = fv1.FunctionReferenceTypeFunctionWeights
 	t.Spec.FunctionReference.FunctionWeights = weights
 	return t
 }
 
 func aliasTrigger(name, alias string) *fv1.HTTPTrigger {
-	t := &fv1.HTTPTrigger{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"}}
+	t := &fv1.HTTPTrigger{Name: name, Namespace: "default"}
 	t.Spec.FunctionReference.Type = fv1.FunctionReferenceTypeFunctionName
 	t.Spec.FunctionReference.Alias = alias
 	return t
@@ -60,16 +60,16 @@ func aliasTrigger(name, alias string) *fv1.HTTPTrigger {
 
 func newFunctionVersion(name, fnName string, seq int64) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: fnName, Sequence: seq},
+		Name: name, Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: fnName, Sequence: seq},
 	}
 }
 
 func TestCanaryCreateFunctionWeightsMode(t *testing.T) {
 	trigger := weightedTrigger("route", map[string]int{"new": 0, "old": 100})
 	fc := setCreateClient(trigger,
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "new", Namespace: "default"}},
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "old", Namespace: "default"}},
+		&fv1.Function{Name: "new", Namespace: "default"},
+		&fv1.Function{Name: "old", Namespace: "default"},
 	)
 
 	in := newCreateFlagSet("canary", "route", "new", "old")
@@ -85,8 +85,8 @@ func TestCanaryCreateFunctionWeightsModeMissingWeightEntryErrors(t *testing.T) {
 	// "new" is not in the trigger's FunctionWeights map.
 	trigger := weightedTrigger("route", map[string]int{"old": 100})
 	setCreateClient(trigger,
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "new", Namespace: "default"}},
-		&fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "old", Namespace: "default"}},
+		&fv1.Function{Name: "new", Namespace: "default"},
+		&fv1.Function{Name: "old", Namespace: "default"},
 	)
 
 	in := newCreateFlagSet("canary", "route", "new", "old")
@@ -96,8 +96,8 @@ func TestCanaryCreateFunctionWeightsModeMissingWeightEntryErrors(t *testing.T) {
 func TestCanaryCreateAliasMode(t *testing.T) {
 	trigger := aliasTrigger("route", "prod")
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
 	}
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)
 	newVer := newFunctionVersion("orders-v2", "orders", 2)
@@ -115,8 +115,8 @@ func TestCanaryCreateAliasMode(t *testing.T) {
 func TestCanaryCreateAliasModeNotPointingAtOldFuncErrors(t *testing.T) {
 	trigger := aliasTrigger("route", "prod")
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v0"}, // not --oldfn
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v0"}, // not --oldfn
 	}
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)
 	newVer := newFunctionVersion("orders-v2", "orders", 2)
@@ -142,8 +142,8 @@ func TestCanaryCreateAliasModeMissingAliasErrors(t *testing.T) {
 func TestCanaryCreateAliasModeMissingVersionErrors(t *testing.T) {
 	trigger := aliasTrigger("route", "prod")
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
 	}
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)
 	// "orders-v2" not seeded.
@@ -156,8 +156,8 @@ func TestCanaryCreateAliasModeMissingVersionErrors(t *testing.T) {
 func TestCanaryCreateAliasModeVersionBelongsToDifferentFunctionErrors(t *testing.T) {
 	trigger := aliasTrigger("route", "prod")
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
 	}
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)
 	newVer := newFunctionVersion("payments-v1", "payments", 1) // wrong function
@@ -173,8 +173,8 @@ func TestCanaryCreateAliasModeSkipsWeightsMapCheck(t *testing.T) {
 	trigger := aliasTrigger("route", "prod")
 	assert.Nil(t, trigger.Spec.FunctionReference.FunctionWeights)
 	alias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "orders", Version: "orders-v1"},
 	}
 	oldVer := newFunctionVersion("orders-v1", "orders", 1)
 	newVer := newFunctionVersion("orders-v2", "orders", 2)

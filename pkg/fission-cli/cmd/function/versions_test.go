@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -34,9 +33,9 @@ func TestTruncateDigest(t *testing.T) {
 
 func TestSortedBySequence(t *testing.T) {
 	items := []fv1.FunctionVersion{
-		{ObjectMeta: metav1.ObjectMeta{Name: "v3"}, Spec: fv1.FunctionVersionSpec{Sequence: 3}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "v1"}, Spec: fv1.FunctionVersionSpec{Sequence: 1}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "v2"}, Spec: fv1.FunctionVersionSpec{Sequence: 2}},
+		{Name: "v3", Spec: fv1.FunctionVersionSpec{Sequence: 3}},
+		{Name: "v1", Spec: fv1.FunctionVersionSpec{Sequence: 1}},
+		{Name: "v2", Spec: fv1.FunctionVersionSpec{Sequence: 2}},
 	}
 	got := sortedBySequence(items)
 	require.Len(t, got, 3)
@@ -50,8 +49,8 @@ func TestSortedBySequence(t *testing.T) {
 func TestPrintVersionsListTableTruncatesDigest(t *testing.T) {
 	longDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef"
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
 	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputTable, nil, nil) })
@@ -63,8 +62,8 @@ func TestPrintVersionsListTableTruncatesDigest(t *testing.T) {
 func TestPrintVersionsListWideKeepsFullDigest(t *testing.T) {
 	longDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef"
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
 	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide, nil, nil) })
@@ -74,8 +73,8 @@ func TestPrintVersionsListWideKeepsFullDigest(t *testing.T) {
 func TestPrintVersionsListJSON(t *testing.T) {
 	longDigest := "sha256:0123456789abcdef0123456789abcdef0123456789abcdef"
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1, PackageDigest: longDigest},
 	}}
 
 	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputJSON, nil, nil) })
@@ -87,8 +86,8 @@ func TestPrintVersionsListJSON(t *testing.T) {
 
 func TestPrintVersionsListWideAddsEnvDriftColumn(t *testing.T) {
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1},
 	}}
 	drift := map[string]string{"hello-v1": "True"}
 
@@ -99,8 +98,8 @@ func TestPrintVersionsListWideAddsEnvDriftColumn(t *testing.T) {
 
 func TestPrintVersionsListWideDriftMissingFallsBackToNone(t *testing.T) {
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1},
 	}}
 
 	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputWide, nil, nil) })
@@ -109,8 +108,8 @@ func TestPrintVersionsListWideDriftMissingFallsBackToNone(t *testing.T) {
 
 func TestPrintVersionsListTableOmitsEnvDriftColumn(t *testing.T) {
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
-		Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+		Name: "hello-v1",
+		Spec: fv1.FunctionVersionSpec{Sequence: 1},
 	}}
 
 	out := captureStdout(t, func() error { return printVersionsList(versions, util.OutputTable, nil, nil) })
@@ -120,14 +119,14 @@ func TestPrintVersionsListTableOmitsEnvDriftColumn(t *testing.T) {
 func TestEnvDriftByVersionDetectsDrift(t *testing.T) {
 	cmd.ResetClientsetForTest()
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2},
+		Name: "nodejs", Namespace: "default", Generation: 2,
 	}
 	fc := fissionfake.NewClientset(env)
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	versions := []fv1.FunctionVersion{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+			Name: "hello-v1",
 			Spec: fv1.FunctionVersionSpec{
 				Sequence:              1,
 				EnvObservedGeneration: 1, // stale vs live generation 2
@@ -135,7 +134,7 @@ func TestEnvDriftByVersionDetectsDrift(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v2"},
+			Name: "hello-v2",
 			Spec: fv1.FunctionVersionSpec{
 				Sequence:              2,
 				EnvObservedGeneration: 2, // current
@@ -143,7 +142,7 @@ func TestEnvDriftByVersionDetectsDrift(t *testing.T) {
 			},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v3"},
+			Name: "hello-v3",
 			Spec: fv1.FunctionVersionSpec{
 				Sequence: 3, // no Environment recorded on the snapshot
 			},
@@ -162,7 +161,7 @@ func TestEnvDriftByVersionUnknownWhenEnvironmentMissing(t *testing.T) {
 	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
 
 	versions := []fv1.FunctionVersion{{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"},
+		Name: "hello-v1",
 		Spec: fv1.FunctionVersionSpec{
 			Sequence: 1,
 			Snapshot: fv1.FunctionSpec{Environment: fv1.EnvironmentReference{Name: "does-not-exist"}},
@@ -179,12 +178,10 @@ func TestEnvDriftByVersionUnknownWhenEnvironmentMissing(t *testing.T) {
 func TestVersionsCommandFiltersByFunctionLabel(t *testing.T) {
 	mkVersion := func(name, fn string, seq int64) *fv1.FunctionVersion {
 		return &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: "default",
-				Labels:    map[string]string{fv1.VersionFunctionNameLabel: fn},
-			},
-			Spec: fv1.FunctionVersionSpec{FunctionName: fn, Sequence: seq},
+			Name:      name,
+			Namespace: "default",
+			Labels:    map[string]string{fv1.VersionFunctionNameLabel: fn},
+			Spec:      fv1.FunctionVersionSpec{FunctionName: fn, Sequence: seq},
 		}
 	}
 
@@ -213,14 +210,12 @@ func TestVersionsCommandFiltersByFunctionLabel(t *testing.T) {
 // the ENVDRIFT column: Versions() -> envDriftByVersion() -> printVersionsList().
 func TestVersionsCommandWideShowsEnvDrift(t *testing.T) {
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "nodejs", Namespace: "default", Generation: 2},
+		Name: "nodejs", Namespace: "default", Generation: 2,
 	}
 	v := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hello-v1",
-			Namespace: "default",
-			Labels:    map[string]string{fv1.VersionFunctionNameLabel: "hello"},
-		},
+		Name:      "hello-v1",
+		Namespace: "default",
+		Labels:    map[string]string{fv1.VersionFunctionNameLabel: "hello"},
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:          "hello",
 			Sequence:              1,
@@ -247,13 +242,13 @@ func TestVersionsCommandWideShowsEnvDrift(t *testing.T) {
 
 func TestAliasedByColumn(t *testing.T) {
 	aliases := []fv1.FunctionAlias{
-		{ObjectMeta: metav1.ObjectMeta{Name: "prod"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "canary"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "staging"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"}},
+		{Name: "prod", Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"}},
+		{Name: "canary", Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"}},
+		{Name: "staging", Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"}},
 		// A digest-pinned alias that has not resolved yet has no effective
 		// target (fv1.FunctionAlias.EffectiveTarget returns "") and must not
 		// appear in the column at all, for any version.
-		{ObjectMeta: metav1.ObjectMeta{Name: "unresolved"}, Spec: fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:abc"}},
+		{Name: "unresolved", Spec: fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:abc"}},
 	}
 
 	got := aliasedByColumn(aliases)
@@ -271,8 +266,8 @@ func TestAliasedByColumn(t *testing.T) {
 // version, "-" for an unaliased one, and present even outside -o wide.
 func TestPrintVersionsListAliasedByColumn(t *testing.T) {
 	versions := []fv1.FunctionVersion{
-		{ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"}, Spec: fv1.FunctionVersionSpec{Sequence: 1}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "hello-v2"}, Spec: fv1.FunctionVersionSpec{Sequence: 2}},
+		{Name: "hello-v1", Spec: fv1.FunctionVersionSpec{Sequence: 1}},
+		{Name: "hello-v2", Spec: fv1.FunctionVersionSpec{Sequence: 2}},
 	}
 	aliasedBy := map[string]string{"hello-v2": "canary,prod"}
 
@@ -298,12 +293,12 @@ func TestPrintVersionsListAliasedByColumn(t *testing.T) {
 func TestPrintVersionsListWideAddsDescriptionColumn(t *testing.T) {
 	versions := []fv1.FunctionVersion{
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Annotations: map[string]string{"fission.io/description": "fix the widget bug"}},
-			Spec:       fv1.FunctionVersionSpec{Sequence: 1},
+			Name: "hello-v1", Annotations: map[string]string{"fission.io/description": "fix the widget bug"},
+			Spec: fv1.FunctionVersionSpec{Sequence: 1},
 		},
 		{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v2"},
-			Spec:       fv1.FunctionVersionSpec{Sequence: 2},
+			Name: "hello-v2",
+			Spec: fv1.FunctionVersionSpec{Sequence: 2},
 		},
 	}
 
@@ -321,8 +316,8 @@ func TestPrintVersionsListWideAddsDescriptionColumn(t *testing.T) {
 
 func TestPrintVersionNames(t *testing.T) {
 	versions := []fv1.FunctionVersion{
-		{ObjectMeta: metav1.ObjectMeta{Name: "hello-v1"}, Spec: fv1.FunctionVersionSpec{Sequence: 1}},
-		{ObjectMeta: metav1.ObjectMeta{Name: "hello-v2"}, Spec: fv1.FunctionVersionSpec{Sequence: 2}},
+		{Name: "hello-v1", Spec: fv1.FunctionVersionSpec{Sequence: 1}},
+		{Name: "hello-v2", Spec: fv1.FunctionVersionSpec{Sequence: 2}},
 	}
 	var buf bytes.Buffer
 	require.NoError(t, printVersionNames(&buf, versions))
@@ -337,12 +332,10 @@ func TestPrintVersionNames(t *testing.T) {
 func TestVersionsCommandOutputName(t *testing.T) {
 	mkVersion := func(name string, seq int64) *fv1.FunctionVersion {
 		return &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: "default",
-				Labels:    map[string]string{fv1.VersionFunctionNameLabel: "hello"},
-			},
-			Spec: fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: seq},
+			Name:      name,
+			Namespace: "default",
+			Labels:    map[string]string{fv1.VersionFunctionNameLabel: "hello"},
+			Spec:      fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: seq},
 		}
 	}
 
@@ -365,25 +358,25 @@ func TestVersionsCommandOutputName(t *testing.T) {
 // aliasedByColumn, and printVersionsList renders the DEFAULT table with it.
 func TestVersionsCommandAliasedByColumn(t *testing.T) {
 	v1 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default", Labels: map[string]string{fv1.VersionFunctionNameLabel: "hello"}},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1},
+		Name: "hello-v1", Namespace: "default", Labels: map[string]string{fv1.VersionFunctionNameLabel: "hello"},
+		Spec: fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 1},
 	}
 	v2 := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v2", Namespace: "default", Labels: map[string]string{fv1.VersionFunctionNameLabel: "hello"}},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 2},
+		Name: "hello-v2", Namespace: "default", Labels: map[string]string{fv1.VersionFunctionNameLabel: "hello"},
+		Spec: fv1.FunctionVersionSpec{FunctionName: "hello", Sequence: 2},
 	}
 	prod := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
+		Name: "prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
 	}
 	canary := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "canary", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
+		Name: "canary", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v2"},
 	}
 	// An alias for a different function must not leak into hello's column.
 	otherAlias := &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "other-prod", Namespace: "default"},
-		Spec:       fv1.FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
+		Name: "other-prod", Namespace: "default",
+		Spec: fv1.FunctionAliasSpec{FunctionName: "other", Version: "other-v1"},
 	}
 
 	cmd.ResetClientsetForTest()

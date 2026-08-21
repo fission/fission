@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -30,9 +29,8 @@ func tenancyModeEnv(dynamic bool) string {
 // when tenancy is off verify master-derived. A wrong choice 401s the build.
 func TestBuilderSigningNamespace(t *testing.T) {
 	const builderNs = "team-a-builder"
-	nsPod := &apiv1.Pod{ObjectMeta: metav1.ObjectMeta{
-		Annotations: map[string]string{fv1.AuthKeySchemeAnnotation: fv1.AuthKeySchemeNamespace},
-	}}
+	nsPod := &apiv1.Pod{
+		Annotations: map[string]string{fv1.AuthKeySchemeAnnotation: fv1.AuthKeySchemeNamespace}}
 	plainPod := &apiv1.Pod{}
 
 	tests := []struct {

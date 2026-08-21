@@ -36,7 +36,7 @@ func TestAsyncInvokerHandleAccepted(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}, Spec: fv1.FunctionSpec{FunctionTimeout: 30}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns", Spec: fv1.FunctionSpec{FunctionTimeout: 30}}
 
 	r := httptest.NewRequest("POST", "/x?a=1", strings.NewReader("payload"))
 	r.Header.Set(asyncinvoke.HeaderDedupKey, "dk")
@@ -76,10 +76,8 @@ func TestAsyncInvokerHandleStampsFunctionVersion(t *testing.T) {
 		q := routerMemQueue(t)
 		inv := &asyncInvoker{queue: q, logger: logr.Discard()}
 		fn := &fv1.Function{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "hello", Namespace: "ns",
-				Labels: map[string]string{fv1.FUNCTION_VERSION: "hello-v1"},
-			},
+			Name: "hello", Namespace: "ns",
+			Labels: map[string]string{fv1.FUNCTION_VERSION: "hello-v1"},
 		}
 		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
 		w := httptest.NewRecorder()
@@ -98,7 +96,7 @@ func TestAsyncInvokerHandleStampsFunctionVersion(t *testing.T) {
 		t.Parallel()
 		q := routerMemQueue(t)
 		inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-		fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "ns"}}
+		fn := &fv1.Function{Name: "hello", Namespace: "ns"}
 		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
 		w := httptest.NewRecorder()
 		inv.handle(w, r, fn)
@@ -115,7 +113,7 @@ func TestAsyncInvokerHandleStampsFunctionVersion(t *testing.T) {
 
 func TestAsyncInvokerHandleDisabled501(t *testing.T) {
 	t.Parallel()
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 
 	// nil queue → disabled.
 	invNilQueue := &asyncInvoker{logger: logr.Discard()}
@@ -134,7 +132,7 @@ func TestAsyncInvokerHandleBodyTooLarge413(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 
 	big := strings.Repeat("a", asyncinvoke.DefaultMaxBodyBytes+1)
 	w := httptest.NewRecorder()
@@ -153,7 +151,7 @@ func TestHandlerAsyncBranchPublicOnly(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 
 	fh := functionHandler{
 		logger:       logr.Discard(),
@@ -221,7 +219,7 @@ func TestHandlerAsyncBranchDirectPath(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 
 	// Direct path, async header, no invocation id → enqueues.
 	fh := functionHandler{logger: logr.Discard(), function: fn, asyncInvoker: inv} // httpTrigger nil
@@ -243,7 +241,7 @@ func TestHandlerAsyncBranchTriggerMode(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 
 	fh := functionHandler{
 		logger:       logr.Discard(),
@@ -334,7 +332,7 @@ func TestAsyncInvokerHandleDedup(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 	post := func() string {
 		r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
 		r.Header.Set(asyncinvoke.HeaderDedupKey, "same")
@@ -358,7 +356,7 @@ func TestAsyncInvokerHandleIgnoresCallerDepth(t *testing.T) {
 	t.Parallel()
 	q := routerMemQueue(t)
 	inv := &asyncInvoker{queue: q, logger: logr.Discard()}
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "ns"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "ns"}
 	r := httptest.NewRequest("POST", "/x", strings.NewReader("p"))
 	r.Header.Set(asyncinvoke.HeaderInvocationDepth, "5")
 	w := httptest.NewRecorder()

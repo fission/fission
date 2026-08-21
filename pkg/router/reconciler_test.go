@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,9 +68,9 @@ func requireNoRebuildSignal(t *testing.T, ts *HTTPTriggerSet) {
 }
 
 func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	trigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "t1", Namespace: "default"},
+		Name: "t1", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			CreateIngress:     true,
 			RelativeURL:       "/t1",
@@ -81,7 +80,7 @@ func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
 	}
 	ts, cl, kc := newReconcilerTS(t, fn, trigger)
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "t1", Namespace: "default"}}
+	req := ctrl.Request{Name: "t1", Namespace: "default"}
 
 	// Present + CreateIngress -> ingress created, rebuild signalled.
 	_, err := r.Reconcile(t.Context(), req)
@@ -105,9 +104,9 @@ func TestHTTPTriggerReconcilerIngressLifecycle(t *testing.T) {
 // then switching it to the ingress provider must delete the HTTPRoute and create
 // the Ingress in a single reconcile pass (cross-provider self-clean).
 func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	trigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "tg", Namespace: "default"},
+		Name: "tg", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/tg", Methods: []string{"GET"},
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
@@ -124,7 +123,7 @@ func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
 		newIngressRouteProvider(ts.logger, kc),
 		newGatewayRouteProvider(ts.logger, gw, nil),
 	}}
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "tg", Namespace: "default"}}
+	req := ctrl.Request{Name: "tg", Namespace: "default"}
 
 	// Gateway provider creates the HTTPRoute; ingress provider creates nothing.
 	_, err := r.Reconcile(t.Context(), req)
@@ -152,9 +151,9 @@ func TestHTTPTriggerReconcilerGatewayAndSwitch(t *testing.T) {
 }
 
 func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default"}
 	trigger := &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "t2", Namespace: "default"},
+		Name: "t2", Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/t2", Methods: []string{"GET"},
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn"},
@@ -163,7 +162,7 @@ func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
 	ts, cl, kc := newReconcilerTS(t, fn, trigger)
 	r := &httpTriggerReconciler{logger: ts.logger, client: cl, ts: ts, providers: []RouteProvider{newIngressRouteProvider(ts.logger, kc)}}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "t2", Namespace: "default"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "t2", Namespace: "default"})
 	require.NoError(t, err)
 	_, err = kc.NetworkingV1().Ingresses(podNamespace).Get(t.Context(), "t2", metav1.GetOptions{})
 	assert.True(t, apierrors.IsNotFound(err), "no ingress should exist for a non-CreateIngress trigger")
@@ -171,11 +170,11 @@ func TestHTTPTriggerReconcilerNoIngressStillRebuilds(t *testing.T) {
 }
 
 func TestFunctionReconcilerRebuildsAndResolvesFresh(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default", ResourceVersion: "5"}}
+	fn := &fv1.Function{Name: "fn1", Namespace: "default", ResourceVersion: "5"}
 	ts, cl, _ := newReconcilerTS(t, fn)
 	r := &functionReconciler{logger: ts.logger, client: cl, ts: ts}
 
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "fn1", Namespace: "default"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "fn1", Namespace: "default"})
 	require.NoError(t, err)
 	requireRebuildSignal(t, ts)
 
@@ -184,7 +183,7 @@ func TestFunctionReconcilerRebuildsAndResolvesFresh(t *testing.T) {
 	// function update ALWAYS sees the current ResourceVersion — the staleness
 	// class the old trigger-RV-keyed cache could serve is structurally gone.
 	trigger := fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "trig", Namespace: "default", ResourceVersion: "1"},
+		Name: "trig", Namespace: "default", ResourceVersion: "1",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "fn1"},
 		},
@@ -198,7 +197,7 @@ func TestFunctionReconcilerRebuildsAndResolvesFresh(t *testing.T) {
 func TestFunctionReconcilerDeletedUnknownNoSignal(t *testing.T) {
 	ts, cl, _ := newReconcilerTS(t)
 	r := &functionReconciler{logger: ts.logger, client: cl, ts: ts}
-	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "gone", Namespace: "default"}})
+	_, err := r.Reconcile(t.Context(), ctrl.Request{Name: "gone", Namespace: "default"})
 	require.NoError(t, err)
 	// The deleted function was never in the route table (no route referenced it),
 	// so the incremental delete is a no-op shape-wise and signals no rebuild.
@@ -206,12 +205,12 @@ func TestFunctionReconcilerDeletedUnknownNoSignal(t *testing.T) {
 }
 
 func TestResolverResolveByNameViaCache(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(fn).Build()
 	frr := makeFunctionReferenceResolver(loggerfactory.GetLogger(), cl)
 
 	trigger := fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default", ResourceVersion: "1"},
+		Name: "t", Namespace: "default", ResourceVersion: "1",
 		Spec: fv1.HTTPTriggerSpec{
 			FunctionReference: fv1.FunctionReference{Type: fv1.FunctionReferenceTypeFunctionName, Name: "hello"},
 		},

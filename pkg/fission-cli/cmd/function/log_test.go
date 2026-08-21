@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
@@ -25,7 +24,7 @@ import (
 
 func logFunction() *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default", UID: "uid-1"},
+		Name: "hello", Namespace: "default", UID: "uid-1",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "nodejs", Namespace: "default"},
 			InvokeStrategy: fv1.InvokeStrategy{
@@ -37,13 +36,11 @@ func logFunction() *fv1.Function {
 
 func logFunctionPod(name, resourceVersion, version string) *corev1.Pod {
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: "default", ResourceVersion: resourceVersion,
-			Labels: map[string]string{
-				fv1.FUNCTION_UID:          "uid-1",
-				fv1.ENVIRONMENT_NAME:      "nodejs",
-				fv1.ENVIRONMENT_NAMESPACE: "default",
-			},
+		Name: name, Namespace: "default", ResourceVersion: resourceVersion,
+		Labels: map[string]string{
+			fv1.FUNCTION_UID:          "uid-1",
+			fv1.ENVIRONMENT_NAME:      "nodejs",
+			fv1.ENVIRONMENT_NAMESPACE: "default",
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "hello"}}},
 	}
@@ -105,8 +102,8 @@ func TestLogAliasPreflight(t *testing.T) {
 	t.Run("alias targets a different function", func(t *testing.T) {
 		fn := logFunction()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-v1"},
 		}
 		setLogClients(t, []runtime.Object{fn, alias})
 
@@ -130,8 +127,8 @@ func TestLogAliasPreflight(t *testing.T) {
 func TestLogVersionFilterAppliesToKubernetesSelector(t *testing.T) {
 	fn := logFunction()
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello"},
+		Name: "hello-v1", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "hello"},
 	}
 	older := logFunctionPod("pod-v1", "1", "hello-v1")
 	newer := logFunctionPod("pod-v2", "9", "hello-v2")
@@ -159,8 +156,8 @@ func TestLogVersionFilterWarnsForNonKubernetesDbType(t *testing.T) {
 
 	fn := logFunction()
 	version := &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-		Spec:       fv1.FunctionVersionSpec{FunctionName: "hello"},
+		Name: "hello-v1", Namespace: "default",
+		Spec: fv1.FunctionVersionSpec{FunctionName: "hello"},
 	}
 	setLogClients(t, []runtime.Object{fn, version})
 

@@ -66,7 +66,7 @@ func TestSpecMerge(t *testing.T) {
 		"hello-js-leSC": archive,
 		// DeploymentConfig name + uid scope the `spec destroy` cleanup
 		// label-selector to just this test's resources.
-		"name: spec-merge": "name: " + "spec-merge-" + ns.ID,
+		"name: spec-merge":                     "name: " + "spec-merge-" + ns.ID,
 		"b1573a35-f3a2-45a8-a430-1f1a08d71177": uid,
 	}
 

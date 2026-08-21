@@ -6,6 +6,7 @@ package poolmgr
 
 import (
 	"errors"
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,13 +51,13 @@ func TestProcessRSDiscriminator(t *testing.T) {
 	// distinguishes them.
 	liveEnv := func() *fv1.Environment {
 		return &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: envName, Namespace: ns, UID: k8stypes.UID(envUID), Generation: 3},
-			Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
+			Name: envName, Namespace: ns, UID: k8stypes.UID(envUID), Generation: 3,
+			Spec: fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v2"}},
 		}
 	}
 	staleHash := envRuntimeHash(&fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: envName, Namespace: ns, UID: k8stypes.UID(envUID)},
-		Spec:       fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v1"}},
+		Name: envName, Namespace: ns, UID: k8stypes.UID(envUID),
+		Spec: fv1.EnvironmentSpec{Runtime: fv1.Runtime{Image: "img:v1"}},
 	})
 	liveHash := envRuntimeHash(liveEnv())
 
@@ -72,16 +73,13 @@ func TestProcessRSDiscriminator(t *testing.T) {
 		if hash != "" {
 			l[fv1.ENVIRONMENT_RUNTIME_HASH] = hash
 		}
-		for k, v := range overrides {
-			l[k] = v
-		}
+		maps.Copy(l, overrides)
 		return l
 	}
 
 	liveDep := func(deleting bool) *appsv1.Deployment {
-		d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
-			Name: depName, Namespace: ns, UID: k8stypes.UID(depUID),
-		}}
+		d := &appsv1.Deployment{
+			Name: depName, Namespace: ns, UID: k8stypes.UID(depUID)}
 		if deleting {
 			now := metav1.Now()
 			d.DeletionTimestamp = &now
@@ -218,20 +216,18 @@ func TestProcessRSDiscriminator(t *testing.T) {
 			// selector with managed=false. Its presence is what makes
 			// processRS reach the discriminator at all.
 			specialized := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "specialized-1", Namespace: ns,
-					Labels: func() map[string]string {
-						l := templateLabels("", nil) // pod labels need no hash for selection
-						l["managed"] = "false"
-						return l
-					}(),
-				},
+				Name: "specialized-1", Namespace: ns,
+				Labels: func() map[string]string {
+					l := templateLabels("", nil) // pod labels need no hash for selection
+					l["managed"] = "false"
+					return l
+				}(),
 				Status: corev1.PodStatus{Phase: corev1.PodRunning},
 			}
 
 			replicas := c.replicas
 			rs := &appsv1.ReplicaSet{
-				ObjectMeta: metav1.ObjectMeta{Name: depName + "-abc123", Namespace: ns},
+				Name: depName + "-abc123", Namespace: ns,
 				Spec: appsv1.ReplicaSetSpec{
 					Replicas: &replicas,
 					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{
@@ -314,9 +310,8 @@ func TestPoolSelectorStaysHashFree(t *testing.T) {
 		// allocates a fresh map and the aliasing bug is invisible. A labelled
 		// env is the case where writing pool/hash labels back into env.Labels
 		// leaked them into Service selectors.
-		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default", UID: "u", Generation: 7,
-			Labels: map[string]string{"team": "core"}},
-		Spec: fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
+		Labels: map[string]string{"team": "core"},
+		Spec:   fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
 	}
 	fetcherCfg, err := fetcherConfig.MakeFetcherConfig("/userfunc")
 	require.NoError(t, err)
@@ -340,8 +335,8 @@ func TestPoolSelectorStaysHashFree(t *testing.T) {
 // exact operation the scale-up serves.
 func TestEnvRuntimeHashIgnoresNonTemplateSpec(t *testing.T) {
 	base := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "e", Namespace: "default", UID: "u", Generation: 3},
-		Spec:       fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
+		Name: "e", Namespace: "default", UID: "u", Generation: 3,
+		Spec: fv1.EnvironmentSpec{Version: 3, Poolsize: 3, Runtime: fv1.Runtime{Image: "img"}},
 	}
 	scaled := base.DeepCopy()
 	scaled.Spec.Poolsize = 30

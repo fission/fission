@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -66,8 +65,7 @@ func TestDecodeEventUnknownTypeFailsLoud(t *testing.T) {
 func TestStreamName(t *testing.T) {
 	t.Parallel()
 
-	run := &fv1.WorkflowRun{ObjectMeta: metav1.ObjectMeta{
-		Name: "r1", Namespace: "default", UID: types.UID("2fd0ad4d-9c6e-4a4f-8f7e-000000000001"),
-	}}
+	run := &fv1.WorkflowRun{
+		Name: "r1", Namespace: "default", UID: types.UID("2fd0ad4d-9c6e-4a4f-8f7e-000000000001")}
 	assert.Equal(t, "wfrun/2fd0ad4d-9c6e-4a4f-8f7e-000000000001", streamName(run))
 }

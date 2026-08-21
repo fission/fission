@@ -15,7 +15,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
@@ -25,10 +24,8 @@ const routerSelector = "svc in (router)"
 
 func routerDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "router", Namespace: "fission", ResourceVersion: "1",
-			Labels: map[string]string{"svc": "router"},
-		},
+		Name: "router", Namespace: "fission", ResourceVersion: "1",
+		Labels: map[string]string{"svc": "router"},
 	}
 }
 
@@ -199,7 +196,7 @@ func TestOrphanedPodEventDumperSkipsEverythingWhenThePodListIsIncomplete(t *test
 	client.PrependReactor("list", "pods", func(a clienttesting.Action) (bool, runtime.Object, error) {
 		podLists++
 		if podLists == 1 {
-			return true, &corev1.PodList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
+			return true, &corev1.PodList{Continue: "page-2"}, nil
 		}
 		return true, nil, apierrors.NewResourceExpired("too old resource version")
 	})
@@ -217,10 +214,8 @@ func TestOrphanedPodEventDumperHonoursEverySelector(t *testing.T) {
 	// dump.go passes three selectors; a dumper honouring only the first would
 	// quietly drop builder and function pods from the orphan scan.
 	builder := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "builder", Namespace: "fission", ResourceVersion: "1",
-			Labels: map[string]string{"owner": "buildermgr"},
-		},
+		Name: "builder", Namespace: "fission", ResourceVersion: "1",
+		Labels: map[string]string{"owner": "buildermgr"},
 	}
 
 	client := k8sfake.NewClientset(
@@ -249,7 +244,7 @@ func TestOrphanedPodEventDumperPagesThePodList(t *testing.T) {
 	client.PrependReactor("list", "pods", func(a clienttesting.Action) (bool, runtime.Object, error) {
 		// SAFETY: a "list" reactor receives a ListActionImpl.
 		if a.(clienttesting.ListActionImpl).GetListOptions().Continue == "" {
-			return true, &corev1.PodList{ListMeta: metav1.ListMeta{Continue: "page-2"}}, nil
+			return true, &corev1.PodList{Continue: "page-2"}, nil
 		}
 		return true, &corev1.PodList{Items: []corev1.Pod{*live}}, nil
 	})

@@ -95,8 +95,7 @@ func (err Error) Description() string {
 func GetHTTPError(err error) (int, string) {
 	var msg string
 	var code int
-	var fe Error
-	if errors.As(err, &fe) {
+	if fe, ok := errors.AsType[Error](err); ok {
 		code = fe.HTTPStatus()
 		msg = fe.Message
 	} else {

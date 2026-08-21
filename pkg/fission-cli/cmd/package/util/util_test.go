@@ -9,18 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func TestPrintPackageSummary(t *testing.T) {
 
 	pkg := &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "foobar",
-			Namespace: "dummy",
-		},
+		Name:      "foobar",
+		Namespace: "dummy",
 		Status: fv1.PackageStatus{
 			BuildStatus: "failed",
 			BuildLog:    "dummy-build-log",

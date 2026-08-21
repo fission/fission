@@ -255,8 +255,8 @@ func TestFunctionReconcilerFinalizerUpdateRace(t *testing.T) {
 
 func TestDeletionTimestampPredicate(t *testing.T) {
 	now := metav1.Now()
-	live := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn"}}
-	deleting := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", DeletionTimestamp: &now}}
+	live := &fv1.Function{Name: "fn"}
+	deleting := &fv1.Function{Name: "fn", DeletionTimestamp: &now}
 
 	assert.True(t, deletionTimestampPredicate.Update(event.UpdateEvent{ObjectNew: deleting}),
 		"must pass updates where the object is being deleted (Generation unchanged, so GenerationChangedPredicate drops them)")

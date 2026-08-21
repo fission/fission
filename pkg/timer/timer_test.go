@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -53,7 +52,7 @@ func TestFunctionTargetURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			tt := fv1.TimeTrigger{
-				ObjectMeta: metav1.ObjectMeta{Name: "tt", Namespace: tc.ns},
+				Name: "tt", Namespace: tc.ns,
 				Spec: fv1.TimeTriggerSpec{
 					FunctionReference: tc.ref,
 					Subpath:           tc.sub,

@@ -28,14 +28,12 @@ func makeSlice(name, ns, fnName string, addrs ...string) *discoveryv1.EndpointSl
 	port := int32(8888)
 	ready := true
 	es := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels: map[string]string{
-				fv1.FUNCTION_NAME:      fnName,
-				fv1.FUNCTION_NAMESPACE: ns,
-				fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
-			},
+		Name:      name,
+		Namespace: ns,
+		Labels: map[string]string{
+			fv1.FUNCTION_NAME:      fnName,
+			fv1.FUNCTION_NAMESPACE: ns,
+			fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
 		},
 		Ports: []discoveryv1.EndpointPort{{Port: &port}},
 	}

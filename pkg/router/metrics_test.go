@@ -14,7 +14,6 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/metrics/metricstest"
@@ -72,13 +71,12 @@ func TestFunctionCallMetrics_VersionLabel(t *testing.T) {
 		fh.collectFunctionMetric(time.Now(), &RetryingRoundTripper{serviceURL: backend}, req, resp)
 	}
 
-	versioned := &fv1.Function{ObjectMeta: metav1.ObjectMeta{
+	versioned := &fv1.Function{
 		Name: "hello", Namespace: "default",
-		Labels: map[string]string{fv1.FUNCTION_VERSION: "hello-v1"},
-	}}
+		Labels: map[string]string{fv1.FUNCTION_VERSION: "hello-v1"}}
 	call(versioned, "/versioned-metric-test", 500) // >=400 so functionCallErrors also records
 
-	unversioned := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "classic", Namespace: "default"}}
+	unversioned := &fv1.Function{Name: "classic", Namespace: "default"}
 	call(unversioned, "/unversioned-metric-test", 200)
 
 	families, err := reg.Gather()

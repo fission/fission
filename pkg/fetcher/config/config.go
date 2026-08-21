@@ -100,9 +100,9 @@ func secretKeyEnv(name, secretName, secretKey string, optional bool) apiv1.EnvVa
 		Name: name,
 		ValueFrom: &apiv1.EnvVarSource{
 			SecretKeyRef: &apiv1.SecretKeySelector{
-				LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
-				Key:                  secretKey,
-				Optional:             &opt,
+				Name:     secretName,
+				Key:      secretKey,
+				Optional: &opt,
 			},
 		},
 	}
@@ -300,28 +300,20 @@ func (cfg *Config) volumesWithMounts() ([]apiv1.Volume, []apiv1.VolumeMount) {
 	dwAPIVol := apiv1.DownwardAPIVolumeSource{Items: items}
 	volumes := []apiv1.Volume{
 		{
-			Name: fv1.SharedVolumeUserfunc,
-			VolumeSource: apiv1.VolumeSource{
-				EmptyDir: &apiv1.EmptyDirVolumeSource{},
-			},
+			Name:     fv1.SharedVolumeUserfunc,
+			EmptyDir: &apiv1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: fv1.SharedVolumeSecrets,
-			VolumeSource: apiv1.VolumeSource{
-				EmptyDir: &apiv1.EmptyDirVolumeSource{},
-			},
+			Name:     fv1.SharedVolumeSecrets,
+			EmptyDir: &apiv1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: fv1.SharedVolumeConfigmaps,
-			VolumeSource: apiv1.VolumeSource{
-				EmptyDir: &apiv1.EmptyDirVolumeSource{},
-			},
+			Name:     fv1.SharedVolumeConfigmaps,
+			EmptyDir: &apiv1.EmptyDirVolumeSource{},
 		},
 		{
-			Name: fv1.PodInfoVolume,
-			VolumeSource: apiv1.VolumeSource{
-				DownwardAPI: &dwAPIVol,
-			},
+			Name:        fv1.PodInfoVolume,
+			DownwardAPI: &dwAPIVol,
 		},
 	}
 	mounts := []apiv1.VolumeMount{
@@ -360,26 +352,22 @@ func (cfg *Config) addFetcherToPodSpecWithCommand(podSpec *apiv1.PodSpec, mainCo
 			InitialDelaySeconds: 1,
 			PeriodSeconds:       1,
 			FailureThreshold:    30,
-			ProbeHandler: apiv1.ProbeHandler{
-				HTTPGet: &apiv1.HTTPGetAction{
-					Path: "/readiness-healthz",
-					Port: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: svcinfo.PortFetcher,
-					},
+			HTTPGet: &apiv1.HTTPGetAction{
+				Path: "/readiness-healthz",
+				Port: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: svcinfo.PortFetcher,
 				},
 			},
 		},
 		LivenessProbe: &apiv1.Probe{
 			InitialDelaySeconds: 1,
 			PeriodSeconds:       5,
-			ProbeHandler: apiv1.ProbeHandler{
-				HTTPGet: &apiv1.HTTPGetAction{
-					Path: "/healthz",
-					Port: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: svcinfo.PortFetcher,
-					},
+			HTTPGet: &apiv1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: svcinfo.PortFetcher,
 				},
 			},
 		},

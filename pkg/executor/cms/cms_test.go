@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -41,14 +40,14 @@ func (f *fakeExecutor) RefreshFuncPods(context.Context, logr.Logger, fv1.Functio
 const cmsNamespace = "ns1"
 
 func functionRefingConfigMap(name, cmName string) fv1.Function {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace}}
+	fn := fv1.Function{Name: name, Namespace: cmsNamespace}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypePoolmgr
 	fn.Spec.ConfigMaps = []fv1.ConfigMapReference{{Name: cmName, Namespace: cmsNamespace}}
 	return fn
 }
 
 func functionRefingSecret(name, secretName string) fv1.Function {
-	fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace}}
+	fn := fv1.Function{Name: name, Namespace: cmsNamespace}
 	fn.Spec.InvokeStrategy.ExecutionStrategy.ExecutorType = fv1.ExecutorTypePoolmgr
 	fn.Spec.Secrets = []fv1.SecretReference{{Name: secretName, Namespace: cmsNamespace}}
 	return fn
@@ -106,11 +105,11 @@ func TestRefreshPods(t *testing.T) {
 }
 
 func configMap(name, rv string) *apiv1.ConfigMap {
-	return &apiv1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}}
+	return &apiv1.ConfigMap{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}
 }
 
 func req(name string) ctrl.Request {
-	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: cmsNamespace}}
+	return ctrl.Request{Name: name, Namespace: cmsNamespace}
 }
 
 func TestConfigMapReconciler(t *testing.T) {
@@ -145,7 +144,7 @@ func TestConfigMapReconciler(t *testing.T) {
 }
 
 func secret(name, rv string) *apiv1.Secret {
-	return &apiv1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}}
+	return &apiv1.Secret{Name: name, Namespace: cmsNamespace, ResourceVersion: rv}
 }
 
 func TestSecretReconciler(t *testing.T) {

@@ -90,7 +90,7 @@ func newHarness(t *testing.T, spec *fv1.WorkflowSpec) *harness {
 	t.Cleanup(h.server.Close)
 
 	h.run = &fv1.WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default", UID: types.UID("uid-run-1")},
+		Name: "run-1", Namespace: "default", UID: types.UID("uid-run-1"),
 		Spec: fv1.WorkflowRunSpec{
 			WorkflowRef: "wf",
 			Input:       &apiextensionsv1.JSON{Raw: []byte(`{"seed":1}`)},

@@ -33,7 +33,7 @@ const (
 
 func watchTestPackage(status fv1.BuildStatus) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: watchTestPkg, Namespace: watchTestNS},
+		Name: watchTestPkg, Namespace: watchTestNS,
 		Spec: fv1.PackageSpec{
 			Environment: fv1.EnvironmentReference{Name: watchTestEnv, Namespace: watchTestNS},
 		},
@@ -43,13 +43,11 @@ func watchTestPackage(status fv1.BuildStatus) *fv1.Package {
 
 func watchTestBuilderPod() *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      watchTestEnv + "-1234-abc",
-			Namespace: watchTestNS,
-			Labels: map[string]string{
-				fv1.BuilderLabelOwner:   fv1.BuilderOwnerBuilderMgr,
-				fv1.BuilderLabelEnvName: watchTestEnv,
-			},
+		Name:      watchTestEnv + "-1234-abc",
+		Namespace: watchTestNS,
+		Labels: map[string]string{
+			fv1.BuilderLabelOwner:   fv1.BuilderOwnerBuilderMgr,
+			fv1.BuilderLabelEnvName: watchTestEnv,
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: fv1.BuilderContainerName}}},
 		Status: corev1.PodStatus{
@@ -202,7 +200,7 @@ func TestWatchPackageBuildRefusesBuilderlessEnv(t *testing.T) {
 		pkg := watchTestPackage(fv1.BuildStatusPending)
 		pkg.Spec.Source = fv1.Archive{Type: fv1.ArchiveTypeUrl, URL: "http://storage/src.zip"}
 		env := &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{Name: watchTestEnv, Namespace: watchTestNS},
+			Name: watchTestEnv, Namespace: watchTestNS,
 			// No Builder.Image: this env can never run a build.
 		}
 		client := cmd.Client{
@@ -222,14 +220,12 @@ func TestPickBuilderPod(t *testing.T) {
 
 	mkPod := func(name, rv string, ready bool, age time.Duration) corev1.Pod {
 		return corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:              name,
-				CreationTimestamp: metav1.NewTime(time.Now().Add(-age)),
-				Labels: map[string]string{
-					fv1.BuilderLabelOwner:              fv1.BuilderOwnerBuilderMgr,
-					fv1.BuilderLabelEnvName:            watchTestEnv,
-					fv1.BuilderLabelEnvResourceVersion: rv,
-				},
+			Name:              name,
+			CreationTimestamp: metav1.NewTime(time.Now().Add(-age)),
+			Labels: map[string]string{
+				fv1.BuilderLabelOwner:              fv1.BuilderOwnerBuilderMgr,
+				fv1.BuilderLabelEnvName:            watchTestEnv,
+				fv1.BuilderLabelEnvResourceVersion: rv,
 			},
 			Status: corev1.PodStatus{
 				PodIP:             "10.1.2.3",

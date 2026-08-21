@@ -51,10 +51,8 @@ func TestFunctionServiceCache(t *testing.T) {
 			UID:  "1212",
 		},
 		Environment: &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "foo-env",
-				UID:  "2323",
-			},
+			Name: "foo-env",
+			UID:  "2323",
 			Spec: fv1.EnvironmentSpec{
 				Version: 1,
 				Runtime: fv1.Runtime{
@@ -126,10 +124,8 @@ func TestFunctionServiceNewCache(t *testing.T) {
 			UID:  "1212",
 		},
 		Environment: &fv1.Environment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "foo-env",
-				UID:  "2323",
-			},
+			Name: "foo-env",
+			UID:  "2323",
 			Spec: fv1.EnvironmentSpec{
 				Version: 1,
 				Runtime: fv1.Runtime{
@@ -145,10 +141,8 @@ func TestFunctionServiceNewCache(t *testing.T) {
 		Atime:             now.Add(-1 * time.Minute),
 	}
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "foo",
-			UID:  "1212",
-		},
+		Name: "foo",
+		UID:  "1212",
 	}
 
 	ctx := t.Context()

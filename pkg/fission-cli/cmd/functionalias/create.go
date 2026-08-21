@@ -63,15 +63,13 @@ func (opts *CreateSubCommand) complete(input cli.Input) (err error) {
 	}
 
 	opts.alias = &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-			Labels: map[string]string{
-				fv1.VersionFunctionNameLabel: fn.Name,
-			},
-			OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
+		Name:      name,
+		Namespace: ns,
+		Labels: map[string]string{
+			fv1.VersionFunctionNameLabel: fn.Name,
 		},
-		Spec: spec,
+		OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
+		Spec:            spec,
 	}
 
 	return nil

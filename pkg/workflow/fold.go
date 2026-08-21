@@ -82,7 +82,7 @@ type RunState struct {
 	ErrorType string               `json:"errorType,omitempty"`
 	Cause     json.RawMessage      `json:"cause,omitempty"`
 
-	StartedAt time.Time `json:"startedAt,omitempty"`
+	StartedAt time.Time `json:"startedAt"`
 	LastSeq   int64     `json:"lastSeq,omitempty"`
 
 	Recent []fv1.WorkflowRunEventSummary `json:"recent,omitempty"`

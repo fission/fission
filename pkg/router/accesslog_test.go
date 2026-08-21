@@ -17,7 +17,6 @@ import (
 	"github.com/go-logr/logr/funcr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/utils/correlation"
@@ -66,7 +65,7 @@ func (s *capturingSink) find(t *testing.T, msg string) (accessRecord, bool) {
 }
 
 func TestAccessRecord(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "fn", Namespace: "default", UID: "uid-1"}}
+	fn := &fv1.Function{Name: "fn", Namespace: "default", UID: "uid-1"}
 	backend, _ := url.Parse("http://10.0.0.5:8888")
 	resp := &http.Response{StatusCode: 200}
 

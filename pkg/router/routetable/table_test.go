@@ -202,7 +202,7 @@ func TestApplyTriggerDecisionTable(t *testing.T) {
 // TestApplyFunctionDecisionTable pins the internal-route contract: insert /
 // delete touch the internal mux, generation bumps are pure swaps.
 func TestApplyFunctionDecisionTable(t *testing.T) {
-	key := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "fn"}}
+	key := InternalKey{Namespace: "default", Name: "fn"}
 	tbl := New()
 
 	assert.Equal(t, ShapeChanged, tbl.ApplyFunction(key, 1, func() http.Handler { return tagHandler("v1") }),
@@ -350,10 +350,10 @@ func TestInternalKeySuffixIsolation(t *testing.T) {
 // each candidate's live claimant before deleting).
 func TestInternalKeysBySuffix(t *testing.T) {
 	tbl := New()
-	prod := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello"}, Suffix: "prod"}
-	otherFnSameSuffix := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "world"}, Suffix: "prod"}
-	otherNS := InternalKey{NamespacedName: types.NamespacedName{Namespace: "other", Name: "hello"}, Suffix: "prod"}
-	plain := InternalKey{NamespacedName: types.NamespacedName{Namespace: "default", Name: "hello"}}
+	prod := InternalKey{Namespace: "default", Name: "hello", Suffix: "prod"}
+	otherFnSameSuffix := InternalKey{Namespace: "default", Name: "world", Suffix: "prod"}
+	otherNS := InternalKey{Namespace: "other", Name: "hello", Suffix: "prod"}
+	plain := InternalKey{Namespace: "default", Name: "hello"}
 
 	for _, k := range []InternalKey{prod, otherFnSameSuffix, otherNS, plain} {
 		tbl.ApplyFunction(k, 1, func() http.Handler { return tagHandler(k.Name + ":" + k.Suffix) })

@@ -81,8 +81,8 @@ func TestFoldChoiceRouting(t *testing.T) {
 	spec.States["route"] = fv1.WorkflowState{
 		Type: fv1.WorkflowStateChoice,
 		Choices: []fv1.WorkflowChoiceRule{{
-			WorkflowChoiceCondition: fv1.WorkflowChoiceCondition{Variable: "$.big", IsPresent: new(true)},
-			Next:                    "b",
+			Variable: "$.big", IsPresent: new(true),
+			Next: "b",
 		}},
 		Default: "done",
 	}

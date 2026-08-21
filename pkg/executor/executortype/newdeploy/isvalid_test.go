@@ -23,13 +23,13 @@ import (
 )
 
 func svcObj(ns, name string) *apiv1.Service {
-	return &apiv1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	return &apiv1.Service{Namespace: ns, Name: name}
 }
 
 func deplObj(ns, name string, available int32) *appsv1.Deployment {
 	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
-		Status:     appsv1.DeploymentStatus{AvailableReplicas: available},
+		Namespace: ns, Name: name,
+		Status: appsv1.DeploymentStatus{AvailableReplicas: available},
 	}
 }
 

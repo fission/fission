@@ -53,8 +53,8 @@ type OtelConfig struct {
 // (comma-separated exporter names); the exact token "otlp" turns on metric push
 // (a token match, not a substring, so "otlphttp"/"notlp" do not enable it).
 func parseOtelConfig() OtelConfig {
-	config := OtelConfig{}
-	config.endpoint = os.Getenv(OtelEndpointEnvVar)
+	config := OtelConfig{
+		endpoint: os.Getenv(OtelEndpointEnvVar)}
 	insecure, err := strconv.ParseBool(os.Getenv(OtelInsecureEnvVar))
 	if err != nil {
 		insecure = true

@@ -55,10 +55,8 @@ func (opts *RunSubCommand) do(input cli.Input) error {
 	}
 
 	run := &fv1.WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", wfName, rand.String(5)),
-			Namespace: namespace,
-		},
+		Name:      fmt.Sprintf("%s-%s", wfName, rand.String(5)),
+		Namespace: namespace,
 		Spec: fv1.WorkflowRunSpec{
 			WorkflowRef:        wfName,
 			WorkflowGeneration: wf.Generation,

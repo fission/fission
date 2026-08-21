@@ -21,11 +21,9 @@ import (
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 )
 
-func intPtr(i int) *int { return &i }
-
 func newAlias() *fv1.FunctionAlias {
 	return &fv1.FunctionAlias{
-		ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
+		Name: "prod", Namespace: "default",
 		Spec: fv1.FunctionAliasSpec{
 			FunctionName: "hello",
 			Version:      "hello-v1",
@@ -117,7 +115,7 @@ func TestAliasUpdateWeightAndSecondaryVersion(t *testing.T) {
 
 func TestAliasUpdateClearWeightDropsSplit(t *testing.T) {
 	alias := newAlias()
-	alias.Spec.Weight = intPtr(50)
+	alias.Spec.Weight = new(50)
 	alias.Spec.SecondaryVersion = "hello-v2"
 	fc := setAliasClient(alias)
 

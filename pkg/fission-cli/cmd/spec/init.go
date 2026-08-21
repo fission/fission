@@ -67,11 +67,9 @@ func (opts *InitSubCommand) complete(input cli.Input) error {
 
 	// Write the deployment config
 	opts.deployConfig = &spectypes.DeploymentConfig{
-		TypeMeta: spectypes.TypeMeta{
-			APIVersion: SPEC_API_VERSION,
-			Kind:       "DeploymentConfig",
-		},
-		Name: name,
+		APIVersion: SPEC_API_VERSION,
+		Kind:       "DeploymentConfig",
+		Name:       name,
 
 		// All resources will be annotated with the UID when they're created. This allows
 		// us to be idempotent, as well as to delete resources when their specs are

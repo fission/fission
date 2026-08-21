@@ -17,7 +17,6 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -57,14 +56,14 @@ func (r *recordingCleaner) CleanupFunctionVersion(_ context.Context, fnNamespace
 }
 
 func reconcileReq(ns, name string) ctrl.Request {
-	return ctrl.Request{NamespacedName: types.NamespacedName{Namespace: ns, Name: name}}
+	return ctrl.Request{Namespace: ns, Name: name}
 }
 
 // TestVersionGCReconcileAliveVersionIsNoop: a CREATE/initial-sync event for a
 // still-existing FunctionVersion must tear nothing down.
 func TestVersionGCReconcileAliveVersionIsNoop(t *testing.T) {
 	t.Parallel()
-	v := &fv1.FunctionVersion{ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"}}
+	v := &fv1.FunctionVersion{Name: "hello-v1", Namespace: "default"}
 	cleaner := &recordingCleaner{}
 	r := &reconciler{logger: logr.Discard(), client: newFakeClient(t, v), cleaners: []VersionObjectCleaner{cleaner}}
 

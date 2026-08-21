@@ -21,7 +21,7 @@ import (
 // incrVersion builds a FunctionVersion CR pinning (uid, gen) of fnName.
 func incrVersion(name, ns, fnName string, uid types.UID, gen, seq int64) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Name: name, Namespace: ns,
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:       fnName,
 			FunctionUID:        uid,
@@ -38,7 +38,7 @@ func incrVersion(name, ns, fnName string, uid types.UID, gen, seq int64) *fv1.Fu
 // RFC-0025 Version reference) rather than the live Function.
 func incrVersionedTrigger(name, ns string, gen int64, url, fnName, version string) *fv1.HTTPTrigger {
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name)},
+		Name: name, Namespace: ns, Generation: gen, UID: types.UID("trig-" + name),
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: url,
 			Methods:     []string{http.MethodGet},

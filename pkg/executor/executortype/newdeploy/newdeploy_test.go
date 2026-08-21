@@ -42,10 +42,8 @@ func newTestNewDeploy(t *testing.T) *NewDeploy {
 
 func newTestNewDeployEnv() *fv1.Environment {
 	return &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      envCName,
-			Namespace: "default",
-		},
+		Name:      envCName,
+		Namespace: "default",
 		Spec: fv1.EnvironmentSpec{
 			Version: 1,
 			Runtime: fv1.Runtime{
@@ -57,10 +55,8 @@ func newTestNewDeployEnv() *fv1.Environment {
 
 func newTestNewDeployFunction() *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "newdeploy-test-fn",
-			Namespace: "default",
-		},
+		Name:      "newdeploy-test-fn",
+		Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{
 				Name:      envCName,
@@ -446,8 +442,8 @@ func TestNewDeployPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t *t
 
 func ociTestPackage(deployment fv1.Archive) *fv1.Package {
 	return &fv1.Package{
-		ObjectMeta: metav1.ObjectMeta{Name: "pkg-1", Namespace: "default"},
-		Spec:       fv1.PackageSpec{Deployment: deployment},
+		Name: "pkg-1", Namespace: "default",
+		Spec: fv1.PackageSpec{Deployment: deployment},
 	}
 }
 

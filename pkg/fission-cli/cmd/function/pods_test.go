@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -46,8 +45,8 @@ func TestListPodsVersionFilter(t *testing.T) {
 	t.Run("filters to the pinned version's pods", func(t *testing.T) {
 		fn := describeFunction()
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "hello-v1", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "hello"},
+			Name: "hello-v1", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "hello"},
 		}
 		matching := describeFunctionPod()
 		matching.Name = "poolmgr-nodejs-hello-v1"
@@ -70,8 +69,8 @@ func TestListPodsVersionFilter(t *testing.T) {
 	t.Run("a version owned by another function is rejected", func(t *testing.T) {
 		fn := describeFunction()
 		version := &fv1.FunctionVersion{
-			ObjectMeta: metav1.ObjectMeta{Name: "other-v1", Namespace: "default"},
-			Spec:       fv1.FunctionVersionSpec{FunctionName: "other-fn"},
+			Name: "other-v1", Namespace: "default",
+			Spec: fv1.FunctionVersionSpec{FunctionName: "other-fn"},
 		}
 		setDescribeClients(t, []runtime.Object{fn, version})
 
@@ -93,8 +92,8 @@ func TestListPodsAliasFilter(t *testing.T) {
 	t.Run("name-pinned alias filters by Spec.Version", func(t *testing.T) {
 		fn := describeFunction()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", Version: "hello-v1"},
 		}
 		matching := describeFunctionPod()
 		matching.Name = "poolmgr-nodejs-hello-v1"
@@ -117,9 +116,9 @@ func TestListPodsAliasFilter(t *testing.T) {
 	t.Run("digest-pinned alias falls back to Status.ResolvedVersion", func(t *testing.T) {
 		fn := describeFunction()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + repeat64("a")},
-			Status:     fv1.FunctionAliasStatus{ResolvedVersion: "hello-v3"},
+			Name: "prod", Namespace: "default",
+			Spec:   fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + repeat64("a")},
+			Status: fv1.FunctionAliasStatus{ResolvedVersion: "hello-v3"},
 		}
 		matching := describeFunctionPod()
 		matching.Name = "poolmgr-nodejs-hello-v3"
@@ -138,8 +137,8 @@ func TestListPodsAliasFilter(t *testing.T) {
 	t.Run("an unresolved alias is rejected", func(t *testing.T) {
 		fn := describeFunction()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + repeat64("a")},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "hello", PackageDigest: "sha256:" + repeat64("a")},
 		}
 		setDescribeClients(t, []runtime.Object{fn, alias})
 
@@ -154,8 +153,8 @@ func TestListPodsAliasFilter(t *testing.T) {
 	t.Run("an alias owned by another function is rejected", func(t *testing.T) {
 		fn := describeFunction()
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "other-fn", Version: "other-v1"},
 		}
 		setDescribeClients(t, []runtime.Object{fn, alias})
 

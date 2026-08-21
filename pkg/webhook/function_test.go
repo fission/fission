@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	apiv1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -22,10 +21,8 @@ import (
 // override the Environment / PackageRef namespaces to exercise the rejects.
 func makeValidFunction(fnNs, envNs, pkgNs string) *v1.Function {
 	return &v1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "fn-1",
-			Namespace: fnNs,
-		},
+		Name:      "fn-1",
+		Namespace: fnNs,
 		Spec: v1.FunctionSpec{
 			Environment: v1.EnvironmentReference{
 				Name:      "env-1",
@@ -134,10 +131,8 @@ func TestFunctionWebhook_Validate_RejectsDangerousPodSpec(t *testing.T) {
 			name: "hostPath volume",
 			ps: &apiv1.PodSpec{
 				Volumes: []apiv1.Volume{{
-					Name: "host-root",
-					VolumeSource: apiv1.VolumeSource{
-						HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
-					},
+					Name:     "host-root",
+					HostPath: &apiv1.HostPathVolumeSource{Path: "/"},
 				}},
 			},
 			wantInErr: "hostPath",
@@ -260,12 +255,12 @@ func TestFunctionWebhook_Validate_StateOnInfiniteEnv(t *testing.T) {
 	t.Parallel()
 
 	envInfinite := &v1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
-		Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerInfinite},
+		Name: "env-1", Namespace: "default",
+		Spec: v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerInfinite},
 	}
 	envSingle := &v1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
-		Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerSingle},
+		Name: "env-1", Namespace: "default",
+		Spec: v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: v1.AllowedFunctionsPerContainerSingle},
 	}
 	stateFn := func() *v1.Function {
 		fn := makeValidFunction("default", "default", "default")
@@ -325,8 +320,8 @@ func TestFunctionWebhook_Validate_MountPathOnInfiniteEnv(t *testing.T) {
 	envWith := func(policy v1.AllowedFunctionsPerContainer) func() *v1.Environment {
 		return func() *v1.Environment {
 			return &v1.Environment{
-				ObjectMeta: metav1.ObjectMeta{Name: "env-1", Namespace: "default"},
-				Spec:       v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
+				Name: "env-1", Namespace: "default",
+				Spec: v1.EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: policy},
 			}
 		}
 	}

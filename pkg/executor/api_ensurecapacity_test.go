@@ -64,7 +64,7 @@ func (s *capacityStubExecutorType) MarkSpecializationFailure(_ context.Context, 
 
 func poolmgrFn(name string) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default", UID: "test-uid"},
+		Name: name, Namespace: "default", UID: "test-uid",
 		Spec: fv1.FunctionSpec{
 			InvokeStrategy: fv1.InvokeStrategy{
 				ExecutionStrategy: fv1.ExecutionStrategy{ExecutorType: fv1.ExecutorTypePoolmgr},

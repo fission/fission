@@ -18,7 +18,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -35,15 +34,14 @@ func benchRouteSet(n int) ([]fv1.Function, []fv1.HTTPTrigger, map[crd.CacheKeyUG
 	triggers := make([]fv1.HTTPTrigger, 0, n)
 	fnTimeout := make(map[crd.CacheKeyUG]int, n)
 	for i := range n {
-		fn := fv1.Function{ObjectMeta: metav1.ObjectMeta{
+		fn := fv1.Function{
 			Name:      fmt.Sprintf("bench-fn-%d", i),
 			Namespace: "default",
-			UID:       types.UID(fmt.Sprintf("uid-%d", i)),
-		}}
+			UID:       types.UID(fmt.Sprintf("uid-%d", i))}
 		fns = append(fns, fn)
 		fnTimeout[crd.CacheKeyUGFromMeta(&fn.ObjectMeta)] = fv1.DEFAULT_FUNCTION_TIMEOUT
 		triggers = append(triggers, fv1.HTTPTrigger{
-			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("bench-%d", i), Namespace: "default"},
+			Name: fmt.Sprintf("bench-%d", i), Namespace: "default",
 			Spec: fv1.HTTPTriggerSpec{
 				FunctionReference: fv1.FunctionReference{
 					Type: fv1.FunctionReferenceTypeFunctionName,
@@ -114,7 +112,7 @@ func BenchmarkIncrementalWeightTick(b *testing.B) {
 	const n = 10000
 	fns, triggers, _ := benchRouteSet(n)
 	canary := fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: "bench-canary", Namespace: "default", Generation: 1, UID: "uid-canary"},
+		Name: "bench-canary", Namespace: "default", Generation: 1, UID: "uid-canary",
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/bench-canary",
 			Methods:     []string{http.MethodGet},

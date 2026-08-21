@@ -23,12 +23,10 @@ import (
 
 func gcVersion(fnName string, seq int64) *fv1.FunctionVersion {
 	return &fv1.FunctionVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-v%d", fnName, seq),
-			Namespace: "default",
-			Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
-		},
-		Spec: fv1.FunctionVersionSpec{FunctionName: fnName, Sequence: seq},
+		Name:      fmt.Sprintf("%s-v%d", fnName, seq),
+		Namespace: "default",
+		Labels:    map[string]string{fv1.VersionFunctionNameLabel: fnName},
+		Spec:      fv1.FunctionVersionSpec{FunctionName: fnName, Sequence: seq},
 	}
 }
 
@@ -54,7 +52,7 @@ func gcVersionsFlags(fnName string, keep int, keepSet bool) dummy.Cli {
 func TestGCVersionsCommand_KeepOverride(t *testing.T) {
 	retain := 2
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Versioning: &fv1.VersioningConfig{Retain: &retain},
 		},
@@ -83,7 +81,7 @@ func TestGCVersionsCommand_KeepOverride(t *testing.T) {
 func TestGCVersionsCommand_DefaultsToFunctionRetain(t *testing.T) {
 	retain := 3
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 		Spec: fv1.FunctionSpec{
 			Versioning: &fv1.VersioningConfig{Retain: &retain},
 		},
@@ -112,7 +110,7 @@ func TestGCVersionsCommand_DefaultsToFunctionRetain(t *testing.T) {
 // operator action, not the automatic controller).
 func TestGCVersionsCommand_NoVersioningConfigDefaultsToPackageDefault(t *testing.T) {
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"},
+		Name: "hello", Namespace: "default",
 	}
 	objs := []runtime.Object{fn}
 	for i := int64(1); i <= int64(versioning.DefaultRetain)+2; i++ {
@@ -134,7 +132,7 @@ func TestGCVersionsCommand_NoVersioningConfigDefaultsToPackageDefault(t *testing
 // rejected before any sweep runs -- SweepVersions would silently floor it to
 // 1, but the CLI should surface the mistake instead.
 func TestGCVersionsCommand_InvalidKeepRejected(t *testing.T) {
-	fn := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "hello", Namespace: "default"}}
+	fn := &fv1.Function{Name: "hello", Namespace: "default"}
 	setGCVersionsClient(fn)
 
 	in := gcVersionsFlags("hello", 0, true)

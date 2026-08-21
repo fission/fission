@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
@@ -21,7 +20,7 @@ import (
 func existingRoute(name string) *fv1.HTTPTrigger {
 	prefix := ""
 	return &fv1.HTTPTrigger{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Name: name, Namespace: "default",
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: "/test",
 			Prefix:      &prefix,
@@ -119,8 +118,8 @@ func TestUpdateCompleteFnRefTagFlags(t *testing.T) {
 
 	t.Run("valid alias lands on the updated FunctionReference", func(t *testing.T) {
 		alias := &fv1.FunctionAlias{
-			ObjectMeta: metav1.ObjectMeta{Name: "prod", Namespace: "default"},
-			Spec:       fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
+			Name: "prod", Namespace: "default",
+			Spec: fv1.FunctionAliasSpec{FunctionName: "fn", Version: "fn-v1"},
 		}
 		fc := fissionfake.NewSimpleClientset(existingRoute("r1"), alias) //nolint:staticcheck
 		cmd.ResetClientsetForTest()

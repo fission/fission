@@ -56,7 +56,7 @@ func TestFunctionAliasToolReconciler_RepointRefreshesToolEntry(t *testing.T) {
 
 	// Populate the initial entry the way FunctionToolReconciler normally
 	// would (the Function's own reconcile, independent of the alias watch).
-	_, err := tool.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "repointed"}})
+	_, err := tool.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "repointed"})
 	require.NoError(t, err)
 	e, ok := reg.Lookup("default-repointed")
 	require.True(t, ok)
@@ -71,7 +71,7 @@ func TestFunctionAliasToolReconciler_RepointRefreshesToolEntry(t *testing.T) {
 	require.NoError(t, c.Update(ctx, got))
 
 	// The alias reconciler fires on the FunctionAlias event, not the Function.
-	_, err = ar.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "repoint-alias"}})
+	_, err = ar.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "repoint-alias"})
 	require.NoError(t, err)
 
 	e, ok = reg.Lookup("default-repointed")
@@ -94,15 +94,15 @@ func TestFunctionAliasToolReconciler_IgnoresFunctionsNotTargetingThisAlias(t *te
 	ctx := t.Context()
 
 	// Seed both functions' entries directly (as their own reconcile would).
-	_, err := tool.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "unrelated"}})
+	_, err := tool.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "unrelated"})
 	require.NoError(t, err)
-	_, err = tool.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "other"}})
+	_, err = tool.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "other"})
 	require.NoError(t, err)
 	require.Equal(t, 2, reg.Len())
 
 	// "some-alias" fires; neither function targets it, and its own target
 	// function doesn't even exist -- must be a no-op, not an error.
-	_, err = ar.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "some-alias"}})
+	_, err = ar.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "some-alias"})
 	require.NoError(t, err)
 	assert.Equal(t, 2, reg.Len(), "unrelated functions must be untouched")
 }
@@ -119,7 +119,7 @@ func TestFunctionAliasToolReconciler_DeleteIsNoop(t *testing.T) {
 	ar, tool, reg, _ := newAliasReconciler(t, fn)
 	ctx := t.Context()
 
-	_, err := tool.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "orphaned"}})
+	_, err := tool.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "orphaned"})
 	require.NoError(t, err)
 	e, ok := reg.Lookup("default-orphaned")
 	require.True(t, ok)
@@ -128,6 +128,6 @@ func TestFunctionAliasToolReconciler_DeleteIsNoop(t *testing.T) {
 	// "gone-alias" was never created, so a reconcile for it behaves exactly
 	// like a delete (client.Get on the alias itself is never even attempted
 	// here -- List-and-filter over Functions doesn't touch the alias object).
-	_, err = ar.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: "default", Name: "gone-alias"}})
+	_, err = ar.Reconcile(ctx, ctrl.Request{Namespace: "default", Name: "gone-alias"})
 	require.NoError(t, err)
 }

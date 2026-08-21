@@ -10,7 +10,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -45,11 +44,9 @@ func NamespaceAuthSecret(master []byte, namespace string) *corev1.Secret {
 		return nil
 	}
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      keysSecretName,
-			Namespace: namespace,
-			Labels:    map[string]string{managedByLabelKey: managedByValue},
-		},
+		Name:      keysSecretName,
+		Namespace: namespace,
+		Labels:    map[string]string{managedByLabelKey: managedByValue},
 		// Hex-encode each derived key: these land in a Secret the fetcher/builder
 		// consume as ENV VARS, and raw HKDF bytes are not valid UTF-8, which breaks
 		// container creation ("string field contains invalid UTF-8"). The consumers

@@ -42,11 +42,9 @@ func refreshTestPod(gp *GenericPool, fn *fv1.Function, name, generation string) 
 		labels[fv1.FUNCTION_GENERATION] = generation
 	}
 	return &apiv1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: fn.Spec.Environment.Namespace,
-			Labels:    labels,
-		},
+		Name:      name,
+		Namespace: fn.Spec.Environment.Namespace,
+		Labels:    labels,
 	}
 }
 
@@ -59,10 +57,10 @@ func newRefreshFixture(t *testing.T) *refreshTestFixture {
 	t.Helper()
 
 	env := &fv1.Environment{
-		ObjectMeta: metav1.ObjectMeta{Name: "env1", Namespace: "default", UID: "env-uid-1"},
+		Name: "env1", Namespace: "default", UID: "env-uid-1",
 	}
 	fn := fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 5},
+		Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 5,
 		Spec: fv1.FunctionSpec{
 			Environment: fv1.EnvironmentReference{Name: "env1", Namespace: "default"},
 		},
@@ -176,7 +174,7 @@ func TestRefreshSparesPod(t *testing.T) {
 	t.Parallel()
 
 	fn := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 5},
+		Name: "fn1", Namespace: "default", UID: "fn-uid-1", Generation: 5,
 	}
 	retainGen3 := func(uid k8sTypes.UID, gen int64) bool {
 		return uid == fn.UID && gen == 3

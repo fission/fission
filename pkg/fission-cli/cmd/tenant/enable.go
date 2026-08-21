@@ -59,7 +59,7 @@ func (opts *EnableSubCommand) do(input cli.Input) error {
 	}
 
 	ft := &v1.FissionTenant{
-		ObjectMeta: metav1.ObjectMeta{Name: namespace},
+		Name: namespace,
 		Spec: v1.FissionTenantSpec{
 			Namespace:         namespace,
 			FunctionNamespace: fnNS,

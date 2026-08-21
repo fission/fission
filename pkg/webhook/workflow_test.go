@@ -11,14 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 func makeValidWorkflow() *v1.Workflow {
 	return &v1.Workflow{
-		ObjectMeta: metav1.ObjectMeta{Name: "wf-1", Namespace: "default"},
+		Name: "wf-1", Namespace: "default",
 		Spec: v1.WorkflowSpec{
 			StartAt: "a",
 			States: map[string]v1.WorkflowState{
@@ -102,8 +101,8 @@ func TestWorkflowRunSpecImmutable(t *testing.T) {
 	r := &WorkflowRun{}
 
 	old := &v1.WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default"},
-		Spec:       v1.WorkflowRunSpec{WorkflowRef: "wf-1"},
+		Name: "run-1", Namespace: "default",
+		Spec: v1.WorkflowRunSpec{WorkflowRef: "wf-1"},
 	}
 
 	same := old.DeepCopy()
@@ -121,13 +120,13 @@ func TestWorkflowRunWebhookValidate(t *testing.T) {
 	r := &WorkflowRun{}
 
 	ok := &v1.WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-1", Namespace: "default"},
-		Spec:       v1.WorkflowRunSpec{WorkflowRef: "wf-1"},
+		Name: "run-1", Namespace: "default",
+		Spec: v1.WorkflowRunSpec{WorkflowRef: "wf-1"},
 	}
 	assert.NoError(t, r.Validate(ok))
 
 	oversized := &v1.WorkflowRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "run-2", Namespace: "default"},
+		Name: "run-2", Namespace: "default",
 		Spec: v1.WorkflowRunSpec{
 			WorkflowRef: "wf-1",
 			Input:       &apiextensionsv1.JSON{Raw: bytes.Repeat([]byte("x"), v1.MaxWorkflowRunInputBytes+1)},

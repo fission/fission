@@ -195,15 +195,13 @@ func readyPod(name, fnUID string) *corev1.Pod {
 // tests exercising the provisioner's generation filter.
 func readyPodGen(name, fnUID, generation string) *corev1.Pod {
 	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-			Labels: map[string]string{
-				fv1.FUNCTION_UID:        fnUID,
-				fv1.FUNCTION_GENERATION: generation,
-				fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
-				fv1.PROVISIONED_LABEL:   fv1.PROVISIONED_VALUE,
-			},
+		Name:      name,
+		Namespace: "default",
+		Labels: map[string]string{
+			fv1.FUNCTION_UID:        fnUID,
+			fv1.FUNCTION_GENERATION: generation,
+			fv1.SERVED_LABEL:        fv1.SERVED_VALUE,
+			fv1.PROVISIONED_LABEL:   fv1.PROVISIONED_VALUE,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
@@ -240,10 +238,8 @@ func podNoProvisionedLabel(name, fnUID string) *corev1.Pod {
 // provisionedFn builds a Function with the given target and poolmgr executor.
 func provisionedFn(name string, target int) *fv1.Function {
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name, Namespace: "default",
-			UID: types.UID("fn-uid-" + name), Generation: 1,
-		},
+		Name: name, Namespace: "default",
+		UID: types.UID("fn-uid-" + name), Generation: 1,
 		Spec: fv1.FunctionSpec{
 			ProvisionedConcurrency: &fv1.ProvisionedConcurrencyConfig{Target: target},
 		},
@@ -1246,8 +1242,7 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
 
 		// check if window 1 provisioned target is updated
-		time.Sleep(9 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(9 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
@@ -1259,8 +1254,7 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		updateCrClient(t, p)
 
 		// check if window 2 provisioned target is updated
-		time.Sleep(3 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(3 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 5, fn.Status.ProvisionedTarget, "expected 5 target, got: ", fn.Status.ProvisionedTarget)
@@ -1271,8 +1265,7 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		updateCrClient(t, p)
 
 		// window 2 is over, check if provisioned target is updated to window1 target
-		time.Sleep(2 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(2 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
@@ -1283,8 +1276,7 @@ func TestProvisionerArmTransitionSyncBubbleTest(t *testing.T) {
 		updateCrClient(t, p)
 
 		// window1 is over, check if provisioned target is updated to 0
-		time.Sleep(3 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(3 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
@@ -1330,8 +1322,7 @@ func TestProvisionerScheduleStopProvisionerRemoveProvisionedConcurrency(t *testi
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
 
 		// check if window 1 provisioned target is updated
-		time.Sleep(9 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(9 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
@@ -1377,8 +1368,7 @@ func TestProvisionerScheduleStopProvisionerDeleteFunction(t *testing.T) {
 		assert.Equal(t, 0, fn.Status.ProvisionedTarget, "expected 0 target, got: ", fn.Status.ProvisionedTarget)
 
 		// check if window 1 provisioned target is updated
-		time.Sleep(9 * time.Hour)
-		synctest.Wait()
+		synctest.Sleep(9 * time.Hour)
 		fn, err = p.fissionClient.CoreV1().Functions(fn.Namespace).Get(t.Context(), fn.Name, metav1.GetOptions{})
 		assert.NoError(t, err, "no error expected fetching latest function")
 		assert.Equal(t, 3, fn.Status.ProvisionedTarget, "expected 3 target, got: ", fn.Status.ProvisionedTarget)
@@ -1617,8 +1607,7 @@ func TestProvisionerScheduleTickerTimer(t *testing.T) {
 		p2 := newTestProvisioner(crClient2)
 		p2.armTransition(fn)
 
-		time.Sleep(9*time.Hour + time.Nanosecond)
-		synctest.Wait()
+		synctest.Sleep(9*time.Hour + time.Nanosecond)
 		// The fired timer's callback is the one stuck here — the only
 		// contender that exists at this point, so exactly 1 call.
 		assert.Equal(t, int64(1), listCalls2.Load())

@@ -372,12 +372,10 @@ func (r *EnvironmentReconciler) createBuilderService(ctx context.Context, env *f
 		}
 	}
 	service := apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       ns,
-			Name:            name,
-			Labels:          sel,
-			OwnerReferences: ownerReferences,
-		},
+		Namespace:       ns,
+		Name:            name,
+		Labels:          sel,
+		OwnerReferences: ownerReferences,
 		Spec: apiv1.ServiceSpec{
 			Selector: sel,
 			Type:     apiv1.ServiceTypeClusterIP,
@@ -435,9 +433,9 @@ func builderAuthEnvVars(namespace string) []apiv1.EnvVar {
 	keyRef := func(name, key string, optional bool) apiv1.EnvVar {
 		opt := optional
 		return apiv1.EnvVar{Name: name, ValueFrom: &apiv1.EnvVarSource{SecretKeyRef: &apiv1.SecretKeySelector{
-			LocalObjectReference: apiv1.LocalObjectReference{Name: fv1.TenantAuthKeysSecret},
-			Key:                  key,
-			Optional:             &opt,
+			Name:     fv1.TenantAuthKeysSecret,
+			Key:      key,
+			Optional: &opt,
 		}}}
 	}
 	return []apiv1.EnvVar{
@@ -484,13 +482,11 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 		ReadinessProbe: &apiv1.Probe{
 			InitialDelaySeconds: 5,
 			PeriodSeconds:       2,
-			ProbeHandler: apiv1.ProbeHandler{
-				HTTPGet: &apiv1.HTTPGetAction{
-					Path: "/healthz",
-					Port: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: svcinfo.PortBuilder,
-					},
+			HTTPGet: &apiv1.HTTPGetAction{
+				Path: "/healthz",
+				Port: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: svcinfo.PortBuilder,
 				},
 			},
 		},
@@ -507,10 +503,8 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 	// GHSA-85g2-pmrx-r49q).
 	automountSAToken := false
 	pod := apiv1.PodTemplateSpec{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:      sel,
-			Annotations: podAnnotations,
-		},
+		Labels:      sel,
+		Annotations: podAnnotations,
 		Spec: apiv1.PodSpec{
 			Containers:                   []apiv1.Container{*container},
 			ServiceAccountName:           fv1.FissionBuilderSA,
@@ -552,12 +546,10 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 	}
 
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace:       ns,
-			Name:            name,
-			Labels:          sel,
-			OwnerReferences: ownerReferences,
-		},
+		Namespace:       ns,
+		Name:            name,
+		Labels:          sel,
+		OwnerReferences: ownerReferences,
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{

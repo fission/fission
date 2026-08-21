@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -98,14 +97,12 @@ func TestDynamicCachePersistentSARErrorsEventuallyExcludeAndRecover(t *testing.T
 	port := int32(8888)
 	ready := true
 	fakeEndpointSlice := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testendpoint",
-			Namespace: "team-a",
-			Labels: map[string]string{
-				fv1.FUNCTION_NAMESPACE: "team-a",
-				fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
-				fv1.FUNCTION_NAME:      "fn-a",
-			},
+		Name:      "testendpoint",
+		Namespace: "team-a",
+		Labels: map[string]string{
+			fv1.FUNCTION_NAMESPACE: "team-a",
+			fv1.MANAGED_BY_LABEL:   fv1.MANAGED_BY_VALUE,
+			fv1.FUNCTION_NAME:      "fn-a",
 		},
 		AddressType: discoveryv1.AddressTypeIPv4,
 		Endpoints: []discoveryv1.Endpoint{

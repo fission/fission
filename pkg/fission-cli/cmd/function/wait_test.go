@@ -19,13 +19,13 @@ import (
 
 func TestFunctionWait(t *testing.T) {
 	ready := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "rdy", Namespace: "default"},
+		Name: "rdy", Namespace: "default",
 		Status: fv1.FunctionStatus{Conditions: []metav1.Condition{
 			{Type: fv1.FunctionConditionReady, Status: metav1.ConditionTrue},
 		}},
 	}
 	notReady := &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: "notrdy", Namespace: "default"},
+		Name: "notrdy", Namespace: "default",
 		Status: fv1.FunctionStatus{Conditions: []metav1.Condition{
 			{Type: fv1.FunctionConditionReady, Status: metav1.ConditionFalse},
 		}},
