@@ -7,6 +7,7 @@ package spec
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,4 +73,21 @@ func TestShowSections(t *testing.T) {
 		assert.Contains(t, out, "NAME STARTAT STATES\n")
 		assert.Contains(t, out, "wf   s1      2\n")
 	})
+}
+
+// TestShowMQTriggersNormalizedTitle pins the one deliberate rendering change
+// the showSection collapse made: MQ triggers historically printed their title
+// through fmt.Printf with a leading newline, unlike the other nine sections;
+// it now renders identically to them — title first, no leading blank line.
+func TestShowMQTriggersNormalizedTitle(t *testing.T) {
+	mqts := []fv1.MessageQueueTrigger{{Name: "mq1"}}
+	mqts[0].Spec.FunctionReference = fv1.FunctionReference{Name: "fn-a"}
+	mqts[0].Spec.Topic = "orders"
+
+	out := captureShow(t, func() { ShowMQTriggers(mqts) })
+
+	assert.True(t, strings.HasPrefix(out, "MessageQueue Triggers:\n"),
+		"title must be the first line, with no leading blank line:\n%q", out)
+	assert.Contains(t, out, "mq1")
+	assert.Contains(t, out, "orders")
 }

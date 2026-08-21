@@ -184,7 +184,7 @@ func TestRunWait(t *testing.T) {
 		in.SetString(flagkey.WaitFor, "condition=Ready")
 		in.SetDuration(flagkey.WaitTimeout, 2*time.Second)
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionTrue), nil }
-		if err := RunWait(in, "Function", "hello", get); err != nil {
+		if err := runWait(in, "Function", "hello", get); err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
 	})
@@ -193,7 +193,7 @@ func TestRunWait(t *testing.T) {
 		in := dummy.TestFlagSet()
 		in.SetString(flagkey.WaitFor, "Ready")
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionTrue), nil }
-		if err := RunWait(in, "Function", "hello", get); err == nil {
+		if err := runWait(in, "Function", "hello", get); err == nil {
 			t.Fatal("expected an error for invalid --for")
 		}
 	})
@@ -203,7 +203,7 @@ func TestRunWait(t *testing.T) {
 		in.SetString(flagkey.WaitFor, "condition=Ready")
 		in.SetDuration(flagkey.WaitTimeout, 20*time.Millisecond)
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionFalse), nil }
-		err := RunWait(in, "Function", "hello", get)
+		err := runWait(in, "Function", "hello", get)
 		if err == nil || !strings.Contains(err.Error(), "Function/hello") {
 			t.Fatalf("expected timeout error mentioning Function/hello, got %v", err)
 		}

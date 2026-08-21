@@ -15,6 +15,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -74,7 +75,7 @@ func watchPackageBuild(ctx context.Context, client cmd.Client, out io.Writer, na
 		if envNamespace == "" {
 			envNamespace = namespace
 		}
-	} else if util.IsNotFound(err) {
+	} else if kerrors.IsNotFound(err) {
 		return fmt.Errorf("package %s/%s not found: %w", namespace, name, err)
 	}
 
@@ -101,7 +102,7 @@ func watchPackageBuild(ctx context.Context, client cmd.Client, out io.Writer, na
 	check := func(ctx context.Context) (bool, error) {
 		p, err := client.FissionClientSet.CoreV1().Packages(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			if util.IsNotFound(err) {
+			if kerrors.IsNotFound(err) {
 				// The caller just created/updated this package; NotFound now
 				// means it was deleted underneath the watch.
 				return false, fmt.Errorf("package %s/%s no longer exists: %w", namespace, name, err)

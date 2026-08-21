@@ -81,24 +81,26 @@ func DeleteKubeObject(ctx context.Context, kubeClient kubernetes.Interface, kube
 	return nil
 }
 
-// ownedLister is the slice of a typed client cleanupOwned needs; the
+// ownedLister is the slice of a typed client cleanupOrphaned needs; the
 // namespaced accessors of every kubernetes.Interface group satisfy it.
 type ownedLister[T any, L any] interface {
 	List(ctx context.Context, opts metav1.ListOptions) (*L, error)
 	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
 }
 
-// cleanupOwned deletes, across every reaper namespace, each object whose
+// cleanupOrphaned deletes, across every reaper namespace, each object whose
 // executor-instanceID annotation (or, for backward compatibility, label)
 // names a DIFFERENT executor instance — i.e. resources orphaned by a previous
 // executor. Delete failures are logged and skipped, matching the historical
 // per-kind loops: a leftover object must not abort the sweep. noun names the
-// kind in the "cleaning up" message; key prefixes the structured log fields
-// (they differ only for HPA, whose message says "HPA" but logs "hpa_name").
-func cleanupOwned[T any, L any, PT interface {
+// kind in the "cleaning up" message; its lowercase form prefixes the
+// structured log fields (the two differ only for HPA, whose message says
+// "HPA" but logs "hpa_name").
+func cleanupOrphaned[T any, L any, PT interface {
 	*T
 	metav1.Object
-}, C ownedLister[T, L]](ctx context.Context, logger logr.Logger, client func(ns string) C, fromList func(*L) []T, noun, key, instanceID string, listOps metav1.ListOptions, delOpts metav1.DeleteOptions) error {
+}, C ownedLister[T, L]](ctx context.Context, logger logr.Logger, client func(ns string) C, fromList func(*L) []T, noun, instanceID string, listOps metav1.ListOptions, delOpts metav1.DeleteOptions) error {
+	key := strings.ToLower(noun)
 	clean := func(namespace string) error {
 		list, err := client(namespace).List(ctx, listOps)
 		if err != nil {
@@ -133,30 +135,30 @@ func cleanupOwned[T any, L any, PT interface {
 
 // CleanupDeployments deletes deployment(s) for a given instanceID
 func CleanupDeployments(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	return cleanupOwned(ctx, logger, client.AppsV1().Deployments,
+	return cleanupOrphaned(ctx, logger, client.AppsV1().Deployments,
 		func(l *appsv1.DeploymentList) []appsv1.Deployment { return l.Items },
-		"deployment", "deployment", instanceID, listOps, delOpt)
+		"deployment", instanceID, listOps, delOpt)
 }
 
 // CleanupPods deletes pod(s) for a given instanceID
 func CleanupPods(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	return cleanupOwned(ctx, logger, client.CoreV1().Pods,
+	return cleanupOrphaned(ctx, logger, client.CoreV1().Pods,
 		func(l *apiv1.PodList) []apiv1.Pod { return l.Items },
-		"pod", "pod", instanceID, listOps, metav1.DeleteOptions{})
+		"pod", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 // CleanupServices deletes service(s) for a given instanceID
 func CleanupServices(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	return cleanupOwned(ctx, logger, client.CoreV1().Services,
+	return cleanupOrphaned(ctx, logger, client.CoreV1().Services,
 		func(l *apiv1.ServiceList) []apiv1.Service { return l.Items },
-		"service", "service", instanceID, listOps, metav1.DeleteOptions{})
+		"service", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
 func CleanupHpa(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	return cleanupOwned(ctx, logger, client.AutoscalingV2().HorizontalPodAutoscalers,
+	return cleanupOrphaned(ctx, logger, client.AutoscalingV2().HorizontalPodAutoscalers,
 		func(l *asv2.HorizontalPodAutoscalerList) []asv2.HorizontalPodAutoscaler { return l.Items },
-		"HPA", "hpa", instanceID, listOps, metav1.DeleteOptions{})
+		"HPA", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 func GetReaperNamespace() map[string]string {

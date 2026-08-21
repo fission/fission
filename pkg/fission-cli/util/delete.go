@@ -29,10 +29,11 @@ type deleter interface {
 // other failure comes back wrapped as "error deleting <errNoun>: ...".
 //
 // Not-found is detected with the typed kerrors.IsNotFound check. The string
-// suffix match some callers used before (util.IsNotFound) also matched
-// unrelated errors that merely end in "not found" — e.g. a port-forward
-// failing with `service <selector> not found` — making --ignore-not-found
-// report success for failures that were not the object being absent.
+// suffix match some callers used before (a now-deleted util.IsNotFound) also
+// matched unrelated errors that merely end in "not found" — e.g. a
+// port-forward failing with `service <selector> not found` — making
+// --ignore-not-found report success for failures that were not the object
+// being absent.
 func DeleteOne(input cli.Input, client deleter, name, errNoun string) (deleted bool, err error) {
 	err = client.Delete(input.Context(), name, metav1.DeleteOptions{})
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/conditions"
@@ -136,7 +137,11 @@ func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.C
 					return true, nil
 				}
 			}
-		case IsNotFound(err):
+		case kerrors.IsNotFound(err):
+			// The object does not exist (yet) — keep polling; a wait is often
+			// issued right after a create. The typed check matters: an
+			// unrelated error merely ending in "not found" must take the
+			// default branch and fail the wait rather than poll to timeout.
 			lastSeen = "NotFound"
 		case ctx.Err() != nil:
 			// The wait deadline/cancellation interrupted the in-flight get;
@@ -167,7 +172,7 @@ func waitTimeoutError(ctx context.Context, condType string, want metav1.Conditio
 // RunWait is the shared glue for every resource's `wait` subcommand: it parses
 // --for / --timeout, polls get until the condition is met (or the deadline),
 // and prints the outcome. get fetches the target resource's Status.Conditions.
-func RunWait(input cli.Input, kind, name string, get func(context.Context) ([]metav1.Condition, error)) error {
+func runWait(input cli.Input, kind, name string, get func(context.Context) ([]metav1.Condition, error)) error {
 	condType, want, err := ParseForCondition(input.String(flagkey.WaitFor))
 	if err != nil {
 		return err
@@ -216,5 +221,5 @@ func WaitOn[T any, PT conditioned[T], C getter[T]](input cli.Input, client C, ki
 		}
 		return *PT(obj).GetConditions(), nil
 	}
-	return RunWait(input, kind, name, get)
+	return runWait(input, kind, name, get)
 }

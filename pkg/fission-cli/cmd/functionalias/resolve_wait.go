@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -36,7 +38,7 @@ func waitForResolved(ctx context.Context, get func(context.Context) (*fv1.Functi
 				(wantVersion == "" || alias.Status.ResolvedVersion == wantVersion) {
 				return true, nil
 			}
-		case !util.IsNotFound(err):
+		case !kerrors.IsNotFound(err):
 			return false, err
 		}
 		return false, nil
@@ -62,7 +64,7 @@ func resolveWaitSuffix(wantVersion string) string {
 // `alias update --wait` and `fn rollback --wait`: it polls the named
 // FunctionAlias at 1s intervals until Resolved=True (and, when wantVersion is
 // set, Status.ResolvedVersion==wantVersion) or timeout elapses (falling back
-// to util.DefaultWaitTimeout when timeout<=0, mirroring util.RunWait).
+// to util.DefaultWaitTimeout when timeout<=0, mirroring util.WaitOn).
 func WaitForResolved(ctx context.Context, cl versioned.Interface, namespace, name, wantVersion string, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = util.DefaultWaitTimeout

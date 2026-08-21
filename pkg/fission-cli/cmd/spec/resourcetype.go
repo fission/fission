@@ -228,8 +228,9 @@ type crudClient[T any, L any] interface {
 // so a kind with no quirks declares only what genuinely differs: where its
 // items live in the spec, how to unwrap its list type, its ObjectMeta, and
 // its equality. Kinds with quirks take this as the base and override fields
-// on the returned value (HTTPTrigger adds validate; Package replaces list,
-// equal, and update — see applyPackages).
+// on the returned value (HTTPTrigger adds validate; Package replaces list and
+// update — its build-status-aware equality is its positional argument — see
+// applyPackages).
 func standardOps[T any, PT Object[T], L any, C crudClient[T, L]](
 	client func(ns string) C,
 	items func(*FissionResources) []T,
