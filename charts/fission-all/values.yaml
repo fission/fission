@@ -1422,6 +1422,61 @@ authentication:
 ##
 nameFormat: standard
 
+## Annotations and labels to stamp onto the ServiceAccounts this chart creates.
+##
+## The motivating case is cloud workload identity — EKS IRSA, GKE Workload
+## Identity, Azure Workload Identity — where a component assumes a cloud role by
+## carrying an annotation on its ServiceAccount. storagesvc talking to S3 with an
+## IAM role instead of a static access key is the common one.
+##
+## `annotations` and `labels` at this level apply to EVERY account; a key under a
+## component name applies to that account alone and overrides the chart-wide
+## value key by key. Components are keyed by ACCOUNT, not by deployment: two of
+## them (fetcher, builder) live in the function and builder namespaces rather
+## than the release namespace, and neither has a component block elsewhere in
+## this file.
+##
+## A role ARN is scoped to one component's permissions, so it belongs under that
+## component, never at the chart-wide level:
+##
+##   serviceAccounts:
+##     labels:
+##       my-org/owner: platform-team
+##     storagesvc:
+##       annotations:
+##         eks.amazonaws.com/role-arn: arn:aws:iam::012345678901:role/fission-storagesvc
+##     kafka:
+##       annotations:
+##         eks.amazonaws.com/role-arn: arn:aws:iam::012345678901:role/fission-kafka
+##
+serviceAccounts:
+  ## Applied to every Fission ServiceAccount.
+  annotations: {}
+  labels: {}
+
+  ## Per-account overrides. Every account this chart can create is listed, so
+  ## the set is discoverable without reading the templates; an account only
+  ## renders when its component is enabled.
+  builder: {}
+  buildermgr: {}
+  canaryconfig: {}
+  executor: {}
+  fetcher: {}
+  kafka: {}
+  kubewatcher: {}
+  mcp: {}
+  mqtKeda: {}
+  preupgrade: {}
+  router: {}
+  statestore: {}
+  statestoreMqt: {}
+  statesvc: {}
+  storagesvc: {}
+  tenantController: {}
+  timer: {}
+  webhook: {}
+  workflow: {}
+
 ## OpenTelemetry is a set of tools for collecting, analyzing, and visualizing
 ## distributed tracing data across function calls.
 ##

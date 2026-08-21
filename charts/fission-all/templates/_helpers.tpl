@@ -540,3 +540,134 @@ annotation would fight that design — hence the same tenancy gate.
 {{- end -}}
 {{- join " " $namespaces -}}
 {{- end -}}
+
+{{/*
+fission.saMetadata renders the annotations and labels a ServiceAccount inherits
+from the `serviceAccounts` values block, as complete metadata sub-blocks.
+
+  {{- include "fission.saMetadata" (dict "root" . "component" "storagesvc") }}
+
+Each component key merges over the chart-wide default, so an operator can stamp
+an ownership label on every account and still give storagesvc its own IRSA role
+annotation. Nothing renders when both maps are empty, which keeps the manifest
+byte-identical for anyone not using the feature.
+
+Cloud workload identity (#3166) is the motivating case, and it is why the
+annotations are per-component rather than chart-wide only: an EKS IRSA role ARN
+is scoped to one component's permissions, so a single shared value would either
+over-grant every account or fit none of them.
+
+The component key is the account's own name, not the deployment's — several
+components own more than one (misc-functions owns both `fetcher` and `builder`)
+and two accounts have no component block of their own. `fission.saComponents`
+below is the canonical list, and the chart test walks it against the rendered
+accounts so a new one cannot silently miss this include.
+*/}}
+{{- define "fission.saMetadata" -}}
+{{- include "fission.saAnnotationsBlock" . }}
+{{- include "fission.saLabelsBlock" . }}
+{{- end -}}
+
+{{/*
+fission.saAnnotationsBlock and fission.saLabelsBlock are fission.saMetadata's
+halves, for the accounts that already own one of the two blocks: pre-upgrade
+checks owns Helm hook annotations, and four accounts carry chart labels. Those
+templates merge the entry helpers into the block they own and include only the
+missing half from here — emitting a second `annotations:` key in the same
+mapping would be invalid YAML, and Helm would not catch it.
+
+All three carry their own indentation, two spaces, for the `metadata:` level
+every ServiceAccount in this chart sits at. That is what lets a call site write
+a bare `{{- include ... }}`: piping an empty include through `nindent` yields a
+line of spaces rather than nothing, so a chart with no serviceAccounts values
+set would grow whitespace-only lines in every account it renders.
+*/}}
+{{- define "fission.saAnnotationsBlock" -}}
+{{- $annotations := include "fission.saAnnotations" . -}}
+{{- if $annotations }}
+  annotations:
+{{- $annotations | nindent 4 }}
+{{- end }}
+{{- end -}}
+
+{{- define "fission.saLabelsBlock" -}}
+{{- $labels := include "fission.saLabels" . -}}
+{{- if $labels }}
+  labels:
+{{- $labels | nindent 4 }}
+{{- end }}
+{{- end -}}
+
+{{/*
+fission.saAnnotations and fission.saLabels resolve the merged map for one
+component and emit it as bare, unindented YAML entries. Callers wrap them in
+`with` so an empty map renders nothing:
+
+  {{- with include "fission.saLabels" (dict "root" . "component" "workflow") }}{{ . | nindent 4 }}{{- end }}
+
+merge's first argument wins, so the component map overrides the chart-wide one
+key by key rather than replacing it wholesale.
+
+BOTH arguments are deep-copied. merge mutates its destination, and these helpers
+run once per account against the same chart-wide map, so a version of sprig that
+writes through to either argument would let the first account's keys contaminate
+the other eighteen. Current sprig does not, and TestServiceAccountNoCrossAccountLeak
+is what keeps that from becoming a silent regression on a helm bump.
+*/}}
+{{- define "fission.saAnnotations" -}}
+{{- $sa := .root.Values.serviceAccounts | default dict -}}
+{{- $merged := merge (deepCopy (dig .component "annotations" dict $sa)) (deepCopy ($sa.annotations | default dict)) -}}
+{{- range $k, $v := $merged -}}
+{{- if hasPrefix "helm.sh/" $k -}}
+{{- fail (printf "serviceAccounts.%s: %q is reserved — the chart owns helm.sh/* annotations (hook ordering and delete policy on the pre-upgrade account); overriding one would emit a duplicate key and change when the hook runs" $.component $k) -}}
+{{- end -}}
+{{- end -}}
+{{- $entries := list -}}
+{{- range $k, $v := $merged -}}
+{{- $entries = append $entries (printf "%s: %s" $k ($v | quote)) -}}
+{{- end -}}
+{{- join "\n" $entries -}}
+{{- end -}}
+
+{{- define "fission.saLabels" -}}
+{{- $sa := .root.Values.serviceAccounts | default dict -}}
+{{- $merged := merge (deepCopy (dig .component "labels" dict $sa)) (deepCopy ($sa.labels | default dict)) -}}
+{{- range $k, $v := $merged -}}
+{{- if has $k (list "svc" "application" "chart") -}}
+{{- fail (printf "serviceAccounts.%s: %q is reserved — the chart owns it as a component identity label. `svc` in particular selects components in the router NetworkPolicy and the support dump, so overriding it would emit a duplicate key and detach this account from both" $.component $k) -}}
+{{- end -}}
+{{- end -}}
+{{- $entries := list -}}
+{{- range $k, $v := $merged -}}
+{{- $entries = append $entries (printf "%s: %s" $k ($v | quote)) -}}
+{{- end -}}
+{{- join "\n" $entries -}}
+{{- end -}}
+
+{{/*
+fission.saComponents is the canonical list of ServiceAccount component keys —
+the contract between values.yaml, the templates, and the two things that hold
+them together: fission.validateSaComponents rejects a key that is not on it, and
+the chart test proves every key on it annotates exactly one rendered account.
+
+Keep it sorted, and add to it in the same commit that adds a ServiceAccount.
+*/}}
+{{- define "fission.saComponents" -}}
+builder buildermgr canaryconfig executor fetcher kafka kubewatcher mcp mqtKeda preupgrade router statestore statestoreMqt statesvc storagesvc tenantController timer webhook workflow
+{{- end -}}
+
+{{/*
+fission.validateSaComponents fails the render on an unrecognised key under
+`serviceAccounts`. Without it a typo is silent and total: `serviceAccounts.storagesv`
+parses fine, renders fine, and produces an account with no role annotation — so
+the first symptom is storagesvc getting AccessDenied from S3 at runtime, a long
+way from the values file that caused it.
+*/}}
+{{- define "fission.validateSaComponents" -}}
+{{- $known := concat (splitList " " (include "fission.saComponents" .)) (list "annotations" "labels") -}}
+{{- range $k, $v := (.Values.serviceAccounts | default dict) -}}
+{{- if not (has $k $known) -}}
+{{- fail (printf "serviceAccounts.%s: unknown key. Expected `annotations`, `labels`, or one of: %s" $k (include "fission.saComponents" $)) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
