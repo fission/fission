@@ -53,9 +53,11 @@ func SeedTenants(ctx context.Context, fissionClient versioned.Interface, nsr *ut
 			continue
 		}
 		ft := &fv1.FissionTenant{
-			Name:        ns,
-			Annotations: map[string]string{managedByAnnotation: managedByHelm},
-			Spec:        fv1.FissionTenantSpec{Namespace: ns},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        ns,
+				Annotations: map[string]string{managedByAnnotation: managedByHelm},
+			},
+			Spec: fv1.FissionTenantSpec{Namespace: ns},
 		}
 		// The deprecated global overrides only ever remapped the default
 		// namespace, so they migrate onto the default tenant only.

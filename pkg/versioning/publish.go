@@ -167,14 +167,16 @@ func publishWithNewest(ctx context.Context, cl versioned.Interface, fn *fv1.Func
 	}
 
 	version := &fv1.FunctionVersion{
-		Name:      name,
-		Namespace: fn.Namespace,
-		Labels: map[string]string{
-			fv1.VersionFunctionNameLabel: fn.Name,
-			fv1.VersionFunctionUIDLabel:  string(fn.UID),
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: fn.Namespace,
+			Labels: map[string]string{
+				fv1.VersionFunctionNameLabel: fn.Name,
+				fv1.VersionFunctionUIDLabel:  string(fn.UID),
+			},
+			Annotations:     versionAnnotations(description, legacy, origPkgName),
+			OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
 		},
-		Annotations:     versionAnnotations(description, legacy, origPkgName),
-		OwnerReferences: []metav1.OwnerReference{fv1.FunctionOwnerRef(fn)},
 		Spec: fv1.FunctionVersionSpec{
 			FunctionName:          fn.Name,
 			FunctionUID:           fn.UID,
@@ -325,10 +327,12 @@ func ensureSnapshotPackage(ctx context.Context, cl versioned.Interface, fn *fv1.
 	snapPkgName := version.Spec.Snapshot.Package.PackageRef.Name
 
 	snapPkg := &fv1.Package{
-		Name:            snapPkgName,
-		Namespace:       fn.Namespace,
-		OwnerReferences: []metav1.OwnerReference{versionOwnerRef(version)},
-		Spec:            *pkg.Spec.DeepCopy(),
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            snapPkgName,
+			Namespace:       fn.Namespace,
+			OwnerReferences: []metav1.OwnerReference{versionOwnerRef(version)},
+		},
+		Spec: *pkg.Spec.DeepCopy(),
 		Status: fv1.PackageStatus{
 			BuildStatus:         pkg.Status.BuildStatus,
 			LastUpdateTimestamp: metav1.Now(),

@@ -38,9 +38,11 @@ func (gpm *GenericPoolManager) createIstioServiceForFunction(ctx context.Context
 	envNs := gpm.nsResolver.GetFunctionNS(fn.Spec.Environment.Namespace)
 
 	svc := apiv1.Service{
-		Namespace: envNs,
-		Name:      svcName,
-		Labels:    getIstioServiceLabels(fn.Name),
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: envNs,
+			Name:      svcName,
+			Labels:    getIstioServiceLabels(fn.Name),
+		},
 		Spec: apiv1.ServiceSpec{
 			Type: apiv1.ServiceTypeClusterIP,
 			Ports: []apiv1.ServicePort{

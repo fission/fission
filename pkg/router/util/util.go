@@ -7,6 +7,7 @@ package util
 import (
 	v1 "k8s.io/api/networking/v1"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -58,31 +59,35 @@ func GetIngressSpec(namespace string, trigger *fv1.HTTPTrigger) *v1.Ingress {
 
 	var pathType = v1.PathTypeImplementationSpecific
 	ing := &v1.Ingress{
-		Labels: GetDeployLabels(trigger),
-		Name:   trigger.Name,
-		// The Ingress NS MUST be same as Router NS, check long discussion:
-		// https://github.com/kubernetes/kubernetes/issues/17088
-		// We need to revisit this in future, once Kubernetes supports cross namespace ingress
-		Namespace:   namespace,
-		Annotations: annotations,
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: GetDeployLabels(trigger),
+			Name:   trigger.Name,
+			// The Ingress NS MUST be same as Router NS, check long discussion:
+			// https://github.com/kubernetes/kubernetes/issues/17088
+			// We need to revisit this in future, once Kubernetes supports cross namespace ingress
+			Namespace:   namespace,
+			Annotations: annotations,
+		},
 		Spec: v1.IngressSpec{
 			TLS: ingTLS,
 			Rules: []v1.IngressRule{
 				{
 					Host: host,
-					HTTP: &v1.HTTPIngressRuleValue{
-						Paths: []v1.HTTPIngressPath{
-							{
-								Backend: v1.IngressBackend{
-									Service: &v1.IngressServiceBackend{
-										Name: "router",
-										Port: v1.ServiceBackendPort{
-											Number: 80,
+					IngressRuleValue: v1.IngressRuleValue{
+						HTTP: &v1.HTTPIngressRuleValue{
+							Paths: []v1.HTTPIngressPath{
+								{
+									Backend: v1.IngressBackend{
+										Service: &v1.IngressServiceBackend{
+											Name: "router",
+											Port: v1.ServiceBackendPort{
+												Number: 80,
+											},
 										},
 									},
+									Path:     path,
+									PathType: &pathType,
 								},
-								Path:     path,
-								PathType: &pathType,
 							},
 						},
 					},
@@ -136,10 +141,12 @@ func GetHTTPRouteSpec(namespace string, trigger *fv1.HTTPTrigger, defaultParentR
 
 	port := gwapiv1.PortNumber(80)
 	return &gwapiv1.HTTPRoute{
-		Labels:      GetDeployLabels(trigger),
-		Name:        trigger.Name,
-		Namespace:   namespace,
-		Annotations: annotations,
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      GetDeployLabels(trigger),
+			Name:        trigger.Name,
+			Namespace:   namespace,
+			Annotations: annotations,
+		},
 		Spec: gwapiv1.HTTPRouteSpec{
 			CommonRouteSpec: gwapiv1.CommonRouteSpec{ParentRefs: parentRefs},
 			Hostnames:       hostnames,
@@ -155,8 +162,12 @@ func GetHTTPRouteSpec(namespace string, trigger *fv1.HTTPTrigger, defaultParentR
 					},
 					BackendRefs: []gwapiv1.HTTPBackendRef{
 						{
-							Name: gwapiv1.ObjectName("router"),
-							Port: &port,
+							BackendRef: gwapiv1.BackendRef{
+								BackendObjectReference: gwapiv1.BackendObjectReference{
+									Name: gwapiv1.ObjectName("router"),
+									Port: &port,
+								},
+							},
 						},
 					},
 				},

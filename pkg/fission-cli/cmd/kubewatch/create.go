@@ -57,8 +57,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.watcher = &fv1.KubernetesWatchTrigger{
-		Name:      watchName,
-		Namespace: namespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      watchName,
+			Namespace: namespace,
+		},
 		Spec: fv1.KubernetesWatchTriggerSpec{
 			Namespace: namespace,
 			Type:      objType,

@@ -296,7 +296,7 @@ func (mqt *MessageQueueTriggerManager) RegisterTrigger(trigger *fv1.MessageQueue
 // NamespacedName). It reports whether a subscription was actually removed —
 // false with a nil error is the no-op case (this head never held one).
 func (mqt *MessageQueueTriggerManager) unsubscribe(key types.NamespacedName) (bool, error) {
-	stub := &fv1.MessageQueueTrigger{Namespace: key.Namespace, Name: key.Name}
+	stub := &fv1.MessageQueueTrigger{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}
 	sub := mqt.getTriggerSubscription(stub)
 	if sub == nil {
 		return false, nil

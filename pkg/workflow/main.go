@@ -109,7 +109,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	wakeCh := make(chan event.TypedGenericEvent[client.Object], wakeBuffer)
 	wake := func(key types.NamespacedName) {
 		ev := event.TypedGenericEvent[client.Object]{Object: &fv1.WorkflowRun{
-			Namespace: key.Namespace, Name: key.Name,
+			ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name},
 		}}
 		select {
 		case wakeCh <- ev:

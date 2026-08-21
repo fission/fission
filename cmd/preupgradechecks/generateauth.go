@@ -179,20 +179,22 @@ func newMaster() ([]byte, error) {
 // a key the control plane does not verify — with nothing naming the cause.
 func createIfAbsent(ctx context.Context, client kubernetes.Interface, namespace, name string, master []byte) (created, agreed bool, err error) {
 	_, err = client.CoreV1().Secrets(namespace).Create(ctx, &apiv1.Secret{
-		Name:      name,
-		Namespace: namespace,
-		Labels: map[string]string{
-			// NOT sufficient to make this Helm-adoptable, and deliberately
-			// not claiming to be. Helm's ownership check wants this label
-			// AND the meta.helm.sh/release-{name,namespace} annotations;
-			// the hook does not know the release, so it cannot set them.
-			// The label is here for selectors and parity with the chart's
-			// other objects only. Consequence: switching an autoGenerate
-			// install to a templated internalAuth.secret makes Helm refuse
-			// to adopt this Secret ("invalid ownership metadata") — see
-			// values.yaml, which documents deleting it first.
-			"app.kubernetes.io/managed-by": "Helm",
-			"application":                  "fission-internal-auth",
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				// NOT sufficient to make this Helm-adoptable, and deliberately
+				// not claiming to be. Helm's ownership check wants this label
+				// AND the meta.helm.sh/release-{name,namespace} annotations;
+				// the hook does not know the release, so it cannot set them.
+				// The label is here for selectors and parity with the chart's
+				// other objects only. Consequence: switching an autoGenerate
+				// install to a templated internalAuth.secret makes Helm refuse
+				// to adopt this Secret ("invalid ownership metadata") — see
+				// values.yaml, which documents deleting it first.
+				"app.kubernetes.io/managed-by": "Helm",
+				"application":                  "fission-internal-auth",
+			},
 		},
 		Type: apiv1.SecretTypeOpaque,
 		Data: map[string][]byte{authSecretKey: master},

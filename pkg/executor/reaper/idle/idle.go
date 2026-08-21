@@ -170,8 +170,8 @@ func getDeploymentObj(kubeobjs []apiv1.ObjectReference) *apiv1.ObjectReference {
 func scaleDeploymentToMinScale(ctx context.Context, logger logr.Logger, kubeClient kubernetes.Interface, namespace, name string, replicas int32) error {
 	logger.Info("scaling down idle deployment", "deployment", name, "namespace", namespace, "replicas", replicas)
 	_, err := kubeClient.AppsV1().Deployments(namespace).UpdateScale(ctx, name, &autoscalingv1.Scale{
-		Name: name, Namespace: namespace,
-		Spec: autoscalingv1.ScaleSpec{Replicas: replicas},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec:       autoscalingv1.ScaleSpec{Replicas: replicas},
 	}, metav1.UpdateOptions{})
 	return err
 }

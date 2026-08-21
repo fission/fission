@@ -52,10 +52,12 @@ func (cn *Container) createOrGetSvc(ctx context.Context, fn *fv1.Function, deplo
 	svcLabels[fv1.MANAGED_BY_LABEL] = fv1.MANAGED_BY_VALUE
 
 	service := &apiv1.Service{
-		Name:            svcName,
-		Labels:          svcLabels,
-		Annotations:     deployAnnotations,
-		OwnerReferences: ownerReferences,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            svcName,
+			Labels:          svcLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
+		},
 		Spec: apiv1.ServiceSpec{
 			Ports: []apiv1.ServicePort{
 				{

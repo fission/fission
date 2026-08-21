@@ -170,10 +170,12 @@ func (hpaops *HpaOperations) CreateOrGetHpa(ctx context.Context, fn *fv1.Functio
 	}
 
 	hpa := &asv2.HorizontalPodAutoscaler{
-		Name:            hpaName,
-		Labels:          deployLabels,
-		Annotations:     deployAnnotations,
-		OwnerReferences: ownerReferences,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            hpaName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
+		},
 		Spec: asv2.HorizontalPodAutoscalerSpec{
 			ScaleTargetRef: getScaleTargetRef(depl),
 			MinReplicas:    &minRepl,

@@ -441,8 +441,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			}
 
 			pkg = fr.PackageInSpecs(&fv1.Package{ // In case of spec I might or might not have the `fnNamespace`, how will I get pkg objectMeta here.
-				Name:      pkgName,
-				Namespace: userProvidedNS,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      pkgName,
+					Namespace: userProvidedNS,
+				},
 			}, true, false)
 			if pkg == nil {
 				return fmt.Errorf("please create package %s spec file with namespace %s before referencing it", pkgName, userProvidedNS)
@@ -475,8 +477,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 				return fmt.Errorf("error reading spec in '%s': %w", specDir, err)
 			}
 			exists, err := fr.ExistsInSpecs(&fv1.Environment{
-				Name:      envName,
-				Namespace: userProvidedNS,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      envName,
+					Namespace: userProvidedNS,
+				},
 			})
 			if err != nil {
 				return err
@@ -561,8 +565,10 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.function = &fv1.Function{
-		Name:      fnName,
-		Namespace: fnNamespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fnName,
+			Namespace: fnNamespace,
+		},
 		Spec: fv1.FunctionSpec{
 			Secrets:                secrets,
 			ConfigMaps:             cfgmaps,
@@ -671,8 +677,10 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	triggerName := uuid.NewString()
 	ht := &fv1.HTTPTrigger{
-		Name:      triggerName,
-		Namespace: opts.function.Namespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      triggerName,
+			Namespace: opts.function.Namespace,
+		},
 		Spec: fv1.HTTPTriggerSpec{
 			RelativeURL: triggerUrl,
 			Prefix:      &prefix,

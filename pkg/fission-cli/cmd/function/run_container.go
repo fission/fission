@@ -165,8 +165,10 @@ func (opts *RunContainerSubCommand) complete(input cli.Input) error {
 	}
 
 	opts.function = &fv1.Function{
-		Name:      fnName,
-		Namespace: fnNamespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fnName,
+			Namespace: fnNamespace,
+		},
 		Spec: fv1.FunctionSpec{
 			Secrets:         secrets,
 			ConfigMaps:      cfgmaps,

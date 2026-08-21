@@ -170,8 +170,8 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 				Name: toEnvVar(key),
 				ValueFrom: &apiv1.EnvVarSource{
 					SecretKeyRef: &apiv1.SecretKeySelector{
-						Name: secretName,
-						Key:  key,
+						LocalObjectReference: apiv1.LocalObjectReference{Name: secretName},
+						Key:                  key,
 					},
 				},
 			})
@@ -347,9 +347,11 @@ func getAuthTriggerSpec(ctx context.Context, mqt *fv1.MessageQueueTrigger, authe
 	}
 
 	authTriggerObj := &kedav1alpha1.TriggerAuthentication{
-		Name:            authenticationRef,
-		Namespace:       mqt.Namespace,
-		OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            authenticationRef,
+			Namespace:       mqt.Namespace,
+			OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
+		},
 		Spec: kedav1alpha1.TriggerAuthenticationSpec{
 			SecretTargetRef: secretTargetRefFields,
 		},
@@ -420,11 +422,13 @@ func getDeploymentSpec(ctx context.Context, logger logr.Logger, mqt *fv1.Message
 	podSpec = mergedSpec
 
 	return &appsv1.Deployment{
-		Name: mqt.Name,
-		Labels: map[string]string{
-			"app": mqt.Name,
+		ObjectMeta: metav1.ObjectMeta{
+			Name: mqt.Name,
+			Labels: map[string]string{
+				"app": mqt.Name,
+			},
+			OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
 		},
-		OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -480,9 +484,11 @@ func getScaledObject(mqt *fv1.MessageQueueTrigger, authenticationRef string) *ke
 		trigger.AuthenticationRef = &kedav1alpha1.AuthenticationRef{Name: authenticationRef}
 	}
 	return &kedav1alpha1.ScaledObject{
-		Name:            mqt.Name,
-		Namespace:       mqt.Namespace,
-		OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            mqt.Name,
+			Namespace:       mqt.Namespace,
+			OwnerReferences: []metav1.OwnerReference{newOwnerReference(mqt.Name, mqt.UID)},
+		},
 
 		Spec: kedav1alpha1.ScaledObjectSpec{
 			CooldownPeriod:  mqt.Spec.CooldownPeriod,

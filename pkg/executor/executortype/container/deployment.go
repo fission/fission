@@ -221,9 +221,11 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		return nil, err
 	}
 	pod := apiv1.PodTemplateSpec{
-		Labels:      podLabels,
-		Annotations: podAnnotations,
-		Spec:        *podSpec,
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      podLabels,
+			Annotations: podAnnotations,
+		},
+		Spec: *podSpec,
 	}
 
 	pod.Spec = *(util.ApplyImagePullSecret("", pod.Spec))
@@ -241,10 +243,12 @@ func (cn *Container) getDeploymentSpec(ctx context.Context, fn *fv1.Function, ta
 		}
 	}
 	deployment := &appsv1.Deployment{
-		Name:            deployName,
-		Labels:          deployLabels,
-		Annotations:     deployAnnotations,
-		OwnerReferences: ownerReferences,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            deployName,
+			Labels:          deployLabels,
+			Annotations:     deployAnnotations,
+			OwnerReferences: ownerReferences,
+		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{

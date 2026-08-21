@@ -76,7 +76,7 @@ func DeleteNamespaceRBAC(ctx context.Context, c client.Client, namespace string)
 	// secret without ever being able to read tenant secrets. The name is the
 	// controller-owned keysSecretName, never the chart's master copy, so teardown
 	// cannot disturb a Helm-managed Secret.
-	authSecret := &corev1.Secret{Name: keysSecretName, Namespace: namespace}
+	authSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: keysSecretName, Namespace: namespace}}
 	if err := c.Delete(ctx, authSecret); err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("deleting auth secret in %s: %w", namespace, err)
 	}

@@ -139,9 +139,13 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	}
 
 	env := &fv1.Environment{
-		Kind:       fv1.CRD_NAME_ENVIRONMENT,
-		APIVersion: fv1.CRD_VERSION,
-		Name:       envName,
+		TypeMeta: metav1.TypeMeta{
+			Kind:       fv1.CRD_NAME_ENVIRONMENT,
+			APIVersion: fv1.CRD_VERSION,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: envName,
+		},
 		Spec: fv1.EnvironmentSpec{
 			Version: envVersion,
 			Runtime: fv1.Runtime{

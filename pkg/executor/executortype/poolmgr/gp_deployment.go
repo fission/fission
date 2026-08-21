@@ -164,8 +164,10 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		baseVolumes = append(baseVolumes, util.FetcherSATokenProjectedVolume())
 	}
 	pod := apiv1.PodTemplateSpec{
-		Labels:      podLabels,
-		Annotations: podAnnotations,
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      podLabels,
+			Annotations: podAnnotations,
+		},
 		Spec: apiv1.PodSpec{
 			Containers:                   []apiv1.Container{*container},
 			ServiceAccountName:           fv1.FissionFetcherSA,

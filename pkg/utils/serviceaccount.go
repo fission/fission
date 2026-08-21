@@ -194,9 +194,11 @@ func setupRoles(ctx context.Context, client kubernetes.Interface, logger logr.Lo
 		"namespace", sa.Namespace)
 
 	roleObj := &rbac.Role{
-		Name:      fmt.Sprintf("%s-role-%s", sa.Name, suffix),
-		Namespace: sa.Namespace,
-		Rules:     rules,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-role-%s", sa.Name, suffix),
+			Namespace: sa.Namespace,
+		},
+		Rules: rules,
 	}
 	role, err := client.RbacV1().Roles(sa.Namespace).Create(ctx, roleObj, metav1.CreateOptions{})
 	if err != nil {
@@ -216,8 +218,10 @@ func setupRoleBinding(ctx context.Context, client kubernetes.Interface, logger l
 		"namespace", sa.Namespace)
 
 	roleBindingObj := &rbac.RoleBinding{
-		Name:      fmt.Sprintf("%s-rolebinding-%s", sa.Name, suffix),
-		Namespace: sa.Namespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-rolebinding-%s", sa.Name, suffix),
+			Namespace: sa.Namespace,
+		},
 		Subjects: []rbac.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -244,7 +248,9 @@ func setupRoleBinding(ctx context.Context, client kubernetes.Interface, logger l
 func checkPermission(ctx context.Context, client kubernetes.Interface, sa *v1.ServiceAccount, gvr *schema.GroupVersionResource, verb string) (bool, error) {
 	user := fmt.Sprintf("system:serviceaccount:%s:%s", sa.Namespace, sa.Name)
 	sar := authorizationv1.LocalSubjectAccessReview{
-		Namespace: sa.Namespace,
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: sa.Namespace,
+		},
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: sa.Namespace,
@@ -272,8 +278,10 @@ func createGetSA(ctx context.Context, k8sClient kubernetes.Interface, SAName, ns
 	saObj, err := k8sClient.CoreV1().ServiceAccounts(ns).Get(ctx, SAName, metav1.GetOptions{})
 	if err != nil && k8serrors.IsNotFound(err) {
 		saObj = &v1.ServiceAccount{
-			Namespace: ns,
-			Name:      SAName,
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+				Name:      SAName,
+			},
 		}
 		saObj, err = k8sClient.CoreV1().ServiceAccounts(ns).Create(ctx, saObj, metav1.CreateOptions{})
 		if err != nil {
