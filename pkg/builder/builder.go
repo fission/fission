@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/fission/fission/pkg/info"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
@@ -231,18 +233,16 @@ func (builder *Builder) reply(ctx context.Context, w http.ResponseWriter, pkgFil
 		BuildLogs:        buildLogs,
 	}
 
-	rBody, err := json.Marshal(resp)
-	if err != nil {
+	// WriteJSON marshals before it commits the status line, so an ErrEncode
+	// leaves the response untouched and the 500 fallback below still lands —
+	// the client must not receive HTTP 200 with a failed body.
+	err := httpx.WriteJSON(w, statusCode, resp)
+	if errors.Is(err, httpx.ErrEncode) {
 		e := fmt.Errorf("error encoding response body: %w", err)
-		rBody = fmt.Appendf(nil, `{"buildLogs": "%s"}`, e.Error())
-		statusCode = http.StatusInternalServerError
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, err = w.Write(fmt.Appendf(nil, `{"buildLogs": "%s"}`, e.Error()))
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	// should write header before writing the body,
-	// or client will receive HTTP 200 regardless the real status code
-	w.WriteHeader(statusCode)
-	_, err = w.Write(rBody)
 	if err != nil {
 		logger.Error(err,
 			"error writing response")

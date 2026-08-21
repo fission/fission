@@ -30,8 +30,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/tools/reference"
 
-	"github.com/fission/fission/pkg/utils/uuid"
-
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/crd"
@@ -42,7 +40,9 @@ import (
 	storageSvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/svcinfo"
 	"github.com/fission/fission/pkg/utils"
+	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
+	"github.com/fission/fission/pkg/utils/uuid"
 )
 
 type (
@@ -784,17 +784,14 @@ func (fetcher *Fetcher) UploadHandler(w http.ResponseWriter, r *http.Request) {
 
 // writeUploadResponse marshals and writes an upload response.
 func writeUploadResponse(logger logr.Logger, w http.ResponseWriter, resp *ArchiveUploadResponse) {
-	rBody, err := json.Marshal(resp)
-	if err != nil {
+	// WriteJSON marshals before committing the status, so an ErrEncode failure
+	// still leaves the 500 reachable; anything else is already on the wire.
+	if err := httpx.WriteJSON(w, http.StatusOK, resp); err != nil {
 		e := "error encoding upload response"
 		logger.Error(err, e)
-		http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write(rBody); err != nil {
-		logger.Error(err, "error writing response")
+		if errors.Is(err, httpx.ErrEncode) {
+			http.Error(w, fmt.Sprintf("%s: %v", e, err), http.StatusInternalServerError)
+		}
 	}
 }
 
