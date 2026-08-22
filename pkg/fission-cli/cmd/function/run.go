@@ -7,7 +7,8 @@ package function
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -662,7 +663,9 @@ func specialize(ctx context.Context, cfg runConfig, hostPort int) error {
 	if cfg.envVersion < 2 {
 		return httpx.PostWithConnRetry(ctx, client, url, "text/plain", nil, logr.Logger{}, specializeMaxRetries, nil)
 	}
-	payload, err := json.Marshal(buildLoadRequest(&cfg.functionMeta, cfg.entrypoint, cfg.envVersion))
+	// POSTed to the env runtime container's own /v2/specialize server
+	// (possibly an old env image, non-Go): pin exact v1 emission.
+	payload, err := json.Marshal(buildLoadRequest(&cfg.functionMeta, cfg.entrypoint, cfg.envVersion), jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return fmt.Errorf("encoding load request: %w", err)
 	}

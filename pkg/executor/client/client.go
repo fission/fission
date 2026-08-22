@@ -7,7 +7,8 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -141,7 +142,10 @@ func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) Cli
 func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
 	executorURL := c.executorURL + "/v2/getServiceForFunction"
 
-	body, err := json.Marshal(fn)
+	// fn can embed raw user JSON (ToolConfig.InputSchema); allow a degenerate
+	// stored schema that predates admission validation to marshal rather than
+	// erroring on syntax v1 never checked.
+	body, err := json.Marshal(fn, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		return "", fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
@@ -179,11 +183,13 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedReady, observedBusy int) (string, error) {
 	executorURL := c.executorURL + "/v2/ensureCapacity"
 
+	// EnsureCapacityRequest.Function can embed raw user JSON
+	// (ToolConfig.InputSchema); see the comment in GetServiceForFunction.
 	body, err := json.Marshal(EnsureCapacityRequest{
 		Function:               fn,
 		ObservedReadyEndpoints: observedReady,
 		ObservedBusyEndpoints:  observedBusy,
-	})
+	}, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		return "", fmt.Errorf("could not marshal request body for ensuring capacity for function: %w", err)
 	}

@@ -6,7 +6,8 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"html"
@@ -44,7 +45,10 @@ func (executor *Executor) getServiceForFunctionAPI(w http.ResponseWriter, r *htt
 
 	// get function metadata
 	fn := &fv1.Function{}
-	err = json.Unmarshal(body, &fn)
+	// fv1.Function can embed raw user JSON (ToolConfig.InputSchema); allow
+	// degenerate stored schemas that predate admission validation to decode
+	// rather than erroring on syntax v1 never checked.
+	err = json.Unmarshal(body, &fn, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
@@ -192,7 +196,9 @@ func (executor *Executor) ensureCapacityHandler(w http.ResponseWriter, r *http.R
 	}
 
 	var req client.EnsureCapacityRequest
-	if err := json.Unmarshal(body, &req); err != nil || req.Function == nil {
+	// req.Function is a full fv1.Function and can embed raw user JSON
+	// (ToolConfig.InputSchema); see the comment in getServiceForFunctionAPI.
+	if err := json.Unmarshal(body, &req, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil || req.Function == nil {
 		http.Error(w, "Failed to parse request", http.StatusBadRequest)
 		return
 	}
