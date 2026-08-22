@@ -14,10 +14,13 @@
 package asyncinvoke
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
+
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 )
 
 const (
@@ -178,13 +181,40 @@ func (d Destination) functionRouteName() string {
 // IsTopic reports whether the destination targets a topic.
 func (d Destination) IsTopic() bool { return d.Topic != "" }
 
-// Encode marshals the envelope for a statestore Queue message body.
-func (e Envelope) Encode() ([]byte, error) { return json.Marshal(e) }
+// Encode marshals the envelope for a statestore Queue message body. Non-default
+// options, all load-bearing for the RFC-0024 queue-durable wire format (json/v2
+// migration, see jsonwire_compat_test.go): FormatDurationAsNano is required
+// because v2 has no default representation for time.Duration (Policy's fields);
+// OmitEmptyWithLegacySemantics and EscapeForHTML reproduce v1's exact byte
+// output (v2's omitempty only drops null/""/{}/[], not a false bool or zero
+// int, and v2 does not HTML-escape by default) so an already-queued message's
+// bytes are unaffected by a rolling upgrade; AllowInvalidUTF8 keeps a raw
+// replayed HTTP header value from turning an otherwise-valid async request
+// into a marshal error (v1 silently substituted U+FFFD instead).
+func (e Envelope) Encode() ([]byte, error) {
+	return json.Marshal(e,
+		jsonv1.FormatDurationAsNano(true),
+		jsonv1.OmitEmptyWithLegacySemantics(true),
+		jsontext.EscapeForHTML(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+}
 
-// Decode parses an envelope from a leased statestore Queue message body.
+// Decode parses an envelope from a leased statestore Queue message body. A
+// leased message can be weeks old and enqueued by a previous release, so this
+// is deliberately lenient: AllowDuplicateNames and AllowInvalidUTF8 preserve
+// v1's decode leniency (last-key-wins on a duplicate name, U+FFFD substitution
+// for invalid UTF-8) rather than rejecting a message v1 would have decoded
+// fine — pinned by TestDLQProbeCompat_DuplicateKeys / _InvalidUTF8 and the
+// asyncinvoke jsonwire_compat_test.go round trips. FormatDurationAsNano
+// mirrors Encode (v2 has no default Duration decode either).
 func Decode(data []byte) (Envelope, error) {
 	var e Envelope
-	err := json.Unmarshal(data, &e)
+	err := json.Unmarshal(data, &e,
+		jsonv1.FormatDurationAsNano(true),
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
 	return e, err
 }
 
@@ -239,8 +269,19 @@ type ResponseContext struct {
 	Truncated bool `json:"truncated,omitempty"`
 }
 
-// Encode marshals the result envelope for a destination invocation body.
-func (r ResultEnvelope) Encode() ([]byte, error) { return json.Marshal(r) }
+// Encode marshals the result envelope for a destination invocation body. Also
+// a queue-durable payload (see Envelope.Encode): OmitEmptyWithLegacySemantics
+// keeps RequestPayloadOmitted/Truncated omitted when false, matching v1 (v2's
+// default omitempty does not omit a false bool), pinned by
+// TestJSONWireCompat_ResultEnvelope. AllowInvalidUTF8 keeps an odd response
+// byte from turning a settled invocation's destination fire into a marshal
+// error.
+func (r ResultEnvelope) Encode() ([]byte, error) {
+	return json.Marshal(r,
+		jsonv1.OmitEmptyWithLegacySemantics(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+}
 
 // allowedHeaders returns the subset of request headers to replay on async
 // delivery. It is an allowlist, not a denylist: Content-Type and Accept (so the

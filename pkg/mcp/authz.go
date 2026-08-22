@@ -186,8 +186,7 @@ type scopeClaim AuthScope
 //
 // SECURITY boundary: both Unmarshal calls below use v2 strict defaults (no
 // Allow options) — this claim is untrusted token input, and the hardening
-// goal is to reject a malformed or ambiguous encoding rather than tolerate it
-//.
+// goal is to reject a malformed or ambiguous encoding rather than tolerate it.
 func (c *scopeClaim) UnmarshalJSON(b []byte) error {
 	*c = scopeClaim{}
 	if bytes.Equal(bytes.TrimSpace(b), []byte("null")) {

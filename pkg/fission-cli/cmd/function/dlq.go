@@ -6,7 +6,9 @@ package function
 
 import (
 	"bytes"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -65,7 +67,7 @@ type dlqListResp struct {
 
 type dlqShowResp struct {
 	dlqMessage
-	Envelope json.RawMessage `json:"envelope"`
+	Envelope jsonv1.RawMessage `json:"envelope"`
 }
 
 type dlqRedriveReq struct {
@@ -189,7 +191,17 @@ func (opts *dlqSubCommand) show(input cli.Input) error {
 	if err := dlqCall(opts, input, http.MethodGet, dlqAPIShow, q, nil, &resp); err != nil {
 		return err
 	}
-	out, err := json.MarshalIndent(resp, "", "  ")
+	// resp.Envelope is a json.RawMessage (jsontext.Value) carrying the
+	// dead-lettered envelope's bytes verbatim from the router response — it
+	// may hold user-authored content (e.g. a replayed header value) that is
+	// not valid UTF-8. Plain v2 (even with AllowInvalidUTF8) re-tokenizes a
+	// RawMessage while re-serializing it and substitutes U+FFFD for any
+	// invalid byte, mangling it on every `dlq show`, whereas v1 passed it
+	// through byte-for-byte.
+	// jsonv1.DefaultOptionsV1() restores that verbatim pass-through (it
+	// includes PreserveRawStrings) alongside the rest of v1's marshal
+	// semantics, so this print matches v1 exactly.
+	out, err := json.Marshal(resp, jsontext.WithIndent("  "), jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return err
 	}
@@ -306,7 +318,8 @@ func dlqCall[Resp any](opts *dlqSubCommand, input cli.Input, method, path string
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("router DLQ API returned %s: %s", resp.Status, strings.TrimSpace(string(msg)))
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	// The router's own Go-marshaled response: plain v2 defaults.
+	if err := json.UnmarshalRead(resp.Body, out); err != nil {
 		return fmt.Errorf("decoding router DLQ response: %w", err)
 	}
 	return nil

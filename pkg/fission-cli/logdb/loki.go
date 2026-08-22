@@ -7,7 +7,7 @@ package logdb
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -170,7 +170,8 @@ func (l loki) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffe
 	}
 
 	var parsed lokiQueryRangeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+	// Loki's own JSON API response: plain v2 defaults.
+	if err := json.UnmarshalRead(resp.Body, &parsed); err != nil {
 		return fmt.Errorf("failed to decode loki response: %w", err)
 	}
 
