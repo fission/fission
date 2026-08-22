@@ -5,7 +5,7 @@
 package workflow
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"os"
@@ -94,7 +94,10 @@ func readRunInput(input cli.Input) (*apiextensionsv1.JSON, error) {
 			return nil, fmt.Errorf("reading input file: %w", err)
 		}
 	}
-	if !json.Valid(data) {
+	// v1-equivalent acceptance: the document plane stays lenient about
+	// duplicate member names and invalid UTF-8 (see pkg/workflow docDecOpts),
+	// so the CLI gate must not be stricter than the server that stores it.
+	if !jsontext.Value(data).IsValid(jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) {
 		return nil, errors.New("--input must be valid JSON (or @file containing JSON)")
 	}
 	return &apiextensionsv1.JSON{Raw: data}, nil

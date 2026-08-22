@@ -5,7 +5,7 @@
 package function
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -157,8 +157,10 @@ func (opts *stateSubCommand) list(input cli.Input) error {
 			_ = resp.Body.Close()
 			return err
 		}
+		// statesvc-authored control DTO (keys + cursor), not a user-function
+		// payload, so v2's strict defaults apply unchanged.
 		var page stateapi.ListResponse
-		err = json.NewDecoder(resp.Body).Decode(&page)
+		err = json.UnmarshalRead(resp.Body, &page)
 		_ = resp.Body.Close()
 		if err != nil {
 			return fmt.Errorf("decoding statesvc response: %w", err)

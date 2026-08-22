@@ -7,7 +7,8 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"slices"
@@ -134,14 +135,21 @@ var readClaims = map[string]struct{}{
 
 // UnmarshalJSON decodes the claim set by EXACT key.
 //
-// encoding/json matches struct fields case-insensitively, so a plain struct
-// decode would let a token carrying "ALLOWED_NAMESPACES" populate the scope
-// that only "allowed_namespaces" is meant to own — and, with two spellings
-// present, the last one in the document would win. The pre-typed code looked
-// claims up in a map with exact keys and had no such hole, so any key that
-// differs only in case from a claim this verifier reads is refused outright.
+// encoding/json (v1) matches struct fields case-insensitively, so a plain
+// struct decode would let a token carrying "ALLOWED_NAMESPACES" populate the
+// scope that only "allowed_namespaces" is meant to own — and, with two
+// spellings present, the last one in the document would win. The pre-typed
+// code looked claims up in a map with exact keys and had no such hole, so any
+// key that differs only in case from a claim this verifier reads is refused
+// outright. (v2's default struct matching is itself case-sensitive, which
+// would already close this hole, but the map-based guard stays: it is what
+// enforces the exact-key contract, not an artifact of v1's matching.)
 func (c *mcpClaims) UnmarshalJSON(b []byte) error {
-	var raw map[string]json.RawMessage
+	// SECURITY boundary: v2 defaults (strict) are used deliberately here —
+	// duplicate JSON member names and invalid UTF-8 in the token's claim set
+	// are rejected rather than silently tolerated, hardening this JWT-claims
+	// decode against ambiguous or malformed tokens.
+	var raw map[string]jsontext.Value
 	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
@@ -175,6 +183,11 @@ func (c *mcpClaims) UnmarshalJSON(b []byte) error {
 type scopeClaim AuthScope
 
 // UnmarshalJSON accepts a JSON string, an array of strings, or null.
+//
+// SECURITY boundary: both Unmarshal calls below use v2 strict defaults (no
+// Allow options) — this claim is untrusted token input, and the hardening
+// goal is to reject a malformed or ambiguous encoding rather than tolerate it
+//.
 func (c *scopeClaim) UnmarshalJSON(b []byte) error {
 	*c = scopeClaim{}
 	if bytes.Equal(bytes.TrimSpace(b), []byte("null")) {

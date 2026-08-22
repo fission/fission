@@ -5,7 +5,8 @@
 package workflow
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -46,8 +47,8 @@ type historyEvent struct {
 	// live Workflow, which may have since been edited or deleted.
 	Spec      *fv1.WorkflowSpec `json:"spec,omitempty"`
 	ErrorType string            `json:"errorType,omitempty"`
-	Cause     json.RawMessage   `json:"cause,omitempty"`
-	Output    json.RawMessage   `json:"output,omitempty"`
+	Cause     jsontext.Value    `json:"cause,omitempty"`
+	Output    jsontext.Value    `json:"output,omitempty"`
 	OutputRef string            `json:"outputRef,omitempty"`
 }
 
@@ -127,8 +128,12 @@ func fetchHistory(input cli.Input, opts *cmd.CommandActioner) ([]historyEvent, *
 		return nil, nil, fmt.Errorf("history endpoint: %s: %s", resp.Status, string(body))
 	}
 
+	// The event log embeds user-function-produced RawMessage docs (Cause,
+	// Output), so — same reasoning as admission (rule 3) — allow duplicate
+	// JSON member names and invalid UTF-8 rather than newly rejecting a
+	// degenerate doc a function actually produced.
 	var events []historyEvent
-	if err := json.Unmarshal(body, &events); err != nil {
+	if err := json.Unmarshal(body, &events, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
 		return nil, nil, fmt.Errorf("decoding history: %w", err)
 	}
 	return events, run, nil
