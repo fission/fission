@@ -143,12 +143,15 @@ func TestPrintItems(t *testing.T) {
 }
 
 func TestPrintObjectsTableAndWide(t *testing.T) {
-	type row struct{ name, ready, age string }
+	// Exported fields: encoding/json/v2 (unlike v1) refuses to marshal a
+	// struct with no exported fields instead of emitting a useless {} — and
+	// every production PrintObjects row type has exported fields.
+	type row struct{ Name, Ready, Age string }
 	items := []row{{"a", "True", "5m"}, {"b", NoneValue, "1h"}}
 	hdr := []string{"NAME", "READY"}
-	rowFn := func(r row) []string { return []string{r.name, r.ready} }
+	rowFn := func(r row) []string { return []string{r.Name, r.Ready} }
 	wideHdr := []string{"AGE"}
-	wideFn := func(r row) []string { return []string{r.age} }
+	wideFn := func(r row) []string { return []string{r.Age} }
 
 	out := captureStdout(t, func() error { return PrintObjects(OutputTable, items, hdr, rowFn, wideHdr, wideFn) })
 	if strings.Contains(out, "AGE") {
