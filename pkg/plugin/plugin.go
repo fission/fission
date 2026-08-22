@@ -8,7 +8,8 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"os"
 	"os/exec"
@@ -150,7 +151,16 @@ func fetchPluginMetadata(ctx context.Context, pluginPath string) (*Metadata, err
 	// Parse metadata if possible
 	pluginName := strings.TrimPrefix(path.Base(pluginPath), Prefix)
 	md := &Metadata{}
-	err = json.Unmarshal(buf.Bytes(), md)
+	// Third-party plugin binaries are external producers we don't control;
+	// stay lenient like v1 was — allow duplicate JSON member names and
+	// invalid UTF-8 in their metadata output rather than newly rejecting
+	// output v1 would have accepted.
+	// MatchCaseInsensitiveNames keeps v1's field matching for these
+	// externally-built binaries: a plugin emitting {"Name": ...} populated
+	// Metadata.Name under v1 and must not silently stop doing so.
+	err = json.Unmarshal(buf.Bytes(), md,
+		jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true),
+		json.MatchCaseInsensitiveNames(true))
 
 	// If metadata could not be retrieved, or if no name was provided, use the filename of the binary
 	if err != nil || len(md.Name) == 0 {
