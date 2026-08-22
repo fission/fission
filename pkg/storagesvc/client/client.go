@@ -7,7 +7,7 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -288,6 +288,8 @@ func (c *client) UploadReader(ctx context.Context, fileName string, r io.Reader,
 	}
 
 	var ur storagesvc.UploadResponse
+	// Decode of JSON produced by our own marshaler (storagesvc.uploadHandler);
+	// plain v2 Unmarshal is safe (no RawMessage).
 	err = json.Unmarshal(body, &ur)
 	if err != nil {
 		return "", err
@@ -321,6 +323,10 @@ func (c *client) List(ctx context.Context) ([]string, error) {
 	}
 
 	var ids []string
+	// Decode of JSON produced by our own marshaler (storagesvc.listItems);
+	// plain v2 Unmarshal is safe (no RawMessage) — a JSON null decodes to the
+	// Go zero value (nil slice), matching v1's nil/empty distinction on the
+	// unmarshal side without any option needed.
 	err = json.Unmarshal(body, &ids)
 	if err != nil {
 		return []string{}, err
