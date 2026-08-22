@@ -5,7 +5,7 @@
 package statesvc
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -203,7 +203,7 @@ func (h *handler) cas(w http.ResponseWriter, r *http.Request) {
 	// Envelope cap: base64 inflation (4/3) plus field overhead.
 	body := io.LimitReader(r.Body, maxBytes*2+4096)
 	var req stateapi.CASRequest
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	if err := json.UnmarshalRead(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid CAS body: "+err.Error())
 		return
 	}
