@@ -62,6 +62,11 @@ func MakeKubeWatcher(ctx context.Context, logger logr.Logger, kubernetesClient k
 }
 
 // TODO lifted from kubernetes/pkg/kubectl/resource_printer.go.
+//
+// Stays on encoding/json (v1): the output is the payload delivered verbatim to
+// user functions, and typed k8s objects are full of nil slices/maps that v1
+// emits as null. json/v2 would emit [] / {} instead — a silent, user-visible
+// payload change across every KubernetesWatchTrigger.
 func printKubernetesObject(obj runtime.Object, w io.Writer) error {
 	switch obj := obj.(type) {
 	case *runtime.Unknown:

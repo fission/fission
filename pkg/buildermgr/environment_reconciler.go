@@ -637,6 +637,11 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 // Sorting by name is safe because container order carries no meaning here: the
 // entrypoint is chosen by name, and init containers are appended by the same
 // merge rather than ordered by the user.
+//
+// This site stays on encoding/json (v1) permanently: the hash is a byte-level
+// contract compared against values stamped by earlier releases, and json/v2
+// changes output bytes (nil slice/map emission, omitempty semantics,
+// escaping). TestBuilderSpecHashGolden pins the exact values.
 func builderSpecHash(tmpl *apiv1.PodTemplateSpec) (string, error) {
 	canonical := tmpl.DeepCopy()
 	sortByName(canonical.Spec.Containers)

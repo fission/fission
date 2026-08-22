@@ -475,3 +475,64 @@ func TestBuilderSpecHashIsStableAcrossCalls(t *testing.T) {
 			"hash must not depend on map iteration order (differed on call %d)", i+2)
 	}
 }
+
+// TestBuilderSpecHashGolden pins the exact output of builderSpecHash. The hash
+// is stamped on builder Deployments and compared on every reconcile: if the
+// value moves for an unchanged template, every environment's builder is torn
+// down and rebuilt on the release that shipped the change. This test exists so
+// that any change to canonicalisation, struct field order, or the JSON
+// marshaler feeding sha256 — including a future encoding/json/v2 migration —
+// fails loudly here instead of shipping a silent fleet-wide builder rebuild.
+//
+// If this test fails, DO NOT just update the constants: decide first whether a
+// one-time builder rebuild is acceptable for the release, and release-note it.
+func TestBuilderSpecHashGolden(t *testing.T) {
+	t.Parallel()
+
+	full := &apiv1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"envName": "golden", "owner": "buildermgr"},
+		},
+		Spec: apiv1.PodSpec{
+			Containers: []apiv1.Container{
+				{
+					Name:    "builder",
+					Image:   "fission/builder:1.2.3",
+					Command: []string{"/builder"},
+					Env: []apiv1.EnvVar{
+						{Name: "B", Value: "2"},
+						{Name: "A", Value: "1"},
+					},
+					VolumeMounts: []apiv1.VolumeMount{
+						{Name: "userfunc", MountPath: "/userfunc"},
+					},
+				},
+				{Name: "fetcher", Image: "fission/fetcher:1.2.3"},
+			},
+			Volumes: []apiv1.Volume{
+				{Name: "userfunc", VolumeSource: apiv1.VolumeSource{
+					EmptyDir: &apiv1.EmptyDirVolumeSource{},
+				}},
+			},
+		},
+	}
+	zero := &apiv1.PodTemplateSpec{}
+
+	tests := []struct {
+		name string
+		tmpl *apiv1.PodTemplateSpec
+		want string
+	}{
+		// Golden values captured on go1.27.0 (encoding/json v1 semantics).
+		{name: "fully populated", tmpl: full, want: "sha256:6693cf48ecdfdec04ee9911fb0326a148c6d702ab1262f7da3a2ae1b372bcef5"},
+		{name: "zero template", tmpl: zero, want: "sha256:103650a8e8747dd18003a892139ffabcb7111196e28ddc389da8e510ec1ef9d7"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := builderSpecHash(tt.tmpl)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

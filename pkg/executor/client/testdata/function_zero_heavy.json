@@ -1,0 +1,1 @@
+{"metadata":{"name":"zero-fn","namespace":"default"},"spec":{"environment":{"namespace":""},"package":{"packageref":{"namespace":""}},"resources":{},"InvokeStrategy":{"ExecutionStrategy":{"ExecutorType":"","MinScale":0,"MaxScale":0,"TargetCPUPercent":0,"SpecializationTimeout":0},"StrategyType":""}},"status":{}}
