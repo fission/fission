@@ -8,7 +8,7 @@ import (
 	"bytes"
 	jsonv1 "encoding/json"
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -67,7 +67,7 @@ type dlqListResp struct {
 
 type dlqShowResp struct {
 	dlqMessage
-	Envelope jsonv1.RawMessage `json:"envelope"`
+	Envelope jsontext.Value `json:"envelope"`
 }
 
 type dlqRedriveReq struct {
@@ -318,7 +318,6 @@ func dlqCall[Resp any](opts *dlqSubCommand, input cli.Input, method, path string
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("router DLQ API returned %s: %s", resp.Status, strings.TrimSpace(string(msg)))
 	}
-	// The router's own Go-marshaled response: plain v2 defaults.
 	if err := json.UnmarshalRead(resp.Body, out); err != nil {
 		return fmt.Errorf("decoding router DLQ response: %w", err)
 	}

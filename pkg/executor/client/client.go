@@ -7,8 +7,8 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -138,14 +138,20 @@ func MakeClient(logger logr.Logger, executorURL string, masterSecret []byte) Cli
 	return c
 }
 
+// executorWireOpts pins the executor RPC request emission to exact v1 bytes.
+// The compat fixtures (jsonwire_compat_test.go, testdata/) byte-pin this wire,
+// and v2 defaults move it (zero ints/bools appear under omitempty, empty
+// structs vanish, nil slices become []). DefaultOptionsV1 also subsumes the
+// leniency a degenerate stored ToolConfig.InputSchema needs to marshal at all
+// (duplicate keys / invalid UTF-8 that predate admission validation), with
+// verbatim raw passthrough instead of U+FFFD substitution.
+var executorWireOpts = jsonv1.DefaultOptionsV1()
+
 // GetServiceForFunction returns the service name for a given function.
 func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (string, error) {
 	executorURL := c.executorURL + "/v2/getServiceForFunction"
 
-	// fn can embed raw user JSON (ToolConfig.InputSchema); allow a degenerate
-	// stored schema that predates admission validation to marshal rather than
-	// erroring on syntax v1 never checked.
-	body, err := json.Marshal(fn, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	body, err := json.Marshal(fn, executorWireOpts)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
@@ -183,13 +189,11 @@ func (c *client) GetServiceForFunction(ctx context.Context, fn *fv1.Function) (s
 func (c *client) EnsureCapacity(ctx context.Context, fn *fv1.Function, observedReady, observedBusy int) (string, error) {
 	executorURL := c.executorURL + "/v2/ensureCapacity"
 
-	// EnsureCapacityRequest.Function can embed raw user JSON
-	// (ToolConfig.InputSchema); see the comment in GetServiceForFunction.
 	body, err := json.Marshal(EnsureCapacityRequest{
 		Function:               fn,
 		ObservedReadyEndpoints: observedReady,
 		ObservedBusyEndpoints:  observedBusy,
-	}, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	}, executorWireOpts)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal request body for ensuring capacity for function: %w", err)
 	}
@@ -228,7 +232,7 @@ func (c *client) UnTapService(ctx context.Context, fnMeta metav1.ObjectMeta, exe
 		ServiceURL:     strings.TrimPrefix(serviceURL.String(), "http://"),
 	}
 
-	body, err := json.Marshal(tapSvc)
+	body, err := json.Marshal(tapSvc, executorWireOpts)
 	if err != nil {
 		return fmt.Errorf("could not marshal request body for getting service for function: %w", err)
 	}
@@ -334,7 +338,7 @@ func (c *client) TapService(fnMeta metav1.ObjectMeta, executorType fv1.ExecutorT
 func (c *client) _tapService(ctx context.Context, tapSvcReqs []TapServiceRequest) error {
 	executorURL := c.executorURL + "/v2/tapServices"
 
-	body, err := json.Marshal(tapSvcReqs)
+	body, err := json.Marshal(tapSvcReqs, executorWireOpts)
 	if err != nil {
 		return err
 	}

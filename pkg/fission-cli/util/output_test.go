@@ -7,6 +7,7 @@ package util
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"os"
 	"strings"
 	"testing"
@@ -244,6 +245,43 @@ func TestPrintTableRowsAlign(t *testing.T) {
 	for _, want := range []string{"NAME", "READY", "hello", "True", "world", NoneValue} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table output missing %q; got:\n%s", want, out)
+		}
+	}
+}
+
+// TestEncodeJSONLenientAndDeterministic pins two contracts of the -o json
+// encoder: it must render a record whose raw passthrough fields carry
+// degenerate user bytes (duplicate keys) instead of failing the whole
+// listing, and its map-key order must be stable across calls so diffs and
+// golden-output scripts keep working (v1 sorted keys; v2 needs Deterministic).
+func TestEncodeJSONLenientAndDeterministic(t *testing.T) {
+	type withRaw struct {
+		Name   string         `json:"name"`
+		Schema jsontext.Value `json:"schema"`
+	}
+	v := withRaw{Name: "x", Schema: jsontext.Value(`{"a":1,"a":2}`)}
+	out, err := encode(OutputJSON, v)
+	if err != nil {
+		t.Fatalf("encode must tolerate duplicate keys in raw fields: %v", err)
+	}
+	// WithIndent reformats the raw value, so assert both duplicate members
+	// survived rather than exact bytes.
+	if got := strings.Count(string(out), `"a"`); got != 2 {
+		t.Fatalf("both duplicate members should pass through, found %d in %s", got, out)
+	}
+
+	m := map[string]string{"zeta": "1", "alpha": "2", "mid": "3", "beta": "4"}
+	first, err := encode(OutputJSON, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		again, err := encode(OutputJSON, m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(again) != string(first) {
+			t.Fatalf("map key order must be deterministic:\n%s\nvs\n%s", first, again)
 		}
 	}
 }

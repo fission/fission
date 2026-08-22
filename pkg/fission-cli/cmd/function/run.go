@@ -8,7 +8,7 @@ import (
 	"bufio"
 	"context"
 	jsonv1 "encoding/json"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"

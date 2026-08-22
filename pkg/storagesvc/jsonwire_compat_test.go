@@ -5,7 +5,7 @@
 package storagesvc
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +77,7 @@ func TestArchiveListJSONWireCompat(t *testing.T) {
 		ids := []string{"default-abc123", "test-ns-def456"}
 		golden := `["default-abc123","test-ns-def456"]`
 
-		body, err := json.Marshal(ids)
+		body, err := json.Marshal(ids, listWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, golden, string(body),
 			"compat gate for the json/v2 migration — cross-version RPC wire "+
@@ -96,7 +96,7 @@ func TestArchiveListJSONWireCompat(t *testing.T) {
 		var ids []string
 		golden := `null`
 
-		body, err := json.Marshal(ids)
+		body, err := json.Marshal(ids, listWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, golden, string(body),
 			"compat gate for the json/v2 migration — cross-version RPC wire "+
@@ -115,7 +115,7 @@ func TestArchiveListJSONWireCompat(t *testing.T) {
 		ids := []string{}
 		golden := `[]`
 
-		body, err := json.Marshal(ids)
+		body, err := json.Marshal(ids, listWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, golden, string(body),
 			"compat gate for the json/v2 migration — cross-version RPC wire "+

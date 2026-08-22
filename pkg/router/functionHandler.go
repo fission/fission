@@ -6,7 +6,7 @@ package router
 
 import (
 	"context"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httputil"
@@ -542,8 +542,6 @@ func (fh functionHandler) writeInvocationError(rw http.ResponseWriter, req *http
 	// the marshal-failure fallback below.
 	rw.Header().Set(correlation.HeaderComponent, string(component))
 
-	// Our own Go-marshaled response type (ferror.InvocationError): plain v2
-	// defaults, no leniency options needed.
 	payload, merr := json.Marshal(body)
 	if merr != nil {
 		// Never emit a half-written body: fall back to plain text.

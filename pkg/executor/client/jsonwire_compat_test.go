@@ -6,7 +6,7 @@ package client
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"testing"
 	"time"
@@ -174,7 +174,7 @@ func TestFunctionJSONWireCompat(t *testing.T) {
 
 			golden := readGolden(t, tc.golden)
 
-			body, err := json.Marshal(tc.fn)
+			body, err := json.Marshal(tc.fn, executorWireOpts)
 			require.NoError(t, err)
 			require.Equal(t, string(golden), string(body),
 				"compat gate for the json/v2 migration — cross-version RPC wire "+
@@ -209,7 +209,7 @@ func TestFunctionMarshal_PodSpecNilContainersEmitsNull(t *testing.T) {
 		},
 	}
 
-	body, err := json.Marshal(fn)
+	body, err := json.Marshal(fn, executorWireOpts)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"containers":null`,
 		"a nil apiv1.PodSpec.Containers (no omitempty tag) must marshal as null, "+

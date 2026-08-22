@@ -7,7 +7,7 @@ package poolmgr
 import (
 	"context"
 	jsonv1 "encoding/json"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"time"
