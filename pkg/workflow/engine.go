@@ -6,7 +6,8 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -125,7 +126,7 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 			if err != nil {
 				return nil, err
 			}
-			var input json.RawMessage
+			var input jsontext.Value
 			if run.Spec.Input != nil {
 				input = run.Spec.Input.Raw
 			}
@@ -230,7 +231,7 @@ func (e *Engine) assembleJoin(ctx context.Context, run *fv1.WorkflowRun, s *RunS
 		}
 		return Event{}, err
 	}
-	raw, err := json.Marshal(joined)
+	raw, err := json.Marshal(joined, docEncOpts)
 	if err != nil {
 		return Event{}, fmt.Errorf("encoding join output: %w", err)
 	}

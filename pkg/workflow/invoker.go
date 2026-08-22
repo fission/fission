@@ -7,7 +7,8 @@ package workflow
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -48,7 +49,7 @@ type invocation struct {
 	state       string
 	attempt     int32
 	stateSpec   fv1.WorkflowState
-	input       json.RawMessage
+	input       jsontext.Value
 	expectedSeq int64
 }
 
@@ -165,9 +166,9 @@ func (inv *Invoker) run(iv invocation) {
 type outcome struct {
 	succeeded bool
 	skip      bool
-	body      json.RawMessage
+	body      jsontext.Value
 	errorType string
-	cause     json.RawMessage
+	cause     jsontext.Value
 }
 
 func (inv *Invoker) execute(iv invocation) outcome {
@@ -245,13 +246,13 @@ func (inv *Invoker) execute(iv invocation) outcome {
 
 // functionBody is the request body the function sees: InputPath-shaped when
 // set, the raw flowing document verbatim (byte-identical) otherwise.
-func functionBody(iv invocation) (json.RawMessage, error) {
+func functionBody(iv invocation) (jsontext.Value, error) {
 	if iv.stateSpec.InputPath == "" {
 		return iv.input, nil
 	}
 	var doc any
 	if len(iv.input) > 0 {
-		if err := json.Unmarshal(iv.input, &doc); err != nil {
+		if err := json.Unmarshal(iv.input, &doc, docDecOpts); err != nil {
 			return nil, fmt.Errorf("decoding step input: %w", err)
 		}
 	}
@@ -259,7 +260,7 @@ func functionBody(iv invocation) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := json.Marshal(selected)
+	out, err := json.Marshal(selected, docEncOpts)
 	if err != nil {
 		return nil, fmt.Errorf("encoding step input: %w", err)
 	}
@@ -270,10 +271,10 @@ func functionBody(iv invocation) (json.RawMessage, error) {
 // from a non-2xx body, falling back to the status-class built-in.
 func classifyError(body []byte, fallback string) outcome {
 	var typed struct {
-		ErrorType string          `json:"errorType"`
-		Cause     json.RawMessage `json:"cause"`
+		ErrorType string         `json:"errorType"`
+		Cause     jsontext.Value `json:"cause"`
 	}
-	if err := json.Unmarshal(body, &typed); err == nil && typed.ErrorType != "" {
+	if err := json.Unmarshal(body, &typed, docDecOpts); err == nil && typed.ErrorType != "" {
 		return outcome{errorType: typed.ErrorType, cause: typed.Cause}
 	}
 	return outcome{errorType: fallback, cause: normalizeJSON(body)}
@@ -281,19 +282,19 @@ func classifyError(body []byte, fallback string) outcome {
 
 // normalizeJSON keeps valid JSON as-is and wraps anything else as a string,
 // so events always carry valid JSON.
-func normalizeJSON(body []byte) json.RawMessage {
+func normalizeJSON(body []byte) jsontext.Value {
 	if len(body) == 0 {
-		return json.RawMessage("null")
+		return jsontext.Value("null")
 	}
-	if json.Valid(body) {
+	if jsontext.Value(body).IsValid(docDecOpts) {
 		return body
 	}
-	quoted, _ := json.Marshal(string(body))
+	quoted, _ := json.Marshal(string(body), docEncOpts)
 	return quoted
 }
 
-func causeOf(err error) json.RawMessage {
-	quoted, _ := json.Marshal(err.Error())
+func causeOf(err error) jsontext.Value {
+	quoted, _ := json.Marshal(err.Error(), docEncOpts)
 	return quoted
 }
 
@@ -328,24 +329,24 @@ func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 
 // documentAfterSuccess merges the function result into the state's input per
 // ResultPath/OutputPath, producing the next state's document.
-func (inv *Invoker) documentAfterSuccess(iv invocation, body json.RawMessage) (json.RawMessage, error) {
+func (inv *Invoker) documentAfterSuccess(iv invocation, body jsontext.Value) (jsontext.Value, error) {
 	var input, result any
 	if len(iv.input) > 0 {
-		if err := json.Unmarshal(iv.input, &input); err != nil {
+		if err := json.Unmarshal(iv.input, &input, docDecOpts); err != nil {
 			return nil, fmt.Errorf("decoding step input: %w", err)
 		}
 	}
 	// normalizeJSON already ran on the body (non-JSON success responses —
 	// plain-text functions — become JSON strings), so this cannot fail on
 	// function output; a failure here means engine corruption.
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := json.Unmarshal(body, &result, docDecOpts); err != nil {
 		return nil, fmt.Errorf("decoding step result: %w", err)
 	}
 	next, err := applyOutputPath(iv.stateSpec, input, result)
 	if err != nil {
 		return nil, err
 	}
-	out, err := json.Marshal(next)
+	out, err := json.Marshal(next, docEncOpts)
 	if err != nil {
 		return nil, fmt.Errorf("encoding next document: %w", err)
 	}

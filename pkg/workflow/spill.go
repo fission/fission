@@ -6,7 +6,8 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -37,7 +38,7 @@ func checkpointScope(namespace, runName string) statestore.Scope {
 // spill stores doc under a per-(state, attempt) key. Keys are write-once in
 // practice (W2: at most one result per attempt), so refs are immutable and
 // dereferencing stays deterministic.
-func spill(ctx context.Context, kv statestore.KVStore, namespace, runName, state string, attempt int32, doc json.RawMessage) (string, error) {
+func spill(ctx context.Context, kv statestore.KVStore, namespace, runName, state string, attempt int32, doc jsontext.Value) (string, error) {
 	key := fmt.Sprintf("%s/%d", state, attempt)
 	if err := kv.Set(ctx, ioScope(namespace, runName), key, doc, statestore.SetOptions{}); err != nil {
 		return "", fmt.Errorf("spilling %s: %w", key, err)
@@ -47,7 +48,7 @@ func spill(ctx context.Context, kv statestore.KVStore, namespace, runName, state
 
 // derefFor builds the fold's spill resolver for one run.
 func (e *Engine) derefFor(run *fv1.WorkflowRun) derefFn {
-	return func(ref string) (json.RawMessage, error) {
+	return func(ref string) (jsontext.Value, error) {
 		v, err := e.kv.Get(context.Background(), ioScope(run.Namespace, run.Name), ref)
 		if err != nil {
 			return nil, fmt.Errorf("dereferencing spilled document %q: %w", ref, err)
@@ -77,7 +78,7 @@ func (e *Engine) loadCheckpoint(ctx context.Context, run *fv1.WorkflowRun) (*Run
 		return nil, fmt.Errorf("loading checkpoint: %w", err)
 	}
 	var doc checkpointDoc
-	if jsonErr := json.Unmarshal(v.Data, &doc); jsonErr != nil || doc.State == nil {
+	if jsonErr := json.Unmarshal(v.Data, &doc, docDecOpts); jsonErr != nil || doc.State == nil {
 		e.logger.V(1).Info("discarding undecodable checkpoint (re-folding from scratch)", "run", run.Name, "error", jsonErr)
 		return newRunState(), nil
 	}
@@ -99,7 +100,7 @@ func (e *Engine) saveCheckpoint(ctx context.Context, run *fv1.WorkflowRun, s *Ru
 	if s.LastSeq == 0 || s.LastSeq%checkpointEvery != 0 {
 		return
 	}
-	data, err := json.Marshal(checkpointDoc{UID: string(run.UID), State: s})
+	data, err := json.Marshal(checkpointDoc{UID: string(run.UID), State: s}, docEncOpts)
 	if err != nil {
 		e.logger.Error(err, "encoding checkpoint", "run", run.Name)
 		return

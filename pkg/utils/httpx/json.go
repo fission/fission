@@ -29,6 +29,13 @@ var ErrEncode = errors.New("encoding JSON response")
 //
 // Set any additional response headers before calling — they are frozen when
 // the status is written.
+//
+// Stays on encoding/json (v1): this is the emission chokepoint for every HTTP
+// response in the control plane, including ones parsed by cross-language
+// function SDKs (state API), so its byte-level output (null for nil slices,
+// empty omitempty structs emitted) is a compatibility surface. Buffering
+// before the status line is likewise deliberate — do not switch to a
+// streaming MarshalWrite.
 func WriteJSON[T any](w http.ResponseWriter, status int, v T) error {
 	b, err := json.Marshal(v)
 	if err != nil {

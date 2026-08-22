@@ -5,7 +5,8 @@
 package workflow
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strconv"
 	"time"
@@ -20,13 +21,13 @@ import (
 // derefFn resolves a spilled document by its KV ref. Spilled entries are
 // immutable (write-once per (state, attempt) key), so dereferencing keeps
 // the fold deterministic: same log → same refs → same content.
-type derefFn func(ref string) (json.RawMessage, error)
+type derefFn func(ref string) (jsontext.Value, error)
 
 // stepResult is one recorded (state, attempt) outcome.
 type stepResult struct {
-	Succeeded bool            `json:"succeeded"`
-	ErrorType string          `json:"errorType,omitempty"`
-	Cause     json.RawMessage `json:"cause,omitempty"`
+	Succeeded bool           `json:"succeeded"`
+	ErrorType string         `json:"errorType,omitempty"`
+	Cause     jsontext.Value `json:"cause,omitempty"`
 }
 
 // maxRecentEvents bounds the status tail (etcd visibility only; the full
@@ -38,16 +39,16 @@ const maxRecentEvents = 20
 // costs a longer re-fold, never correctness.
 type RunState struct {
 	Spec  *fv1.WorkflowSpec `json:"spec,omitempty"`
-	Input json.RawMessage   `json:"input,omitempty"`
+	Input jsontext.Value    `json:"input,omitempty"`
 
 	// Current is the state whose turn it is ("" before RunStarted). Doc /
 	// DocRef is the document flowing into it (already shaped by the previous
 	// step's worker). Choice states are resolved during advancement, so
 	// Current is always a Task, Succeed, or Fail state — only Task states
 	// append step events, matching workflowfold.tla's task-step model.
-	Current string          `json:"current,omitempty"`
-	Doc     json.RawMessage `json:"doc,omitempty"`
-	DocRef  string          `json:"docRef,omitempty"`
+	Current string         `json:"current,omitempty"`
+	Doc     jsontext.Value `json:"doc,omitempty"`
+	DocRef  string         `json:"docRef,omitempty"`
 
 	// Attempts is each state's highest scheduled attempt (TLA AttemptsOf);
 	// Results records outcomes keyed "state/attempt" (TLA HasResult).
@@ -77,10 +78,10 @@ type RunState struct {
 
 	// Terminal is set by a terminal event; nothing folds after it (W4).
 	Terminal  fv1.WorkflowRunPhase `json:"terminal,omitempty"`
-	Output    json.RawMessage      `json:"output,omitempty"`
+	Output    jsontext.Value       `json:"output,omitempty"`
 	OutputRef string               `json:"outputRef,omitempty"`
 	ErrorType string               `json:"errorType,omitempty"`
-	Cause     json.RawMessage      `json:"cause,omitempty"`
+	Cause     jsontext.Value       `json:"cause,omitempty"`
 
 	StartedAt time.Time `json:"startedAt,omitempty"`
 	LastSeq   int64     `json:"lastSeq,omitempty"`
@@ -323,17 +324,17 @@ func (s *RunState) applyBranchEvent(e Event, se statestore.Event, deref derefFn)
 // StepScheduled InputHash, and a reordering would refingerprint documents on
 // runs that are already in flight.
 type catchError struct {
-	Cause     json.RawMessage `json:"cause"`
-	ErrorType string          `json:"errorType"`
+	Cause     jsontext.Value `json:"cause"`
+	ErrorType string         `json:"errorType"`
 }
 
 // branchErrorCause is the Cause payload of a Fission.BranchFailed failure: it
 // names the branch that failed and carries its own error through. Field order
 // is sorted for the same byte-stability reason as catchError.
 type branchErrorCause struct {
-	Branch    string          `json:"branch"`
-	Cause     json.RawMessage `json:"cause"`
-	ErrorType string          `json:"errorType"`
+	Branch    string         `json:"branch"`
+	Cause     jsontext.Value `json:"cause"`
+	ErrorType string         `json:"errorType"`
 }
 
 // failRegion dissolves the live region because branch failed terminally:
@@ -347,7 +348,7 @@ func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) erro
 		Branch:    branch,
 		Cause:     nonEmpty(mini.Cause),
 		ErrorType: mini.PendingError,
-	})
+	}, docEncOpts)
 	if err != nil {
 		return fmt.Errorf("encoding branch error object: %w", err)
 	}
@@ -372,7 +373,7 @@ func (s *RunState) failRegion(branch string, mini *RunState, deref derefFn) erro
 				return nil
 			}
 		}
-		errObj, err := json.Marshal(next)
+		errObj, err := json.Marshal(next, docEncOpts)
 		if err != nil {
 			return fmt.Errorf("encoding error object: %w", err)
 		}
@@ -396,7 +397,7 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 	failEntry := func(cause string) {
 		s.Current = ""
 		s.PendingError = fv1.WorkflowErrPermanentError
-		s.Cause, _ = json.Marshal(cause)
+		s.Cause, _ = json.Marshal(cause, docEncOpts)
 	}
 
 	doc, err := s.currentDoc(deref)
@@ -461,7 +462,7 @@ func (s *RunState) enterRegion(name string, st fv1.WorkflowState, deref derefFn)
 			// (retryPolicy falls back to Spec.DefaultRetry).
 			DefaultRetry: s.Spec.DefaultRetry,
 		}
-		raw, err := json.Marshal(seed.input)
+		raw, err := json.Marshal(seed.input, docEncOpts)
 		if err != nil {
 			failEntry(fmt.Sprintf("encoding branch %d input: %v", i, err))
 			return nil
@@ -519,7 +520,7 @@ func (s *RunState) applyStepFailure(e Event, deref derefFn) error {
 				return nil
 			}
 		}
-		raw, err := json.Marshal(next)
+		raw, err := json.Marshal(next, docEncOpts)
 		if err != nil {
 			return fmt.Errorf("encoding error object: %w", err)
 		}
@@ -559,9 +560,9 @@ func matchCatch(routes []fv1.WorkflowCatchRoute, errorType string) *fv1.Workflow
 	return nil
 }
 
-func nonEmpty(raw json.RawMessage) json.RawMessage {
+func nonEmpty(raw jsontext.Value) jsontext.Value {
 	if len(raw) == 0 {
-		return json.RawMessage("null")
+		return jsontext.Value("null")
 	}
 	return raw
 }
@@ -626,7 +627,7 @@ func (s *RunState) currentDoc(deref derefFn) (any, error) {
 		return nil, nil
 	}
 	var doc any
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	if err := json.Unmarshal(raw, &doc, docDecOpts); err != nil {
 		return nil, fmt.Errorf("decoding flowing document: %w", err)
 	}
 	return doc, nil

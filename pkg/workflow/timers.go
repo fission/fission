@@ -6,7 +6,7 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 
 	"k8s.io/apimachinery/pkg/types"
