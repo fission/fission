@@ -28,7 +28,7 @@ TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
 # Implementation-Version "2.0 2026-08-11", X-Git-Revision
 # 0894c3407f4717fec7cc18bde3bf3c857fa47333 on tlaplus master, tlc2/TLC.class
 # present, downloaded from the official tlaplus/tlaplus v1.8.0 release URL.
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-ab323b79802aedc3203b3f9af37c6aca3ed43f4e0225b36f2aa77b26de46c05f}"
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-eabd140a70f49eb9305a3bd3f3df944eddf87e5a90d329789085f8953a80533a}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"
