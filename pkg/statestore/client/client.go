@@ -11,7 +11,7 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -112,7 +112,7 @@ func postJSON[Req, Resp any](c *Client, ctx context.Context, path string, req Re
 		return err
 	}
 	defer drainClose(resp)
-	return json.NewDecoder(resp.Body).Decode(out)
+	return json.UnmarshalRead(resp.Body, out)
 }
 
 // postNoResponse is postJSON for endpoints whose 2xx reply carries no body.
@@ -157,7 +157,7 @@ func (c *Client) send(ctx context.Context, path string, body []byte) (*http.Resp
 
 func decodeErr(resp *http.Response) error {
 	var e httpapi.Error
-	_ = json.NewDecoder(resp.Body).Decode(&e)
+	_ = json.UnmarshalRead(resp.Body, &e)
 	if e.Code == "" {
 		return fmt.Errorf("statestore/client: unexpected status %d", resp.StatusCode)
 	}
