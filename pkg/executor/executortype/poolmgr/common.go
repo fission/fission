@@ -31,6 +31,10 @@ import (
 // sorted), so the value is stable across processes. Changing this function's
 // input set in a future release costs at most one warm-pod recycle wave on
 // the upgrade that ships the change — document it there if it happens.
+//
+// This site stays on encoding/json (v1) permanently: the hash is a byte-level
+// contract, and json/v2 changes output bytes (nil-map emission, omitempty
+// semantics, escaping). TestEnvRuntimeHashGolden pins the exact values.
 func envRuntimeHash(env *fv1.Environment) string {
 	in := struct {
 		Runtime     fv1.Runtime                `json:"runtime"`

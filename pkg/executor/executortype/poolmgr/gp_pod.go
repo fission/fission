@@ -162,6 +162,10 @@ func (gp *GenericPool) choosePod(ctx context.Context, newLabels map[string]strin
 				Annotations: annotations,
 				Labels:      newLabels,
 			}}
+			// Stays on encoding/json (v1): this is a StrategicMergePatch,
+			// where a nil map marshals as null (= delete the field) under v1
+			// but as {} (= no-op) under json/v2 — a semantic change, not just
+			// a byte-level one.
 			patchBytes, _ := json.Marshal(patch)
 			logger.Info("relabel pod", "pod", string((patchBytes)))
 			newPod, err := gp.kubernetesClient.CoreV1().Pods(chosenPod.Namespace).Patch(ctx, chosenPod.Name, k8sTypes.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
