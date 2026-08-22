@@ -6,7 +6,8 @@ package mqpub
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	json "encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -73,7 +74,15 @@ func (p *egressPublisher) Publish(ctx context.Context, namespace, mqType, topic,
 		recordPublish(ctx, mqType, "invalid")
 		return fmt.Errorf("mqpub: invalid topic name: %w", err)
 	}
-	body, err := json.Marshal(EgressJob{Namespace: namespace, Topic: topic, ContentType: contentType, Payload: payload})
+	// EgressJob is a queue-durable payload (RFC-0027): FormatNilSliceAsNull
+	// keeps a nil Payload emitted as JSON null like v1 (Payload has no omitempty
+	// tag, and v2's default for a nil []byte is an empty string, not null;
+	// Payload itself is base64-encoded so it is never a UTF-8 concern).
+	// AllowInvalidUTF8 covers ContentType, a caller-supplied string (e.g. from a
+	// raw request header), so invalid UTF-8 there is U+FFFD-substituted like v1
+	// instead of turning an otherwise-valid publish into a marshal error.
+	body, err := json.Marshal(EgressJob{Namespace: namespace, Topic: topic, ContentType: contentType, Payload: payload},
+		json.FormatNilSliceAsNull(true), jsontext.AllowInvalidUTF8(true))
 	if err != nil {
 		recordPublish(ctx, mqType, "error")
 		return fmt.Errorf("mqpub: encoding egress job: %w", err)

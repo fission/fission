@@ -129,7 +129,7 @@ func fetchHistory(input cli.Input, opts *cmd.CommandActioner) ([]historyEvent, *
 	}
 
 	// The event log embeds user-function-produced RawMessage docs (Cause,
-	// Output), so — same reasoning as admission (rule 3) — allow duplicate
+	// Output), so — same reasoning as admission — allow duplicate
 	// JSON member names and invalid UTF-8 rather than newly rejecting a
 	// degenerate doc a function actually produced.
 	var events []historyEvent
