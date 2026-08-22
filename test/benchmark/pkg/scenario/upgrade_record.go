@@ -5,7 +5,8 @@
 package scenario
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -302,10 +303,10 @@ func (r *upgradeRecorder) writeArtifact(dir string) {
 	// this best-effort recorder could kill the run it exists to explain.
 	// This runs once at scenario end; contention is irrelevant.
 	r.mu.Lock()
-	data, err := json.MarshalIndent(attribution{
+	data, err := json.Marshal(attribution{
 		T0: r.t0, Phases: r.phases, Events: r.events,
 		Failures: r.failures, Timeline: r.timeline, Dropped: r.dropped,
-	}, "", "  ")
+	}, jsontext.WithIndent("  "))
 	r.mu.Unlock()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "upgrade recorder: marshal attribution: %v\n", err)

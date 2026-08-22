@@ -5,7 +5,8 @@
 package util
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -52,7 +53,7 @@ func ParseOutputFormat(s string) (OutputFormat, error) {
 func encode[T any](format OutputFormat, v T) ([]byte, error) {
 	switch format {
 	case OutputJSON:
-		return json.MarshalIndent(v, "", "  ")
+		return json.Marshal(v, jsontext.WithIndent("  "))
 	case OutputYAML:
 		return yaml.Marshal(v)
 	default:
@@ -143,7 +144,7 @@ func PrintStructured[T any](format OutputFormat, v T) (bool, error) {
 }
 
 // printBytes writes b to stdout ensuring exactly one trailing newline:
-// yaml.Marshal already appends one, json.MarshalIndent does not.
+// yaml.Marshal already appends one, indented json.Marshal does not.
 func printBytes(b []byte) {
 	_, _ = os.Stdout.Write(b)
 	if n := len(b); n == 0 || b[n-1] != '\n' {
