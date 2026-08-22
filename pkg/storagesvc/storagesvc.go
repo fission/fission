@@ -6,7 +6,7 @@ package storagesvc
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"net"
@@ -102,7 +102,11 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	logger.V(1).Info("archives in storage", "archives", archivesInStorage)
 
 	// respond with the list of items
-	resp, err := json.Marshal(archivesInStorage)
+	// Marshal for pkg/storagesvc/client's Go v1/v2 decoder (cross-version RPC
+	// wire); FormatNilSliceAsNull preserves v1's nil-slice-marshals-null
+	// behavior (v2 defaults to emitting "[]" for a nil slice), which the
+	// nil-vs-empty golden fixture in jsonwire_compat_test.go pins.
+	resp, err := json.Marshal(archivesInStorage, json.FormatNilSliceAsNull(true))
 	if err != nil {
 		http.Error(w, "error marshaling item list", http.StatusInternalServerError)
 		return
@@ -179,6 +183,9 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	ur := &UploadResponse{
 		ID: id,
 	}
+	// Marshal for pkg/storagesvc/client's Go v1/v2 decoder (cross-version RPC
+	// wire); plain v2 Marshal is wire-compatible (UploadResponse has no
+	// omitempty tags or slice/map fields).
 	resp, err := json.Marshal(ur)
 	if err != nil {
 		logger.Error(err, "error marshaling uploaded file response", "filename", handler.Filename)
