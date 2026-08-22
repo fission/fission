@@ -5,7 +5,8 @@
 package container
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -249,7 +250,12 @@ func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName
 
 func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string, fn *fv1.Function, env *fv1.Environment) error {
 	specializeReq := cfg.NewSpecializeRequest(fn, env)
-	specializePayload, err := json.Marshal(specializeReq)
+	// Cross-version compat: this payload is passed as a pod command-line arg
+	// and read by the fetcher sidecar at container startup. Pool pods are not
+	// rolled on a control-plane upgrade (see jsonwire_compat_test.go), so an
+	// OLD fetcher binary running a v1 decoder may read what a NEW (v2)
+	// control plane wrote here — pin exact v1 emission.
+	specializePayload, err := json.Marshal(specializeReq, jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return err
 	}

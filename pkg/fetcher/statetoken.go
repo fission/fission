@@ -5,7 +5,8 @@
 package fetcher
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	json "encoding/json/v2"
 	"errors"
 	"os"
 	"path/filepath"
@@ -50,7 +51,8 @@ func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
 		creds.Token = hmacauth.EncodeKeyForEnv(hmacauth.DeriveStateKeyspaceKey(master,
 			creds.Namespace, creds.Keyspace))
 	}
-	blob, err := json.Marshal(creds)
+	// cross-language SDK file contract: exact v1 emission
+	blob, err := json.Marshal(creds, jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return err
 	}
