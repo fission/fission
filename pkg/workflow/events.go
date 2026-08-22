@@ -10,7 +10,8 @@
 package workflow
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -58,16 +59,16 @@ type Event struct {
 	// initial input. A Workflow edit or deletion mid-run can neither fork nor
 	// strand the run — the stream alone determines its semantics.
 	Spec  *fv1.WorkflowSpec `json:"spec,omitempty"`
-	Input json.RawMessage   `json:"input,omitempty"`
+	Input jsontext.Value    `json:"input,omitempty"`
 
 	// Results carry exactly one of Output (inline, <= spill threshold) or
 	// OutputRef (a statestore KV key in the run's "io" keyspace).
-	Output    json.RawMessage `json:"output,omitempty"`
-	OutputRef string          `json:"outputRef,omitempty"`
+	Output    jsontext.Value `json:"output,omitempty"`
+	OutputRef string         `json:"outputRef,omitempty"`
 
 	// Failures carry the RFC error model's classification.
-	ErrorType string          `json:"errorType,omitempty"`
-	Cause     json.RawMessage `json:"cause,omitempty"`
+	ErrorType string         `json:"errorType,omitempty"`
+	Cause     jsontext.Value `json:"cause,omitempty"`
 
 	// InputHash fingerprints the shaped input a StepScheduled was computed
 	// from (debugging aid; not consulted by the fold).
@@ -82,7 +83,7 @@ var knownEventTypes = map[EventType]bool{
 }
 
 func encodeEvent(e Event) (statestore.Event, error) {
-	payload, err := json.Marshal(e)
+	payload, err := json.Marshal(e, docEncOpts)
 	if err != nil {
 		return statestore.Event{}, fmt.Errorf("encoding %s event: %w", e.Type, err)
 	}
@@ -97,7 +98,7 @@ func decodeEvent(se statestore.Event) (Event, error) {
 		return Event{}, fmt.Errorf("unknown workflow event type %q at seq %d", se.Type, se.Seq)
 	}
 	var e Event
-	if err := json.Unmarshal(se.Payload, &e); err != nil {
+	if err := json.Unmarshal(se.Payload, &e, docDecOpts); err != nil {
 		return Event{}, fmt.Errorf("decoding %s event at seq %d: %w", se.Type, se.Seq, err)
 	}
 	return e, nil
