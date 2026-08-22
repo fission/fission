@@ -7,7 +7,8 @@ package logdb
 import (
 	"bytes"
 	"context"
-	json "encoding/json/v2"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -170,8 +171,10 @@ func (l loki) GetLogs(ctx context.Context, filter LogFilter, output *bytes.Buffe
 	}
 
 	var parsed lokiQueryRangeResponse
-	// Loki's own JSON API response: plain v2 defaults.
-	if err := json.UnmarshalRead(resp.Body, &parsed); err != nil {
+	// Log lines carry arbitrary function stdout, so tolerate invalid UTF-8
+	// like the row-level parsing below does - one bad byte must not discard
+	// the whole batch of valid lines.
+	if err := json.UnmarshalRead(resp.Body, &parsed, jsontext.AllowInvalidUTF8(true)); err != nil {
 		return fmt.Errorf("failed to decode loki response: %w", err)
 	}
 

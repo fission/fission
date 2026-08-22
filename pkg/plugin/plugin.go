@@ -31,6 +31,18 @@ var (
 	Prefix = "fission-"
 )
 
+// metadataDecodeOpts keeps v1's full decode leniency for plugin metadata.
+// Third-party plugin binaries are external producers we don't control: allow
+// duplicate JSON member names and invalid UTF-8 rather than newly rejecting
+// output v1 accepted, and keep case-insensitive field matching — a plugin
+// emitting {"Name": ...} populated Metadata.Name under v1 and must not
+// silently stop doing so.
+var metadataDecodeOpts = json.JoinOptions(
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
+	json.MatchCaseInsensitiveNames(true),
+)
+
 // ObjectMeta contains the metadata of a plugin.
 // The only metadata that is guaranteed to be non-empty is the path and Name. All other fields are considered optional.
 type Metadata struct {
@@ -151,16 +163,7 @@ func fetchPluginMetadata(ctx context.Context, pluginPath string) (*Metadata, err
 	// Parse metadata if possible
 	pluginName := strings.TrimPrefix(path.Base(pluginPath), Prefix)
 	md := &Metadata{}
-	// Third-party plugin binaries are external producers we don't control;
-	// stay lenient like v1 was — allow duplicate JSON member names and
-	// invalid UTF-8 in their metadata output rather than newly rejecting
-	// output v1 would have accepted.
-	// MatchCaseInsensitiveNames keeps v1's field matching for these
-	// externally-built binaries: a plugin emitting {"Name": ...} populated
-	// Metadata.Name under v1 and must not silently stop doing so.
-	err = json.Unmarshal(buf.Bytes(), md,
-		jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true),
-		json.MatchCaseInsensitiveNames(true))
+	err = json.Unmarshal(buf.Bytes(), md, metadataDecodeOpts)
 
 	// If metadata could not be retrieved, or if no name was provided, use the filename of the binary
 	if err != nil || len(md.Name) == 0 {

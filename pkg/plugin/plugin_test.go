@@ -5,13 +5,14 @@
 package plugin
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,4 +75,33 @@ func TestExec(t *testing.T) {
 	err = Exec(md, nil)
 	os.RemoveAll(testDir)
 	require.NoError(t, err)
+}
+
+// TestMetadataDecodeLeniency pins the v1-equivalent leniency contract for
+// third-party plugin metadata: case-insensitive field matching, duplicate
+// keys tolerated last-wins, invalid UTF-8 substituted rather than rejected.
+// If metadataDecodeOpts loses an option, this fails instead of plugins
+// silently losing fields.
+func TestMetadataDecodeLeniency(t *testing.T) {
+	t.Parallel()
+
+	t.Run("capitalized field names still match", func(t *testing.T) {
+		t.Parallel()
+		md := &Metadata{}
+		require.NoError(t, json.Unmarshal([]byte(`{"Name":"hank","Version":"1.0"}`), md, metadataDecodeOpts))
+		assert.Equal(t, "hank", md.Name)
+		assert.Equal(t, "1.0", md.Version)
+	})
+	t.Run("duplicate keys last-wins", func(t *testing.T) {
+		t.Parallel()
+		md := &Metadata{}
+		require.NoError(t, json.Unmarshal([]byte(`{"name":"a","name":"b"}`), md, metadataDecodeOpts))
+		assert.Equal(t, "b", md.Name)
+	})
+	t.Run("invalid UTF-8 substituted not rejected", func(t *testing.T) {
+		t.Parallel()
+		md := &Metadata{}
+		require.NoError(t, json.Unmarshal([]byte("{\"name\":\"x\xff\"}"), md, metadataDecodeOpts))
+		assert.Equal(t, "x�", md.Name)
+	})
 }

@@ -14,13 +14,12 @@
 package asyncinvoke
 
 import (
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"time"
-
-	jsonv1 "encoding/json"
-	"encoding/json/jsontext"
-	json "encoding/json/v2"
 )
 
 const (
@@ -187,9 +186,9 @@ func (d Destination) IsTopic() bool { return d.Topic != "" }
 // because v2 has no default representation for time.Duration (Policy's fields);
 // OmitEmptyWithLegacySemantics and EscapeForHTML keep v1's field emission
 // (v2's omitempty only drops null/""/{}/[], not a false bool or zero int,
-// and v2 does not HTML-escape by default) so an already-queued message's
-// shape is unaffected by a rolling upgrade — map key order (Headers) is not
-// byte-pinned, and no consumer byte-compares envelopes; AllowInvalidUTF8 keeps a raw
+// and v2 does not HTML-escape by default) and Deterministic keeps v1's sorted
+// map keys, so an already-queued message's bytes are unaffected by a rolling
+// upgrade; AllowInvalidUTF8 keeps a raw
 // replayed HTTP header value from turning an otherwise-valid async request
 // into a marshal error (v1 silently substituted U+FFFD instead).
 func (e Envelope) Encode() ([]byte, error) {
@@ -198,6 +197,9 @@ func (e Envelope) Encode() ([]byte, error) {
 		jsonv1.OmitEmptyWithLegacySemantics(true),
 		jsontext.EscapeForHTML(true),
 		jsontext.AllowInvalidUTF8(true),
+		// v1 sorted map keys; without this, Headers order varies per call
+		// and the byte-pinning compat fixture would flake.
+		json.Deterministic(true),
 	)
 }
 

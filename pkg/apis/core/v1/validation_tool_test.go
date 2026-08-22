@@ -34,6 +34,12 @@ func TestToolConfigValidate(t *testing.T) {
 		{"schema type not object", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"string"}`)}, true},
 		{"schema type not a string", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":["object","null"]}`)}, true},
 		{"schema not json", ToolConfig{Description: "d", InputSchema: rawSchema(`{bad`)}, true},
+		// ADMISSION LENIENCY (see validation.go): stored objects and GitOps
+		// manifests the apiserver already accepted must keep validating, so
+		// the probe must not get stricter than v1 about duplicate keys or
+		// invalid UTF-8. If the Allow options are dropped, these rows fail.
+		{"duplicate keys accepted", ToolConfig{Description: "d", InputSchema: rawSchema(`{"type":"object","a":1,"a":2}`)}, false},
+		{"invalid UTF-8 accepted", ToolConfig{Description: "d", InputSchema: rawSchema("{\"type\":\"object\",\"note\":\"x\xff\"}")}, false},
 		// RFC-0025: Alias is a format-only kube-name check (no existence check
 		// — aliases are eventually consistent).
 		{"valid alias ok", ToolConfig{Description: "d", Alias: "prod"}, false},

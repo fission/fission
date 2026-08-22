@@ -7,13 +7,20 @@ package mqpub
 import (
 	"context"
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 )
+
+// egressWireOpts pins the queue-durable EgressJob emission; shared with the
+// jsonwire_compat fixture so the byte-golden actually gates this site.
+// FormatNilSliceAsNull keeps v1's "payload":null for a nil body (plain v2
+// would emit ""); AllowInvalidUTF8 keeps a caller-supplied ContentType from
+// turning an accepted publish into a marshal error.
+var egressWireOpts = json.JoinOptions(json.FormatNilSliceAsNull(true), jsontext.AllowInvalidUTF8(true))
 
 // EgressJob is the unit of broker egress (RFC-0027): a topic publish destined
 // for an external broker, enqueued durably on the statestore and executed by
@@ -74,15 +81,8 @@ func (p *egressPublisher) Publish(ctx context.Context, namespace, mqType, topic,
 		recordPublish(ctx, mqType, "invalid")
 		return fmt.Errorf("mqpub: invalid topic name: %w", err)
 	}
-	// EgressJob is a queue-durable payload (RFC-0027): FormatNilSliceAsNull
-	// keeps a nil Payload emitted as JSON null like v1 (Payload has no omitempty
-	// tag, and v2's default for a nil []byte is an empty string, not null;
-	// Payload itself is base64-encoded so it is never a UTF-8 concern).
-	// AllowInvalidUTF8 covers ContentType, a caller-supplied string (e.g. from a
-	// raw request header), so invalid UTF-8 there is U+FFFD-substituted like v1
-	// instead of turning an otherwise-valid publish into a marshal error.
 	body, err := json.Marshal(EgressJob{Namespace: namespace, Topic: topic, ContentType: contentType, Payload: payload},
-		json.FormatNilSliceAsNull(true), jsontext.AllowInvalidUTF8(true))
+		egressWireOpts)
 	if err != nil {
 		recordPublish(ctx, mqType, "error")
 		return fmt.Errorf("mqpub: encoding egress job: %w", err)

@@ -7,7 +7,7 @@ package executor
 import (
 	"context"
 	"encoding/json/jsontext"
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"html"

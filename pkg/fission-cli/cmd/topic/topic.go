@@ -9,7 +9,7 @@
 package topic
 
 import (
-	json "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -127,7 +127,6 @@ func (opts *topicSubCommand) peek(input cli.Input) error {
 		return err
 	}
 	var peek topicPeekResp
-	// The router's own Go-marshaled response: plain v2 defaults.
 	if err := json.UnmarshalRead(resp.Body, &peek); err != nil {
 		return fmt.Errorf("decoding router topic response: %w", err)
 	}

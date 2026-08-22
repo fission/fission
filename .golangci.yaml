@@ -27,6 +27,7 @@ linters:
             - "!**/pkg/buildermgr/environment_reconciler.go"
             - "!**/pkg/executor/executortype/poolmgr/common.go"
             - "!**/pkg/executor/executortype/poolmgr/gp_pod.go"
+            - "!**/pkg/executor/client/client.go"
             - "!**/pkg/executor/executortype/poolmgr/oci_specialize.go"
             - "!**/pkg/fetcher/config/config.go"
             - "!**/pkg/fetcher/fetcher.go"

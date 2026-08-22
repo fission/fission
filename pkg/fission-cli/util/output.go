@@ -58,7 +58,10 @@ func encode[T any](format OutputFormat, v T) ([]byte, error) {
 		// input/output) whose bytes v2 would otherwise validate — display
 		// output must render every record, never fail on one degenerate
 		// stored value. Same rationale as the executor RPC's options.
-		return json.Marshal(v, jsontext.WithIndent("  "),
+		// Deterministic restores v1's sorted map keys: labels/annotations
+		// must not shuffle between two runs of the same command, or diffs
+		// and golden-output scripts break.
+		return json.Marshal(v, jsontext.WithIndent("  "), json.Deterministic(true),
 			jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	case OutputYAML:
 		return yaml.Marshal(v)

@@ -11,15 +11,15 @@ import (
 )
 
 // The workflow document plane carries user-function-produced JSON opaquely in
-// json.RawMessage fields (inputs, outputs, causes, checkpoints). Two option
+// jsontext.Value fields (inputs, outputs, causes, checkpoints). Two option
 // sets keep that passthrough contract intact under encoding/json/v2:
 //
 // docEncOpts: exact v1 emission. json/v2 validates RawMessage content on
 // Marshal and — even with AllowInvalidUTF8 — substitutes U+FFFD inside a
 // RawMessage instead of passing bytes through verbatim (the asymmetry pinned
-// in jsonwire_compat_test.go). DefaultOptionsV1 is the only option set that
-// re-emits stored documents byte-for-byte, which spill/re-spill and the event
-// log require.
+// in jsonwire_compat_test.go). DefaultOptionsV1 is the option set that
+// reproduces v1's own emission byte-for-byte - raw document bytes pass
+// through verbatim - which spill/re-spill and the event log require.
 var docEncOpts = jsonv1.DefaultOptionsV1()
 
 // docDecOpts: v1's decode leniency for durable and user-authored bytes.

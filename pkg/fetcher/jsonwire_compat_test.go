@@ -5,7 +5,7 @@
 package fetcher
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ func TestStateCredentialsJSONWireCompat(t *testing.T) {
 		}
 		const want = `{"namespace":"default","keyspace":"myfunc-state","token":"dev-unauthenticated"}`
 
-		got, err := json.Marshal(creds)
+		got, err := json.Marshal(creds, statetokenWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 
@@ -51,7 +51,7 @@ func TestStateCredentialsJSONWireCompat(t *testing.T) {
 		creds := StateCredentials{}
 		const want = `{"namespace":"","keyspace":"","token":""}`
 
-		got, err := json.Marshal(creds)
+		got, err := json.Marshal(creds, statetokenWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 
