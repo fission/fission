@@ -48,7 +48,13 @@ func (opts *CreateSubCommand) run(input cli.Input) error {
 
 	values := map[string]string{"username": username, "password": password}
 
-	jsonValue, _ := json.Marshal(values)
+	// v2's Marshal errors on invalid UTF-8 (v1 silently substituted
+	// U+FFFD), so a discarded error here would turn a bad --password byte
+	// into a confusing empty-body auth failure.
+	jsonValue, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("error encoding login request: %w", err)
+	}
 
 	authURI, _ := os.LookupEnv("FISSION_AUTH_URI")
 	if input.IsSet(flagkey.TokAuthURI) {

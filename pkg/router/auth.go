@@ -145,7 +145,9 @@ func authLoginHandler(featureConfig *config.FeatureConfig) func(w http.ResponseW
 		// deliberately STRICT with no leniency options — rejecting a
 		// duplicate-key or invalid-UTF-8 body outright is intentional
 		// hardening for a credential-bearing input, not something to relax
-		// to match v1.
+		// to match v1. That includes v2's exact-case field matching: a
+		// client posting {"Username": ...} authenticated under v1 and now
+		// gets 401 — send lowercase keys, as the fission CLI always has.
 		err = json.Unmarshal(body, &t)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
