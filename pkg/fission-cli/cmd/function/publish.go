@@ -11,6 +11,7 @@ import (
 	"io"
 	"time"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -91,7 +92,7 @@ func (opts *PublishSubCommand) run(input cli.Input) error {
 // checks — or timeout elapses. A NotFound get keeps polling (the package may
 // not have been created yet by a racing builder step); BuildStatusFailed
 // returns immediately since waiting longer cannot help. timeout<=0 falls back
-// to util.DefaultWaitTimeout, mirroring util.RunWait. The poll scaffold
+// to util.DefaultWaitTimeout, mirroring util.WaitOn. The poll scaffold
 // itself is util.PollUntil, shared with util.WaitForCondition and
 // functionalias.waitForResolved.
 func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace, name string, timeout time.Duration) error {
@@ -111,7 +112,7 @@ func waitForPackageBuild(ctx context.Context, cl versioned.Interface, namespace,
 			case fv1.BuildStatusFailed:
 				return false, fmt.Errorf("package %s/%s build failed", namespace, name)
 			}
-		case !util.IsNotFound(err):
+		case !kerrors.IsNotFound(err):
 			return false, err
 		}
 		return false, nil

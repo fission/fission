@@ -7,8 +7,6 @@ package canaryconfig
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -29,14 +27,12 @@ func (opts *DeleteSubCommand) run(input cli.Input) (err error) {
 		return fmt.Errorf("error in deleting canaryConfig: %w", err)
 	}
 
-	err = opts.Client().FissionClientSet.CoreV1().CanaryConfigs(namespace).Delete(input.Context(), input.String(flagkey.CanaryName), metav1.DeleteOptions{})
+	deleted, err := util.DeleteOne(input, opts.Client().FissionClientSet.CoreV1().CanaryConfigs(namespace), input.String(flagkey.CanaryName), "canary config")
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && util.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("error deleting canary config: %w", err)
+		return err
 	}
-
-	fmt.Printf("canaryconfig '%v.%v' deleted\n", input.String(flagkey.CanaryName), namespace)
+	if deleted {
+		fmt.Printf("canaryconfig '%v.%v' deleted\n", input.String(flagkey.CanaryName), namespace)
+	}
 	return nil
 }

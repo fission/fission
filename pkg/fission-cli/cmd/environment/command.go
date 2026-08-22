@@ -30,7 +30,7 @@ func Commands() *cobra.Command {
 		Short: "Get environment details",
 	}, Get, flag.FlagSet{
 		Required: []flag.Flag{flag.EnvName},
-		Optional: []flag.Flag{},
+		Optional: []flag.Flag{flag.Output},
 	})
 
 	updateCmd := wrapper.SubCommand(&cobra.Command{

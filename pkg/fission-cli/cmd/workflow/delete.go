@@ -7,12 +7,10 @@ package workflow
 import (
 	"fmt"
 
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
+	"github.com/fission/fission/pkg/fission-cli/util"
 )
 
 type DeleteSubCommand struct {
@@ -30,14 +28,12 @@ func (opts *DeleteSubCommand) do(input cli.Input) error {
 	}
 
 	name := input.String(flagkey.WfName)
-	err = opts.Client().FissionClientSet.CoreV1().Workflows(namespace).Delete(input.Context(), name, metav1.DeleteOptions{})
+	deleted, err := util.DeleteOne(input, opts.Client().FissionClientSet.CoreV1().Workflows(namespace), name, "workflow")
 	if err != nil {
-		if input.Bool(flagkey.IgnoreNotFound) && kerrors.IsNotFound(err) {
-			return nil
-		}
-		return fmt.Errorf("error deleting workflow: %w", err)
+		return err
 	}
-
-	fmt.Printf("workflow '%v' deleted\n", name)
+	if deleted {
+		fmt.Printf("workflow '%v' deleted\n", name)
+	}
 	return nil
 }

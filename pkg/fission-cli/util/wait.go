@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/conditions"
@@ -136,7 +137,11 @@ func WaitForCondition(ctx context.Context, get func(context.Context) ([]metav1.C
 					return true, nil
 				}
 			}
-		case IsNotFound(err):
+		case kerrors.IsNotFound(err):
+			// The object does not exist (yet) — keep polling; a wait is often
+			// issued right after a create. The typed check matters: an
+			// unrelated error merely ending in "not found" must take the
+			// default branch and fail the wait rather than poll to timeout.
 			lastSeen = "NotFound"
 		case ctx.Err() != nil:
 			// The wait deadline/cancellation interrupted the in-flight get;
@@ -167,7 +172,7 @@ func waitTimeoutError(ctx context.Context, condType string, want metav1.Conditio
 // RunWait is the shared glue for every resource's `wait` subcommand: it parses
 // --for / --timeout, polls get until the condition is met (or the deadline),
 // and prints the outcome. get fetches the target resource's Status.Conditions.
-func RunWait(input cli.Input, kind, name string, get func(context.Context) ([]metav1.Condition, error)) error {
+func runWait(input cli.Input, kind, name string, get func(context.Context) ([]metav1.Condition, error)) error {
 	condType, want, err := ParseForCondition(input.String(flagkey.WaitFor))
 	if err != nil {
 		return err
@@ -185,4 +190,36 @@ func RunWait(input cli.Input, kind, name string, get func(context.Context) ([]me
 	}
 	fmt.Printf("%s/%s condition met: %s=%s\n", kind, name, condType, want)
 	return nil
+}
+
+// conditioned constrains WaitOn to a pointer to a Fission CRD value type:
+// every CRD gains GetConditions from pkg/apis/core/v1/status_accessors.go, so
+// the constraint is what lets one wait implementation read status off any of
+// them without a per-kind closure.
+type conditioned[T any] interface {
+	*T
+	GetConditions() *[]metav1.Condition
+}
+
+// getter is the one typed-clientset method WaitOn needs; every generated
+// resource client (Functions(ns), TimeTriggers(ns), ...) satisfies it.
+type getter[T any] interface {
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*T, error)
+}
+
+// WaitOn is the whole body of a `fission <resource> wait` subcommand: it reads
+// the resource name from nameKey and blocks until the --for condition is met
+// or the timeout ends. client is the namespace-bound typed client; kind names
+// the resource in messages. Each command supplies only those three, instead of
+// its own copy of the fetch-and-read-conditions loop.
+func WaitOn[T any, PT conditioned[T], C getter[T]](input cli.Input, client C, kind, nameKey string) error {
+	name := input.String(nameKey)
+	get := func(ctx context.Context) ([]metav1.Condition, error) {
+		obj, err := client.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return *PT(obj).GetConditions(), nil
+	}
+	return runWait(input, kind, name, get)
 }

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	asv2 "k8s.io/api/autoscaling/v2"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,25 +81,44 @@ func DeleteKubeObject(ctx context.Context, kubeClient kubernetes.Interface, kube
 	return nil
 }
 
-// CleanupDeployments deletes deployment(s) for a given instanceID
-func CleanupDeployments(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	cleanupDeployments := func(namespace string) error {
-		deploymentList, err := client.AppsV1().Deployments(namespace).List(ctx, listOps)
+// ownedLister is the slice of a typed client cleanupOrphaned needs; the
+// namespaced accessors of every kubernetes.Interface group satisfy it.
+type ownedLister[T any, L any] interface {
+	List(ctx context.Context, opts metav1.ListOptions) (*L, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+}
+
+// cleanupOrphaned deletes, across every reaper namespace, each object whose
+// executor-instanceID annotation (or, for backward compatibility, label)
+// names a DIFFERENT executor instance — i.e. resources orphaned by a previous
+// executor. Delete failures are logged and skipped, matching the historical
+// per-kind loops: a leftover object must not abort the sweep. noun names the
+// kind in the "cleaning up" message; its lowercase form prefixes the
+// structured log fields (the two differ only for HPA, whose message says
+// "HPA" but logs "hpa_name").
+func cleanupOrphaned[T any, L any, PT interface {
+	*T
+	metav1.Object
+}, C ownedLister[T, L]](ctx context.Context, logger logr.Logger, client func(ns string) C, fromList func(*L) []T, noun, instanceID string, listOps metav1.ListOptions, delOpts metav1.DeleteOptions) error {
+	key := strings.ToLower(noun)
+	clean := func(namespace string) error {
+		list, err := client(namespace).List(ctx, listOps)
 		if err != nil {
 			return err
 		}
-		for _, dep := range deploymentList.Items {
-			id, ok := dep.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
+		for _, item := range fromList(list) {
+			obj := PT(&item)
+			id, ok := obj.GetAnnotations()[fv1.EXECUTOR_INSTANCEID_LABEL]
 			if !ok {
 				// Backward compatibility with older label name
-				id, ok = dep.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
+				id, ok = obj.GetLabels()[fv1.EXECUTOR_INSTANCEID_LABEL]
 			}
 			if ok && id != instanceID {
-				logger.Info("cleaning up deployment", "deployment", dep.Name)
-				err := client.AppsV1().Deployments(dep.ObjectMeta.Namespace).Delete(ctx, dep.Name, delOpt)
+				logger.Info("cleaning up "+noun, key, obj.GetName())
+				err := client(obj.GetNamespace()).Delete(ctx, obj.GetName(), delOpts)
 				if err != nil {
-					logger.Error(err, "error cleaning up deployment", "deployment_name", dep.Name,
-						"deployment_namespace", dep.Namespace)
+					logger.Error(err, "error cleaning up "+noun, key+"_name", obj.GetName(),
+						key+"_namespace", obj.GetNamespace())
 				}
 				// ignore err
 			}
@@ -105,118 +126,39 @@ func CleanupDeployments(ctx context.Context, logger logr.Logger, client kubernet
 		return nil
 	}
 	for _, namespace := range GetReaperNamespace() {
-		if err := cleanupDeployments(namespace); err != nil {
+		if err := clean(namespace); err != nil {
 			return err
 		}
 	}
-
 	return nil
+}
+
+// CleanupDeployments deletes deployment(s) for a given instanceID
+func CleanupDeployments(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
+	return cleanupOrphaned(ctx, logger, client.AppsV1().Deployments,
+		func(l *appsv1.DeploymentList) []appsv1.Deployment { return l.Items },
+		"deployment", instanceID, listOps, delOpt)
 }
 
 // CleanupPods deletes pod(s) for a given instanceID
 func CleanupPods(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	cleanupPods := func(namespace string) error {
-		podList, err := client.CoreV1().Pods(namespace).List(ctx, listOps)
-		if err != nil {
-			return err
-		}
-		for _, pod := range podList.Items {
-			id, ok := pod.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
-			if !ok {
-				// Backward compatibility with older label name
-				id, ok = pod.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
-			}
-			if ok && id != instanceID {
-				logger.Info("cleaning up pod", "pod", pod.Name)
-				err := client.CoreV1().Pods(pod.ObjectMeta.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
-				if err != nil {
-					logger.Error(err, "error cleaning up pod", "pod_name", pod.Name,
-						"pod_namespace", pod.Namespace)
-				}
-				// ignore err
-			}
-		}
-		return nil
-	}
-
-	for _, namespace := range GetReaperNamespace() {
-		if err := cleanupPods(namespace); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return cleanupOrphaned(ctx, logger, client.CoreV1().Pods,
+		func(l *apiv1.PodList) []apiv1.Pod { return l.Items },
+		"pod", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 // CleanupServices deletes service(s) for a given instanceID
 func CleanupServices(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	cleanupServices := func(namespace string) error {
-		svcList, err := client.CoreV1().Services(namespace).List(ctx, listOps)
-		if err != nil {
-			return err
-		}
-		for _, svc := range svcList.Items {
-			id, ok := svc.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
-			if !ok {
-				// Backward compatibility with older label name
-				id, ok = svc.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
-			}
-			if ok && id != instanceID {
-				logger.Info("cleaning up service", "service", svc.Name)
-				err := client.CoreV1().Services(svc.ObjectMeta.Namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{})
-				if err != nil {
-					logger.Error(err, "error cleaning up service", "service_name", svc.Name,
-						"service_namespace", svc.Namespace)
-				}
-				// ignore err
-			}
-		}
-		return nil
-	}
-
-	for _, namespace := range GetReaperNamespace() {
-		if err := cleanupServices(namespace); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return cleanupOrphaned(ctx, logger, client.CoreV1().Services,
+		func(l *apiv1.ServiceList) []apiv1.Service { return l.Items },
+		"service", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 // CleanupHpa deletes horizontal pod autoscaler(s) for a given instanceID
 func CleanupHpa(ctx context.Context, logger logr.Logger, client kubernetes.Interface, instanceID string, listOps metav1.ListOptions) error {
-	cleanupHpa := func(namespace string) error {
-		hpaList, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(ctx, listOps)
-		if err != nil {
-			return err
-		}
-
-		for _, hpa := range hpaList.Items {
-			id, ok := hpa.Annotations[fv1.EXECUTOR_INSTANCEID_LABEL]
-			if !ok {
-				// Backward compatibility with older label name
-				id, ok = hpa.Labels[fv1.EXECUTOR_INSTANCEID_LABEL]
-			}
-			if ok && id != instanceID {
-				logger.Info("cleaning up HPA", "hpa", hpa.Name)
-				err := client.AutoscalingV2().HorizontalPodAutoscalers(hpa.ObjectMeta.Namespace).Delete(ctx, hpa.Name, metav1.DeleteOptions{})
-				if err != nil {
-					logger.Error(err, "error cleaning up HPA", "hpa_name", hpa.Name,
-						"hpa_namespace", hpa.Namespace)
-				}
-				// ignore err
-			}
-		}
-		return nil
-	}
-
-	for _, namespace := range GetReaperNamespace() {
-		if err := cleanupHpa(namespace); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return cleanupOrphaned(ctx, logger, client.AutoscalingV2().HorizontalPodAutoscalers,
+		func(l *asv2.HorizontalPodAutoscalerList) []asv2.HorizontalPodAutoscaler { return l.Items },
+		"HPA", instanceID, listOps, metav1.DeleteOptions{})
 }
 
 func GetReaperNamespace() map[string]string {

@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/dummy"
 	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
@@ -77,17 +79,29 @@ func TestWaitForCondition(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps polling through NotFound", func(t *testing.T) {
+	t.Run("keeps polling through a typed NotFound", func(t *testing.T) {
 		n := 0
 		get := func(context.Context) ([]metav1.Condition, error) {
 			n++
 			if n < 2 {
-				return nil, fmt.Errorf("functions.fission.io %q not found", "x")
+				return nil, kerrors.NewNotFound(schema.GroupResource{Group: "fission.io", Resource: "functions"}, "x")
 			}
 			return conds(metav1.ConditionTrue), nil
 		}
 		if err := WaitForCondition(ctx, get, "Ready", metav1.ConditionTrue, time.Millisecond); err != nil {
 			t.Fatalf("not-found should not abort the wait, got %v", err)
+		}
+	})
+
+	// The typed check is load-bearing: before it, ANY error message ending in
+	// "not found" (a port-forward's "service <sel> not found") kept the wait
+	// polling to timeout. Such an error must now fail the wait immediately.
+	t.Run("an unrelated error merely ending in 'not found' aborts the wait", func(t *testing.T) {
+		unrelated := fmt.Errorf("service svc=router not found")
+		get := func(context.Context) ([]metav1.Condition, error) { return nil, unrelated }
+		err := WaitForCondition(ctx, get, "Ready", metav1.ConditionTrue, time.Millisecond)
+		if !errors.Is(err, unrelated) {
+			t.Fatalf("expected the unrelated error to fail the wait fast, got %v", err)
 		}
 	})
 
@@ -184,7 +198,7 @@ func TestRunWait(t *testing.T) {
 		in.SetString(flagkey.WaitFor, "condition=Ready")
 		in.SetDuration(flagkey.WaitTimeout, 2*time.Second)
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionTrue), nil }
-		if err := RunWait(in, "Function", "hello", get); err != nil {
+		if err := runWait(in, "Function", "hello", get); err != nil {
 			t.Fatalf("expected success, got %v", err)
 		}
 	})
@@ -193,7 +207,7 @@ func TestRunWait(t *testing.T) {
 		in := dummy.TestFlagSet()
 		in.SetString(flagkey.WaitFor, "Ready")
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionTrue), nil }
-		if err := RunWait(in, "Function", "hello", get); err == nil {
+		if err := runWait(in, "Function", "hello", get); err == nil {
 			t.Fatal("expected an error for invalid --for")
 		}
 	})
@@ -203,7 +217,7 @@ func TestRunWait(t *testing.T) {
 		in.SetString(flagkey.WaitFor, "condition=Ready")
 		in.SetDuration(flagkey.WaitTimeout, 20*time.Millisecond)
 		get := func(context.Context) ([]metav1.Condition, error) { return conds(metav1.ConditionFalse), nil }
-		err := RunWait(in, "Function", "hello", get)
+		err := runWait(in, "Function", "hello", get)
 		if err == nil || !strings.Contains(err.Error(), "Function/hello") {
 			t.Fatalf("expected timeout error mentioning Function/hello, got %v", err)
 		}

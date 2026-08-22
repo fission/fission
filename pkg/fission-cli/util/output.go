@@ -18,6 +18,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/fission/fission/pkg/conditions"
+	"github.com/fission/fission/pkg/fission-cli/cliwrapper/cli"
+	flagkey "github.com/fission/fission/pkg/fission-cli/flag/key"
 )
 
 // NoneValue is rendered in a status column when a controller has not yet
@@ -184,4 +186,26 @@ func PrintConditionsTo(out io.Writer, conds []metav1.Condition) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", c.Type, c.Status, c.Reason, c.Message, age)
 	}
 	w.Flush()
+}
+
+// PrintGet is the shared skeleton of a `fission <resource> get` subcommand:
+// resolve --output, render json/yaml whole-object when asked, otherwise run
+// the caller's table renderer and append the CONDITIONS block (a no-op for an
+// object with none). It returns the resolved format so a caller can gate
+// table-only extras on it (functionalias's HISTORY block). The conditioned
+// constraint rides the GetConditions accessor every CRD has, the same way
+// WaitOn's does.
+func PrintGet[T any, PT conditioned[T]](input cli.Input, obj PT, table func() error) (OutputFormat, error) {
+	format, err := ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return format, err
+	}
+	if handled, err := PrintStructured(format, obj); err != nil || handled {
+		return format, err
+	}
+	if err := table(); err != nil {
+		return format, err
+	}
+	PrintConditions(*obj.GetConditions())
+	return format, nil
 }
