@@ -61,7 +61,11 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 	}
 	for _, msg := range msgs {
 		var tm timerMsg
-		if err := json.Unmarshal(msg.Body, &tm); err != nil {
+		// Queue-durable bytes, possibly enqueued by a previous release:
+		// decode with the same leniency as every other durable decode.
+		// timerMsg carries no user bytes today, but a future field must not
+		// silently tighten the contract.
+		if err := json.Unmarshal(msg.Body, &tm, docDecOpts); err != nil {
 			// Undecodable = never processable: settle it away.
 			e.logger.Error(err, "dropping undecodable timer message", "id", msg.ID)
 			if killErr := e.q.Kill(ctx, msg.Receipt, "undecodable timer message"); killErr != nil {

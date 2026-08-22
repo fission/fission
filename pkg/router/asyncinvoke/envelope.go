@@ -185,10 +185,11 @@ func (d Destination) IsTopic() bool { return d.Topic != "" }
 // options, all load-bearing for the RFC-0024 queue-durable wire format (json/v2
 // migration, see jsonwire_compat_test.go): FormatDurationAsNano is required
 // because v2 has no default representation for time.Duration (Policy's fields);
-// OmitEmptyWithLegacySemantics and EscapeForHTML reproduce v1's exact byte
-// output (v2's omitempty only drops null/""/{}/[], not a false bool or zero
-// int, and v2 does not HTML-escape by default) so an already-queued message's
-// bytes are unaffected by a rolling upgrade; AllowInvalidUTF8 keeps a raw
+// OmitEmptyWithLegacySemantics and EscapeForHTML keep v1's field emission
+// (v2's omitempty only drops null/""/{}/[], not a false bool or zero int,
+// and v2 does not HTML-escape by default) so an already-queued message's
+// shape is unaffected by a rolling upgrade — map key order (Headers) is not
+// byte-pinned, and no consumer byte-compares envelopes; AllowInvalidUTF8 keeps a raw
 // replayed HTTP header value from turning an otherwise-valid async request
 // into a marshal error (v1 silently substituted U+FFFD instead).
 func (e Envelope) Encode() ([]byte, error) {

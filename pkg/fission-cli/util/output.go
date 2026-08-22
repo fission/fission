@@ -53,7 +53,13 @@ func ParseOutputFormat(s string) (OutputFormat, error) {
 func encode[T any](format OutputFormat, v T) ([]byte, error) {
 	switch format {
 	case OutputJSON:
-		return json.Marshal(v, jsontext.WithIndent("  "))
+		// Lenient on raw passthrough fields: fv1 objects can embed
+		// user-authored JSON (ToolConfig.InputSchema, WorkflowRun
+		// input/output) whose bytes v2 would otherwise validate — display
+		// output must render every record, never fail on one degenerate
+		// stored value. Same rationale as the executor RPC's options.
+		return json.Marshal(v, jsontext.WithIndent("  "),
+			jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	case OutputYAML:
 		return yaml.Marshal(v)
 	default:
