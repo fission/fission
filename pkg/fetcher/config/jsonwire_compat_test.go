@@ -5,7 +5,7 @@
 package container
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -73,7 +73,7 @@ func TestFunctionSpecializeRequestJSONWireCompat(t *testing.T) {
 		}
 		const want = `{"FetchReq":{"fetchType":1,"package":{"name":"hello-pkg","namespace":"default","resourceVersion":"12345"},"url":"http://storagesvc.fission/v1/archive?id=abc","storagesvcurl":"http://storagesvc.fission","filename":"deployarchive","secretList":[{"namespace":"default","name":"mysecret","mountPath":"creds"}],"configMapList":[{"namespace":"default","name":"myconfig"}],"keeparchive":true},"LoadReq":{"filepath":"/userfunc/deployarchive","functionName":"Handler","url":"/","FunctionMetadata":{"name":"hello","namespace":"default","uid":"abc-123-uid","resourceVersion":"999","generation":2,"creationTimestamp":"2026-08-22T10:30:00Z","labels":{"app":"hello"},"annotations":{"fission.io/foo":"bar"}},"envVersion":2,"stateKeyspace":"hello-state"}}`
 
-		got, err := json.Marshal(req)
+		got, err := json.Marshal(req, specializeWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 
@@ -109,7 +109,7 @@ func TestFunctionSpecializeRequestJSONWireCompat(t *testing.T) {
 		req := fetcher.FunctionSpecializeRequest{}
 		const want = `{"FetchReq":{"fetchType":0,"package":{},"url":"","storagesvcurl":"","filename":"","secretList":null,"configMapList":null,"keeparchive":false},"LoadReq":{"filepath":"","functionName":"","url":"","FunctionMetadata":null,"envVersion":0}}`
 
-		got, err := json.Marshal(req)
+		got, err := json.Marshal(req, specializeWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 

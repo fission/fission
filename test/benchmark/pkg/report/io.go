@@ -5,14 +5,15 @@
 package report
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 )
 
 // WriteRun marshals run to path as indented JSON.
 func WriteRun(path string, run Run) error {
-	data, err := json.MarshalIndent(run, "", "  ")
+	data, err := json.Marshal(run, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

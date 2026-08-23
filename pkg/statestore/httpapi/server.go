@@ -5,7 +5,7 @@
 package httpapi
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"time"
@@ -57,7 +57,7 @@ func (h *handler) readyz(w http.ResponseWriter, r *http.Request) {
 func decode[T any](w http.ResponseWriter, r *http.Request) (T, bool) {
 	var dst T
 	r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBytes)
-	if err := json.NewDecoder(r.Body).Decode(&dst); err != nil {
+	if err := json.UnmarshalRead(r.Body, &dst); err != nil {
 		writeJSON(w, http.StatusBadRequest, Error{Code: CodeBadRequest, Message: err.Error()})
 		return dst, false
 	}

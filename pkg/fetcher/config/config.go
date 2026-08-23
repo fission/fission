@@ -5,7 +5,8 @@
 package container
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -69,6 +70,12 @@ type Config struct {
 // version-aware-sign it with — closing the stamp-before-key race without 401s.
 // The storage key stays optional even then: storagesvc dual-accepts a
 // master-derived signature, so an unprovisioned fetcher degrades gracefully.
+
+// specializeWireOpts pins the specialize-request CLI payload to exact v1
+// emission; shared with the jsonwire_compat fixture so the byte-golden gates
+// this site. Old fetcher binaries in long-lived pool pods decode it.
+var specializeWireOpts = jsonv1.DefaultOptionsV1()
+
 func internalAuthEnvVars(namespace string) []apiv1.EnvVar {
 	// Not necessarily chart-generated: internalAuth.existingSecret points this
 	// at an operator-supplied Secret instead.
@@ -249,7 +256,12 @@ func (cfg *Config) AddFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName
 
 func (cfg *Config) AddSpecializingFetcherToPodSpec(podSpec *apiv1.PodSpec, mainContainerName, namespace string, fn *fv1.Function, env *fv1.Environment) error {
 	specializeReq := cfg.NewSpecializeRequest(fn, env)
-	specializePayload, err := json.Marshal(specializeReq)
+	// Cross-version compat: this payload is passed as a pod command-line arg
+	// and read by the fetcher sidecar at container startup. Pool pods are not
+	// rolled on a control-plane upgrade (see jsonwire_compat_test.go), so an
+	// OLD fetcher binary running a v1 decoder may read what a NEW (v2)
+	// control plane wrote here — pin exact v1 emission.
+	specializePayload, err := json.Marshal(specializeReq, specializeWireOpts)
 	if err != nil {
 		return err
 	}

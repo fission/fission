@@ -7,7 +7,7 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,6 +98,10 @@ func (c *client) getCleanUrl(srcPkgFilename string) string {
 func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*builder.PackageBuildResponse, error) {
 	logger := otelUtils.LoggerWithTraceID(ctx, c.logger)
 
+	// Marshal for the builder binary's decoder in env images (cross-release wire: old builder binaries outlive control-plane releases) (cross-version RPC wire; the
+	// builder binary ships in env images that outlive releases); plain v2
+	// Marshal is wire-compatible since PackageBuildRequest has no slice/map
+	// fields whose nil-vs-empty encoding could drift.
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling json: %w", err)
@@ -122,6 +126,8 @@ func (c *client) Build(ctx context.Context, req *builder.PackageBuildRequest) (*
 	}
 
 	pkgBuildResp := builder.PackageBuildResponse{}
+	// Decode of JSON produced by our own marshaler (builder.reply, via
+	// httpx.WriteJSON, pinned v1); plain v2 Unmarshal is safe (no RawMessage).
 	err = json.Unmarshal(rBody, &pkgBuildResp)
 	if err != nil {
 		logger.Error(err, "error parsing resp body")

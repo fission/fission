@@ -5,7 +5,8 @@
 package fetcher
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"os"
 	"path/filepath"
@@ -37,6 +38,14 @@ type StateCredentials struct {
 // and only ever reads it). Without a master secret (dev clusters) it writes a
 // placeholder token — statesvc's pass-through mode accepts any bearer, and
 // the SDK contract stays uniform.
+
+// statetokenWireOpts pins the on-disk statetoken file to exact v1 emission;
+// shared with the jsonwire_compat fixture so the byte-golden gates this site.
+// Cross-language SDKs parse the file. Defensive today - StateCredentials is
+// three plain strings, which v2 defaults would emit identically - but the
+// option keeps the contract explicit if the struct ever grows.
+var statetokenWireOpts = jsonv1.DefaultOptionsV1()
+
 func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
 	if loadReq.FunctionMetadata == nil {
 		return errors.New("specialize request with a state keyspace but no function metadata")
@@ -50,7 +59,8 @@ func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
 		creds.Token = hmacauth.EncodeKeyForEnv(hmacauth.DeriveStateKeyspaceKey(master,
 			creds.Namespace, creds.Keyspace))
 	}
-	blob, err := json.Marshal(creds)
+	// cross-language SDK file contract: exact v1 emission
+	blob, err := json.Marshal(creds, statetokenWireOpts)
 	if err != nil {
 		return err
 	}

@@ -7,7 +7,8 @@ package fetcher
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -881,7 +882,11 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 	var specializeURL string
 	var reader *bytes.Reader
 
-	loadPayload, err := json.Marshal(loadReq)
+	// This POST goes straight to the env runtime container (a per-language
+	// server, possibly an old env image, non-Go) — same non-Go-reader
+	// contract as run.go's local /v2/specialize call, so pin exact v1
+	// emission.
+	loadPayload, err := json.Marshal(loadReq, jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("error encoding load request: %w", err)
 	}

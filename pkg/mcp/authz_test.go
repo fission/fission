@@ -213,3 +213,28 @@ func TestAuthorizerNilTokenDenyWhenEnabled(t *testing.T) {
 	_, ok := a.ScopeFromTokenInfo(nil)
 	assert.False(t, ok)
 }
+
+// TestMcpClaimsStrictDecode pins the deliberate v2 strictness of the
+// SECURITY-boundary claims parser: a claim set carrying duplicate member
+// names or invalid UTF-8 is rejected outright — the duplicate-key smuggling
+// and encoding-ambiguity classes v1 tolerated silently. A future leniency
+// option added to authz.go fails this test.
+func TestMcpClaimsStrictDecode(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		raw  string
+	}{
+		{name: "duplicate allowed_namespaces", raw: `{"allowed_namespaces":"a","allowed_namespaces":"b"}`},
+		{name: "duplicate nested key", raw: `{"allowed_namespaces":["a"],"sub":"x","sub":"y"}`},
+		{name: "invalid UTF-8 in claim", raw: "{\"allowed_namespaces\":\"n\xffs\"}"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var c mcpClaims
+			require.Error(t, c.UnmarshalJSON([]byte(tc.raw)))
+		})
+	}
+}

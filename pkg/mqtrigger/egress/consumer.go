@@ -19,7 +19,8 @@ package egress
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"sync"
@@ -136,7 +137,12 @@ func (c *Consumer) process(ctx context.Context, msg statestore.LeasedMessage) {
 	defer cancel()
 
 	var job mqpub.EgressJob
-	if err := json.Unmarshal(msg.Body, &job); err != nil {
+	// msg.Body is a queue-durable payload (RFC-0027) that can be weeks old and
+	// enqueued by a previous release: decode leniently, mirroring
+	// asyncinvoke.Decode and async_dlq.go's dlqSummary — a duplicate-key or
+	// invalid-UTF-8 body that v1 decoded fine must not now be misclassified as
+	// permanently malformed and dead-lettered.
+	if err := json.Unmarshal(msg.Body, &job, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
 		// Malformed jobs are permanent: no number of retries will fix the bytes.
 		// Kill dead-letters immediately, keeping the poison job inspectable.
 		c.logger.Error(err, "malformed egress job; dead-lettering", "id", msg.ID)

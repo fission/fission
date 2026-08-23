@@ -5,7 +5,8 @@
 package report
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 )
@@ -60,7 +61,7 @@ func writeJSONArray(path string, points []TrendPoint) error {
 	if points == nil {
 		points = []TrendPoint{}
 	}
-	data, err := json.MarshalIndent(points, "", "  ")
+	data, err := json.Marshal(points, jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("marshal trend %s: %w", path, err)
 	}

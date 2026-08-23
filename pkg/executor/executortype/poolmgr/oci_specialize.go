@@ -6,7 +6,8 @@ package poolmgr
 
 import (
 	"context"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"time"
@@ -28,7 +29,11 @@ func (gp *GenericPool) loadOnlySpecialize(ctx context.Context, podIP string, fn 
 	logger := otelUtils.LoggerWithTraceID(ctx, gp.logger)
 
 	specializeReq := gp.fetcherConfig.NewSpecializeRequest(fn, gp.env)
-	loadPayload, err := json.Marshal(specializeReq.LoadReq)
+	// This POST goes straight to the env runtime container (a per-language
+	// server, possibly an old env image, non-Go) rather than through the
+	// fetcher — same non-Go-reader contract as run.go's local /v2/specialize
+	// call, so pin exact v1 emission.
+	loadPayload, err := json.Marshal(specializeReq.LoadReq, jsonv1.DefaultOptionsV1())
 	if err != nil {
 		return fmt.Errorf("error encoding load request: %w", err)
 	}

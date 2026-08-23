@@ -6,7 +6,8 @@ package v1
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -668,12 +669,17 @@ func (tc *ToolConfig) Validate() error {
 	}
 
 	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {
-		var obj map[string]json.RawMessage
-		if err := json.Unmarshal(tc.InputSchema.Raw, &obj); err != nil {
+		// ADMISSION LENIENCY: this must NOT get stricter than v1 — stored
+		// objects and GitOps manifests the apiserver already accepted have to
+		// keep validating, so duplicate JSON member names and invalid UTF-8
+		// are explicitly allowed on both probes below rather than newly
+		// rejected.
+		var obj map[string]jsontext.Value
+		if err := json.Unmarshal(tc.InputSchema.Raw, &obj, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), "must be a JSON object"))
 		} else if typRaw, ok := obj["type"]; !ok {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `must be a JSON Schema object with a "type" key`))
-		} else if typ := ""; json.Unmarshal(typRaw, &typ) != nil || typ != "object" {
+		} else if typ := ""; json.Unmarshal(typRaw, &typ, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) != nil || typ != "object" {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Tool.InputSchema", string(tc.InputSchema.Raw), `"type" must be "object" (MCP tool arguments are always an object)`))
 		}
 	}

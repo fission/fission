@@ -9,7 +9,7 @@
 package topic
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -127,7 +127,7 @@ func (opts *topicSubCommand) peek(input cli.Input) error {
 		return err
 	}
 	var peek topicPeekResp
-	if err := json.NewDecoder(resp.Body).Decode(&peek); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &peek); err != nil {
 		return fmt.Errorf("decoding router topic response: %w", err)
 	}
 	fmt.Printf("head: %d\n", peek.Head)

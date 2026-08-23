@@ -6,13 +6,21 @@ package mqpub
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 )
+
+// egressWireOpts pins the queue-durable EgressJob emission; shared with the
+// jsonwire_compat fixture so the byte-golden actually gates this site.
+// FormatNilSliceAsNull keeps v1's "payload":null for a nil body (plain v2
+// would emit ""); AllowInvalidUTF8 keeps a caller-supplied ContentType from
+// turning an accepted publish into a marshal error.
+var egressWireOpts = json.JoinOptions(json.FormatNilSliceAsNull(true), jsontext.AllowInvalidUTF8(true))
 
 // EgressJob is the unit of broker egress (RFC-0027): a topic publish destined
 // for an external broker, enqueued durably on the statestore and executed by
@@ -73,7 +81,8 @@ func (p *egressPublisher) Publish(ctx context.Context, namespace, mqType, topic,
 		recordPublish(ctx, mqType, "invalid")
 		return fmt.Errorf("mqpub: invalid topic name: %w", err)
 	}
-	body, err := json.Marshal(EgressJob{Namespace: namespace, Topic: topic, ContentType: contentType, Payload: payload})
+	body, err := json.Marshal(EgressJob{Namespace: namespace, Topic: topic, ContentType: contentType, Payload: payload},
+		egressWireOpts)
 	if err != nil {
 		recordPublish(ctx, mqType, "error")
 		return fmt.Errorf("mqpub: encoding egress job: %w", err)

@@ -5,7 +5,8 @@
 package router
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"regexp"
@@ -282,7 +283,11 @@ func dlqSummary(d statestore.DeadMessage) dlqMessage {
 		return m
 	}
 	var job mqpub.EgressJob
-	if err := json.Unmarshal(d.Body, &job); err == nil && job.Topic != "" {
+	// d.Body is a queue-durable payload (RFC-0024/0027): may be weeks old and
+	// enqueued by a previous release, so decode leniently like
+	// asyncinvoke.Decode above rather than rejecting a body v1 would
+	// have decoded fine.
+	if err := json.Unmarshal(d.Body, &job, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err == nil && job.Topic != "" {
 		m.Namespace, m.Topic = job.Namespace, job.Topic
 	}
 	return m
@@ -295,7 +300,7 @@ func dlqWriteShow(w http.ResponseWriter, ts *HTTPTriggerSet, d statestore.DeadMe
 	// success alone must not pick the shape.
 	if env, err := asyncinvoke.Decode(d.Body); err == nil && env.Function != "" {
 		resp.Envelope = &env
-	} else if job := new(mqpub.EgressJob); json.Unmarshal(d.Body, job) == nil && job.Topic != "" {
+	} else if job := new(mqpub.EgressJob); json.Unmarshal(d.Body, job, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) == nil && job.Topic != "" {
 		resp.EgressJob = job
 	}
 	dlqWriteJSON(w, ts, resp)
@@ -316,8 +321,9 @@ func dlqParseLimit(raw string) int {
 }
 
 func dlqDecodeJSON[T any](w http.ResponseWriter, r *http.Request, v *T) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, dlqMaxBodyBytes))
-	if err := dec.Decode(v); err != nil {
+	// The admin request body (e.g. a redrive id list) is not queue-durable —
+	// plain v2 defaults are fine.
+	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, dlqMaxBodyBytes), v); err != nil {
 		// Distinguish an over-limit body (the explicit dlqMaxBodyBytes bound → 413)
 		// from malformed JSON (400), mirroring the async enqueue path's mapping.
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {

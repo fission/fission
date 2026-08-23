@@ -109,16 +109,16 @@ func TestCheckpointDocCompat_V1RoundTrip(t *testing.T) {
 	// 1. The literal really is what v1 produces today (byte-identical, not
 	// just JSON-equivalent: map keys sort deterministically so this is
 	// reproducible).
-	got, err := json.Marshal(checkpointDoc{UID: wantCheckpointUID, State: wantCheckpointState()})
+	got, err := jsonv2.Marshal(checkpointDoc{UID: wantCheckpointUID, State: wantCheckpointState()}, docEncOpts)
 	require.NoError(t, err)
 	require.JSONEq(t, checkpointJSONv1, string(got))
 	assert.Equal(t, checkpointJSONv1, string(got), "byte-identical, not just semantically equal")
 
 	// 2. The literal still decodes via the real decode statement
-	// (loadCheckpoint in spill.go: `json.Unmarshal(v.Data, &doc)` then
+	// (loadCheckpoint in spill.go: `json.Unmarshal(v.Data, &doc, docDecOpts)` then
 	// doc.State.normalize()).
 	var doc checkpointDoc
-	require.NoError(t, json.Unmarshal([]byte(checkpointJSONv1), &doc))
+	require.NoError(t, jsonv2.Unmarshal([]byte(checkpointJSONv1), &doc, docDecOpts))
 	require.NotNil(t, doc.State)
 	doc.State.normalize()
 
@@ -177,7 +177,7 @@ const eventJSONv1 = `{"type":"StepFailed","state":"task2","attempt":2,"branch":"
 func TestEventPayloadCompat_V1RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	got, err := json.Marshal(wantFailedEvent())
+	got, err := jsonv2.Marshal(wantFailedEvent(), docEncOpts)
 	require.NoError(t, err)
 	require.JSONEq(t, eventJSONv1, string(got))
 	assert.Equal(t, eventJSONv1, string(got), "byte-identical, not just semantically equal")

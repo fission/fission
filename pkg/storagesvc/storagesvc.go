@@ -6,7 +6,7 @@ package storagesvc
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"net"
@@ -70,6 +70,13 @@ type (
 const uploadSpoolThresholdBytes int64 = 4 << 20
 
 // Functions handling storage interface
+
+// listWireOpts pins the /v1/archives list emission; shared with the
+// jsonwire_compat fixture so the byte-golden gates this site.
+// FormatNilSliceAsNull keeps v1's null-for-nil (no archives) distinct from
+// [] (empty listing) on the wire.
+var listWireOpts = json.FormatNilSliceAsNull(true)
+
 func getStorageType(storage Storage) string {
 	return string(storage.getStorageType())
 }
@@ -102,7 +109,7 @@ func (ss *StorageService) listItems(w http.ResponseWriter, r *http.Request) {
 	logger.V(1).Info("archives in storage", "archives", archivesInStorage)
 
 	// respond with the list of items
-	resp, err := json.Marshal(archivesInStorage)
+	resp, err := json.Marshal(archivesInStorage, listWireOpts)
 	if err != nil {
 		http.Error(w, "error marshaling item list", http.StatusInternalServerError)
 		return
@@ -179,6 +186,9 @@ func (ss *StorageService) uploadHandler(w http.ResponseWriter, r *http.Request) 
 	ur := &UploadResponse{
 		ID: id,
 	}
+	// Marshal for pkg/storagesvc/client's Go v1/v2 decoder (cross-version RPC
+	// wire); plain v2 Marshal is wire-compatible (UploadResponse has no
+	// omitempty tags or slice/map fields).
 	resp, err := json.Marshal(ur)
 	if err != nil {
 		logger.Error(err, "error marshaling uploaded file response", "filename", handler.Filename)

@@ -7,7 +7,7 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"reflect"
 	"slices"
@@ -22,7 +22,12 @@ import (
 
 // defaultInputSchema is advertised when a tool declares no InputSchema: an open
 // object that accepts any arguments.
-var defaultInputSchema = json.RawMessage(`{"type":"object"}`)
+//
+// jsontext.Value (not json.RawMessage — encoding/json/v2 does not export that
+// name; it lives only as an alias in v1) is a pure rename here: this file
+// never decodes or re-marshals the bytes it carries, it only stores and
+// clones them, so no jsontext/json.Marshal options are needed at this site.
+var defaultInputSchema = jsontext.Value(`{"type":"object"}`)
 
 // ToolEntry is the resolved, agent-facing view of one MCP-exposed Function. The
 // tool name → (namespace, function) mapping lives here so the agent never names
@@ -32,7 +37,7 @@ type ToolEntry struct {
 	Namespace   string
 	FnName      string
 	Description string
-	InputSchema json.RawMessage
+	InputSchema jsontext.Value
 
 	// Alias, when non-empty, is the FunctionAlias name (RFC-0025) tools/call
 	// proxies through -- Proxy.Invoke builds the ":<alias>" internal route
@@ -187,7 +192,7 @@ func toolEntryFromFunction(fn *fv1.Function) ToolEntry {
 	}
 	schema := defaultInputSchema
 	if tc.InputSchema != nil && len(tc.InputSchema.Raw) > 0 {
-		schema = json.RawMessage(slices.Clone(tc.InputSchema.Raw))
+		schema = jsontext.Value(slices.Clone(tc.InputSchema.Raw))
 	}
 	entry := ToolEntry{
 		ToolName:    name,

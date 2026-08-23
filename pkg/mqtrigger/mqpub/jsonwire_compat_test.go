@@ -5,7 +5,7 @@
 package mqpub
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ func TestEgressJobJSONWireCompat(t *testing.T) {
 		}
 		const want = `{"namespace":"default","topic":"orders.created","contentType":"application/json","payload":"aGVsbG8gd29ybGQ="}`
 
-		got, err := json.Marshal(job)
+		got, err := json.Marshal(job, egressWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 
@@ -56,7 +56,7 @@ func TestEgressJobJSONWireCompat(t *testing.T) {
 		job := EgressJob{}
 		const want = `{"namespace":"","topic":"","payload":null}`
 
-		got, err := json.Marshal(job)
+		got, err := json.Marshal(job, egressWireOpts)
 		require.NoError(t, err)
 		require.Equal(t, want, string(got))
 

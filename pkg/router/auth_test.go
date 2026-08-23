@@ -225,3 +225,40 @@ func TestAuthLoginRejectsBadCredentials(t *testing.T) {
 		}
 	})
 }
+
+// TestAuthLoginStrictBody pins the deliberate v2 strictness of the login
+// parser (see the SECURITY boundary comment in auth.go): duplicate keys and
+// invalid UTF-8 are rejected with 400, and v2's exact-case field matching
+// means a capitalized body decodes to empty credentials and fails auth —
+// where v1's case-insensitive matching accepted it. A future "compat" sweep
+// adding leniency options here fails this test.
+func TestAuthLoginStrictBody(t *testing.T) {
+	t.Setenv("AUTH_USERNAME", "alice")
+	t.Setenv("AUTH_PASSWORD", "s3cret")
+	t.Setenv("JWT_SIGNING_KEY", "k")
+
+	featureConfig := &config.FeatureConfig{}
+	featureConfig.AuthConfig.JWTIssuer = "fission"
+	featureConfig.AuthConfig.JWTExpiryTime = 60
+	h := authLoginHandler(featureConfig)
+
+	cases := []struct {
+		name     string
+		body     string
+		wantCode int
+	}{
+		{name: "duplicate key rejected", body: `{"username":"alice","username":"alice","password":"s3cret"}`, wantCode: http.StatusBadRequest},
+		{name: "invalid UTF-8 rejected", body: "{\"username\":\"al\xffice\",\"password\":\"s3cret\"}", wantCode: http.StatusBadRequest},
+		{name: "wrong-case keys decode empty and fail auth", body: `{"Username":"alice","Password":"s3cret"}`, wantCode: http.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(tc.body))
+			rr := httptest.NewRecorder()
+			h(rr, req)
+			if rr.Code != tc.wantCode {
+				t.Fatalf("want %d, got %d (body=%q)", tc.wantCode, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}

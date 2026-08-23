@@ -1,6 +1,7 @@
 version: "2"
 linters:
   enable:
+    - depguard
     - errcheck
     - govet
     - ineffassign
@@ -10,6 +11,37 @@ linters:
     - unconvert
     - unused
     - staticcheck
+  settings:
+    depguard:
+      rules:
+        # encoding/json (v1) is allowed only at deliberately pinned sites:
+        # byte-stability hash contracts, StrategicMergePatch and published-
+        # payload emission, cross-language/old-binary wire compat via
+        # DefaultOptionsV1, and the httpx.WriteJSON chokepoint. Everything
+        # else uses encoding/json/v2. Tests may use v1 freely (the
+        # jsonwire_compat fixtures pin v1 bytes on purpose).
+        jsonv1-pinned-only:
+          list-mode: lax
+          files:
+            - "!$test"
+            - "!**/pkg/buildermgr/environment_reconciler.go"
+            - "!**/pkg/executor/executortype/poolmgr/common.go"
+            - "!**/pkg/executor/executortype/poolmgr/gp_pod.go"
+            - "!**/pkg/executor/client/client.go"
+            - "!**/pkg/executor/executortype/poolmgr/oci_specialize.go"
+            - "!**/pkg/fetcher/config/config.go"
+            - "!**/pkg/fetcher/fetcher.go"
+            - "!**/pkg/fetcher/statetoken.go"
+            - "!**/pkg/fission-cli/cmd/function/dlq.go"
+            - "!**/pkg/fission-cli/cmd/function/run.go"
+            - "!**/pkg/kubewatcher/kubewatcher.go"
+            - "!**/pkg/router/asyncinvoke/envelope.go"
+            - "!**/pkg/utils/httpx/json.go"
+            - "!**/pkg/workflow/jsonopts.go"
+            - "!**/test/integration/framework/executor_lifecycle.go"
+          deny:
+            - pkg: "encoding/json$"
+              desc: "use encoding/json/v2; encoding/json (v1) only at pinned compat sites (allowlist in .golangci.yaml)"
   exclusions:
     generated: lax
     presets:

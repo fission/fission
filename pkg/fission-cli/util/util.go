@@ -6,7 +6,7 @@ package util
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -192,7 +192,7 @@ func GetServerInfo(input cli.Input, cmdClient cmd.Client) *info.ServerInfo {
 		return &serverInfo
 	}
 
-	err = json.NewDecoder(resp.Body).Decode(&serverInfo)
+	err = json.UnmarshalRead(resp.Body, &serverInfo)
 	if err != nil {
 		console.Warn(fmt.Sprintf("Error getting Fission API version: %v", err))
 		serverInfo = info.ServerInfo{}

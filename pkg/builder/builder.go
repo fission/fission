@@ -7,7 +7,7 @@ package builder
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -140,6 +140,8 @@ func (builder *Builder) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req PackageBuildRequest
+	// Decode of JSON produced by our own client marshaler (pkg/builder/client);
+	// plain v2 Unmarshal is safe (strict decoding, no RawMessage fields here).
 	err = json.Unmarshal(body, &req)
 	if err != nil {
 		e := "error parsing json body"

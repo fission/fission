@@ -5,7 +5,8 @@
 package util
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -52,7 +53,16 @@ func ParseOutputFormat(s string) (OutputFormat, error) {
 func encode[T any](format OutputFormat, v T) ([]byte, error) {
 	switch format {
 	case OutputJSON:
-		return json.MarshalIndent(v, "", "  ")
+		// Lenient on raw passthrough fields: fv1 objects can embed
+		// user-authored JSON (ToolConfig.InputSchema, WorkflowRun
+		// input/output) whose bytes v2 would otherwise validate — display
+		// output must render every record, never fail on one degenerate
+		// stored value. Same rationale as the executor RPC's options.
+		// Deterministic restores v1's sorted map keys: labels/annotations
+		// must not shuffle between two runs of the same command, or diffs
+		// and golden-output scripts break.
+		return json.Marshal(v, jsontext.WithIndent("  "), json.Deterministic(true),
+			jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
 	case OutputYAML:
 		return yaml.Marshal(v)
 	default:
@@ -143,7 +153,7 @@ func PrintStructured[T any](format OutputFormat, v T) (bool, error) {
 }
 
 // printBytes writes b to stdout ensuring exactly one trailing newline:
-// yaml.Marshal already appends one, json.MarshalIndent does not.
+// yaml.Marshal already appends one, indented json.Marshal does not.
 func printBytes(b []byte) {
 	_, _ = os.Stdout.Write(b)
 	if n := len(b); n == 0 || b[n-1] != '\n' {
