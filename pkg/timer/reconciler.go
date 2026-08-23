@@ -66,7 +66,24 @@ func (r *TimeTriggerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	r.timer.addUpdate(tt)
+	if err := r.timer.addUpdate(tt); err != nil {
+		// Only reachable if this parser and IsValidCronSpec's disagree. Report it
+		// the same way an invalid spec is reported rather than stamping Ready=True
+		// on a trigger that has no cron entry behind it.
+		controller.SetConditions(ctx, r.logger, r.client, tt,
+			metav1.Condition{
+				Type: fv1.TimeTriggerConditionScheduled, Status: metav1.ConditionFalse,
+				Reason:  fv1.TimeTriggerReasonInvalidCron,
+				Message: fmt.Sprintf("could not schedule cron %q: %v", tt.Spec.Cron, err),
+			},
+			metav1.Condition{
+				Type: fv1.TimeTriggerConditionReady, Status: metav1.ConditionFalse,
+				Reason:  fv1.TimeTriggerReasonInvalidCron,
+				Message: "trigger is not firing: cron schedule could not be registered",
+			},
+		)
+		return ctrl.Result{}, nil
+	}
 
 	// Best-effort Scheduled + Ready conditions. Status writes never gate the
 	// schedule; SetConditions skips the write when nothing changed.
