@@ -28,6 +28,7 @@ import (
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/metrics"
 	"github.com/fission/fission/pkg/executor/reaper"
 	"github.com/fission/fission/pkg/generated/clientset/versioned"
 	"github.com/fission/fission/pkg/utils"
@@ -90,11 +91,16 @@ func (r *Reaper) Start(ctx context.Context) {
 
 func (r *Reaper) reapOnce(ctx context.Context, s Strategy) {
 	if err := s.Prepare(ctx); err != nil {
+		// Counted, not just logged: a Prepare failure skips the WHOLE pass, so
+		// nothing is reaped and no lag is sampled. Without this the likeliest
+		// way for reaping to stop dead looks exactly like a quiet cluster.
+		metrics.RecordIdleReapError(ctx, s.ExecutorType(), metrics.ReapStagePrepare)
 		r.logger.Error(err, "skipping idle reaper pass", "strategy", s.Name())
 		return
 	}
 	funcSvcs, err := s.ListIdle()
 	if err != nil {
+		metrics.RecordIdleReapError(ctx, s.ExecutorType(), metrics.ReapStageList)
 		r.logger.Error(err, "error listing idle function services", "strategy", s.Name())
 		return
 	}
@@ -110,6 +116,7 @@ func (r *Reaper) reapOnce(ctx context.Context, s Strategy) {
 		wg.Go(func() {
 			defer func() { <-sem }()
 			if err := s.Reap(ctx, fsvc); err != nil {
+				metrics.RecordIdleReapError(ctx, s.ExecutorType(), metrics.ReapStageReap)
 				r.logger.Error(err, "error reaping idle function service", "strategy", s.Name(), "function", fsvc.Function.Name)
 			}
 		})
@@ -124,6 +131,17 @@ func idleThreshold(fn *fv1.Function, def time.Duration) time.Duration {
 		return time.Duration(*fn.Spec.IdleTimeout) * time.Second
 	}
 	return def
+}
+
+// reapLag is how long a function service sat past its idle deadline before the
+// reaper acted: idleFor is the age of its last access, threshold the idle
+// timeout that made it eligible.
+//
+// Callers pass the SAME idleFor they tested against the threshold rather than
+// re-reading the clock; a request landing mid-reap moves Atime forward, and a
+// second time.Since would then yield a negative lag.
+func reapLag(idleFor, threshold time.Duration) float64 {
+	return (idleFor - threshold).Seconds()
 }
 
 // listEnvUIDs returns the set of Environment UIDs across the Fission resource
@@ -303,7 +321,8 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 	if fn, ok := s.fnByUID[fsvc.Function.UID]; ok {
 		reapTime = idleThreshold(&fn, s.reapTime)
 	}
-	if time.Since(fsvc.Atime) < reapTime {
+	idleFor := time.Since(fsvc.Atime)
+	if idleFor < reapTime {
 		return nil
 	}
 
@@ -312,6 +331,10 @@ func (s *PoolDeleteStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) er
 		return err
 	}
 	if deleted {
+		// Gated on deleted: DeleteOldPoolCache re-reads the clock and returns
+		// false when a request moved Atime past the threshold between the check
+		// above and the delete, which is a reap that did not happen.
+		metrics.RecordIdleReap(ctx, s.ExecutorType(), reapLag(idleFor, reapTime))
 		if s.drainBeforeDelete {
 			s.drainThenDelete(ctx, fsvc)
 			return nil
@@ -479,7 +502,9 @@ func (s *ScaleDownStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) err
 		}
 	}
 
-	if time.Since(fsvc.Atime) < idleThreshold(fn, s.reapTime) {
+	threshold := idleThreshold(fn, s.reapTime)
+	idleFor := time.Since(fsvc.Atime)
+	if idleFor < threshold {
 		return nil
 	}
 
@@ -493,8 +518,13 @@ func (s *ScaleDownStrategy) Reap(ctx context.Context, fsvc *fscache.FuncSvc) err
 	}
 	minScale := int32(fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale)
 	// Do nothing if the current replica count is already at or below MinScale.
+	// Not a reap: nothing was released, so it stays out of the metrics.
 	if currentDeploy.Spec.Replicas != nil && *currentDeploy.Spec.Replicas <= minScale {
 		return nil
 	}
-	return scaleDeploymentToMinScale(ctx, s.logger, s.kubeClient, deployObj.Namespace, deployObj.Name, minScale)
+	if err := scaleDeploymentToMinScale(ctx, s.logger, s.kubeClient, deployObj.Namespace, deployObj.Name, minScale); err != nil {
+		return err
+	}
+	metrics.RecordIdleReap(ctx, s.ExecutorType(), reapLag(idleFor, threshold))
+	return nil
 }
