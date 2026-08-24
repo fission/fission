@@ -17,7 +17,7 @@
 // keep in mind:
 //
 //   - The envelope's Turns field is a DEDUP basis only, never a precondition.
-//     Task 14's DispatchTurn reads the persisted Stats.Turns inside a CAS
+//     DispatchTurn reads the persisted Stats.Turns inside a CAS
 //     mutate closure that can retry after a version conflict; the count it
 //     hands EnqueueWake can therefore be stale relative to what actually
 //     lands in the store. A wake consumer must not assume Turns matches the
@@ -194,7 +194,7 @@ type WakeService struct {
 	d      *Dispatcher
 	now    func() time.Time
 	// rand is backoff.ExpFullJitter's jitter source: nil disables jitter
-	// (deterministic tests); production wiring sets a real source (Task 16).
+	// (deterministic tests); production wiring sets a real source.
 	rand func() float64
 }
 

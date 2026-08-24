@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Package ui embeds the agent runtime's boardroom UI (Task 22, RFC-0032
-// slice 4): a single self-contained HTML page (inline CSS/JS, no external
-// assets, no build step) that visualizes the SESSIONS/POOL split view from
-// distributed-agent-runtime/06-demo-plan.md, driven by the registry API's
-// SSE feed (GET /registry/events) with a REST polling fallback.
+// Package ui embeds the agent runtime's boardroom UI (introspection slice 4):
+// a single self-contained HTML page (inline CSS/JS, no external assets, no
+// build step) that visualizes the SESSIONS/POOL split view for the
+// boardroom density demo, driven by the registry API's SSE feed
+// (GET /registry/events) with a REST polling fallback.
 //
 // The embed lives in its own package, mirroring crds/crds.go's precedent —
 // the embed directive cannot reach outside its own package directory — and
