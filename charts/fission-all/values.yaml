@@ -1504,6 +1504,7 @@ serviceAccounts:
   ## Per-account overrides. Every account this chart can create is listed, so
   ## the set is discoverable without reading the templates; an account only
   ## renders when its component is enabled.
+  agentruntime: {}
   builder: {}
   buildermgr: {}
   canaryconfig: {}
