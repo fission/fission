@@ -28,6 +28,15 @@
 //     more than once for the same continuation. DispatchTurn re-invokes the
 //     function each time; functions that yield "continue" own their own
 //     idempotency, the same way any at-least-once consumer must.
+//   - process's post-Ack step ALSO enqueues a revival wake (env.Turns+1) for
+//     every yield=continue turn, independent of DispatchTurn's own
+//     shared-path enqueue (see process's doc comment for the self-dedup
+//     chain-death scenario this closes). The two normally dedup onto the
+//     SAME child message (the revival is then a no-op); the accepted cost of
+//     the rare case where both independently succeed is exactly the one the
+//     bullet above already pays for — an occasional extra duplicate
+//     continue-turn, which a "continue"-yielding function must already
+//     tolerate.
 //
 // A wake arriving after its session has archived or expired finds no live
 // record: DispatchTurn's normal ErrNotFound branch creates a fresh one. That
@@ -276,6 +285,24 @@ func (w *WakeService) pollOnce(ctx context.Context) int {
 // over, so settling against a pre-dispatch timeout context would find it
 // already expired and every settle call would silently fail, stranding the
 // message leased until wakeLease expires.
+//
+// Self-dedup chain-death window: DispatchTurn's shared post-response path
+// (dispatcher.go) enqueues its OWN continuation wake using the CAS-persisted
+// Stats.Turns count — but that count can be stale. If an earlier HTTP turn's
+// bookkeeping CAS lost a version-conflict race (the record stayed at
+// Turns=N-1) while its wake enqueue under dedup key ".../N" still landed,
+// then THIS delivery (which re-runs DispatchTurn and re-increments the
+// now-N-1 record to N) has the shared path enqueue under that SAME key
+// ".../N" again — which collapses against the message THIS call is
+// currently processing (still leased, hence unsettled per
+// statestore/types.go:115) instead of creating a fresh child. ack() below
+// then settles this message with no live successor ever created: the chain
+// dies silently even though the function said continue. reviveChain is the
+// fix — a second, consumer-side enqueue keyed one turn past what THIS
+// message itself carried (env.Turns+1), issued only once this message has
+// actually Acked. In the ordinary (non-racing) case it dedups onto whatever
+// the shared path already (correctly) enqueued, a no-op; in the chain-death
+// case above it is the only live enqueue, so the chain survives.
 func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage) {
 	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), wakeSettleTimeout)
 	defer scancel()
@@ -315,7 +342,9 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 
 	switch classifyWakeResult(res, derr) {
 	case wakeActionAck:
-		w.ack(sctx, msg)
+		if w.ack(sctx, msg) && res.Yield == YieldContinue {
+			w.reviveChain(sctx, env)
+		}
 	case wakeActionKillNotAgent:
 		w.kill(sctx, msg, wakeReasonNotAgent)
 	case wakeActionKillSessionQuota:
@@ -376,10 +405,40 @@ func classifyWakeResult(res TurnResult, err error) wakeAction {
 	}
 }
 
-// ack settles a delivery as succeeded.
-func (w *WakeService) ack(ctx context.Context, msg statestore.LeasedMessage) {
+// ack settles a delivery as succeeded, reporting whether the settle actually
+// landed — a stale receipt (a newer lease already superseded this one)
+// returns false, which process uses to skip reviveChain: whichever delivery
+// actually won the settle is the one responsible for reviving the chain.
+func (w *WakeService) ack(ctx context.Context, msg statestore.LeasedMessage) bool {
 	if err := w.q.Ack(ctx, msg.Receipt); err != nil {
 		w.logSettle("ack", msg.ID, err)
+		return false
+	}
+	return true
+}
+
+// reviveChain closes the self-dedup chain-death window documented on
+// process: a best-effort enqueue, keyed one turn past what THIS
+// just-Acked message itself carried (env.Turns+1), issued only after the
+// Ack has actually landed. It is deliberately independent of
+// DispatchTurn's shared-path enqueue (which used the CAS-persisted
+// Stats.Turns and can therefore land on a stale, already-collapsing key) —
+// in the common case it dedups onto the SAME child the shared path already
+// created (a no-op); when the shared path's own enqueue silently collapsed
+// onto this now-settled parent instead, this is the only live enqueue for
+// the chain's continuation.
+//
+// A failure here is logged at Info, not Error, and never propagates: this
+// runs after the message has already settled, so there is no settle left to
+// fail or retry. It is a safety net for a rare race, not a load-bearing step
+// of an ordinary continue turn — though once a session's persisted
+// Stats.Turns has skewed one behind its envelopes (a single lost CAS is
+// enough to trigger it), the shared path self-collides on EVERY subsequent
+// hop for that session, and this enqueue becomes the mechanism actually
+// carrying the chain from then on, not just a one-time recovery.
+func (w *WakeService) reviveChain(ctx context.Context, env wakeEnvelope) {
+	if err := w.EnqueueWake(ctx, env.Namespace, env.Agent, env.Session, env.Turns+1); err != nil {
+		w.logger.Info("wake chain revival enqueue failed", "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "err", err.Error())
 	}
 }
 

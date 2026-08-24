@@ -153,6 +153,46 @@ func TestWakeService_RunHappyPath(t *testing.T) {
 	assert.Equal(t, "1", gotAttempt)
 }
 
+// TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer pins
+// the process-level chain-death fix: SetWakeEnqueuer is deliberately never
+// called on the Dispatcher here, so Dispatcher.wake stays nil and
+// DispatchTurn's OWN shared-path continue-chain enqueue is entirely
+// disabled (see DispatchTurn's "if doEnqueue && d.wake != nil" guard,
+// dispatcher.go). If reviveChain did not exist, a yield=continue wake
+// turn processed under this Dispatcher would Ack with NO successor ever
+// enqueued -- the chain would die on the very first delivery. Driving
+// process() directly (the same call Run's loop makes per leased message)
+// keeps the assertion deterministic: after the Ack, the queue must hold a
+// live next message, proving the revival is a consumer-side mechanism
+// independent of the shared path.
+func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	w, view, _, q := newTestWakeService(t, upstream.URL, time.Now)
+	view.Upsert(headerEntry("ns", "fn", 0))
+	// Note: d.SetWakeEnqueuer is never called -- the shared path cannot
+	// enqueue anything, so any successor observed below must have come from
+	// reviveChain.
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+	msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	w.process(t.Context(), msgs[0])
+
+	st, err := q.Stats(t.Context(), wakeQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, st.Dead, "the parent settled cleanly (Acked), not dead-lettered")
+	assert.EqualValues(t, 1, st.Visible, "reviveChain enqueued a live successor even with the shared path disabled")
+}
+
 // TestWakeService_RetryBackoffGrows runs the loop under virtual time (via
 // testing/synctest) against an always-500 upstream: it proves a nacked wake
 // is not redelivered before its backoff elapses, AND that the backoff grows
