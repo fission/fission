@@ -242,6 +242,52 @@ func TestSweeperArchiveSkipsOnListToGetStalenessWindow(t *testing.T) {
 	})
 }
 
+// TestSweeperIdleSkipsOnListToGetStalenessWindow is the idle-side analogue
+// of TestSweeperArchiveSkipsOnListToGetStalenessWindow: a new turn touches
+// an active session (refreshing LastActiveAt) between the sweeper's List
+// page snapshot and its own re-Get. The Get observes the fresh, still-active
+// record — no CAS conflict occurs — so only a re-validation of the fresh
+// read (not just the CAS) prevents the sweeper from idling a session a turn
+// just touched.
+func TestSweeperIdleSkipsOnListToGetStalenessWindow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1")
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		longAgo := time.Now()
+		staleSnapshot := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: longAgo}
+		require.NoError(t, store.Create(ctx, staleSnapshot, 0, time.Hour))
+
+		time.Sleep(entry.IdleAfter + time.Second)
+
+		// A new turn touches the session after the (simulated) List page
+		// was captured, but before the sweeper processes this record.
+		_, version, err := store.Get(ctx, "ns", "agent1", "s1")
+		require.NoError(t, err)
+		touchedAt := time.Now()
+		touched := staleSnapshot
+		touched.LastActiveAt = touchedAt
+		touched.Stats.Turns = 1
+		require.NoError(t, store.Update(ctx, touched, version, time.Hour))
+
+		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, 7*24*time.Hour, time.Now)
+		// staleSnapshot is what the sweeper's List call would have returned
+		// before the turn landed; sweepRecord must re-validate against a
+		// fresh Get rather than trusting it.
+		sweeper.sweepRecord(ctx, entry, staleSnapshot, time.Hour)
+
+		got, _, err := store.Get(ctx, "ns", "agent1", "s1")
+		require.NoError(t, err)
+		assert.Equal(t, StatusActive, got.Status, "must not idle a session a turn just touched")
+		assert.True(t, touchedAt.Equal(got.LastActiveAt))
+		assert.EqualValues(t, 1, got.Stats.Turns, "the turn's data must survive intact")
+	})
+}
+
 func TestSweeperRunRespectsContextCancel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		kv := newTestKV(t)

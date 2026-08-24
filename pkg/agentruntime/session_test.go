@@ -205,6 +205,45 @@ func TestSessionStoreArchiveVsReviveRaceAborts(t *testing.T) {
 	require.ErrorIs(t, err, statestore.ErrNotFound)
 }
 
+// TestSessionStoreArchiveRaceBetweenTwoArchiversLeavesOneRecord covers the
+// other CAS-delete-conflict cause: not a revive, but a second Archive call
+// (a second replica's sweeper) racing the same pre-read version. Both calls
+// write the archived copy unconditionally before their CAS-delete, so the
+// second call's Set overwrites the first's archived copy with identical
+// content — benign. The dangerous part is what happens on its CAS-delete
+// conflict: the live key is now genuinely absent (the first Archive call
+// already deleted it), not revived. Blindly deleting the archived copy on
+// any delete conflict destroys the just-committed archived record from BOTH
+// keyspaces, losing the session entirely.
+func TestSessionStoreArchiveRaceBetweenTwoArchiversLeavesOneRecord(t *testing.T) {
+	t.Parallel()
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	ctx := t.Context()
+
+	rec := SessionRecord{ID: "s1", Agent: "a", Namespace: "ns", Status: StatusIdle}
+	require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+
+	_, version, err := store.Get(ctx, "ns", "a", "s1")
+	require.NoError(t, err)
+
+	// Two replicas both read version and independently decide to archive.
+	err1 := store.Archive(ctx, rec, version, 7*24*time.Hour)
+	err2 := store.Archive(ctx, rec, version, 7*24*time.Hour)
+
+	require.NoError(t, err1, "the first Archive call must win outright")
+	require.NoError(t, err2, "the second Archive call must treat 'already archived by a peer' as a no-op success, not an error")
+
+	// The archived record must have survived both racing calls.
+	v, err := kv.Get(ctx, archivedScope("ns", "a"), "s1")
+	require.NoError(t, err, "archived record must survive two racing Archive calls at the same version")
+	assert.NotEmpty(t, v.Data)
+
+	// The live key must be gone (both agree the session is archived).
+	_, _, err = store.Get(ctx, "ns", "a", "s1")
+	assert.ErrorIs(t, err, statestore.ErrNotFound)
+}
+
 func TestSessionStoreListPagination(t *testing.T) {
 	t.Parallel()
 	kv := newTestKV(t)

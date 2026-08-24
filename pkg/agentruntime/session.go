@@ -146,9 +146,19 @@ func (s *SessionStore) Update(ctx context.Context, rec SessionRecord, version in
 
 // Archive moves the record to the archived keyspace: it writes the archived
 // copy (Status=archived, TTL=retention, unconditional set) FIRST, then
-// CAS-deletes the live key at version. A delete conflict means a concurrent
-// turn revived the session — the archived copy is removed and Archive
-// aborts, leaving the live record as-is; the next sweep retries.
+// CAS-deletes the live key at version.
+//
+// A delete conflict has two distinct causes that must be told apart: a
+// concurrent turn revived the session (the live key still exists, at a
+// newer version), or a peer replica's own Archive call already won the same
+// race (the live key is now absent). Only the revive case may undo the
+// archived copy — undoing it unconditionally would, on the peer-won case,
+// delete the archived record the peer just committed, destroying the
+// session from both keyspaces even though it was correctly archived. So on
+// conflict we re-Get the live key: present means revived (undo and abort,
+// leaving the live record as-is for the next sweep to retry); absent means
+// a peer already archived it (leave the archived copy alone and return nil
+// — this call is then a no-op success, not a failure).
 func (s *SessionStore) Archive(ctx context.Context, rec SessionRecord, version int64, retention time.Duration) error {
 	archived := rec
 	archived.Status = StatusArchived
@@ -164,7 +174,17 @@ func (s *SessionStore) Archive(ctx context.Context, rec SessionRecord, version i
 
 	lScope := sessionScope(rec.Namespace, rec.Agent)
 	if err := s.kv.Delete(ctx, lScope, rec.ID, version); err != nil {
-		// Concurrent revive: undo the speculative archived write and abort.
+		if errors.Is(err, statestore.ErrVersionConflict) {
+			if _, getErr := s.kv.Get(ctx, lScope, rec.ID); errors.Is(getErr, statestore.ErrNotFound) {
+				// A peer replica's Archive already won: the archived copy
+				// we (re)wrote above is the committed record. Leave it.
+				return nil
+			}
+			// Concurrent revive: undo the speculative archived write and abort.
+			_ = s.kv.Delete(ctx, aScope, rec.ID, 0)
+			return err
+		}
+		// Unexpected error: undo the speculative archived write and abort.
 		_ = s.kv.Delete(ctx, aScope, rec.ID, 0)
 		return err
 	}

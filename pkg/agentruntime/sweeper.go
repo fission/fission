@@ -86,6 +86,17 @@ func (s *Sweeper) sweepOnce(ctx context.Context) {
 	}
 }
 
+// logSweepErr logs a sweep-path error, unless it is context.Canceled — a
+// canceled context is the expected shape of Run's ctx.Done() shutdown
+// racing an in-flight store call, not a failure worth an Error-level log.
+func (s *Sweeper) logSweepErr(err error, msg string, keysAndValues ...any) {
+	if errors.Is(err, context.Canceled) {
+		s.logger.V(1).Info("sweeper: context canceled, stopping", append(keysAndValues, "cause", msg)...)
+		return
+	}
+	s.logger.Error(err, msg, keysAndValues...)
+}
+
 // sweepAgent pages through one agent's live sessions, applying the idle and
 // archive transitions where due. liveTTL (entry.IdleAfter + entry.ArchiveAfter
 // + s.retention, per the controller's Update signature) is passed to every
@@ -100,10 +111,13 @@ func (s *Sweeper) sweepAgent(ctx context.Context, entry AgentEntry) {
 		}
 		recs, next, err := s.store.List(ctx, entry.Namespace, entry.Name, pageToken, sweepPageLimit)
 		if err != nil {
-			s.logger.Error(err, "sweeper: list failed", "namespace", entry.Namespace, "agent", entry.Name)
+			s.logSweepErr(err, "sweeper: list failed", "namespace", entry.Namespace, "agent", entry.Name)
 			return
 		}
 		for _, rec := range recs {
+			if ctx.Err() != nil {
+				return
+			}
 			s.sweepRecord(ctx, entry, rec, liveTTL)
 		}
 		if next == "" {
@@ -133,7 +147,7 @@ func (s *Sweeper) idle(ctx context.Context, entry AgentEntry, rec SessionRecord,
 	fresh, version, err := s.store.Get(ctx, entry.Namespace, entry.Name, rec.ID)
 	if err != nil {
 		if !errors.Is(err, statestore.ErrNotFound) {
-			s.logger.Error(err, "sweeper: get before idle transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+			s.logSweepErr(err, "sweeper: get before idle transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 		}
 		return
 	}
@@ -152,7 +166,7 @@ func (s *Sweeper) idle(ctx context.Context, entry AgentEntry, rec SessionRecord,
 			s.logger.V(1).Info("sweeper: idle transition skipped, CAS conflict", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 			return
 		}
-		s.logger.Error(err, "sweeper: idle transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		s.logSweepErr(err, "sweeper: idle transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 	}
 }
 
@@ -165,7 +179,7 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 	fresh, version, err := s.store.Get(ctx, entry.Namespace, entry.Name, rec.ID)
 	if err != nil {
 		if !errors.Is(err, statestore.ErrNotFound) {
-			s.logger.Error(err, "sweeper: get before archive transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+			s.logSweepErr(err, "sweeper: get before archive transition failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 		}
 		return
 	}
@@ -184,6 +198,6 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 			s.logger.V(1).Info("sweeper: archive skipped, CAS conflict (revived)", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 			return
 		}
-		s.logger.Error(err, "sweeper: archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		s.logSweepErr(err, "sweeper: archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 	}
 }
