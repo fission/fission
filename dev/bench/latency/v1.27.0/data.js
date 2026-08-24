@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785747639121,
+  "lastUpdate": 1787559787915,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission latency (v1.27.0)": [
@@ -2030,6 +2030,683 @@ window.BENCHMARK_DATA = {
           {
             "name": "route-churn/apiserver_calls",
             "value": 1500,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "87a49300c294976e9275bc288d10c33b372ffdbf",
+          "message": "timer: phase-anchor @every schedules to the trigger, not to process start (#2660) (#3698)\n\nrobfig/cron's ConstantDelaySchedule — what \"@every 6h\" parses to — computes\nNext(t) as t + delay, and newCron starts the cron when the trigger is registered.\nSo every @every trigger's phase is set by whenever the timer process last started,\nwhich has two consequences.\n\nThe reported one: every @every trigger registered at process start fires at\nstart+d, +2d, …, so a restart collapses independently-authored schedules into a\nsingle thundering herd. The issue states the expectation well — \"the schedule is\nrelative to when the function was deployed\" — and that is exactly what was not\ntrue.\n\nThe unreported one is worse. The phase resets on EVERY restart, so a timer pod\nthat restarts more often than the interval starves the trigger completely: an\n\"@every 24h\" trigger under a daily rollout never fires at all, and node churn can\ndo the same to \"@every 6h\". Nothing carried phase across a restart.\n\nAnchoring to the trigger's own CreationTimestamp fixes both. Firing times become a\nproperty of the trigger — the smallest creation + k*interval after now — so they\nsurvive restarts and, because creation times differ, spread out on their own.\nTestAnchoredScheduleSurvivesRestart asserts the STOCK schedule fires zero times\nacross a restart cycle that outpaces the interval, so the bug is pinned against\nthe real library rather than only the fix being asserted.\n\nThis is the issue's own option 2 and needs no API change. Its option 1, a\nconfigurable offset field, would need a CRD change and would still leave the\nstarvation, since the phase would keep resetting.\n\nOnly fixed-interval schedules are wrapped. Standard cron expressions and the\n@daily/@hourly descriptors are already wall-clock anchored, so wrapping them would\nchange what they mean. A trigger with no CreationTimestamp — a hand-built object\nthat never round-tripped through the API server — keeps the stock schedule, as\nthere is nothing stable to anchor to.\n\nTwo edge cases the arithmetic has to exclude. k is at least 1 even when the timer\nasks about a time before the anchor: CreationTimestamp is server-set, so a pod\nwhose clock trails the API server sees a trigger created in its own future, and\nfiring at the anchor itself would fire it seconds after creation rather than an\ninterval later. And time.Sub saturates at ~292 years rather than wrapping, so a\nfar-past anchor would otherwise overflow the multiply into a time in the PAST,\nwhich cron fires immediately and then recomputes forever.\n\nRegistration now parses the spec itself rather than discarding AddFunc's error,\nand that error propagates through addUpdate. This matters more than it looks:\nthe reconciler stamps Scheduled/Ready=True on whatever addUpdate leaves behind, so\nan error absorbed here would report a trigger as firing on schedule while it has\nno cron entry at all. It now reports Scheduled=False/InvalidCron, the same way a\nspec rejected up front does. There is no TimeTrigger admission webhook — the\nreconciler's IsValidCronSpec is the gate, and this branch is belt and braces\nagainst that parser and this one drifting apart.",
+          "timestamp": "2026-08-24T07:40:03Z",
+          "url": "https://github.com/fission/fission/commit/87a49300c294976e9275bc288d10c33b372ffdbf"
+        },
+        "date": 1787559786922,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/cold_p50",
+            "value": 57.19,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_p95",
+            "value": 458.874,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_max",
+            "value": 613.876,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr/apiserver_calls",
+            "value": 179,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p50",
+            "value": 2838.517,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p95",
+            "value": 2855.701,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_max",
+            "value": 4605.071,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/apiserver_calls",
+            "value": 733,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p50",
+            "value": 99.11,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p95",
+            "value": 170.142,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_max",
+            "value": 213.262,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/apiserver_calls",
+            "value": 378,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p50",
+            "value": 2569.087,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p95",
+            "value": 3524.322,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_max",
+            "value": 5576.576,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/apiserver_calls",
+            "value": 166,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p50",
+            "value": 2031.943,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p95",
+            "value": 4096.049,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_max",
+            "value": 6118.402,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/apiserver_calls",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/p50",
+            "value": 11.663,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p95",
+            "value": 24.159,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99",
+            "value": 32.015,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99.9",
+            "value": 48.991,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/max",
+            "value": 87.039,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path/apiserver_calls",
+            "value": 483,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path-newdeploy/p50",
+            "value": 13.047,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p95",
+            "value": 29.663,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99",
+            "value": 41.279,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99.9",
+            "value": 58.207,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/max",
+            "value": 102.591,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/apiserver_calls",
+            "value": 73,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/c10_p50",
+            "value": 3.227,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p95",
+            "value": 5.875,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99",
+            "value": 8.039,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99.9",
+            "value": 12.879,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_max",
+            "value": 73.919,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c50_p50",
+            "value": 12.367,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p95",
+            "value": 26.079,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99",
+            "value": 38.783,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99.9",
+            "value": 79.423,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_max",
+            "value": 129.599,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c100_p50",
+            "value": 18.943,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p95",
+            "value": 75.263,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99",
+            "value": 199.167,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99.9",
+            "value": 321.023,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_max",
+            "value": 523.775,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c250_p50",
+            "value": 42.559,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p95",
+            "value": 215.167,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99",
+            "value": 521.727,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99.9",
+            "value": 14573.567,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_max",
+            "value": 59506.687,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_error_rate",
+            "value": 0.002720234358652438,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c500_p50",
+            "value": 180.095,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p95",
+            "value": 791.551,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99",
+            "value": 1474.559,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99.9",
+            "value": 14131.199,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_max",
+            "value": 58982.399,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_error_rate",
+            "value": 0.009967075055434855,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/specializations",
+            "value": 126,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/apiserver_calls",
+            "value": 528,
+            "unit": "count"
+          },
+          {
+            "name": "rps-sweep/rps100_p50",
+            "value": 2.046,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p95",
+            "value": 3.087,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99",
+            "value": 4.939,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99.9",
+            "value": 17.215,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_max",
+            "value": 47.807,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps250_p50",
+            "value": 9.919,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p95",
+            "value": 7868.415,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99",
+            "value": 11419.647,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99.9",
+            "value": 54132.735,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_max",
+            "value": 60030.975,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_error_rate",
+            "value": 0.2610363391655451,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps500_p50",
+            "value": 1.821,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p95",
+            "value": 2.753,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99",
+            "value": 5.183,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99.9",
+            "value": 103.103,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_max",
+            "value": 150.655,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps1000_p50",
+            "value": 1.726,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p95",
+            "value": 4.127,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99",
+            "value": 14.447,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99.9",
+            "value": 168.447,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_max",
+            "value": 372.991,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/apiserver_calls",
+            "value": 522,
+            "unit": "count"
+          },
+          {
+            "name": "payload-sweep/1KiB_p50",
+            "value": 14.503,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p95",
+            "value": 30.383,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99",
+            "value": 57.119,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99.9",
+            "value": 106.559,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_max",
+            "value": 182.143,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/10KiB_p50",
+            "value": 21.967,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p95",
+            "value": 82.495,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99",
+            "value": 183.679,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99.9",
+            "value": 1615.871,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_max",
+            "value": 36306.943,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/100KiB_p50",
+            "value": 44.127,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p95",
+            "value": 92.799,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99",
+            "value": 124.735,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99.9",
+            "value": 223.231,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_max",
+            "value": 342.527,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1MiB_p50",
+            "value": 210.047,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p95",
+            "value": 291.071,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99",
+            "value": 357.375,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99.9",
+            "value": 446.463,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_max",
+            "value": 604.159,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/apiserver_calls",
+            "value": 390,
+            "unit": "count"
+          },
+          {
+            "name": "autoscale-newdeploy/scale_up_seconds",
+            "value": 35.046206898,
+            "unit": "s"
+          },
+          {
+            "name": "autoscale-newdeploy/apiserver_calls",
+            "value": 199,
+            "unit": "count"
+          },
+          {
+            "name": "build-time-python/build_seconds",
+            "value": 12.035335166,
+            "unit": "s"
+          },
+          {
+            "name": "build-time-python/apiserver_calls",
+            "value": 12,
+            "unit": "count"
+          },
+          {
+            "name": "router-index-scale/create_seconds",
+            "value": 4.300806191,
+            "unit": "s"
+          },
+          {
+            "name": "router-index-scale/router_rss_mb",
+            "value": 104.75,
+            "unit": "MiB"
+          },
+          {
+            "name": "router-index-scale/apiserver_calls",
+            "value": 57,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/create_seconds",
+            "value": 2.30915414,
+            "unit": "s"
+          },
+          {
+            "name": "route-churn/route_table_applies_total",
+            "value": 255,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/apiserver_calls",
+            "value": 28,
             "unit": "count"
           }
         ]
