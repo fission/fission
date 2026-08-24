@@ -1,0 +1,14 @@
+apiVersion: fission.io/v1
+kind: Environment
+metadata:
+  name: node
+  namespace: default
+spec:
+  runtime:
+    image: ghcr.io/fission/node-env
+  # 8 warm pods: the boardroom demo's claim is "100+ sessions multiplexed on
+  # <=8 warm pods" (distributed-agent-runtime/06-demo-plan.md). Both fixtures
+  # share this one environment/pool.
+  poolsize: 8
+  version: 2
+  terminationGracePeriod: 20
