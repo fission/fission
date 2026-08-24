@@ -24,6 +24,23 @@
 // EventsHandler.ServeHTTP) — a replayed snapshot value can be one poll cycle
 // stale relative to a diff sitting in the client's channel; the next poll
 // heals it, same as any other missed-then-caught-up diff.
+//
+// The feed emits NO deletion events. When a session leaves the live
+// keyspace — archived by the sweeper, or orphan-expired via its statestore
+// TTL — it simply stops appearing in the next snapshot/diff cycle; no
+// "removed" event is ever published for it. A subscriber that needs to know
+// a session is gone (as opposed to merely unchanged since the last poll)
+// must treat GET /registry/agents/{namespace}/{name}/sessions (or the
+// per-session GET) as ground truth, the same fallback the previous
+// paragraph already prescribes for a missed diff.
+//
+// A page-fetch error partway through paging one agent's live sessions
+// (collectAgentSessions) never lets that agent's unread sessions vanish
+// from the snapshot: the poller falls back to each such session's
+// PREVIOUS-tick record (see seedFromPreviousSnapshot), so a transient
+// SessionStore.List failure degrades to stale-for-one-tick — no event for
+// an unchanged one, no spurious "new" event once the failure clears —
+// rather than a false disappear-then-reappear.
 package agentruntime
 
 import (
@@ -282,7 +299,16 @@ func (p *Poller) pollOnce(ctx context.Context) {
 // each record into out keyed by its full sessionKey. A list error is
 // logged and ends this agent's page walk early — the next tick retries from
 // the top rather than resuming a partial page, matching Sweeper.sweepAgent's
-// own error handling.
+// own error handling. Unlike the sweeper, though, this walk feeds a diffed
+// snapshot: a page fetched before the error already landed in out, but
+// every session on a page this agent never reached is backfilled from the
+// poller's PREVIOUS-tick snapshot (seedFromPreviousSnapshot) rather than
+// left absent — see the package doc's paragraph on this. Without that
+// backfill, a transient List failure would make those sessions vanish from
+// this tick's diff (nothing published, since the poller-diff has no
+// "removed" event) and then look spuriously "new" the moment the failure
+// clears, because the record that would have proven "unchanged" was never
+// in this tick's snapshot to compare against.
 func (p *Poller) collectAgentSessions(ctx context.Context, e AgentEntry, out map[sessionKey]SessionRecord) {
 	pageToken := ""
 	for {
@@ -292,6 +318,7 @@ func (p *Poller) collectAgentSessions(ctx context.Context, e AgentEntry, out map
 		recs, next, err := p.store.List(ctx, e.Namespace, e.Name, pageToken, pollPageLimit)
 		if err != nil {
 			p.logger.Error(err, "poller: list failed", "namespace", e.Namespace, "agent", e.Name)
+			p.seedFromPreviousSnapshot(e, out)
 			return
 		}
 		for _, rec := range recs {
@@ -301,6 +328,24 @@ func (p *Poller) collectAgentSessions(ctx context.Context, e AgentEntry, out map
 			return
 		}
 		pageToken = next
+	}
+}
+
+// seedFromPreviousSnapshot copies e's records from the poller's previous
+// snapshot into out for any key collectAgentSessions has not already
+// populated from a successfully fetched page. A key already in out came
+// from a page fetched before the error and is more current than the stale
+// copy, so it is left untouched.
+func (p *Poller) seedFromPreviousSnapshot(e AgentEntry, out map[sessionKey]SessionRecord) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	for k, rec := range p.sessions {
+		if k.namespace != e.Namespace || k.agent != e.Name {
+			continue
+		}
+		if _, ok := out[k]; !ok {
+			out[k] = rec
+		}
 	}
 }
 
@@ -337,6 +382,19 @@ func sessionUnchanged(old, cur SessionRecord) bool {
 // path permanently dead for the one client this route exists to serve.
 // Authorization instead happens inside ServeHTTP: see bearerFromRequest and
 // Authorizer.ScopeFromBearer.
+//
+// SECURITY: the ?token= query parameter (bearerFromRequest) carries the
+// SAME full-privilege JWT that authorizes POST /agents/{namespace}/{name}
+// dispatch — it is not a scoped-down, feed-only credential. Query strings
+// are captured by most Ingress/Gateway/reverse-proxy access logs by
+// default. Anything fronting this route in front of the cluster (an
+// Ingress, a Gateway API HTTPRoute, a load balancer) MUST redact or
+// suppress the token query parameter in its access logs, or the
+// full-privilege token leaks into log storage on every browser EventSource
+// connection. This is a mitigation, not a fix: the real fix is a
+// short-TTL, single-use SSE ticket exchange (tracked as a follow-up, not
+// implemented here) so the credential riding the URL is no longer the
+// full-privilege dispatch token itself.
 type EventsHandler struct {
 	poller *Poller
 	bus    *Broadcaster
@@ -432,6 +490,11 @@ func writeSSEEvent(w io.Writer, rc *http.ResponseController, eventType string, d
 // when that is absent, a standard "Authorization: Bearer <token>" header
 // (for any other client). An empty return means no token was supplied by
 // either transport.
+//
+// SECURITY: the ?token= value returned here is the caller's full-privilege
+// dispatch JWT riding in a URL query string — see EventsHandler's doc
+// comment for the access-log redaction requirement this places on anything
+// fronting the route.
 func bearerFromRequest(r *http.Request) string {
 	if t := r.URL.Query().Get("token"); t != "" {
 		return t
