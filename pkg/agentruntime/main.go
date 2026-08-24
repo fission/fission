@@ -275,6 +275,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// auth-wrapped dispatcher, which then matches the same pattern again.
 	mux.Handle("POST /agents/{namespace}/{name}", authz.Middleware(dispatcher.Handler()))
 
+	// Registry read API (Task 18): GET /registry/agents carries no
+	// {namespace} path value, so it is mounted behind authz.HTTPMiddleware
+	// (bearer verification only) and filters namespaces manually — see
+	// RegistryAPI.ListAgents. The two per-agent routes below carry
+	// {namespace}, so they use authz.Middleware exactly like the dispatch
+	// route above.
+	registryAPI := NewRegistryAPI(view, store, authz)
+	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(registryAPI.ListAgents)))
+	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions", authz.Middleware(http.HandlerFunc(registryAPI.ListSessions)))
+	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}", authz.Middleware(http.HandlerFunc(registryAPI.GetSession)))
+
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "agentruntime", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
