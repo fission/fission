@@ -140,6 +140,35 @@ func TestAgentReconcilerNotFoundRemoves(t *testing.T) {
 	assert.False(t, ok, "a deleted function must be removed from the view")
 }
 
+func TestAgentReconcilerUpdatesExistingEntry(t *testing.T) {
+	t.Parallel()
+	fn := agentFn("updatable", &fv1.AgentConfig{MaxSessions: 5})
+	r, view, c := newTestReconciler(t, fn)
+	key := types.NamespacedName{Namespace: "default", Name: "updatable"}
+	ctx := t.Context()
+
+	_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+	before, ok := view.Lookup("default", "updatable")
+	require.True(t, ok)
+	require.Equal(t, DefaultIdleAfter, before.IdleAfter)
+	require.EqualValues(t, 5, before.MaxSessions)
+
+	got := &fv1.Function{}
+	require.NoError(t, c.Get(ctx, key, got))
+	got.Spec.Agent.IdleAfter = &metav1.Duration{Duration: 30 * time.Minute}
+	got.Spec.Agent.MaxSessions = 99
+	require.NoError(t, c.Update(ctx, got))
+
+	_, err = r.Reconcile(ctx, ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+
+	after, ok := view.Lookup("default", "updatable")
+	require.True(t, ok)
+	assert.Equal(t, 30*time.Minute, after.IdleAfter, "reconcile must pick up the updated spec, not keep serving the stale entry")
+	assert.EqualValues(t, 99, after.MaxSessions)
+}
+
 func TestAgentReconcilerIdempotent(t *testing.T) {
 	t.Parallel()
 	fn := agentFn("steady", &fv1.AgentConfig{MaxSessions: 5})
