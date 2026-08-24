@@ -5,6 +5,7 @@
 package agentruntime
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -102,15 +103,17 @@ func TestListAgentsNamespaceScopedFiltersToScope(t *testing.T) {
 
 	// Pin the wire field names literally: decoding through agentSummary's own
 	// tags cannot catch a tag typo (it would round-trip through the same
-	// wrong name), so check the raw JSON keys the brief specifies.
-	raw := decodeJSON[map[string]any](t, w)
-	agents, ok := raw["agents"].([]any)
+	// wrong name), so check the raw JSON keys the brief specifies —
+	// map[string]jsontext.Value the way authz.go's agentClaims.UnmarshalJSON
+	// decodes an untyped document, rather than map[string]any.
+	raw := decodeJSON[map[string]jsontext.Value](t, w)
+	agentsRaw, ok := raw["agents"]
 	require.True(t, ok)
-	require.Len(t, agents, 1)
-	entry, ok := agents[0].(map[string]any)
-	require.True(t, ok)
+	var agentRows []map[string]jsontext.Value
+	require.NoError(t, json.Unmarshal(agentsRaw, &agentRows))
+	require.Len(t, agentRows, 1)
 	for _, key := range []string{"namespace", "name", "sessionSource", "sessionName", "idleAfter", "archiveAfter", "maxSessions"} {
-		assert.Contains(t, entry, key)
+		assert.Contains(t, agentRows[0], key)
 	}
 }
 
@@ -196,7 +199,7 @@ func TestListSessionsPaginationWalksNextToken(t *testing.T) {
 	// Pin the raw wire keys the brief specifies (see the analogous check in
 	// TestListAgentsNamespaceScopedFiltersToScope for why this can't be
 	// caught by decoding through sessionsResponse's own tags).
-	raw := decodeJSON[map[string]any](t, w)
+	raw := decodeJSON[map[string]jsontext.Value](t, w)
 	assert.Contains(t, raw, "sessions")
 	assert.Contains(t, raw, "next")
 
@@ -212,8 +215,14 @@ func TestListSessionsPaginationWalksNextToken(t *testing.T) {
 func TestListSessionsDefaultAndCapLimit(t *testing.T) {
 	t.Parallel()
 	authz := NewAuthorizer(nil)
-	mux, view, _ := newTestRegistryMux(t, authz)
+	mux, view, store := newTestRegistryMux(t, authz)
 	view.Upsert(registryTestEntry("ns", "fn", 0))
+
+	ctx := t.Context()
+	for _, id := range []string{"s1", "s2", "s3"} {
+		rec := SessionRecord{ID: id, Agent: "fn", Namespace: "ns", Status: StatusActive}
+		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+	}
 
 	t.Run("non-integer limit is 400", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -221,11 +230,48 @@ func TestListSessionsDefaultAndCapLimit(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
-	t.Run("limit above cap is clamped, not rejected", func(t *testing.T) {
+	t.Run("limit above cap is clamped and still returns everything within it", func(t *testing.T) {
+		// 3 seeded sessions is well within the 500 cap, so a clamp bug that
+		// silently drops the request (rather than serving it at limit=500)
+		// would show up here as a wrong count or an error, not just a 200.
 		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns/fn/sessions?limit=999999", ""))
-		assert.Equal(t, http.StatusOK, w.Code)
+		mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns/fn/sessions?limit=9999", ""))
+		require.Equal(t, http.StatusOK, w.Code)
+		body := decodeJSON[sessionsResponse](t, w)
+		assert.Len(t, body.Sessions, 3)
+		assert.Empty(t, body.Next)
 	})
+}
+
+// TestResolveSessionListLimit unit-tests the clamp/default/parse policy
+// ListSessions delegates to, independent of the HTTP plumbing above.
+func TestResolveSessionListLimit(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		raw       string
+		wantLimit int
+		wantOK    bool
+	}{
+		{"empty uses default", "", defaultSessionListLimit, true},
+		{"zero uses default", "0", defaultSessionListLimit, true},
+		{"negative uses default", "-5", defaultSessionListLimit, true},
+		{"within range passes through", "2", 2, true},
+		{"exactly at cap passes through", "500", maxSessionListLimit, true},
+		{"above cap is clamped down", "9999", maxSessionListLimit, true},
+		{"non-integer is rejected", "abc", 0, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			limit, ok := resolveSessionListLimit(tc.raw)
+			require.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				assert.Equal(t, tc.wantLimit, limit)
+			}
+		})
+	}
 }
 
 func TestListSessionsNonAgentIs404(t *testing.T) {
@@ -260,6 +306,48 @@ func TestListSessionsMiddlewareWrongNamespaceForbidden(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns-b/fn-b/sessions", tok))
 	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestNamespaceScopedRoutesAuthEnabledCorrectNamespace is the positive
+// counterpart to the wrong-namespace 403 tests above: with auth ENABLED, a
+// token correctly scoped to the request's namespace must be admitted through
+// BOTH {namespace}-carrying routes and see real data, not just a passing
+// status code. Without this, a Middleware regression that 403'd every
+// request regardless of scope would slip through the wrong-namespace tests
+// undetected (they only ever exercise the mismatched-namespace path).
+func TestNamespaceScopedRoutesAuthEnabledCorrectNamespace(t *testing.T) {
+	t.Parallel()
+	key := []byte("registry-test-key")
+	authz := NewAuthorizer(key)
+	mux, view, store := newTestRegistryMux(t, authz)
+	view.Upsert(registryTestEntry("ns-a", "fn-a", 0))
+
+	rec := SessionRecord{ID: "sess-1", Agent: "fn-a", Namespace: "ns-a", Status: StatusActive}
+	require.NoError(t, store.Create(t.Context(), rec, 0, time.Hour))
+
+	tok := mintToken(t, key, jwt.MapClaims{
+		"sub":                "caller-1",
+		"allowed_namespaces": []any{"ns-a"},
+		"exp":                time.Now().Add(time.Hour).Unix(),
+	})
+
+	t.Run("ListSessions", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns-a/fn-a/sessions", tok))
+		require.Equal(t, http.StatusOK, w.Code)
+		body := decodeJSON[sessionsResponse](t, w)
+		require.Len(t, body.Sessions, 1)
+		assert.Equal(t, "sess-1", body.Sessions[0].ID)
+	})
+
+	t.Run("GetSession", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns-a/fn-a/sessions/sess-1", tok))
+		require.Equal(t, http.StatusOK, w.Code)
+		got := decodeJSON[SessionRecord](t, w)
+		assert.Equal(t, "sess-1", got.ID)
+		assert.Equal(t, StatusActive, got.Status)
+	})
 }
 
 // --- GET /registry/agents/{namespace}/{name}/sessions/{id} ---
@@ -311,4 +399,29 @@ func TestGetSessionNonAgentIs404(t *testing.T) {
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns/no-such-fn/sessions/sess-1", ""))
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+// TestGetSessionMiddlewareWrongNamespaceForbidden mirrors
+// TestListSessionsMiddlewareWrongNamespaceForbidden for the single-session
+// route: authz.Middleware must reject the request before GetSession's own
+// view/store lookups ever run.
+func TestGetSessionMiddlewareWrongNamespaceForbidden(t *testing.T) {
+	t.Parallel()
+	key := []byte("registry-test-key")
+	authz := NewAuthorizer(key)
+	mux, view, store := newTestRegistryMux(t, authz)
+	view.Upsert(registryTestEntry("ns-a", "fn-a", 0))
+	view.Upsert(registryTestEntry("ns-b", "fn-b", 0))
+	rec := SessionRecord{ID: "sess-1", Agent: "fn-b", Namespace: "ns-b", Status: StatusActive}
+	require.NoError(t, store.Create(t.Context(), rec, 0, time.Hour))
+
+	tok := mintToken(t, key, jwt.MapClaims{
+		"sub":                "caller-1",
+		"allowed_namespaces": []any{"ns-a"},
+		"exp":                time.Now().Add(time.Hour).Unix(),
+	})
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns-b/fn-b/sessions/sess-1", tok))
+	assert.Equal(t, http.StatusForbidden, w.Code)
 }

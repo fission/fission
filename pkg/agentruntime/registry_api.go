@@ -59,6 +59,13 @@ type agentSummary struct {
 	MaxSessions   int64  `json:"maxSessions"`
 }
 
+// agentsResponse is the wire shape of ListAgents's response — a named type
+// so the JSON envelope, like sessionsResponse below, never has to fall back
+// to a map[string]any.
+type agentsResponse struct {
+	Agents []agentSummary `json:"agents"`
+}
+
 // ListAgents serves GET /registry/agents: every agent-enabled Function this
 // replica's AgentView knows about, filtered to the caller's namespace scope.
 //
@@ -103,7 +110,30 @@ func (a *RegistryAPI) ListAgents(w http.ResponseWriter, r *http.Request) {
 		return strings.Compare(x.Name, y.Name)
 	})
 
-	writeJSON(w, http.StatusOK, map[string]any{"agents": agents})
+	writeJSON(w, http.StatusOK, agentsResponse{Agents: agents})
+}
+
+// resolveSessionListLimit parses the ListSessions route's ?limit= query
+// value: "" or a non-positive integer falls back to
+// defaultSessionListLimit, anything above maxSessionListLimit is clamped
+// down to it, and a value that fails to parse as an integer is reported via
+// ok=false so the caller can answer 400. Extracted from ListSessions so the
+// parse/default/clamp policy has a single, directly unit-testable seam.
+func resolveSessionListLimit(raw string) (limit int, ok bool) {
+	if raw == "" {
+		return defaultSessionListLimit, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, false
+	}
+	if n <= 0 {
+		return defaultSessionListLimit, true
+	}
+	if n > maxSessionListLimit {
+		return maxSessionListLimit, true
+	}
+	return n, true
 }
 
 // sessionsResponse is the wire shape of ListSessions's response. Next is
@@ -128,20 +158,10 @@ func (a *RegistryAPI) ListSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := defaultSessionListLimit
-	if raw := r.URL.Query().Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "invalid limit")
-			return
-		}
-		limit = n
-	}
-	if limit <= 0 {
-		limit = defaultSessionListLimit
-	}
-	if limit > maxSessionListLimit {
-		limit = maxSessionListLimit
+	limit, ok := resolveSessionListLimit(r.URL.Query().Get("limit"))
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid limit")
+		return
 	}
 
 	sessions, next, err := a.store.List(r.Context(), ns, name, r.URL.Query().Get("page"), limit)
@@ -188,8 +208,10 @@ func (a *RegistryAPI) GetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeJSON answers with v marshaled as the JSON body at status. It mirrors
-// writeErr's shape (dispatcher.go) for the success path.
-func writeJSON(w http.ResponseWriter, status int, v any) {
+// writeErr's shape (dispatcher.go) for the success path. It is generic
+// (rather than taking v any) so every call site's argument type is visible
+// in its own signature instead of being erased to any at this boundary.
+func writeJSON[T any](w http.ResponseWriter, status int, v T) {
 	b, err := json.Marshal(v)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
