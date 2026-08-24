@@ -2,15 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Command loadgen drives the agent-boardroom demo (see ../README.md and
-// fission/distributed-agent-runtime/06-demo-plan.md): it creates a bounded
-// number of session-scoped conversations against the fission-bundle
-// --agentPort dispatcher (pkg/agentruntime/dispatcher.go), each sending a
-// fixed number of turns separated by an idle "think" pause (the "90%-idle"
-// profile the demo's density claim depends on), then reports the numbers
-// 06-demo-plan.md calls out: sessions:pods density (via GET /registry/pool),
-// p50/p95 turn latency, and the spread of sessions across serving pods (via
-// GET /registry/agents/<ns>/<agent>/sessions).
+// Command loadgen drives the agent-boardroom demo (see ../README.md): it
+// creates a bounded number of session-scoped conversations against the
+// fission-bundle --agentPort dispatcher (pkg/agentruntime/dispatcher.go),
+// each sending a fixed number of turns separated by an idle "think" pause
+// (the "90%-idle" profile the demo's density claim depends on), then reports
+// the numbers the boardroom density demo cares about: sessions:pods density
+// (via GET /registry/pool), p50/p95 turn latency, and the spread of sessions
+// across serving pods (via GET /registry/agents/<ns>/<agent>/sessions).
 //
 // Deliberately stdlib-only: it lives in the main module but adds no new
 // go.mod dependency, so it stays trivially runnable with a bare `go run`.
@@ -351,7 +350,7 @@ func printReport(ctx context.Context, cfg config, client *http.Client, res loadR
 	}
 
 	fmt.Println()
-	fmt.Println("== registry snapshot (06-demo-plan.md success metrics) ==")
+	fmt.Println("== registry snapshot (boardroom density demo success metrics) ==")
 	pods, err := fetchPool(ctx, cfg, client)
 	if err != nil {
 		fmt.Printf("pods (env=%s):     unavailable (%s)\n", cfg.environment, err)

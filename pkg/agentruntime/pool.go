@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // pool.go implements PoolAPI, the read-only pool-introspection surface: GET
-// /registry/pool. Unlike RegistryAPI (Task 18), which reads only the agent
-// registry and session store, PoolAPI reads the executor's actual warm/
+// /registry/pool. Unlike RegistryAPI, which reads only the agent registry
+// and session store, PoolAPI reads the executor's actual warm/
 // specialized pod topology (via the Manager's Pod cache — see main.go's
 // checkPoolRBAC / poolCacheOptions) plus the router's own EndpointSlice-
 // derived endpoint index (pkg/router/endpointcache), so a caller can see
