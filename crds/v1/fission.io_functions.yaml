@@ -716,6 +716,60 @@ spec:
                       Now it only supports 'execution'.
                     type: string
                 type: object
+              agent:
+                description: |-
+                  Agent, when non-nil, declares this function as an agent: its
+                  invocations are session-scoped, dispatched and lifecycle-tracked by
+                  the fission-bundle --agentPort subsystem, with session records kept
+                  in the statestore (never CRDs). Presence is the on switch (like
+                  Streaming, Tool and State): nil (the default) means exactly today's
+                  behavior. Additive and backward compatible.
+                properties:
+                  archiveAfter:
+                    description: |-
+                      ArchiveAfter is how long an idle session is kept listed before it is
+                      archived (delisted; record retained on a retention TTL). Must be
+                      >= IdleAfter when both are set; zero (or nil) means the platform
+                      default (24h).
+                    type: string
+                  idleAfter:
+                    description: |-
+                      IdleAfter is how long a session stays "active" after its last turn
+                      before the sweeper marks it idle (a status transition, not a pod
+                      operation — pods are released after every turn regardless). Must be
+                      >= 0; zero (or nil) means the platform default (5m).
+                    type: string
+                  maxSessions:
+                    description: |-
+                      MaxSessions caps live (active or idle) sessions for this agent,
+                      enforced atomically on session creation with the statestore's
+                      counted-write (the same quota mechanism as StateConfig.MaxKeys).
+                      Archived sessions live in a sibling keyspace and never count
+                      against this cap. 0 means unlimited.
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  session:
+                    description: |-
+                      Session, when non-nil, overrides where the session id comes from.
+                      nil (the default) means the X-Fission-Session request header.
+                    properties:
+                      name:
+                        description: |-
+                          Name is the header or query-parameter name holding the session id,
+                          e.g. "X-Fission-Session".
+                        type: string
+                      source:
+                        description: Source is where to look for the session id.
+                        enum:
+                        - header
+                        - queryparam
+                        type: string
+                    required:
+                    - name
+                    - source
+                    type: object
+                type: object
               concurrency:
                 description: |-
                   Maximum number of pods to be specialized which will serve requests
