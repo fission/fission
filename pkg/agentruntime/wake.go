@@ -28,22 +28,23 @@
 //     more than once for the same continuation. DispatchTurn re-invokes the
 //     function each time; functions that yield "continue" own their own
 //     idempotency, the same way any at-least-once consumer must.
-//   - process's post-Ack step ALSO enqueues a revival wake (env.Turns+1),
-//     independent of DispatchTurn's own shared-path enqueue (see process's
-//     doc comment for the self-dedup chain-death scenario this closes) —
-//     but ONLY when TurnResult.WakeEnqueueAttempted is true, i.e. the shared
-//     path's OWN maxContinuations cap check decided this turn's
-//     continuation was allowed. Yield alone is never enough to gate this:
-//     a function past the cap keeps yielding "continue" forever (only the
-//     shared path's enqueue is suppressed past it), so gating on Yield
-//     would have revived a capped-out chain indefinitely, bypassing
-//     maxContinuations entirely. Gated correctly, the two enqueues normally
-//     dedup onto the SAME child message (the revival is then a no-op); the
-//     accepted cost of the rare case where both independently succeed is
-//     exactly the one the bullet above already pays for — a single,
-//     bounded extra duplicate continue-turn per hop, which a
-//     "continue"-yielding function must already tolerate. It is never an
-//     unbounded stream of them past the cap.
+//   - process's post-Ack step ALSO enqueues a revival wake, independent of
+//     DispatchTurn's own shared-path enqueue (see process's doc comment for
+//     the self-dedup chain-death scenario this closes) — but ONLY when
+//     TurnResult.ShouldReviveChain is true, i.e. the shared path's OWN
+//     maxContinuations cap check decided this turn's continuation was
+//     allowed. Yield alone is never enough to gate this: a function past the
+//     cap keeps yielding "continue" forever (only the shared path's enqueue
+//     is suppressed past it), so gating on Yield would have revived a
+//     capped-out chain indefinitely, bypassing maxContinuations entirely.
+//     The revival keys on the session's PERSISTED Stats.Turns (read via a
+//     fresh Get in reviveChain), the SAME value the shared path enqueued
+//     under — so the two enqueues always agree on the key and dedup onto the
+//     SAME child message (the revival is then a no-op). Keying the revival on
+//     the envelope's own carried count instead would fork on any drift
+//     between that count and the persisted one; keying both on the persisted
+//     count is what makes the revival at most a harmless duplicate of the
+//     shared path's child, never a second divergent chain.
 //
 // A wake arriving after its session has archived or expired finds no live
 // record: DispatchTurn's normal ErrNotFound branch creates a fresh one. That
@@ -139,10 +140,19 @@ type wakeEnvelope struct {
 // the message's age or origin — a leased message can be minutes to hours old
 // — but NOT about shape: a wire-incompatible or corrupt body is
 // wakeReasonUndecodable, not a retry (no future delivery attempt can fix it).
+// An unrecognized envelope Version is treated as undecodable too: a version
+// this consumer does not understand cannot be safely processed as v1, and no
+// future delivery attempt will change the stored bytes — so it dead-letters
+// rather than being silently mis-processed.
 func decodeWakeEnvelope(data []byte) (wakeEnvelope, error) {
 	var env wakeEnvelope
-	err := json.Unmarshal(data, &env)
-	return env, err
+	if err := json.Unmarshal(data, &env); err != nil {
+		return env, err
+	}
+	if env.Version != wakeEnvelopeVersion {
+		return env, fmt.Errorf("agentruntime: unrecognized wake envelope version %d (want %d)", env.Version, wakeEnvelopeVersion)
+	}
+	return env, nil
 }
 
 // wakeSink is the TurnSink DispatchTurn writes a wake-delivered turn's
@@ -305,24 +315,31 @@ func (w *WakeService) pollOnce(ctx context.Context) int {
 // statestore/types.go:115) instead of creating a fresh child. ack() below
 // then settles this message with no live successor ever created: the chain
 // dies silently even though the function said continue. reviveChain is the
-// fix — a second, consumer-side enqueue keyed one turn past what THIS
-// message itself carried (env.Turns+1), issued only once this message has
-// actually Acked. In the ordinary (non-racing) case it dedups onto whatever
-// the shared path already (correctly) enqueued, a no-op; in the chain-death
-// case above it is the only live enqueue, so the chain survives.
+// fix — a second, consumer-side enqueue keyed on the session's PERSISTED
+// Stats.Turns (re-Get inside reviveChain, the SAME key the shared path used),
+// issued only once this message has actually Acked. In the ordinary
+// (non-racing) case it dedups onto whatever the shared path already
+// (correctly) enqueued, a no-op; in the chain-death case above the shared
+// path's enqueue collapsed onto this now-Acked parent, so the revival's
+// post-settle enqueue is the only live one and the chain survives. Keying on
+// the persisted count (rather than the message's own carried count) is what
+// keeps revive and shared path in lockstep — the two never emit two
+// divergent successors, so the cost is at most one bounded duplicate per hop,
+// never a fork.
 //
 // This must fire ONLY when the shared path's OWN maxContinuations cap check
-// decided the continuation was allowed (TurnResult.WakeEnqueueAttempted),
+// decided the continuation was allowed (TurnResult.ShouldReviveChain),
 // never merely because Yield=="continue": past the cap, DispatchTurn keeps
 // returning Yield=="continue" forever (it is the function's own response,
 // unaffected by the cap — only the shared path's enqueue is suppressed), so
 // gating on Yield alone would revive an already-capped chain indefinitely,
-// silently bypassing maxContinuations. WakeEnqueueAttempted is exactly the
-// shared path's cap decision, independent of whether an enqueuer was wired
-// or its own enqueue call errored or deduped — which is what lets this gate
-// still revive the chain-death race above (the cap DID allow it there; the
-// shared path's enqueue just collided with its own parent) while correctly
-// refusing to revive a chain that is past its cap.
+// silently bypassing maxContinuations. WakeEnqueueAttempted (which
+// ShouldReviveChain checks) is exactly the shared path's cap decision,
+// independent of whether an enqueuer was wired or its own enqueue call
+// errored or deduped — which is what lets this gate still revive the
+// chain-death race above (the cap DID allow it there; the shared path's
+// enqueue just collided with its own parent) while correctly refusing to
+// revive a chain that is past its cap.
 func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage) {
 	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), wakeSettleTimeout)
 	defer scancel()
@@ -335,6 +352,7 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 	}
 
 	if w.now().Sub(env.EnqueueTime) > wakeMaxAge {
+		w.logger.V(1).Info("wake dead-lettered: past max age", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts, "age", w.now().Sub(env.EnqueueTime).String())
 		w.kill(sctx, msg, wakeReasonExpired)
 		return
 	}
@@ -362,14 +380,26 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 
 	switch classifyWakeResult(res, derr) {
 	case wakeActionAck:
-		if w.ack(sctx, msg) && res.WakeEnqueueAttempted && res.Yield == YieldContinue {
+		if w.ack(sctx, msg) && res.ShouldReviveChain() {
 			w.reviveChain(sctx, env)
 		}
 	case wakeActionKillNotAgent:
+		w.logger.V(1).Info("wake dead-lettered: not an agent function", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
 		w.kill(sctx, msg, wakeReasonNotAgent)
 	case wakeActionKillSessionQuota:
+		w.logger.V(1).Info("wake dead-lettered: session quota exceeded on re-create", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
 		w.kill(sctx, msg, wakeReasonSessionQuota)
 	case wakeActionKillHTTP4xx:
+		// A 401/403 from the router internal listener is not a function-level
+		// client error — it signals a runtime-side auth misconfiguration (a
+		// missing/incorrect internal HMAC secret, or a rejected JWT). Surface
+		// it loudly (an otherwise-silent HMAC misconfig would DLQ every chain),
+		// but still dead-letter: retrying an auth failure will not fix it.
+		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+			w.logger.Error(nil, "wake turn rejected by router auth; check the internal HMAC secret / JWT signing key — dead-lettering", "status", res.StatusCode, "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
+		} else {
+			w.logger.V(1).Info("wake dead-lettered: http 4xx", "status", res.StatusCode, "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
+		}
 		w.kill(sctx, msg, wakeReasonHTTP4xx)
 	case wakeActionRetry:
 		w.retry(sctx, msg, env)
@@ -438,30 +468,43 @@ func (w *WakeService) ack(ctx context.Context, msg statestore.LeasedMessage) boo
 }
 
 // reviveChain closes the self-dedup chain-death window documented on
-// process: a best-effort enqueue, keyed one turn past what THIS
-// just-Acked message itself carried (env.Turns+1), issued only after the
-// Ack has actually landed AND only when the caller (process) has confirmed
-// TurnResult.WakeEnqueueAttempted was true — i.e. this session's
-// maxContinuations cap allowed the continuation. It is deliberately
-// independent of DispatchTurn's shared-path enqueue (which used the
-// CAS-persisted Stats.Turns and can therefore land on a stale,
-// already-collapsing key) — in the common case it dedups onto the SAME
-// child the shared path already created (a no-op); when the shared path's
-// own enqueue silently collapsed onto this now-settled parent instead, this
-// is the only live enqueue for the chain's continuation. reviveChain itself
-// does not re-check the cap — it trusts the caller's gate — so it must
-// never be called except behind that check.
+// process: a best-effort enqueue issued only after the Ack has actually
+// landed AND only when the caller (process) has confirmed
+// TurnResult.ShouldReviveChain — i.e. this session's maxContinuations cap
+// allowed the continuation.
 //
-// A failure here is logged at Info, not Error, and never propagates: this
-// runs after the message has already settled, so there is no settle left to
-// fail or retry. It is a safety net for a rare race, not a load-bearing step
-// of an ordinary continue turn — though once a session's persisted
-// Stats.Turns has skewed one behind its envelopes (a single lost CAS is
-// enough to trigger it), the shared path self-collides on EVERY subsequent
-// hop for that session, and this enqueue becomes the mechanism actually
-// carrying the chain from then on, not just a one-time recovery.
+// It keys the revival on the session's PERSISTED Stats.Turns, read via a
+// fresh Get here (NOT env.Turns+1). That is the same value DispatchTurn's
+// shared post-response path enqueued under, so revive and shared path always
+// agree on the key: in the ordinary case the revival dedups onto the exact
+// child the shared path already created (a harmless no-op), and it never
+// forks. Keying on env.Turns+1 (the message's own carried count + 1) instead
+// would DIVERGE from the persisted count whenever the two drift — a
+// concurrent HTTP turn, an archived-and-recreated session, or a lost CAS —
+// and each hop would then emit TWO live successors under two different keys
+// that never re-converge, compounding without bound when maxContinuations=0.
+//
+// Post-Ack this message is settled, so a fresh enqueue under the persisted
+// key is guaranteed to create a live successor rather than collapse onto this
+// parent — which is exactly what carries the chain forward in the chain-death
+// case (where the shared path's own enqueue collided with, and collapsed
+// onto, this still-leased parent before the Ack). reviveChain does not
+// re-check the cap — it trusts the caller's gate — so it must never be called
+// except behind that check.
+//
+// If the fresh Get fails, the revival is skipped (logged at Info): the chain
+// is carried from the persisted state, so without a readable record there is
+// nothing to safely key on — failing closed on the fork is consistent with
+// the "bookkeeping never gates a turn" rule (the turn itself already
+// succeeded and Acked). A failure here never propagates: this runs after the
+// message has already settled, so there is no settle left to fail or retry.
 func (w *WakeService) reviveChain(ctx context.Context, env wakeEnvelope) {
-	if err := w.EnqueueWake(ctx, env.Namespace, env.Agent, env.Session, env.Turns+1); err != nil {
+	rec, _, err := w.d.store.Get(ctx, env.Namespace, env.Agent, env.Session)
+	if err != nil {
+		w.logger.Info("wake chain revival skipped: session read failed", "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "err", err.Error())
+		return
+	}
+	if err := w.EnqueueWake(ctx, env.Namespace, env.Agent, env.Session, rec.Stats.Turns); err != nil {
 		w.logger.Info("wake chain revival enqueue failed", "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "err", err.Error())
 	}
 }
@@ -487,11 +530,13 @@ func (w *WakeService) kill(ctx context.Context, msg statestore.LeasedMessage, re
 //  3. otherwise, Nack with the computed backoff.
 func (w *WakeService) retry(ctx context.Context, msg statestore.LeasedMessage, env wakeEnvelope) {
 	if msg.Attempts >= statestore.DefaultMaxAttempts {
+		w.logger.V(1).Info("wake dead-lettered: retries exhausted", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
 		w.kill(ctx, msg, wakeReasonRetriesExhausted)
 		return
 	}
 	delay := backoff.ExpFullJitter(wakeBackoffBase, wakeBackoffCap, msg.Attempts, w.rand)
 	if w.now().Add(delay).Sub(env.EnqueueTime) > wakeMaxAge {
+		w.logger.V(1).Info("wake dead-lettered: next retry would exceed max age", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
 		w.kill(ctx, msg, wakeReasonExpired)
 		return
 	}

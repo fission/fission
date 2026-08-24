@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func newTestRegistryMux(t *testing.T, authz *Authorizer) (http.Handler, *AgentVi
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
-	api := NewRegistryAPI(view, store, authz)
+	api := NewRegistryAPI(logr.Discard(), view, store, authz)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(api.ListAgents)))

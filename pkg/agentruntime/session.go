@@ -36,6 +36,13 @@ var (
 	// ErrSessionQuota is returned by Create when the agent's MaxSessions
 	// live-key budget is already spent (mapped from statestore.ErrQuotaExceeded).
 	ErrSessionQuota = errors.New("agentruntime: session quota exceeded")
+	// ErrUpdateArchived is returned by Update when handed a record already in
+	// StatusArchived: the live keyspace only ever holds active/idle records
+	// (archiving goes through Archive, which writes the archived copy to a
+	// sibling keyspace), so an archived record reaching Update would resurrect
+	// a dead session into the live budget. Rejecting it keeps a future caller
+	// from doing so by accident.
+	ErrUpdateArchived = errors.New("agentruntime: refusing to Update an archived session record into the live keyspace")
 )
 
 // SessionStats is the per-session meter set (G19: full meter schema from day
@@ -136,6 +143,9 @@ func (s *SessionStore) Create(ctx context.Context, rec SessionRecord, maxSession
 // Update CAS-writes rec at version with liveTTL (refreshing the orphan
 // expiry). statestore.ErrVersionConflict passes through unmapped.
 func (s *SessionStore) Update(ctx context.Context, rec SessionRecord, version int64, liveTTL time.Duration) error {
+	if rec.Status == StatusArchived {
+		return ErrUpdateArchived
+	}
 	data, err := json.Marshal(rec)
 	if err != nil {
 		return err

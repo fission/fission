@@ -35,6 +35,12 @@ func TestAgentConfigValidate(t *testing.T) {
 		{"archiveAfter below idleAfter", AgentConfig{IdleAfter: dur(time.Hour), ArchiveAfter: dur(time.Minute)}, true},
 		{"archiveAfter equal idleAfter ok", AgentConfig{IdleAfter: dur(time.Hour), ArchiveAfter: dur(time.Hour)}, false},
 		{"negative maxSessions", AgentConfig{MaxSessions: -1}, true},
+		// Reserved header names: a session source must not shadow the runtime's
+		// own Authorization or X-Fission-* headers (case-insensitive).
+		{"session name Authorization reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: "Authorization"}}, true},
+		{"session name authorization lowercase reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: "authorization"}}, true},
+		{"session name X-Fission- prefix reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: "X-Fission-Session"}}, true},
+		{"session name x-fission- lowercase prefix reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceQueryParam, Name: "x-fission-foo"}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

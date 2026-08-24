@@ -147,6 +147,34 @@ func poolCacheOptions(base crcache.Options) (crcache.Options, error) {
 	}
 	podByObject := crcache.ByObject{
 		Label: labels.NewSelector().Add(*podReq),
+		// Strip each cached Pod to only what PodSummary (pool.go) reads: its
+		// identity + labels + a slice of Status. Dropping Spec (container env
+		// values included) both bounds the cache footprint and stops the
+		// agentruntime from retaining pod env — which can carry secrets — in
+		// memory. Identity fields (Name/Namespace/UID/ResourceVersion) are kept
+		// so the informer's own indexing and delta detection stay correct; the
+		// transform is idempotent and passes through anything that is not a
+		// *corev1.Pod (e.g. a cache.DeletedFinalStateUnknown tombstone).
+		Transform: func(obj any) (any, error) {
+			pod, ok := obj.(*corev1.Pod)
+			if !ok {
+				return obj, nil
+			}
+			return &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            pod.Name,
+					Namespace:       pod.Namespace,
+					UID:             pod.UID,
+					ResourceVersion: pod.ResourceVersion,
+					Labels:          pod.Labels,
+				},
+				Status: corev1.PodStatus{
+					PodIP:      pod.Status.PodIP,
+					Phase:      pod.Status.Phase,
+					Conditions: pod.Status.Conditions,
+				},
+			}, nil
+		},
 	}
 	if !utils.ClusterTenancyEnabled() {
 		nsConfig := map[string]crcache.Config{}
@@ -259,6 +287,11 @@ const (
 	// self-chaining cap. 0 means unlimited (see Dispatcher.maxContinuations).
 	envMaxContinuations = "AGENT_MAX_CONTINUATIONS"
 
+	// envMaxSessionsDefault is the platform-wide live-session ceiling applied
+	// to an agent whose spec sets no MaxSessions of its own. 0 means no default
+	// (unbounded). Read once here, like envMaxContinuations.
+	envMaxSessionsDefault = "AGENT_MAX_SESSIONS_DEFAULT"
+
 	// envRegistryPoll configures the SSE registry feed's Poller cadence
 	// (Task 20; see events.go). Read once here, like envSweepInterval.
 	envRegistryPoll = "AGENT_REGISTRY_POLL"
@@ -273,6 +306,11 @@ const (
 
 	// defaultMaxContinuations is applied when envMaxContinuations is unset.
 	defaultMaxContinuations = 1000
+
+	// defaultMaxSessionsDefault is applied when envMaxSessionsDefault is unset:
+	// a conservative platform ceiling that bounds unqualified session creation
+	// without an operator having to set a per-agent MaxSessions.
+	defaultMaxSessionsDefault = 1000
 
 	// dispatcherMaxIdleConnsPerHost bounds the dispatcher's outbound
 	// connection pool to the single router-internal host (see
@@ -327,7 +365,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("opening statestore: %w", err)
 	}
 	caps := statestore.NewScoped(opened, nil)
-	defer func() { _ = caps.Close() }()
+	// caps ownership is handed to the Serve goroutine below, which closes it
+	// only AFTER httpserver.Serve has fully drained — so the mux never serves a
+	// request against a closed statestore during the shutdown window. This
+	// defer is the fallback for the early-error paths between here and that
+	// hand-off (statestore capabilities, env parsing, manager construction),
+	// where the Serve goroutine is never started; capsClosed suppresses it once
+	// ownership has transferred.
+	capsClosed := false
+	defer func() {
+		if !capsClosed {
+			_ = caps.Close()
+		}
+	}()
 
 	kv, err := caps.KV()
 	if err != nil {
@@ -351,6 +401,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return err
 	}
 	registryPollInterval, err := envDuration(envRegistryPoll, defaultRegistryPollInterval)
+	if err != nil {
+		return err
+	}
+	maxSessionsDefault, err := envInt64(envMaxSessionsDefault, defaultMaxSessionsDefault)
 	if err != nil {
 		return err
 	}
@@ -386,7 +440,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// the mux below instead of behind authz middleware.
 	registryBus := NewBroadcaster()
 	registryPoller := NewPoller(logger.WithName("registry_events"), view, store, registryBus, registryPollInterval)
-	eventsHandler := NewEventsHandler(registryPoller, registryBus, authz)
+	// ctx is the subsystem's lifetime: threaded into the events handler so an
+	// open SSE stream ends promptly on shutdown instead of pinning the drain.
+	eventsHandler := NewEventsHandler(ctx, registryPoller, registryBus, authz)
 
 	// WakeService needs the Dispatcher (to call DispatchTurn), so it is built
 	// after the Dispatcher and wired back in via SetWakeEnqueuer — see that
@@ -435,7 +491,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("unable to set up agentruntime manager: %w", err)
 	}
 
-	r := NewAgentReconciler(logger.WithName("agent_reconciler"), crMgr.GetClient(), view)
+	r := NewAgentReconciler(logger.WithName("agent_reconciler"), crMgr.GetClient(), view, maxSessionsDefault)
 	if err := controller.RegisterTenantScoped(crMgr, &fv1.Function{}, r, "agentruntime-function"); err != nil {
 		return fmt.Errorf("error registering agentruntime function reconciler: %w", err)
 	}
@@ -463,7 +519,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// the always-safe empty-when-degraded Index instead keeps one code path
 	// for both outcomes.
 	dispatcher.SetEndpointIndex(index)
-	poolAPI := NewPoolAPI(crMgr.GetClient(), index, view, authz, func() bool {
+	poolAPI := NewPoolAPI(logger.WithName("pool_api"), crMgr.GetClient(), index, view, authz, func() bool {
 		return poolSynced != nil && poolSynced()
 	}, func() bool { return poolDegraded })
 
@@ -521,9 +577,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 			return
 		}
 		if err := caps.Ping(r.Context()); err != nil {
-			// The body says WHY: an opaque 503 turns into a rollout-timeout
-			// mystery in CI.
-			http.Error(w, "statestore unreachable: "+err.Error(), http.StatusServiceUnavailable)
+			// Log the detail server-side (a rollout-timeout in CI needs the
+			// underlying host/driver error to diagnose), but return a generic
+			// body: /readyz is unauthenticated, so it must not leak the
+			// statestore host:port or driver to an anonymous caller.
+			logger.Error(err, "readyz: statestore ping failed")
+			http.Error(w, "statestore not ready", http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -540,7 +599,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// RegistryAPI.ListAgents. The two per-agent routes below carry
 	// {namespace}, so they use authz.Middleware exactly like the dispatch
 	// route above.
-	registryAPI := NewRegistryAPI(view, store, authz)
+	registryAPI := NewRegistryAPI(logger.WithName("registry_api"), view, store, authz)
 	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(registryAPI.ListAgents)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions", authz.Middleware(http.HandlerFunc(registryAPI.ListSessions)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}", authz.Middleware(http.HandlerFunc(registryAPI.GetSession)))
@@ -566,10 +625,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	mux.Handle("GET /ui", uiHandler)
 	mux.Handle("GET /ui/", uiHandler)
 
+	// caps is closed here, not via defer, so it outlives the mux: httpserver.
+	// Serve blocks through its own graceful drain before returning, so by the
+	// time it does every in-flight request the mux served has completed and the
+	// statestore is safe to close. (See the capsClosed defer above for the
+	// early-error fallback this replaces.)
+	capsClosed = true
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "agentruntime", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
 		})
+		_ = caps.Close()
 		return nil
 	})
 

@@ -110,10 +110,33 @@ type TurnResult struct {
 	WakeEnqueueAttempted bool
 }
 
+// ShouldReviveChain reports whether this turn's outcome warrants the wake
+// consumer's out-of-band chain revival (wake.go's reviveChain): the shared
+// path's own maxContinuations cap allowed the continuation
+// (WakeEnqueueAttempted) AND the function asked to continue. Gating on
+// WakeEnqueueAttempted rather than Yield alone is load-bearing — a function
+// past the cap keeps yielding "continue" forever, so a Yield-only gate would
+// revive a capped-out chain indefinitely (see reviveChain's doc comment).
+func (r TurnResult) ShouldReviveChain() bool {
+	return r.WakeEnqueueAttempted && r.Yield == YieldContinue
+}
+
 // ErrNotAgent is returned by DispatchTurn when (namespace, agent) is not in
 // the AgentView — e.g. the Function was deleted or its Agent block removed
 // between a caller resolving it and the turn actually dispatching.
 var ErrNotAgent = errors.New("agentruntime: not an agent function")
+
+// ErrStoreUnavailable is returned by DispatchTurn on a quota-bearing turn when
+// the session store is unhealthy enough that the MaxSessions budget cannot be
+// evaluated (a Get that fails for a reason other than ErrNotFound, or a Create
+// that fails for a reason other than ErrSessionQuota/ErrSessionExists). It
+// FAILS CLOSED: rather than forwarding an unmetered turn that could silently
+// bypass the quota, the turn is rejected. The HTTP handler maps it to 503; the
+// wake consumer classifies it as a retry (transient store degradation). It is
+// deliberately NOT raised when the agent has no quota (MaxSessions == 0) —
+// there is no budget to protect, so the long-standing "bookkeeping never gates
+// a turn" rule still applies there.
+var ErrStoreUnavailable = errors.New("agentruntime: session store unavailable")
 
 // enqueuer is the continue-chain seam DispatchTurn calls into on
 // yield=continue (implemented by Task 15's WakeService). A Dispatcher's zero
@@ -309,6 +332,8 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, ErrSessionQuota):
 			writeErr(w, http.StatusTooManyRequests, "session quota exceeded")
+		case errors.Is(err, ErrStoreUnavailable):
+			writeErr(w, http.StatusServiceUnavailable, "session store unavailable")
 		case errors.Is(err, ErrNotAgent):
 			writeErr(w, http.StatusNotFound, "not an agent function")
 		default:
@@ -342,6 +367,11 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	// record's Stats.Turns AT READ TIME, echoed to the function via
 	// HeaderTurns below.
 	var turnsAtStart int64
+	// quotaBearing is true when this agent enforces a live-session budget. A
+	// store error on a quota-bearing turn must FAIL CLOSED (ErrStoreUnavailable)
+	// rather than forward an unmetered turn that could silently overrun the
+	// budget; a non-quota agent keeps the "bookkeeping never gates a turn" rule.
+	quotaBearing := entry.MaxSessions > 0
 	rec, version, err := d.store.Get(ctx, tr.Namespace, tr.Agent, tr.SessionID)
 	switch {
 	case errors.Is(err, statestore.ErrNotFound):
@@ -370,10 +400,24 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 				rec.LastActiveAt = now
 			})
 		default:
+			// The Create failed for a reason that is neither the quota nor a
+			// lost create-race: the store is unhealthy. On a quota-bearing
+			// agent, forwarding now would mint an unmetered session that
+			// bypasses MaxSessions, so fail closed instead.
 			d.logger.Error(cerr, "creating session record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+			if quotaBearing {
+				return TurnResult{}, ErrStoreUnavailable
+			}
 		}
 	case err != nil:
+		// A Get that failed for a reason other than ErrNotFound leaves us unable
+		// to tell whether this session already exists (and is already counted)
+		// or would be a new one — so on a quota-bearing agent we cannot safely
+		// forward without risking an unmetered session; fail closed.
 		d.logger.Error(err, "getting session record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+		if quotaBearing {
+			return TurnResult{}, ErrStoreUnavailable
+		}
 	default:
 		turnsAtStart = rec.Stats.Turns
 		d.casUpdate(ctx, tr.Namespace, tr.Agent, tr.SessionID, rec, version, liveTTL, func(rec *SessionRecord) {
@@ -408,12 +452,25 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	start := d.now()
 	resp, err := d.client.Do(req)
 	if err != nil {
-		d.logger.Error(err, "calling upstream function", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
-		// A failed turn is still a turn: meter it (Errors included) using
-		// bgCtx so the write is not lost if the caller has already gone.
+		// A client disconnect surfaces here as context.Canceled: that is not a
+		// function error, so it is logged at V(1) and must NOT inflate
+		// Stats.Errors (mirrors the sweeper's own Canceled special-casing). A
+		// DeadlineExceeded or a real transport failure IS a function-observable
+		// error and is metered as one.
+		canceled := errors.Is(err, context.Canceled)
+		if canceled {
+			d.logger.V(1).Info("upstream call canceled by caller disconnect", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+		} else {
+			d.logger.Error(err, "calling upstream function", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+		}
+		// A failed turn is still a turn: meter it using bgCtx so the write is
+		// not lost if the caller has already gone. Errors is bumped only for a
+		// genuine function/transport failure, never a caller disconnect.
 		d.casUpdateFresh(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
 			rec.Stats.Turns++
-			rec.Stats.Errors++
+			if !canceled {
+				rec.Stats.Errors++
+			}
 			rec.Status = StatusActive
 			rec.LastActiveAt = d.now()
 		})
@@ -462,7 +519,7 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	// invocation so only the final (persisted) decision survives a retry.
 	var doEnqueue bool
 	var enqueueTurns int64
-	d.casUpdateFresh(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
+	persisted := d.casUpdateFresh(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
 		doEnqueue = false
 		enqueueTurns = 0
 
@@ -502,6 +559,14 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 			rec.Status = StatusActive
 		}
 	})
+	// If neither CAS write landed (both attempts lost, or the fresh Get
+	// failed), the enqueue decision above rode on a count that was never
+	// persisted — a phantom. Suppress the enqueue so a lost write can never
+	// drive a wake keyed on a turn count the store does not hold.
+	if !persisted {
+		doEnqueue = false
+		enqueueTurns = 0
+	}
 	// Bookkeeping never gates a turn: an enqueue failure is logged, never
 	// returned to the caller.
 	if doEnqueue && d.wake != nil {
@@ -559,40 +624,46 @@ func streamToSink(sink TurnSink, src io.Reader) {
 // liveTTL. On statestore.ErrVersionConflict it retries exactly once with a
 // freshly fetched record and version — never the stale one. Any other
 // failure, or a second conflict, is logged and swallowed: registry writes are
-// bookkeeping, never a request gate.
-func (d *Dispatcher) casUpdate(ctx context.Context, ns, agent, id string, rec SessionRecord, version int64, liveTTL time.Duration, mutate func(*SessionRecord)) {
+// bookkeeping, never a request gate. It returns true only when a write
+// actually landed, so a caller whose post-write action depends on the mutated
+// state having been persisted (the step-5 continue-enqueue) can tell a real
+// persist from a phantom one that never reached the store.
+func (d *Dispatcher) casUpdate(ctx context.Context, ns, agent, id string, rec SessionRecord, version int64, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
 	mutate(&rec)
 	err := d.store.Update(ctx, rec, version, liveTTL)
 	if err == nil {
-		return
+		return true
 	}
 	if !errors.Is(err, statestore.ErrVersionConflict) {
 		d.logger.Error(err, "updating session record", "namespace", ns, "agent", agent, "session", id)
-		return
+		return false
 	}
 
 	fresh, freshVersion, gerr := d.store.Get(ctx, ns, agent, id)
 	if gerr != nil {
 		d.logger.Error(gerr, "re-getting session record after conflict", "namespace", ns, "agent", agent, "session", id)
-		return
+		return false
 	}
 	mutate(&fresh)
 	if uerr := d.store.Update(ctx, fresh, freshVersion, liveTTL); uerr != nil {
 		d.logger.Error(uerr, "updating session record after retry", "namespace", ns, "agent", agent, "session", id)
+		return false
 	}
+	return true
 }
 
 // casUpdateFresh re-Gets the record immediately before the CAS write, then
 // delegates to casUpdate. Used whenever an unbounded amount of work (an
 // upstream call) may have happened since any previously held version was
-// read.
-func (d *Dispatcher) casUpdateFresh(ctx context.Context, ns, agent, id string, liveTTL time.Duration, mutate func(*SessionRecord)) {
+// read. It returns casUpdate's persisted flag (false also when the fresh Get
+// itself fails).
+func (d *Dispatcher) casUpdateFresh(ctx context.Context, ns, agent, id string, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
 	rec, version, err := d.store.Get(ctx, ns, agent, id)
 	if err != nil {
 		d.logger.Error(err, "getting session record for update", "namespace", ns, "agent", agent, "session", id)
-		return
+		return false
 	}
-	d.casUpdate(ctx, ns, agent, id, rec, version, liveTTL, mutate)
+	return d.casUpdate(ctx, ns, agent, id, rec, version, liveTTL, mutate)
 }
 
 // writeErr answers with a small {"error": msg} JSON object at status.

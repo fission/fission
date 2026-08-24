@@ -33,11 +33,16 @@ type AgentReconciler struct {
 	logger logr.Logger
 	client client.Client
 	view   *AgentView
+	// maxSessionsDefault is the platform-wide live-session ceiling applied to
+	// an agent whose spec sets no MaxSessions (0 = no default). Read once from
+	// the environment in Start and passed to entryFromAgentConfig here.
+	maxSessionsDefault int64
 }
 
 // NewAgentReconciler returns an AgentReconciler that maintains view from c.
-func NewAgentReconciler(logger logr.Logger, c client.Client, view *AgentView) *AgentReconciler {
-	return &AgentReconciler{logger: logger, client: c, view: view}
+// maxSessionsDefault is applied to agents that set no MaxSessions of their own.
+func NewAgentReconciler(logger logr.Logger, c client.Client, view *AgentView, maxSessionsDefault int64) *AgentReconciler {
+	return &AgentReconciler{logger: logger, client: c, view: view, maxSessionsDefault: maxSessionsDefault}
 }
 
 func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -55,7 +60,19 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	entry := entryFromAgentConfig(fn.Namespace, fn.Name, fn.Spec.Agent)
+	// Re-validate the stored AgentConfig before trusting it, mirroring pkg/mcp's
+	// reconciler-side validateToolRegistrable probe: a stored object can predate
+	// any admission rule (kubectl/GitOps writers bypass the CLI's Validate), so
+	// an invalid config — e.g. an empty Session.Name, which would make every
+	// turn mint a brand-new session and feed unbounded growth — must not reach
+	// the view. On error, drop it from the view rather than serving a footgun.
+	if err := fn.Spec.Agent.Validate(); err != nil {
+		r.logger.Error(err, "stored agent config is invalid; removing from view", "namespace", fn.Namespace, "name", fn.Name)
+		r.view.Remove(req.NamespacedName)
+		return ctrl.Result{}, nil
+	}
+
+	entry := entryFromAgentConfig(fn.Namespace, fn.Name, fn.Spec.Agent, r.maxSessionsDefault)
 	r.view.Upsert(entry)
 	return ctrl.Result{}, nil
 }

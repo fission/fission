@@ -28,7 +28,7 @@ func newTestReconciler(t *testing.T, objs ...client.Object) (*AgentReconciler, *
 		WithObjects(objs...).
 		Build()
 	view := NewAgentView()
-	r := NewAgentReconciler(logr.Discard(), c, view)
+	r := NewAgentReconciler(logr.Discard(), c, view, 0)
 	return r, view, c
 }
 
@@ -187,4 +187,23 @@ func TestAgentReconcilerIdempotent(t *testing.T) {
 
 	assert.Equal(t, first, second, "re-reconciling an unchanged function must be a no-op on the entry")
 	assert.Len(t, view.List(), 1)
+}
+
+// TestAgentReconcilerSkipsInvalidStoredConfig pins fix #11: a stored
+// AgentConfig that fails Validate (here an empty Session.Name, which would make
+// every turn mint a brand-new session) must never reach the view — the
+// reconciler validates before Upsert and removes it instead.
+func TestAgentReconcilerSkipsInvalidStoredConfig(t *testing.T) {
+	t.Parallel()
+	fn := agentFn("bad", &fv1.AgentConfig{
+		Session: &fv1.AgentSessionConfig{Source: fv1.SessionSourceHeader, Name: ""},
+	})
+	r, view, _ := newTestReconciler(t, fn)
+	key := types.NamespacedName{Namespace: "default", Name: "bad"}
+
+	_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+	require.NoError(t, err, "an invalid stored config is dropped, not surfaced as a reconcile error")
+
+	_, ok := view.Lookup("default", "bad")
+	assert.False(t, ok, "an agent with an invalid stored config must not be served from the view")
 }

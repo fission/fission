@@ -59,6 +59,30 @@ func TestSessionStoreCreateGetRoundtrip(t *testing.T) {
 	assert.Equal(t, rec.Namespace, got.Namespace)
 }
 
+// TestSessionStoreUpdateRejectsArchived pins fix #26c: Update refuses a record
+// already in StatusArchived, so a future caller cannot land a dead session
+// back into the live keyspace (and its live-key budget). The live record is
+// otherwise untouched.
+func TestSessionStoreUpdateRejectsArchived(t *testing.T) {
+	t.Parallel()
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	ctx := t.Context()
+
+	rec := SessionRecord{ID: "sess-1", Agent: "a", Namespace: "ns", Status: StatusActive}
+	require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+	_, version, err := store.Get(ctx, "ns", "a", "sess-1")
+	require.NoError(t, err)
+
+	rec.Status = StatusArchived
+	err = store.Update(ctx, rec, version, time.Hour)
+	require.ErrorIs(t, err, ErrUpdateArchived)
+
+	got, _, err := store.Get(ctx, "ns", "a", "sess-1")
+	require.NoError(t, err)
+	assert.Equal(t, StatusActive, got.Status, "the live record must be left untouched by the rejected Update")
+}
+
 func TestSessionStoreCreateDuplicateExists(t *testing.T) {
 	t.Parallel()
 	kv := newTestKV(t)

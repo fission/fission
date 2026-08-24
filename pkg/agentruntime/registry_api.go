@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 
 	"github.com/fission/fission/pkg/statestore"
@@ -35,15 +36,17 @@ const (
 // RegistryAPI serves GET /registry/... : read-only introspection over the
 // agent registry. Unlike Dispatcher, it never mutates a SessionRecord.
 type RegistryAPI struct {
-	view  *AgentView
-	store *SessionStore
-	authz *Authorizer
+	logger logr.Logger
+	view   *AgentView
+	store  *SessionStore
+	authz  *Authorizer
 }
 
 // NewRegistryAPI returns a RegistryAPI reading from view and store, filtering
-// GET /registry/agents by authz's verified scope (see ListAgents).
-func NewRegistryAPI(view *AgentView, store *SessionStore, authz *Authorizer) *RegistryAPI {
-	return &RegistryAPI{view: view, store: store, authz: authz}
+// GET /registry/agents by authz's verified scope (see ListAgents). logger
+// records the underlying error behind any 500 the sanitized client body hides.
+func NewRegistryAPI(logger logr.Logger, view *AgentView, store *SessionStore, authz *Authorizer) *RegistryAPI {
+	return &RegistryAPI{logger: logger, view: view, store: store, authz: authz}
 }
 
 // agentSummary is the wire shape of one entry in ListAgents's response.
@@ -166,6 +169,7 @@ func (a *RegistryAPI) ListSessions(w http.ResponseWriter, r *http.Request) {
 
 	sessions, next, err := a.store.List(r.Context(), ns, name, r.URL.Query().Get("page"), limit)
 	if err != nil {
+		a.logger.Error(err, "listing sessions failed", "namespace", ns, "agent", name, "operation", "ListSessions")
 		writeErr(w, http.StatusInternalServerError, "listing sessions")
 		return
 	}
@@ -200,6 +204,7 @@ func (a *RegistryAPI) GetSession(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, "session not found")
 			return
 		}
+		a.logger.Error(err, "getting session failed", "namespace", ns, "agent", name, "session", id, "operation", "GetSession")
 		writeErr(w, http.StatusInternalServerError, "getting session")
 		return
 	}

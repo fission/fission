@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,6 +74,7 @@ type poolResponse struct {
 // anything; unlike RegistryAPI it reads two additional, independently
 // degradable dependencies (see synced/degraded below).
 type PoolAPI struct {
+	logger logr.Logger
 	client client.Client
 	index  *endpointcache.Index
 	view   *AgentView
@@ -94,8 +96,8 @@ type PoolAPI struct {
 // agent-enabled Functions the "endpoints" breakdown iterates. synced and
 // degraded are read on every request, never cached at construction time,
 // since both flip after Start begins serving.
-func NewPoolAPI(c client.Client, index *endpointcache.Index, view *AgentView, authz *Authorizer, synced func() bool, degraded func() bool) *PoolAPI {
-	return &PoolAPI{client: c, index: index, view: view, authz: authz, synced: synced, degraded: degraded}
+func NewPoolAPI(logger logr.Logger, c client.Client, index *endpointcache.Index, view *AgentView, authz *Authorizer, synced func() bool, degraded func() bool) *PoolAPI {
+	return &PoolAPI{logger: logger, client: c, index: index, view: view, authz: authz, synced: synced, degraded: degraded}
 }
 
 // ServePool serves GET /registry/pool. It carries no {namespace} path value
@@ -125,6 +127,7 @@ func (p *PoolAPI) ServePool(w http.ResponseWriter, r *http.Request) {
 
 	var podList corev1.PodList
 	if err := p.client.List(r.Context(), &podList); err != nil {
+		p.logger.Error(err, "listing pods failed", "operation", "ServePool")
 		writeErr(w, http.StatusInternalServerError, "listing pods")
 		return
 	}

@@ -96,8 +96,10 @@ func (v *AgentView) List() []AgentEntry {
 }
 
 // entryFromAgentConfig builds the defaults-applied AgentEntry for a Function
-// whose Spec.Agent is non-nil.
-func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig) AgentEntry {
+// whose Spec.Agent is non-nil. maxSessionsDefault is the platform-wide live
+// session ceiling applied when the spec sets no MaxSessions of its own (0
+// disables the default, leaving the agent unbounded).
+func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig, maxSessionsDefault int64) AgentEntry {
 	e := AgentEntry{
 		Namespace:     ns,
 		Name:          name,
@@ -116,6 +118,20 @@ func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig) AgentEntry {
 	}
 	if ac.ArchiveAfter != nil && ac.ArchiveAfter.Duration != 0 {
 		e.ArchiveAfter = ac.ArchiveAfter.Duration
+	}
+	// The cross-field ArchiveAfter >= IdleAfter invariant that AgentConfig.
+	// Validate enforces only when BOTH are set on the spec must ALSO hold on the
+	// resolved values, where the two defaults (5m / 24h) are applied
+	// independently. Without this clamp, IdleAfter:48h with ArchiveAfter unset
+	// (defaulting to 24h) would archive a session on the first sweep after it
+	// goes idle — archived while still within its idle window. Clamp on the
+	// resolved values so no defaulting combination can violate the invariant.
+	e.ArchiveAfter = max(e.ArchiveAfter, e.IdleAfter)
+	// Apply the platform-wide MaxSessions ceiling when the spec opted out of a
+	// per-agent quota (0). A default of 0 means "no platform ceiling", so an
+	// unset spec quota stays unbounded.
+	if e.MaxSessions == 0 {
+		e.MaxSessions = maxSessionsDefault
 	}
 	return e
 }

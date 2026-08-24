@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -207,7 +208,7 @@ func newTestPoolAPI(t *testing.T, authz *Authorizer, synced, degraded bool, inde
 	if view == nil {
 		view = NewAgentView()
 	}
-	api := NewPoolAPI(c, index, view, authz, func() bool { return synced }, func() bool { return degraded })
+	api := NewPoolAPI(logr.Discard(), c, index, view, authz, func() bool { return synced }, func() bool { return degraded })
 	mux := http.NewServeMux()
 	mux.Handle("GET /registry/pool", authz.HTTPMiddleware(http.HandlerFunc(api.ServePool)))
 	return mux

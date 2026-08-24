@@ -230,11 +230,12 @@ func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testi
 // end-to-end, not just that the consumer-side revival happens to be inert.
 //
 // With maxContinuations=1: hop 1 is within the cap (Continuations 0->1),
-// so the shared path enqueues AND the revival's identically-keyed
-// (env.Turns+1) enqueue dedups onto it -- one live child, as normal. Hop 2
-// crosses the cap (Continuations 1->2 == maxContinuations+1): the shared
-// path's own doEnqueue is false, so WakeEnqueueAttempted is false, and
-// process must NOT revive -- the chain stops with no live successor.
+// so the shared path enqueues AND the revival's enqueue -- keyed on the same
+// persisted Stats.Turns the shared path used (reviveChain re-Gets it) -- dedups
+// onto it, one live child, as normal. Hop 2 crosses the cap (Continuations
+// 1->2 == maxContinuations+1): the shared path's own doEnqueue is false, so
+// WakeEnqueueAttempted is false, and process must NOT revive -- the chain stops
+// with no live successor.
 func TestWakeService_RevivalRespectsMaxContinuationsCap(t *testing.T) {
 	t.Parallel()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +283,89 @@ func TestWakeService_RevivalRespectsMaxContinuationsCap(t *testing.T) {
 	msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
 	require.NoError(t, err)
 	assert.Empty(t, msgs)
+}
+
+// TestWakeService_ContinueChainDoesNotForkOnDivergence is the regression pin
+// for the chain-fork/amplification bug: reviveChain must key its enqueue on
+// the session's PERSISTED Stats.Turns (a fresh Get), NOT on the envelope's
+// own carried count + 1. When the two diverge — here forced by seeding the
+// record at Turns=5 while delivering an envelope carrying Turns=0 — the
+// buggy env.Turns+1 keying emits a SECOND live successor under a different
+// dedup key (".../1") than the shared path's own enqueue (".../6"), and the
+// two never re-converge, so every hop doubles. The fix keys both on the
+// persisted count, so the revival dedups onto the shared path's single child.
+//
+// The shared-path enqueuer IS wired (production shape), so DispatchTurn's own
+// continuation enqueue is live; the only successor difference between buggy
+// and fixed code is whether reviveChain forks a second one.
+func TestWakeService_ContinueChainDoesNotForkOnDivergence(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	// wireEnqueuer=true, maxContinuations=0 (unlimited): the shared path
+	// enqueues under the post-increment persisted turns key.
+	w, view, store, q := newTestWakeServiceFull(t, http.DefaultClient, upstream.URL, time.Now, 0, true)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	// Force divergence: the live record is already at Turns=5, but the wake
+	// envelope we deliver carries Turns=0. This delivery re-increments the
+	// record to 6 (the shared path enqueues ".../6"); the buggy revival would
+	// enqueue ".../1" (env.Turns+1), forking the chain.
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "sess-1", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(),
+		Stats: SessionStats{Turns: 5},
+	}, 0, time.Hour))
+
+	enqueueWakeEnvelope(t, q, wakeEnvelope{
+		Version: wakeEnvelopeVersion, Namespace: "ns", Agent: "fn", Session: "sess-1",
+		Turns: 0, EnqueueTime: time.Now(),
+	})
+
+	msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	w.process(t.Context(), msgs[0])
+
+	rec, _, err := store.Get(t.Context(), "ns", "fn", "sess-1")
+	require.NoError(t, err)
+	require.EqualValues(t, 6, rec.Stats.Turns, "the delivery must have incremented the record to 6")
+
+	st, err := q.Stats(t.Context(), wakeQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, st.Dead, "the parent Acked cleanly")
+	assert.EqualValues(t, 1, st.Visible,
+		"exactly ONE live successor per hop — the revival must dedup onto the shared path's child, not fork a second chain")
+
+	// The single survivor must be keyed on the persisted count (6), proving
+	// the revival re-read the record rather than reusing env.Turns+1 (=1).
+	survivors, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, survivors, 1)
+	var succ wakeEnvelope
+	require.NoError(t, json.Unmarshal(survivors[0].Body, &succ))
+	assert.EqualValues(t, 6, succ.Turns, "the successor must carry the persisted turn count, not env.Turns+1")
+}
+
+// TestDecodeWakeEnvelope_UnknownVersion pins the version guard (#26b): an
+// envelope carrying a version this consumer does not recognize is undecodable
+// (dead-lettered), never silently processed as v1.
+func TestDecodeWakeEnvelope_UnknownVersion(t *testing.T) {
+	t.Parallel()
+	body, err := json.Marshal(wakeEnvelope{Version: wakeEnvelopeVersion + 1, Namespace: "ns", Agent: "fn", Session: "s"})
+	require.NoError(t, err)
+	_, derr := decodeWakeEnvelope(body)
+	assert.Error(t, derr, "an unrecognized envelope version must not decode")
+
+	// A well-formed current-version envelope still decodes.
+	good, err := json.Marshal(wakeEnvelope{Version: wakeEnvelopeVersion, Namespace: "ns", Agent: "fn", Session: "s"})
+	require.NoError(t, err)
+	_, derr = decodeWakeEnvelope(good)
+	assert.NoError(t, derr)
 }
 
 // TestWakeService_RetryBackoffGrows runs the loop under virtual time (via
