@@ -80,7 +80,8 @@ func main() {
 		cfg.sessions, cfg.turns, cfg.agentsURL, cfg.namespace, cfg.agent, thinkNote, cfg.concurrency)
 
 	results := runLoad(ctx, cfg, client)
-	printReport(ctx, cfg, client, results)
+	exitCode := printReport(ctx, cfg, client, results)
+	os.Exit(exitCode)
 }
 
 // turnResult is one turn's outcome, fed into the report's latency/status
@@ -320,8 +321,8 @@ func fetchSessions(ctx context.Context, cfg config, client *http.Client) ([]sess
 // printReport prints the turn-latency stats from the run itself, then
 // queries the registry (GET /registry/pool and .../sessions) for the
 // pod-density and pod-spread numbers that can only be observed after the
-// fact.
-func printReport(ctx context.Context, cfg config, client *http.Client, res loadResults) {
+// fact. Returns 1 if zero turns succeeded (total transport failure), 0 otherwise.
+func printReport(ctx context.Context, cfg config, client *http.Client, res loadResults) int {
 	var latencies []time.Duration
 	statusCounts := map[int]int{}
 	var transportErrs int
@@ -361,7 +362,10 @@ func printReport(ctx context.Context, cfg config, client *http.Client, res loadR
 	sessions, err := fetchSessions(ctx, cfg, client)
 	if err != nil {
 		fmt.Printf("sessions:          unavailable (%s)\n", err)
-		return
+		if len(latencies) == 0 {
+			return 1
+		}
+		return 0
 	}
 	fmt.Printf("sessions:          %d\n", len(sessions))
 
@@ -380,6 +384,11 @@ func printReport(ctx context.Context, cfg config, client *http.Client, res loadR
 	// every turn to see each session's own CurrentPod history) — labeled
 	// accordingly so it isn't mistaken for the latter.
 	fmt.Printf("distinct serving pods (final snapshot): %d\n", len(distinctPods))
+
+	if len(latencies) == 0 {
+		return 1
+	}
+	return 0
 }
 
 func sortedStatusCodes(counts map[int]int) []int {
