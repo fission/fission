@@ -5,8 +5,10 @@
 package agentruntime
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +33,7 @@ func newTestDispatcher(t *testing.T, upstreamURL string) (*Dispatcher, *AgentVie
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, time.Now)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, time.Now, 0)
 	return d, view, store
 }
 
@@ -43,7 +45,7 @@ func newTestDispatcherWithClock(t *testing.T, upstreamURL string, now func() tim
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, now)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, now, 0)
 	return d, view, store
 }
 
@@ -448,4 +450,191 @@ func TestDispatcher_StreamsIncrementallyWithPerWriteFlush(t *testing.T) {
 	rest, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, chunk2, rest)
+}
+
+// wakeCall is one recorded fakeEnqueuer.EnqueueWake invocation.
+type wakeCall struct {
+	ns, agent, session string
+	turns              int64
+}
+
+// fakeEnqueuer is a test double for the enqueuer seam: it records every call
+// and can be made to fail, for the "bookkeeping never gates a turn" test.
+type fakeEnqueuer struct {
+	mu    sync.Mutex
+	calls []wakeCall
+	err   error
+}
+
+func (f *fakeEnqueuer) EnqueueWake(_ context.Context, ns, agent, session string, turns int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, wakeCall{ns, agent, session, turns})
+	return f.err
+}
+
+func (f *fakeEnqueuer) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
+// discardSink is a minimal TurnSink for tests that call DispatchTurn
+// directly (the wake path has no http.ResponseWriter to adapt).
+type discardSink struct {
+	statusCode  int
+	contentType string
+	yield       string
+}
+
+func (s *discardSink) Begin(statusCode int, contentType, yield string) {
+	s.statusCode = statusCode
+	s.contentType = contentType
+	s.yield = yield
+}
+
+func (s *discardSink) Write(p []byte) (int, error) { return len(p), nil }
+
+// TestDispatcher_YieldContinueEnqueuesWake pins the new continue-chain seam:
+// an upstream response yielding "continue" must (a) count as a continuation
+// on the record, (b) leave the session active (not idle), and (c) call the
+// configured enqueuer with the post-increment turn count as the dedup basis.
+func TestDispatcher_YieldContinueEnqueuesWake(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upstream.Close)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+	fe := &fakeEnqueuer{}
+	d.SetWakeEnqueuer(fe)
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-continue")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, YieldContinue, rec.Header().Get(HeaderYield))
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-continue")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, got.Stats.Continuations)
+	assert.Equal(t, StatusActive, got.Status)
+
+	fe.mu.Lock()
+	defer fe.mu.Unlock()
+	require.Len(t, fe.calls, 1)
+	assert.Equal(t, wakeCall{"ns", "fn", "sess-continue", 1}, fe.calls[0], "the enqueuer must see (ns, agent, session, turns==1)")
+}
+
+// TestDispatcher_ContinuationCapStopsEnqueueing pins the maxContinuations cap:
+// once a session's Continuations count exceeds the cap, further continue
+// turns must still be metered but must NOT enqueue another wake.
+func TestDispatcher_ContinuationCapStopsEnqueueing(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	view := NewAgentView()
+	view.Upsert(headerEntry("ns", "fn", 0))
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 1)
+	fe := &fakeEnqueuer{}
+	d.SetWakeEnqueuer(fe)
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+		req.Header.Set(HeaderSession, "sess-cap")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-cap")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, got.Stats.Continuations, "both continue turns must still be metered past the cap")
+
+	assert.Equal(t, 1, fe.callCount(), "the enqueuer must be called exactly once: the second continuation is past the cap of 1")
+}
+
+// TestDispatcher_HeaderTurnsReflectsPreTurnCount pins HeaderTurns: it must
+// carry the record's Stats.Turns as read BEFORE the current turn, so a
+// stateless upstream fixture can bound its own loop.
+func TestDispatcher_HeaderTurnsReflectsPreTurnCount(t *testing.T) {
+	t.Parallel()
+	var gotHeaders []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeaders = append(gotHeaders, r.Header.Get(HeaderTurns))
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	d, view, _ := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+		req.Header.Set(HeaderSession, "sess-turns")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
+	require.Equal(t, []string{"0", "1"}, gotHeaders, "HeaderTurns must carry Stats.Turns as read BEFORE this turn")
+}
+
+// TestDispatcher_WakeTurnSetsWakeHeaders pins the wake-delivered replay
+// headers, exercised directly via DispatchTurn since WakeID has no HTTP
+// surface (it is set by Task 15's wake consumer, not the HTTP handler).
+func TestDispatcher_WakeTurnSetsWakeHeaders(t *testing.T) {
+	t.Parallel()
+	var gotID, gotAttempt string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotID = r.Header.Get(HeaderWakeID)
+		gotAttempt = r.Header.Get(HeaderWakeAttempt)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	d, view, _ := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	tr := TurnRequest{
+		Namespace: "ns", Agent: "fn", SessionID: "sess-wake",
+		Body: []byte("{}"), WakeID: "wake-1", WakeAttempt: 3,
+	}
+	sink := &discardSink{}
+	_, err := d.DispatchTurn(t.Context(), tr, sink)
+	require.NoError(t, err)
+	assert.Equal(t, "wake-1", gotID)
+	assert.Equal(t, "3", gotAttempt)
+}
+
+// TestDispatcher_EnqueuerErrorDoesNotFailTurn pins the bookkeeping-never-
+// gates-a-turn rule for the continue-chain seam specifically: a failing
+// enqueuer must still let the turn succeed from the caller's point of view.
+func TestDispatcher_EnqueuerErrorDoesNotFailTurn(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+	d, view, _ := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+	fe := &fakeEnqueuer{err: errors.New("boom")}
+	d.SetWakeEnqueuer(fe)
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-enqueue-err")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, "an enqueuer failure must not surface as a turn failure")
+	assert.Equal(t, 1, fe.callCount(), "the enqueuer must still have been attempted")
 }

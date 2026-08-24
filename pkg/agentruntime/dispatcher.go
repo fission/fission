@@ -15,10 +15,12 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -41,6 +43,22 @@ const (
 	// YieldWaiting is the HeaderYield value that flips a session to idle
 	// immediately, rather than waiting out its normal IdleAfter window.
 	YieldWaiting = "waiting"
+	// YieldContinue is the HeaderYield value that asks the runtime to
+	// re-invoke this session asap (self-continuation). Delivered
+	// at-least-once via the agent-wake queue (Task 15).
+	YieldContinue = "continue"
+
+	// HeaderTurns carries the session's turn count (Stats.Turns BEFORE this
+	// turn) to the function, so stateless fixtures/loops can bound
+	// themselves.
+	HeaderTurns = "X-Fission-Agent-Turns"
+	// HeaderWakeID and HeaderWakeAttempt carry a wake-delivered turn's
+	// identity to the function, mirroring asyncinvoke's HeaderInvocationID /
+	// HeaderInvocationAttempt replay pattern
+	// (pkg/router/asyncinvoke/deliverer.go). Set only when the turn arrived
+	// via the wake queue (TurnRequest.WakeID != "").
+	HeaderWakeID      = "X-Fission-Agent-Wake-Id"
+	HeaderWakeAttempt = "X-Fission-Agent-Wake-Attempt"
 
 	// maxTurnBodyBytes caps a buffered turn request body. The HMAC
 	// ServiceSigner binds the signature to a body hash (pkg/auth/hmac/hmac.go),
@@ -60,6 +78,83 @@ const (
 // portable character set.
 var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 
+// TurnRequest is one session turn, transport-agnostic: everything
+// DispatchTurn needs to run a turn, independent of whether it arrived over
+// HTTP (the dispatch handler) or via the wake queue (Task 15's consumer).
+type TurnRequest struct {
+	Namespace, Agent, SessionID string
+	Body                        []byte
+	ContentType                 string
+	WakeID                      string // non-empty only for wake-delivered turns
+	WakeAttempt                 int    // 1-based, wake-delivered turns only
+}
+
+// TurnResult is the outcome of one DispatchTurn call: the HTTP handler
+// surfaces it on the response, the wake consumer switches on it to decide
+// Ack/Nack/Kill.
+type TurnResult struct {
+	StatusCode int
+	Yield      string
+}
+
+// ErrNotAgent is returned by DispatchTurn when (namespace, agent) is not in
+// the AgentView — e.g. the Function was deleted or its Agent block removed
+// between a caller resolving it and the turn actually dispatching.
+var ErrNotAgent = errors.New("agentruntime: not an agent function")
+
+// enqueuer is the continue-chain seam DispatchTurn calls into on
+// yield=continue (implemented by Task 15's WakeService). A Dispatcher's zero
+// value has a nil enqueuer, which disables chaining — used by tests that
+// construct a Dispatcher without calling SetWakeEnqueuer.
+type enqueuer interface {
+	EnqueueWake(ctx context.Context, ns, agent, session string, turns int64) error
+}
+
+// TurnSink receives the upstream response DispatchTurn streams back. Begin is
+// called EXACTLY ONCE, before any body bytes, with the upstream
+// status/content-type/yield — values only DispatchTurn sees, since it owns
+// the upstream call. Write is called per chunk as DispatchTurn relays the
+// upstream body: the HTTP sink flushes after every Write; the wake sink
+// (Task 15) ignores Begin and discards the body through a bounded counter.
+type TurnSink interface {
+	Begin(statusCode int, contentType, yield string)
+	io.Writer
+}
+
+// httpSink adapts an http.ResponseWriter to TurnSink for the HTTP dispatch
+// path. X-Fission-Session is set by dispatch() before DispatchTurn runs (it
+// resolves independently of the upstream call and must precede any
+// WriteHeader); Begin adds the yield echo and Content-Type and then commits
+// WriteHeader(status) — those values are only known once DispatchTurn's
+// upstream call returns, so they MUST be set here, before the first Write,
+// never by dispatch() itself.
+type httpSink struct {
+	w  http.ResponseWriter
+	rc *http.ResponseController
+}
+
+func (s *httpSink) Begin(statusCode int, contentType, yield string) {
+	if yield != "" {
+		s.w.Header().Set(HeaderYield, yield)
+	}
+	if contentType != "" {
+		s.w.Header().Set("Content-Type", contentType)
+	}
+	s.w.WriteHeader(statusCode)
+}
+
+// Write relays one chunk and flushes immediately, replicating the router's
+// own ReverseProxy FlushInterval=-1 streaming behavior (functionHandler.go)
+// instead of buffering until DispatchTurn's read loop completes.
+func (s *httpSink) Write(p []byte) (int, error) {
+	n, err := s.w.Write(p)
+	if err != nil {
+		return n, err
+	}
+	_ = s.rc.Flush()
+	return n, nil
+}
+
 // Dispatcher serves inbound agent turns.
 type Dispatcher struct {
 	logger    logr.Logger
@@ -69,22 +164,48 @@ type Dispatcher struct {
 	routerURL string
 	retention time.Duration
 	now       func() time.Time
+
+	// maxContinuations caps yield=continue self-chaining per session (0 =
+	// unlimited). See DispatchTurn's step-5 bookkeeping closure.
+	maxContinuations int64
+
+	// wake is the continue-chain seam. It is injected AFTER construction via
+	// SetWakeEnqueuer — see that method's doc comment for the
+	// construction-cycle rationale and the pre-serve contract. nil disables
+	// chaining.
+	wake enqueuer
 }
 
 // NewDispatcher returns a Dispatcher. retention is added to an entry's
 // IdleAfter+ArchiveAfter to compute the live-key TTL passed to
 // SessionStore.Create/Update (orphan self-expiry covers idle + archive-wait +
-// archived-copy retention in one live-key lease).
-func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, client *http.Client, routerURL string, retention time.Duration, now func() time.Time) *Dispatcher {
+// archived-copy retention in one live-key lease). maxContinuations caps
+// yield=continue self-chaining per session (0 = unlimited); the wake
+// enqueuer itself is wired separately via SetWakeEnqueuer.
+func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, client *http.Client, routerURL string, retention time.Duration, now func() time.Time, maxContinuations int64) *Dispatcher {
 	return &Dispatcher{
-		logger:    logger,
-		view:      view,
-		store:     store,
-		client:    client,
-		routerURL: routerURL,
-		retention: retention,
-		now:       now,
+		logger:           logger,
+		view:             view,
+		store:            store,
+		client:           client,
+		routerURL:        routerURL,
+		retention:        retention,
+		now:              now,
+		maxContinuations: maxContinuations,
 	}
+}
+
+// SetWakeEnqueuer wires the continue-chain seam post-construction. This
+// breaks a construction cycle: WakeService needs the Dispatcher (to call
+// DispatchTurn), so the Dispatcher cannot take the enqueuer as a
+// NewDispatcher param without one of them being unbuildable. Start's
+// sequencing is: build Dispatcher, build WakeService(dispatcher), then
+// dispatcher.SetWakeEnqueuer(wakeService), all before the manager starts
+// serving — so this MUST be called before the dispatcher serves any turn. It
+// is a plain field, not synchronized; that pre-serve ordering is what makes
+// an unsynchronized write to it safe.
+func (d *Dispatcher) SetWakeEnqueuer(w enqueuer) {
+	d.wake = w
 }
 
 // Handler serves POST /agents/{namespace}/{name}; other methods get 405 (the
@@ -95,11 +216,21 @@ func (d *Dispatcher) Handler() http.Handler {
 	return mux
 }
 
+// dispatch keeps session-id resolution/minting/validation, the request body
+// read + 413 check, and error-status mapping — the parts that are either
+// HTTP-specific or must run before any session record write — and delegates
+// everything else to DispatchTurn.
 func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	ns := r.PathValue("namespace")
 	name := r.PathValue("name")
 
-	// Step 1: resolve the agent entry.
+	// Step 1: resolve the agent entry. This lookup is ALSO repeated inside
+	// DispatchTurn (which has no AgentEntry in TurnRequest, since the wake
+	// path has no prior lookup to reuse) — it is needed here too because
+	// session id resolution below depends on entry.SessionSource/SessionName.
+	// A benign double-lookup of the same in-memory map; on the rare race
+	// where the entry vanishes between the two, DispatchTurn's ErrNotAgent
+	// maps to the same 404 below.
 	entry, ok := d.view.Lookup(ns, name)
 	if !ok {
 		writeErr(w, http.StatusNotFound, "not an agent function")
@@ -116,17 +247,8 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(HeaderSession, sessionID)
 
-	ctx := r.Context()
-	// bgCtx carries no cancellation from the client connection: the
-	// post-response bookkeeping (and the transport-failure bookkeeping below)
-	// must still land even if the caller has already gone away, since it is
-	// what keeps Stats/Status honest and self-heals nothing on its own.
-	bgCtx := context.WithoutCancel(ctx)
-	liveTTL := entry.IdleAfter + entry.ArchiveAfter + d.retention
-	now := d.now()
-
-	// Read + validate the body BEFORE any session record write: an oversized
-	// or unreadable request must never create or refresh a session (a bad
+	// Read + validate the body BEFORE calling DispatchTurn: an oversized or
+	// unreadable request must never create or refresh a session (a bad
 	// request is a client-side problem, so a read failure here is a 400, not
 	// a 502 — nothing upstream has been touched yet).
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxTurnBodyBytes+1))
@@ -139,94 +261,137 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tr := TurnRequest{
+		Namespace:   ns,
+		Agent:       name,
+		SessionID:   sessionID,
+		Body:        body,
+		ContentType: r.Header.Get("Content-Type"),
+	}
+	sink := &httpSink{w: w, rc: http.NewResponseController(w)}
+	// DispatchTurn's errors arrive BEFORE sink.Begin (no status has been
+	// committed yet), so the handler can still write an error status here.
+	if _, err := d.DispatchTurn(r.Context(), tr, sink); err != nil {
+		switch {
+		case errors.Is(err, ErrSessionQuota):
+			writeErr(w, http.StatusTooManyRequests, "session quota exceeded")
+		case errors.Is(err, ErrNotAgent):
+			writeErr(w, http.StatusNotFound, "not an agent function")
+		default:
+			writeErr(w, http.StatusBadGateway, "calling upstream function")
+		}
+	}
+}
+
+// DispatchTurn runs one turn: view lookup, record get/create (+quota),
+// signed forward to the router internal listener streaming the response into
+// sink (Begin first, then body chunks), then the shared bookkeeping (meters,
+// yield, LastActiveAt, and continue-enqueue). The HTTP handler and the wake
+// consumer (Task 15) both call this — chaining lives HERE so both turn kinds
+// chain.
+func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink TurnSink) (TurnResult, error) {
+	entry, ok := d.view.Lookup(tr.Namespace, tr.Agent)
+	if !ok {
+		return TurnResult{}, ErrNotAgent
+	}
+
+	// bgCtx carries no cancellation from the caller: the post-response
+	// bookkeeping (and the transport-failure bookkeeping below) must still
+	// land even if the caller has already gone away, since it is what keeps
+	// Stats/Status honest and self-heals nothing on its own.
+	bgCtx := context.WithoutCancel(ctx)
+	liveTTL := entry.IdleAfter + entry.ArchiveAfter + d.retention
+	now := d.now()
+
 	// Step 3: bookkeep the session record. A registry write is never a
-	// request gate, EXCEPT session quota on Create.
-	rec, version, err := d.store.Get(ctx, ns, name, sessionID)
+	// request gate, EXCEPT session quota on Create. turnsAtStart captures the
+	// record's Stats.Turns AT READ TIME, echoed to the function via
+	// HeaderTurns below.
+	var turnsAtStart int64
+	rec, version, err := d.store.Get(ctx, tr.Namespace, tr.Agent, tr.SessionID)
 	switch {
 	case errors.Is(err, statestore.ErrNotFound):
 		newRec := SessionRecord{
-			ID:           sessionID,
-			Agent:        name,
-			Namespace:    ns,
+			ID:           tr.SessionID,
+			Agent:        tr.Agent,
+			Namespace:    tr.Namespace,
 			Status:       StatusActive,
 			CreatedAt:    now,
 			LastActiveAt: now,
 		}
 		switch cerr := d.store.Create(ctx, newRec, entry.MaxSessions, liveTTL); {
 		case cerr == nil:
-			// created.
+			// created; turnsAtStart is 0 (SessionStats zero value).
 		case errors.Is(cerr, ErrSessionQuota):
-			writeErr(w, http.StatusTooManyRequests, "session quota exceeded")
-			return
+			return TurnResult{}, ErrSessionQuota
 		case errors.Is(cerr, ErrSessionExists):
 			// Another replica (or a concurrent turn) created the same id
 			// between our Get miss and this Create — a lost race, not a
 			// failure. Fall through to the normal activation path instead of
 			// silently dropping this turn's bookkeeping.
-			d.logger.Info("session created concurrently, activating existing record", "namespace", ns, "agent", name, "session", sessionID)
-			d.casUpdateFresh(ctx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+			d.logger.Info("session created concurrently, activating existing record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+			d.casUpdateFresh(ctx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
+				turnsAtStart = rec.Stats.Turns
 				rec.Status = StatusActive
 				rec.LastActiveAt = now
 			})
 		default:
-			d.logger.Error(cerr, "creating session record", "namespace", ns, "agent", name, "session", sessionID)
+			d.logger.Error(cerr, "creating session record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
 		}
 	case err != nil:
-		d.logger.Error(err, "getting session record", "namespace", ns, "agent", name, "session", sessionID)
+		d.logger.Error(err, "getting session record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
 	default:
-		d.casUpdate(ctx, ns, name, sessionID, rec, version, liveTTL, func(rec *SessionRecord) {
+		turnsAtStart = rec.Stats.Turns
+		d.casUpdate(ctx, tr.Namespace, tr.Agent, tr.SessionID, rec, version, liveTTL, func(rec *SessionRecord) {
 			rec.Status = StatusActive
 			rec.LastActiveAt = now
 		})
 	}
 
 	// Step 4: forward the turn.
-	upstream := d.routerURL + utils.UrlForFunction(name, ns)
+	upstream := d.routerURL + utils.UrlForFunction(tr.Agent, tr.Namespace)
 	if entry.SessionSource == fv1.SessionSourceQueryParam {
-		upstream += "?" + url.Values{entry.SessionName: {sessionID}}.Encode()
+		upstream += "?" + url.Values{entry.SessionName: {tr.SessionID}}.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream, bytes.NewReader(tr.Body))
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "building upstream request")
-		return
+		return TurnResult{}, fmt.Errorf("building upstream request: %w", err)
 	}
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
+	if tr.ContentType != "" {
+		req.Header.Set("Content-Type", tr.ContentType)
 	}
-	req.Header.Set(HeaderSession, sessionID)
+	req.Header.Set(HeaderSession, tr.SessionID)
 	if entry.SessionSource == fv1.SessionSourceHeader {
-		req.Header.Set(entry.SessionName, sessionID)
+		req.Header.Set(entry.SessionName, tr.SessionID)
+	}
+	req.Header.Set(HeaderTurns, strconv.FormatInt(turnsAtStart, 10))
+	if tr.WakeID != "" {
+		req.Header.Set(HeaderWakeID, tr.WakeID)
+		req.Header.Set(HeaderWakeAttempt, strconv.Itoa(tr.WakeAttempt))
 	}
 
 	start := d.now()
 	resp, err := d.client.Do(req)
 	if err != nil {
-		d.logger.Error(err, "calling upstream function", "namespace", ns, "agent", name, "session", sessionID)
+		d.logger.Error(err, "calling upstream function", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
 		// A failed turn is still a turn: meter it (Errors included) using
 		// bgCtx so the write is not lost if the caller has already gone.
-		d.casUpdateFresh(bgCtx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+		d.casUpdateFresh(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
 			rec.Stats.Turns++
 			rec.Stats.Errors++
 			rec.Status = StatusActive
 			rec.LastActiveAt = d.now()
 		})
-		writeErr(w, http.StatusBadGateway, "calling upstream function")
-		return
+		return TurnResult{}, fmt.Errorf("calling upstream function: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// The yield outcome is surfaced to the caller (not just consumed for our
-	// own bookkeeping below) so callers can observe done-vs-waiting.
+	// own bookkeeping below) so callers can observe done-vs-waiting-vs-continue.
 	yield := resp.Header.Get(HeaderYield)
-	if yield != "" {
-		w.Header().Set(HeaderYield, yield)
-	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.WriteHeader(resp.StatusCode)
-	streamResponse(w, resp.Body)
+	sink.Begin(resp.StatusCode, resp.Header.Get("Content-Type"), yield)
+	streamToSink(sink, resp.Body)
 	elapsed := d.now().Sub(start)
 
 	// Step 5: post-response bookkeeping. Reads a fresh record — never the
@@ -234,22 +399,62 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	// taken long enough for another turn to have CAS-written the record
 	// underneath it. Uses bgCtx so a client disconnect during/after the
 	// stream does not lose this turn's meter.
-	d.casUpdateFresh(bgCtx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+	//
+	// doEnqueue/enqueueTurns are decided inside the mutate closure (which
+	// sees the actually-persisted record) but the enqueuer call itself
+	// happens OUTSIDE it: mutate is a pure record mutation that casUpdate may
+	// invoke twice (once, then again on a version-conflict retry with a
+	// freshly re-read record), and an external call has no business running
+	// twice just because a CAS lost a race. Both vars are reset on every
+	// invocation so only the final (persisted) decision survives a retry.
+	var doEnqueue bool
+	var enqueueTurns int64
+	d.casUpdateFresh(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
+		doEnqueue = false
+		enqueueTurns = 0
+
 		rec.Stats.Turns++
 		rec.Stats.ActiveMillis += elapsed.Milliseconds()
 		if resp.StatusCode >= http.StatusInternalServerError {
 			rec.Stats.Errors++
 		}
-		// LastActiveAt refreshes on BOTH branches: a waiting->idle turn still
-		// just happened just now, it is only the session's next-turn clock
-		// (IdleAfter/ArchiveAfter) that starts running from it.
+		// LastActiveAt refreshes on EVERY branch: a waiting->idle or
+		// continue turn still just happened just now, it is only the
+		// session's next-turn clock (IdleAfter/ArchiveAfter) that starts
+		// running from it.
 		rec.LastActiveAt = d.now()
-		if yield == YieldWaiting {
+		switch yield {
+		case YieldWaiting:
 			rec.Status = StatusIdle
-		} else {
+		case YieldContinue:
+			rec.Status = StatusActive
+			rec.Stats.Continuations++
+			switch {
+			case d.maxContinuations == 0 || rec.Stats.Continuations <= d.maxContinuations:
+				doEnqueue = true
+				enqueueTurns = rec.Stats.Turns
+			case rec.Stats.Continuations == d.maxContinuations+1:
+				// Log exactly once per session in the common (no CAS
+				// conflict) case: Continuations only increases, so this
+				// equality holds on exactly the turn that first breaches the
+				// cap. A rare conflict-retry race could hit this branch
+				// twice (first attempt and the retry both landing on
+				// cap+1) — not worth extra state to dedupe further.
+				d.logger.Info("continuation cap reached, not enqueueing wake", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID, "maxContinuations", d.maxContinuations)
+			}
+		default:
 			rec.Status = StatusActive
 		}
 	})
+	// Bookkeeping never gates a turn: an enqueue failure is logged, never
+	// returned to the caller.
+	if doEnqueue && d.wake != nil {
+		if err := d.wake.EnqueueWake(bgCtx, tr.Namespace, tr.Agent, tr.SessionID, enqueueTurns); err != nil {
+			d.logger.Error(err, "enqueueing continuation wake", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
+		}
+	}
+
+	return TurnResult{StatusCode: resp.StatusCode, Yield: yield}, nil
 }
 
 // resolveSessionID extracts the session id from r per entry's configured
@@ -271,20 +476,22 @@ func resolveSessionID(r *http.Request, entry AgentEntry) (string, bool) {
 	return raw, true
 }
 
-// streamResponse relays src to w incrementally: a read/write loop with a
-// streamChunkBytes buffer, flushing after every write. Plain io.Copy buffers
-// until completion; this replicates the router's own ReverseProxy
-// FlushInterval=-1 streaming behavior instead.
-func streamResponse(w http.ResponseWriter, src io.Reader) {
-	rc := http.NewResponseController(w)
+// streamToSink relays src to sink incrementally: a read loop with a
+// streamChunkBytes buffer, calling sink.Write per chunk. Plain io.Copy
+// buffers until completion; this replicates the router's own ReverseProxy
+// FlushInterval=-1 streaming behavior instead (the HTTP sink flushes inside
+// its own Write; the wake sink just counts bytes). A sink Write error (e.g.
+// an HTTP client disconnect) stops the copy but is not otherwise treated as a
+// failure — status is already committed via Begin, so there is nothing left
+// to do but let the caller's bookkeeping still run.
+func streamToSink(sink TurnSink, src io.Reader) {
 	buf := make([]byte, streamChunkBytes)
 	for {
 		n, rerr := src.Read(buf)
 		if n > 0 {
-			if _, werr := w.Write(buf[:n]); werr != nil {
+			if _, werr := sink.Write(buf[:n]); werr != nil {
 				return
 			}
-			_ = rc.Flush()
 		}
 		if rerr != nil {
 			return
