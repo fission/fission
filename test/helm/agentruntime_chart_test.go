@@ -38,12 +38,14 @@ func TestAgentRuntimeChartMaxContinuations(t *testing.T) {
 
 // TestAgentRuntimeChartPoolRBAC guards Task 19's RBAC lockstep: pool
 // introspection (GET /registry/pool) needs get/list/watch on
-// endpointslices (discovery.k8s.io) + services + pods, granted through the
-// single shared "agentruntime-rules" define — a missing grant here would
-// silently degrade every replica's pool panel to a permanent 503 in any
-// cluster whose RBAC came from this chart, with nothing else to catch it
+// endpointslices (discovery.k8s.io) + pods, granted through the single
+// shared "agentruntime-rules" define — a missing grant here would silently
+// degrade every replica's pool panel to a permanent 503 in any cluster
+// whose RBAC came from this chart, with nothing else to catch it
 // (pkg/agentruntime's own tests use a fake clientset, which enforces no
-// RBAC at all).
+// RBAC at all). No "services" grant is expected: the informer watches
+// EndpointSlices directly, PoolAPI lists Pods, and checkPoolRBAC's
+// preflight names only endpointslices and pods.
 //
 // Static tenancy renders only the namespaced Role; dynamic/cluster tenancy
 // additionally renders the cluster-wide ClusterRole (tenant-controller/
@@ -52,7 +54,6 @@ func TestAgentRuntimeChartMaxContinuations(t *testing.T) {
 func TestAgentRuntimeChartPoolRBAC(t *testing.T) {
 	wantChecks := []struct{ group, resource string }{
 		{"discovery.k8s.io", "endpointslices"},
-		{"", "services"},
 		{"", "pods"},
 	}
 
