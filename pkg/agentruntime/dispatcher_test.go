@@ -566,12 +566,17 @@ func TestDispatcher_ContinuationCapStopsEnqueueing(t *testing.T) {
 
 // TestDispatcher_HeaderTurnsReflectsPreTurnCount pins HeaderTurns: it must
 // carry the record's Stats.Turns as read BEFORE the current turn, so a
-// stateless upstream fixture can bound its own loop.
+// stateless upstream fixture can bound its own loop. It also pins the
+// converse for the wake replay headers (Task 15): a plain HTTP turn carries
+// no WakeID, so HeaderWakeID/HeaderWakeAttempt must be absent, never set to
+// an empty string a function could mistake for a wake delivery.
 func TestDispatcher_HeaderTurnsReflectsPreTurnCount(t *testing.T) {
 	t.Parallel()
 	var gotHeaders []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHeaders = append(gotHeaders, r.Header.Get(HeaderTurns))
+		assert.Empty(t, r.Header.Get(HeaderWakeID), "wake headers must be absent on a plain HTTP turn")
+		assert.Empty(t, r.Header.Get(HeaderWakeAttempt), "wake headers must be absent on a plain HTTP turn")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(upstream.Close)

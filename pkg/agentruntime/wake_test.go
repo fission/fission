@@ -1,0 +1,407 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package agentruntime
+
+import (
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/fission/fission/pkg/statestore"
+)
+
+// newTestWakeService wires a WakeService, its Dispatcher, and the AgentView
+// against one shared in-memory statestore instance (KV for sessions, Queue
+// for the wake queue), forwarding turns to upstreamURL via http.DefaultClient.
+func newTestWakeService(t *testing.T, upstreamURL string, now func() time.Time) (*WakeService, *AgentView, *SessionStore, statestore.Queue) {
+	t.Helper()
+	return newTestWakeServiceWithClient(t, http.DefaultClient, upstreamURL, now)
+}
+
+// newTestWakeServiceWithClient is newTestWakeService with an injectable
+// *http.Client, so a test can point the Dispatcher at a fake in-process
+// http.RoundTripper instead of a real listener — required inside a
+// testing/synctest bubble, where a real network dial's completion is not
+// governed by the bubble's fake clock.
+func newTestWakeServiceWithClient(t *testing.T, client *http.Client, upstreamURL string, now func() time.Time) (*WakeService, *AgentView, *SessionStore, statestore.Queue) {
+	t.Helper()
+	caps, err := statestore.Open(t.Context(), statestore.Config{Driver: "memory"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = caps.Close() })
+	kv, err := caps.KV()
+	require.NoError(t, err)
+	q, err := caps.Queue()
+	require.NoError(t, err)
+
+	store := NewSessionStore(kv, now)
+	view := NewAgentView()
+	d := NewDispatcher(logr.Discard(), view, store, client, upstreamURL, time.Hour, now, 0)
+	w := NewWakeService(logr.Discard(), q, d, now)
+	return w, view, store, q
+}
+
+// roundTripFunc adapts a function to http.RoundTripper, entirely in-process
+// (no real dial, no real syscall) — safe to exercise inside a synctest
+// bubble, unlike an httptest.Server's real loopback listener.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// statusClient returns an *http.Client whose RoundTripper always answers
+// status, counting each call in attempts (nil attempts is fine — the caller
+// just doesn't care).
+func statusClient(status int, attempts *atomic.Int64) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		if attempts != nil {
+			attempts.Add(1)
+		}
+		return &http.Response{
+			StatusCode: status,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader("")),
+		}, nil
+	})}
+}
+
+// enqueueWakeEnvelope enqueues env directly (bypassing EnqueueWake's dedup
+// key and now()-stamped EnqueueTime), for tests that need to control the
+// envelope's fields precisely (e.g. an already-expired EnqueueTime).
+func enqueueWakeEnvelope(t *testing.T, q statestore.Queue, env wakeEnvelope) string {
+	t.Helper()
+	body, err := json.Marshal(env)
+	require.NoError(t, err)
+	id, err := q.Enqueue(t.Context(), wakeQueue, statestore.Message{Body: body}, statestore.EnqueueOptions{})
+	require.NoError(t, err)
+	return id
+}
+
+// drainedWake reports whether wakeQueue has settled everything it was given
+// (nothing visible, leased, or dead).
+func drainedWake(t *testing.T, q statestore.Queue) bool {
+	t.Helper()
+	st, err := q.Stats(t.Context(), wakeQueue)
+	require.NoError(t, err)
+	return st.Visible == 0 && st.Leased == 0 && st.Dead == 0
+}
+
+// TestWakeService_EnqueueDedup pins EnqueueWake's DedupKey behavior: an
+// unsettled message with the same (namespace, agent, session, turns) key
+// collapses the enqueue, but once that message settles (Ack), a later
+// EnqueueWake with the identical key enqueues a fresh message — dedup only
+// collapses while unsettled, the overall guarantee stays at-least-once.
+func TestWakeService_EnqueueDedup(t *testing.T) {
+	t.Parallel()
+	w, _, _, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+	ctx := t.Context()
+
+	require.NoError(t, w.EnqueueWake(ctx, "ns", "fn", "sess", 3))
+	require.NoError(t, w.EnqueueWake(ctx, "ns", "fn", "sess", 3))
+
+	st, err := q.Stats(ctx, wakeQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, st.Visible, "same turns collapses to one unsettled message")
+
+	msgs, err := q.Lease(ctx, wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.NoError(t, q.Ack(ctx, msgs[0].Receipt))
+
+	require.NoError(t, w.EnqueueWake(ctx, "ns", "fn", "sess", 3))
+	st, err = q.Stats(ctx, wakeQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, st.Visible, "enqueue after the prior message settled is a fresh message")
+}
+
+// TestWakeService_RunHappyPath: a 200 upstream response acks the message and
+// stamps the wake replay headers (HeaderWakeID/HeaderWakeAttempt) onto the
+// forwarded turn.
+func TestWakeService_RunHappyPath(t *testing.T) {
+	t.Parallel()
+	var gotWakeID, gotAttempt string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotWakeID = r.Header.Get(HeaderWakeID)
+		gotAttempt = r.Header.Get(HeaderWakeAttempt)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	w, view, _, q := newTestWakeService(t, upstream.URL, time.Now)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool { return drainedWake(t, q) }, 2*time.Second, 5*time.Millisecond)
+	assert.NotEmpty(t, gotWakeID, "the leased message id must be replayed as HeaderWakeID")
+	assert.Equal(t, "1", gotAttempt)
+}
+
+// TestWakeService_RetryBackoffGrows runs the loop under virtual time (via
+// testing/synctest) against an always-500 upstream: it proves a nacked wake
+// is not redelivered before its backoff elapses, AND that the backoff grows
+// between the first and second retry (ExpFullJitter(wakeBackoffBase,
+// wakeBackoffCap, attempt, nil) with attempt = msg.Attempts).
+func TestWakeService_RetryBackoffGrows(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int64
+		client := statusClient(http.StatusInternalServerError, &attempts)
+		w, view, _, _ := newTestWakeServiceWithClient(t, client, "http://router.internal", time.Now)
+		view.Upsert(headerEntry("ns", "fn", 0))
+
+		require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		go w.Run(ctx)
+
+		// First delivery happens, then the message is nacked with a ~1s
+		// (wakeBackoffBase, attempt 1) backoff.
+		synctest.Wait()
+		require.EqualValues(t, 1, attempts.Load())
+
+		// Still within the first backoff window.
+		synctest.Sleep(500 * time.Millisecond)
+		require.EqualValues(t, 1, attempts.Load(), "no re-delivery before the first backoff elapses")
+
+		// Past the first (~1s) backoff -> redelivered (attempt 2), nacked
+		// again with a LONGER ~2s backoff -- proving the delay grows.
+		synctest.Sleep(600 * time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 2, attempts.Load())
+
+		synctest.Sleep(1500 * time.Millisecond)
+		require.EqualValues(t, 2, attempts.Load(), "no third delivery before the grown (~2s) backoff elapses")
+
+		synctest.Sleep(700 * time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 3, attempts.Load(), "redelivered once the grown backoff elapses")
+
+		cancel()
+		synctest.Wait()
+	})
+}
+
+// TestWakeService_RetriesExhaustedDeadLetters: once msg.Attempts reaches
+// statestore.DefaultMaxAttempts, the NEXT 5xx is Killed with
+// wakeReasonRetriesExhausted instead of Nacked again (the exhaustion check
+// runs BEFORE the Nack call, mirroring asyncinvoke's retry()).
+func TestWakeService_RetriesExhaustedDeadLetters(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client := statusClient(http.StatusInternalServerError, nil)
+		w, view, _, q := newTestWakeServiceWithClient(t, client, "http://router.internal", time.Now)
+		view.Upsert(headerEntry("ns", "fn", 0))
+
+		require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		go w.Run(ctx)
+
+		// Growing backoff across DefaultMaxAttempts (3) deliveries comfortably
+		// finishes within 10 virtual seconds (~1s + ~2s + kill, no further wait).
+		synctest.Sleep(10 * time.Second)
+		synctest.Wait()
+
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		require.Len(t, dead, 1)
+		assert.Equal(t, wakeReasonRetriesExhausted, dead[0].Reason)
+		assert.GreaterOrEqual(t, dead[0].Attempts, statestore.DefaultMaxAttempts)
+
+		cancel()
+		synctest.Wait()
+	})
+}
+
+// TestWakeService_RunKillsNotAgent: DispatchTurn's ErrNotAgent (the agent
+// entry is absent from the view — e.g. the Function was deleted between
+// enqueue and delivery) dead-letters immediately with reason "not_agent",
+// never retried.
+func TestWakeService_RunKillsNotAgent(t *testing.T) {
+	t.Parallel()
+	w, _, _, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+	// No view.Upsert: (ns, missing-fn) is not a registered agent.
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "missing-fn", "sess-1", 0))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		return len(dead) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	require.Len(t, dead, 1)
+	assert.Equal(t, wakeReasonNotAgent, dead[0].Reason)
+	assert.Equal(t, 1, dead[0].Attempts, "killed on the first attempt, never retried")
+}
+
+// TestWakeService_RunKillsSessionQuota: DispatchTurn's ErrSessionQuota (the
+// wake's session record is gone — expired or archived — and the fresh
+// Create hit the agent's MaxSessions budget) dead-letters with reason
+// "session_quota", never retried (the ledgered rationale: seconds-later
+// retries rarely help a full budget, and the driver's own Nack-exhaustion
+// would DLQ in DefaultMaxAttempts anyway under a generic reason).
+func TestWakeService_RunKillsSessionQuota(t *testing.T) {
+	t.Parallel()
+	w, view, store, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+	entry := headerEntry("ns", "fn", 1) // MaxSessions=1
+	view.Upsert(entry)
+
+	// Spend the one-session budget with an unrelated live session, so the
+	// wake's target session (which does not exist -- simulating an
+	// expired/archived record) hits ErrSessionQuota on DispatchTurn's Create.
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "other-session", Agent: "fn", Namespace: "ns", Status: StatusActive,
+	}, entry.MaxSessions, time.Hour))
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-expired", 0))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		return len(dead) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	assert.Equal(t, wakeReasonSessionQuota, dead[0].Reason)
+}
+
+// TestWakeService_MaxAgeExpiryDeadLetters: an envelope enqueued more than
+// wakeMaxAge ago is dead-lettered with reason "expired" without ever calling
+// DispatchTurn (checked before dispatch, mirroring asyncinvoke's MaxAge
+// check).
+func TestWakeService_MaxAgeExpiryDeadLetters(t *testing.T) {
+	t.Parallel()
+	w, _, _, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+
+	enqueueWakeEnvelope(t, q, wakeEnvelope{
+		Version:     wakeEnvelopeVersion,
+		Namespace:   "ns",
+		Agent:       "fn",
+		Session:     "sess-1",
+		Turns:       0,
+		EnqueueTime: time.Now().Add(-(wakeMaxAge + time.Minute)),
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		return len(dead) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	assert.Equal(t, wakeReasonExpired, dead[0].Reason)
+}
+
+// TestWakeService_RunUndecodableEnvelopeDeadLetters: a message body that
+// will not decode as a wakeEnvelope is killed with "undecodable_envelope"
+// rather than retried — no future delivery attempt can fix a corrupt body.
+func TestWakeService_RunUndecodableEnvelopeDeadLetters(t *testing.T) {
+	t.Parallel()
+	w, _, _, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+
+	_, err := q.Enqueue(t.Context(), wakeQueue, statestore.Message{Body: []byte("not json")}, statestore.EnqueueOptions{})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		return len(dead) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	assert.Equal(t, wakeReasonUndecodable, dead[0].Reason)
+}
+
+// TestWakeService_RunExitsOnContextCancel: Run returns once ctx is
+// cancelled, rather than looping forever.
+func TestWakeService_RunExitsOnContextCancel(t *testing.T) {
+	t.Parallel()
+	w, _, _, _ := newTestWakeService(t, "http://unused.invalid", time.Now)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		w.Run(ctx)
+		close(done)
+	}()
+
+	// Let Run reach its poll-interval wait at least once before cancelling.
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not exit after context cancellation")
+	}
+}
+
+// TestClassifyWakeResult pins the classify matrix from the task brief as a
+// pure function, independent of any queue or HTTP plumbing.
+func TestClassifyWakeResult(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		res  TurnResult
+		err  error
+		want wakeAction
+	}{
+		{"not agent", TurnResult{}, ErrNotAgent, wakeActionKillNotAgent},
+		{"session quota", TurnResult{}, ErrSessionQuota, wakeActionKillSessionQuota},
+		{"transport error", TurnResult{}, errors.New("dial: connection refused"), wakeActionRetry},
+		{"200 ack", TurnResult{StatusCode: 200}, nil, wakeActionAck},
+		{"204 ack", TurnResult{StatusCode: 204}, nil, wakeActionAck},
+		{"299 ack", TurnResult{StatusCode: 299}, nil, wakeActionAck},
+		{"400 kill http4xx", TurnResult{StatusCode: 400}, nil, wakeActionKillHTTP4xx},
+		{"404 kill http4xx", TurnResult{StatusCode: 404}, nil, wakeActionKillHTTP4xx},
+		{"408 retry", TurnResult{StatusCode: 408}, nil, wakeActionRetry},
+		{"429 retry", TurnResult{StatusCode: 429}, nil, wakeActionRetry},
+		{"499 kill http4xx", TurnResult{StatusCode: 499}, nil, wakeActionKillHTTP4xx},
+		{"500 retry", TurnResult{StatusCode: 500}, nil, wakeActionRetry},
+		{"502 retry", TurnResult{StatusCode: 502}, nil, wakeActionRetry},
+		{"error wins over 2xx", TurnResult{StatusCode: 200}, errors.New("x"), wakeActionRetry},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, classifyWakeResult(tc.res, tc.err))
+		})
+	}
+}
