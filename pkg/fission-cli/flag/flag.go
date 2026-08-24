@@ -263,6 +263,14 @@ var (
 	FnStateStickySource  = Flag{Type: String, Name: flagkey.FnStateStickySource, Usage: "Sticky routing key source: header or queryparam"}
 	FnStateStickyName    = Flag{Type: String, Name: flagkey.FnStateStickyName, Usage: "Header or query-parameter name holding the sticky routing key"}
 
+	// Agent runtime config (fn create/update).
+	FnAgent              = Flag{Type: Bool, Name: flagkey.FnAgent, Usage: "Declare the function as an agent (session-scoped invocations, lifecycle-tracked by the agent runtime)"}
+	FnAgentSessionSource = Flag{Type: String, Name: flagkey.FnAgentSessionSource, Usage: "Session id source: header or queryparam (default: header)"}
+	FnAgentSessionName   = Flag{Type: String, Name: flagkey.FnAgentSessionName, Usage: "Header or query-parameter name holding the session id (default: X-Fission-Session)"}
+	FnAgentIdleAfter     = Flag{Type: Duration, Name: flagkey.FnAgentIdleAfter, Usage: "How long after its last turn a session stays active before it is marked idle (0 = platform default 5m)"}
+	FnAgentArchiveAfter  = Flag{Type: Duration, Name: flagkey.FnAgentArchiveAfter, Usage: "How long an idle session stays listed before it is archived (0 = platform default 24h)"}
+	FnAgentMaxSessions   = Flag{Type: Int, Name: flagkey.FnAgentMaxSessions, Usage: "Max live sessions for this agent, enforced atomically on session creation (0 = unlimited)"}
+
 	// RFC-0023 `fission fn state` admin flags.
 	StateKey       = Flag{Type: String, Name: flagkey.StateKey, Usage: "State key to operate on"}
 	StateValue     = Flag{Type: String, Name: flagkey.StateValue, Usage: "Value to store"}
