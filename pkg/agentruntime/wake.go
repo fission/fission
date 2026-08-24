@@ -28,15 +28,22 @@
 //     more than once for the same continuation. DispatchTurn re-invokes the
 //     function each time; functions that yield "continue" own their own
 //     idempotency, the same way any at-least-once consumer must.
-//   - process's post-Ack step ALSO enqueues a revival wake (env.Turns+1) for
-//     every yield=continue turn, independent of DispatchTurn's own
-//     shared-path enqueue (see process's doc comment for the self-dedup
-//     chain-death scenario this closes). The two normally dedup onto the
-//     SAME child message (the revival is then a no-op); the accepted cost of
-//     the rare case where both independently succeed is exactly the one the
-//     bullet above already pays for — an occasional extra duplicate
-//     continue-turn, which a "continue"-yielding function must already
-//     tolerate.
+//   - process's post-Ack step ALSO enqueues a revival wake (env.Turns+1),
+//     independent of DispatchTurn's own shared-path enqueue (see process's
+//     doc comment for the self-dedup chain-death scenario this closes) —
+//     but ONLY when TurnResult.WakeEnqueueAttempted is true, i.e. the shared
+//     path's OWN maxContinuations cap check decided this turn's
+//     continuation was allowed. Yield alone is never enough to gate this:
+//     a function past the cap keeps yielding "continue" forever (only the
+//     shared path's enqueue is suppressed past it), so gating on Yield
+//     would have revived a capped-out chain indefinitely, bypassing
+//     maxContinuations entirely. Gated correctly, the two enqueues normally
+//     dedup onto the SAME child message (the revival is then a no-op); the
+//     accepted cost of the rare case where both independently succeed is
+//     exactly the one the bullet above already pays for — a single,
+//     bounded extra duplicate continue-turn per hop, which a
+//     "continue"-yielding function must already tolerate. It is never an
+//     unbounded stream of them past the cap.
 //
 // A wake arriving after its session has archived or expired finds no live
 // record: DispatchTurn's normal ErrNotFound branch creates a fresh one. That
@@ -303,6 +310,19 @@ func (w *WakeService) pollOnce(ctx context.Context) int {
 // actually Acked. In the ordinary (non-racing) case it dedups onto whatever
 // the shared path already (correctly) enqueued, a no-op; in the chain-death
 // case above it is the only live enqueue, so the chain survives.
+//
+// This must fire ONLY when the shared path's OWN maxContinuations cap check
+// decided the continuation was allowed (TurnResult.WakeEnqueueAttempted),
+// never merely because Yield=="continue": past the cap, DispatchTurn keeps
+// returning Yield=="continue" forever (it is the function's own response,
+// unaffected by the cap — only the shared path's enqueue is suppressed), so
+// gating on Yield alone would revive an already-capped chain indefinitely,
+// silently bypassing maxContinuations. WakeEnqueueAttempted is exactly the
+// shared path's cap decision, independent of whether an enqueuer was wired
+// or its own enqueue call errored or deduped — which is what lets this gate
+// still revive the chain-death race above (the cap DID allow it there; the
+// shared path's enqueue just collided with its own parent) while correctly
+// refusing to revive a chain that is past its cap.
 func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage) {
 	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), wakeSettleTimeout)
 	defer scancel()
@@ -342,7 +362,7 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 
 	switch classifyWakeResult(res, derr) {
 	case wakeActionAck:
-		if w.ack(sctx, msg) && res.Yield == YieldContinue {
+		if w.ack(sctx, msg) && res.WakeEnqueueAttempted && res.Yield == YieldContinue {
 			w.reviveChain(sctx, env)
 		}
 	case wakeActionKillNotAgent:
@@ -420,13 +440,17 @@ func (w *WakeService) ack(ctx context.Context, msg statestore.LeasedMessage) boo
 // reviveChain closes the self-dedup chain-death window documented on
 // process: a best-effort enqueue, keyed one turn past what THIS
 // just-Acked message itself carried (env.Turns+1), issued only after the
-// Ack has actually landed. It is deliberately independent of
-// DispatchTurn's shared-path enqueue (which used the CAS-persisted
-// Stats.Turns and can therefore land on a stale, already-collapsing key) —
-// in the common case it dedups onto the SAME child the shared path already
-// created (a no-op); when the shared path's own enqueue silently collapsed
-// onto this now-settled parent instead, this is the only live enqueue for
-// the chain's continuation.
+// Ack has actually landed AND only when the caller (process) has confirmed
+// TurnResult.WakeEnqueueAttempted was true — i.e. this session's
+// maxContinuations cap allowed the continuation. It is deliberately
+// independent of DispatchTurn's shared-path enqueue (which used the
+// CAS-persisted Stats.Turns and can therefore land on a stale,
+// already-collapsing key) — in the common case it dedups onto the SAME
+// child the shared path already created (a no-op); when the shared path's
+// own enqueue silently collapsed onto this now-settled parent instead, this
+// is the only live enqueue for the chain's continuation. reviveChain itself
+// does not re-check the cap — it trusts the caller's gate — so it must
+// never be called except behind that check.
 //
 // A failure here is logged at Info, not Error, and never propagates: this
 // runs after the message has already settled, so there is no settle left to
