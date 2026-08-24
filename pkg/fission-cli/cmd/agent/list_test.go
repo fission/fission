@@ -63,6 +63,7 @@ func TestAgentListOutput(t *testing.T) {
 		FissionClientSet: fissionfake.NewClientset(plainFn, agentFn),
 		Namespace:        ns,
 	})
+	t.Cleanup(cmd.ResetClientsetForTest)
 
 	in := dummy.TestFlagSet()
 	out := captureStdout(t, func() error { return List(in) })

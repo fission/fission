@@ -697,7 +697,7 @@ func (tc *ToolConfig) Validate() error {
 
 // agentSessionNameRegexp pins the session source name to the HTTP token
 // charset — a CR/LF or ':' in a header name would corrupt the forwarded
-// request line; a '&' or '=' in a query-param name would split it.
+// request line; an '=' in a query-param name would split it.
 var agentSessionNameRegexp = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]{1,128}$`)
 
 func (ac *AgentConfig) Validate() error {
