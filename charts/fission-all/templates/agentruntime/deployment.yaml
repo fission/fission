@@ -78,6 +78,8 @@ spec:
           value: {{ .Values.agentRuntime.sweepInterval | quote }}
         - name: AGENT_ARCHIVE_RETENTION
           value: {{ .Values.agentRuntime.archiveRetention | quote }}
+        - name: AGENT_MAX_CONTINUATIONS
+          value: {{ .Values.agentRuntime.maxContinuations | quote }}
         {{- include "fission-resource-namespace.envs" . | indent 8 }}
         {{- include "kube_client.envs" . | indent 8 }}
         {{- include "opentelemtry.envs" . | indent 8 }}
