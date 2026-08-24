@@ -661,7 +661,7 @@ the chart test proves every key on it annotates exactly one rendered account.
 Keep it sorted, and add to it in the same commit that adds a ServiceAccount.
 */}}
 {{- define "fission.saComponents" -}}
-builder buildermgr canaryconfig executor fetcher kafka kubewatcher mcp mqtKeda preupgrade router statestore statestoreMqt statesvc storagesvc tenantController timer webhook workflow
+agentruntime builder buildermgr canaryconfig executor fetcher kafka kubewatcher mcp mqtKeda preupgrade router statestore statestoreMqt statesvc storagesvc tenantController timer webhook workflow
 {{- end -}}
 
 {{/*
