@@ -1,0 +1,22 @@
+{{- if .Values.agentRuntime.enabled }}
+# agentruntime is a ClusterIP-only Service: the agent runtime dispatcher is
+# reached only by in-cluster callers (front it with an Ingress / Gateway /
+# port-forward if external access is needed). It never joins the public
+# router listener.
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentruntime
+  labels:
+    svc: agentruntime
+    application: fission-agentruntime
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  type: ClusterIP
+  ports:
+  - name: agentruntime
+    port: {{ include "fission.agentRuntimePort" . }}
+    targetPort: {{ include "fission.agentRuntimePort" . }}
+  selector:
+    svc: agentruntime
+{{- end }}
