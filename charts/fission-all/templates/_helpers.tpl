@@ -375,6 +375,14 @@ pkg/svcinfo.PortMCP.
 {{- end -}}
 
 {{/*
+fission.agentRuntimePort is the agent runtime dispatcher's port. Mirrored by
+pkg/svcinfo.PortAgentRuntime.
+*/}}
+{{- define "fission.agentRuntimePort" -}}
+{{ (.Values.agentRuntime | default dict).port | default 8894 }}
+{{- end -}}
+
+{{/*
 fission.statestorePort is the embedded statestore's capability API port.
 Mirrored by pkg/svcinfo.PortStatestore (RFC-0021).
 */}}
