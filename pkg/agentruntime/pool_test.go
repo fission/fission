@@ -98,18 +98,20 @@ func byObjectFor[T client.Object](t *testing.T, opts crcache.Options) crcache.By
 	return crcache.ByObject{}
 }
 
-func TestPoolCacheOptionsPodSelectorMatchesAnyExecutorType(t *testing.T) {
+func TestPoolCacheOptionsPodSelectorMatchesKnownExecutorTypes(t *testing.T) {
 	t.Parallel()
 	opts, err := poolCacheOptions(crcache.Options{})
 	require.NoError(t, err)
 	byObj := byObjectFor[*corev1.Pod](t, opts)
 
-	// A pool warm pod (EXECUTOR_TYPE=poolmgr) and a container-executor pod
-	// (EXECUTOR_TYPE=container) both match — Exists, not a value equality —
-	// but a pod carrying no EXECUTOR_TYPE label at all (e.g. an unrelated
-	// workload) does not.
+	// All three known executor types match — a closed selection.In set, not
+	// a bare Exists — but a pod carrying no EXECUTOR_TYPE label at all (e.g.
+	// an unrelated workload), or one with a value outside the closed set
+	// (e.g. a future/third-party executor type), does not.
 	assert.True(t, byObj.Label.Matches(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypePoolmgr)}))
+	assert.True(t, byObj.Label.Matches(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeNewdeploy)}))
 	assert.True(t, byObj.Label.Matches(labels.Set{fv1.EXECUTOR_TYPE: string(fv1.ExecutorTypeContainer)}))
+	assert.False(t, byObj.Label.Matches(labels.Set{fv1.EXECUTOR_TYPE: "custom-third-party"}))
 	assert.False(t, byObj.Label.Matches(labels.Set{"unrelated": "true"}))
 
 	// Confirms the pool.go blocker-fix deviation from a literal

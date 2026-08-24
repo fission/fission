@@ -32,6 +32,16 @@ import (
 // attempts inside the 180s polling budget.
 const turnAttemptTimeout = 60 * time.Second
 
+// registryAttemptTimeout bounds a single GET /registry/... attempt inside
+// the registry EventuallyWithT loops below. Unlike a turn (which proxies
+// into a function and can legitimately take a while), a registry GET is a
+// cheap in-memory read off this replica's AgentView/session store — it
+// never needs turnAttemptTimeout's 60s allowance. A short per-attempt
+// timeout inside the same 60s overall polling budget instead buys several
+// real retries, so a single hung dial doesn't burn the whole budget as one
+// try.
+const registryAttemptTimeout = 10 * time.Second
+
 // TestAgentRuntimeSessionDispatch exercises the agent-runtime session
 // dispatch path end-to-end against a real Node.js runtime: a function
 // created with `--agent` (default header session source, X-Fission-Session)
@@ -312,7 +322,7 @@ func TestAgentRuntimeRegistrySmoke(t *testing.T) {
 	// AgentView reconciles the Function admission asynchronously.
 	agentsURL := base + "/registry/agents"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
 		defer cancel()
 		body, status, err := getRegistry(attemptCtx, f, agentsURL)
 		if !assert.NoErrorf(c, err, "GET %s", agentsURL) {
@@ -344,7 +354,7 @@ func TestAgentRuntimeRegistrySmoke(t *testing.T) {
 	// must appear with at least one counted turn.
 	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
 		defer cancel()
 		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
 		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {

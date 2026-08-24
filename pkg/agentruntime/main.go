@@ -115,23 +115,30 @@ func poolWatchNamespaces() []string {
 // own slice watch (router.go:111-113) — the EndpointSlice controller mirrors
 // that label from the owning Service.
 //
-// Pod is filtered on fv1.EXECUTOR_TYPE (Exists), NOT fv1.MANAGED_BY_LABEL:
-// MANAGED_BY_LABEL is set on Fission-owned Services only (gp_service.go,
-// newdeploy.go, container/svc.go) and mirrored onto EndpointSlices — it is
-// NEVER set on a Pod, warm or specialized, in any of the three executor
-// types. A literal MANAGED_BY_LABEL filter on Pod matches zero objects in
-// production, silently emptying the pool panel every install. EXECUTOR_TYPE
-// is the one label present on every Fission-managed pod regardless of
-// executor type or specialization state (getEnvironmentPoolLabels /
-// labelsForFunction in poolmgr, and the newdeploy/container pod templates)
-// — its VALUE differs per executor type, so Exists (not a value match) is
-// what actually scopes the informer to Fission's own pods.
+// Pod is filtered on fv1.EXECUTOR_TYPE being one of the three known executor
+// types, NOT fv1.MANAGED_BY_LABEL: MANAGED_BY_LABEL is set on Fission-owned
+// Services only (gp_service.go, newdeploy.go, container/svc.go) and mirrored
+// onto EndpointSlices — it is NEVER set on a Pod, warm or specialized, in any
+// of the three executor types. A literal MANAGED_BY_LABEL filter on Pod
+// matches zero objects in production, silently emptying the pool panel every
+// install. EXECUTOR_TYPE is the one label present on every Fission-managed
+// pod regardless of executor type or specialization state
+// (getEnvironmentPoolLabels / labelsForFunction in poolmgr, and the
+// newdeploy/container pod templates). A bare Exists match would also admit
+// any future non-Fission workload that happens to carry the same label key
+// with an unrecognized value; selection.In against the closed set of known
+// ExecutorType values ({poolmgr, newdeploy, container}) is least-privilege —
+// it scopes the informer to Fission's own pods and nothing else.
 //
 // Namespace scoping mirrors routerCacheOptions: cluster tenancy watches
 // cluster-wide (functions, and hence their pods/Services, can live in any
 // namespace); other modes scope to poolWatchNamespaces().
 func poolCacheOptions(base crcache.Options) (crcache.Options, error) {
-	podReq, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.Exists, nil)
+	podReq, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.In, []string{
+		string(fv1.ExecutorTypePoolmgr),
+		string(fv1.ExecutorTypeNewdeploy),
+		string(fv1.ExecutorTypeContainer),
+	})
 	if err != nil {
 		return base, fmt.Errorf("building pod executor-type selector: %w", err)
 	}
