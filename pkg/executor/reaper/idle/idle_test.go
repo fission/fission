@@ -26,6 +26,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/fscache"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
+	"github.com/fission/fission/pkg/utils/metrics/metricstest"
 )
 
 func TestGetDeploymentObj(t *testing.T) {
@@ -81,6 +82,32 @@ func fsvc(name string, executor fv1.ExecutorType) *fscache.FuncSvc {
 		Name:     name,
 		Executor: executor,
 		Function: &metav1.ObjectMeta{Name: name, Namespace: "default"},
+	}
+}
+
+// TestReapLag pins what the #1989 metric measures. The distinction that matters:
+// it is the reaper's own responsiveness — how late it was — not how long the
+// function sat idle. A function idle for an hour under a one-hour timeout is
+// reaped ON TIME and must record ~0, or the metric just restates the timeout
+// back to whoever configured it.
+func TestReapLag(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		idleFor   time.Duration
+		threshold time.Duration
+		want      float64
+	}{
+		{"reaped on the deadline is zero lag", 2 * time.Minute, 2 * time.Minute, 0},
+		{"one tick late", 125 * time.Second, 2 * time.Minute, 5},
+		{"long idle timeout still reports only the delay", time.Hour + 3*time.Second, time.Hour, 3},
+		{"saturated reaper falling minutes behind", 10 * time.Minute, 2 * time.Minute, 480},
+		{"per-function timeout shorter than the default", 35 * time.Second, 30 * time.Second, 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.InDelta(t, tc.want, reapLag(tc.idleFor, tc.threshold), 1e-9)
+		})
 	}
 }
 
@@ -325,4 +352,98 @@ func TestPoolDeleteStrategy_DrainThenDelete(t *testing.T) {
 	_, served := got.Labels[fv1.SERVED_LABEL]
 	assert.False(t, served, "the served label must be removed so the pod leaves the slices")
 	assert.Equal(t, "false", got.Labels["managed"], "other labels are untouched")
+}
+
+// TestReaperMetrics asserts what the instruments record AT THEIR CALL SITES,
+// which is where the #1989 metrics can be wrong in ways a pure-function test of
+// reapLag cannot see: fired on a skip, missed on a real reap, or a whole failed
+// pass recording nothing at all.
+//
+// metricstest installs a MeterProvider globally and only the FIRST install in a
+// test binary takes effect, so every metric assertion in this package has to
+// live in this one test rather than being spread across the others.
+func TestReaperMetrics(t *testing.T) {
+	reg := metricstest.SetupMeter(t)
+
+	// sampleCount reads a series' counter value or histogram sample count,
+	// returning 0 when the series was never recorded.
+	sampleCount := func(name string, labels map[string]string) float64 {
+		t.Helper()
+		families, err := reg.Gather()
+		require.NoError(t, err)
+		for _, fam := range families {
+			if fam.GetName() != name {
+				continue
+			}
+			m := metricstest.FindMetric(fam, labels)
+			if m == nil {
+				return 0
+			}
+			if m.GetCounter() != nil {
+				return m.GetCounter().GetValue()
+			}
+			return float64(m.GetHistogram().GetSampleCount())
+		}
+		return 0
+	}
+
+	const lag = "fission_executor_idle_reap_lag_seconds"
+	const errs = "fission_executor_idle_reap_errors_total"
+	newdeploy := map[string]string{"executor_type": "newdeploy"}
+
+	const ns, deplName, fnName = "default", "fn-depl", "fn"
+	fn := &fv1.Function{Name: fnName, Namespace: ns}
+	fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 1
+	newFsvc := func() *fscache.FuncSvc {
+		return &fscache.FuncSvc{
+			Name: "p", Executor: fv1.ExecutorTypeNewdeploy,
+			Function:    &metav1.ObjectMeta{Name: fnName, Namespace: ns},
+			Environment: &fv1.Environment{},
+			Atime:       time.Now().Add(-time.Hour),
+			KubernetesObjects: []apiv1.ObjectReference{
+				{Kind: "Deployment", Name: deplName, Namespace: ns},
+			},
+		}
+	}
+	newDeploy := func(r int32) *appsv1.Deployment {
+		return &appsv1.Deployment{Name: deplName, Namespace: ns, Spec: appsv1.DeploymentSpec{Replicas: &r}}
+	}
+	newScaleDown := func(kc *k8sfake.Clientset) *ScaleDownStrategy {
+		return NewScaleDownStrategy(logr.Discard(), fv1.ExecutorTypeNewdeploy,
+			fissionfake.NewClientset(fn), fscache.MakeFunctionServiceCache(logr.Discard()),
+			kc, 2*time.Minute, 5*time.Second, true)
+	}
+
+	t.Run("a real reap records one lag sample", func(t *testing.T) {
+		before := sampleCount(lag, newdeploy)
+		require.NoError(t, newScaleDown(k8sfake.NewSimpleClientset(newDeploy(3))).Reap(t.Context(), newFsvc()))
+		assert.InDelta(t, before+1, sampleCount(lag, newdeploy), 0.001, "scaling down to MinScale is a reap")
+	})
+
+	t.Run("a skip records nothing", func(t *testing.T) {
+		before := sampleCount(lag, newdeploy)
+		// Already at MinScale: nothing is released, so it is not a reap.
+		require.NoError(t, newScaleDown(k8sfake.NewSimpleClientset(newDeploy(1))).Reap(t.Context(), newFsvc()))
+		assert.InDelta(t, before, sampleCount(lag, newdeploy), 0.001, "an at-MinScale deployment must not count as reaped")
+	})
+
+	t.Run("a failed pass is counted at its stage", func(t *testing.T) {
+		// The case that was invisible before: a Prepare failure aborts the whole
+		// pass, so nothing is reaped and no lag is sampled. Without a
+		// stage-labelled error the series look exactly like a quiet cluster.
+		prepareFail := map[string]string{"executor_type": "newdeploy", "stage": "prepare"}
+		before := sampleCount(errs, prepareFail)
+
+		fc := fissionfake.NewClientset()
+		fc.PrependReactor("list", "environments", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, assert.AnError
+		})
+		s := NewScaleDownStrategy(logr.Discard(), fv1.ExecutorTypeNewdeploy, fc,
+			fscache.MakeFunctionServiceCache(logr.Discard()), k8sfake.NewSimpleClientset(),
+			2*time.Minute, 5*time.Second, true)
+
+		NewReaper(logr.Discard(), s).reapOnce(t.Context(), s)
+		assert.InDelta(t, before+1, sampleCount(errs, prepareFail), 0.001,
+			"a Prepare failure must increment the error counter at stage=prepare")
+	})
 }
