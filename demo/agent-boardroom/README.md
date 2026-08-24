@@ -17,12 +17,9 @@ sub-second resume, live UI.**
 
 - `fixtures/support-desk.js` —
   the agent function.
-  Session-scoped (dispatched by `fission-bundle --agentPort`,
-  see `pkg/agentruntime/dispatcher.go`);
-  keeps a per-session turn count and running summary via the RFC-0023 keyed-
-  state API (`FISSION_STATE_URL` + the fetcher-written state token file);
-  sets `X-Fission-Agent-Yield: waiting` after every reply so the session
-  flips back to idle immediately.
+  Session-scoped (dispatched by `fission-bundle --agentPort`, see `pkg/agentruntime/dispatcher.go`);
+  keeps a per-session turn count and running summary via the RFC-0023 keyed-state API (`FISSION_STATE_URL` + the fetcher-written state token file);
+  sets `X-Fission-Agent-Yield: waiting` after every reply so the session flips back to idle immediately.
 - `fixtures/order-lookup.js` —
   a trivial MCP tool function (static order data by id).
   Independent of `support-desk` on purpose:
@@ -30,22 +27,16 @@ sub-second resume, live UI.**
   but the load generator below drives `support-desk` directly,
   so this stays decoupled from the density/teleport story.
 - `specs/` —
-  `fission spec`-format YAML: one shared `node` Environment plus a
-  Package + Function per fixture.
-  `support-desk`'s Function carries `spec.agent` (session lifecycle) and
-  `spec.state` (keyed-state keyspace, with `sticky` routing on the session
-  header so the router's real request routing lands on the same pod the
-  dispatcher's `CurrentPod` prediction shows in the UI);
+  `fission spec`-format YAML: one shared `node` Environment plus a Package + Function per fixture.
+  `support-desk`'s Function carries `spec.agent` (session lifecycle) and `spec.state` (keyed-state keyspace, with `sticky` routing on the session header so the router's real request routing lands on the same pod the dispatcher's `CurrentPod` prediction shows in the UI);
   `order-lookup`'s Function carries `spec.tool`.
 - `loadgen/main.go` —
   a stdlib-only Go CLI that drives sessions against the dispatcher and
   prints the demo's success metrics at the end.
 
-**Relocation note:** `demo/` at the repo top level is a **relocate-at-
-consolidation candidate** — `../examples` (the sibling `fission/examples`
-repo) is the natural home for fixture code once the agent-runtime work
-ships. It stays here for now so the whole stack (fixtures, specs, load
-driver) is self-contained for the end-to-end milestone.
+**Relocation note:** `demo/` at the repo top level is a **relocate-at-consolidation candidate** —
+`../examples` (the sibling `fission/examples` repo) is the natural home for fixture code once the agent-runtime work ships.
+It stays here for now so the whole stack (fixtures, specs, load driver) is self-contained for the end-to-end milestone.
 
 ## Kind quickstart
 
