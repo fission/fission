@@ -36,8 +36,22 @@ func newTestWakeService(t *testing.T, upstreamURL string, now func() time.Time) 
 // *http.Client, so a test can point the Dispatcher at a fake in-process
 // http.RoundTripper instead of a real listener — required inside a
 // testing/synctest bubble, where a real network dial's completion is not
-// governed by the bubble's fake clock.
+// governed by the bubble's fake clock. maxContinuations is 0 (unlimited),
+// and the Dispatcher's own enqueuer seam is deliberately left unwired
+// (Dispatcher.wake stays nil) — see newTestWakeServiceFull if a test needs
+// either dialed in.
 func newTestWakeServiceWithClient(t *testing.T, client *http.Client, upstreamURL string, now func() time.Time) (*WakeService, *AgentView, *SessionStore, statestore.Queue) {
+	t.Helper()
+	return newTestWakeServiceFull(t, client, upstreamURL, now, 0, false)
+}
+
+// newTestWakeServiceFull is newTestWakeServiceWithClient with the two knobs
+// that vary per test: maxContinuations (Dispatcher's continuation cap, 0 =
+// unlimited) and wireEnqueuer (whether Dispatcher.SetWakeEnqueuer(w) is
+// called — i.e. whether DispatchTurn's OWN shared-path continue-chain
+// enqueue is live, the way production wiring does it, as opposed to relying
+// solely on WakeService.process's consumer-side revival).
+func newTestWakeServiceFull(t *testing.T, client *http.Client, upstreamURL string, now func() time.Time, maxContinuations int64, wireEnqueuer bool) (*WakeService, *AgentView, *SessionStore, statestore.Queue) {
 	t.Helper()
 	caps, err := statestore.Open(t.Context(), statestore.Config{Driver: "memory"})
 	require.NoError(t, err)
@@ -49,8 +63,11 @@ func newTestWakeServiceWithClient(t *testing.T, client *http.Client, upstreamURL
 
 	store := NewSessionStore(kv, now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, client, upstreamURL, time.Hour, now, 0)
+	d := NewDispatcher(logr.Discard(), view, store, client, upstreamURL, time.Hour, now, maxContinuations)
 	w := NewWakeService(logr.Discard(), q, d, now)
+	if wireEnqueuer {
+		d.SetWakeEnqueuer(w)
+	}
 	return w, view, store, q
 }
 
@@ -165,6 +182,14 @@ func TestWakeService_RunHappyPath(t *testing.T) {
 // keeps the assertion deterministic: after the Ack, the queue must hold a
 // live next message, proving the revival is a consumer-side mechanism
 // independent of the shared path.
+//
+// newTestWakeService leaves maxContinuations at 0 (unlimited), so the
+// shared path's OWN cap decision (TurnResult.WakeEnqueueAttempted, which
+// process now gates revival on) is trivially true here regardless of
+// d.wake being nil -- this test is about the shared path's ENQUEUE being
+// disabled, not its cap decision. See
+// TestWakeService_RevivalRespectsMaxContinuationsCap for the cap gate
+// itself.
 func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testing.T) {
 	t.Parallel()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -191,6 +216,72 @@ func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testi
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, st.Dead, "the parent settled cleanly (Acked), not dead-lettered")
 	assert.EqualValues(t, 1, st.Visible, "reviveChain enqueued a live successor even with the shared path disabled")
+}
+
+// TestWakeService_RevivalRespectsMaxContinuationsCap pins the regression fix
+// from the Part C re-review: reviveChain must gate on
+// TurnResult.WakeEnqueueAttempted (the shared path's OWN maxContinuations
+// cap decision), not on Yield alone. An always-continue upstream keeps
+// returning Yield="continue" forever regardless of the cap -- gating on
+// Yield alone (the pre-fix code) revives the chain indefinitely, bypassing
+// maxContinuations entirely (the reviewer drove 6+ hops with cap=1 before
+// this fix). Dispatcher.SetWakeEnqueuer IS wired here (production shape),
+// so the shared path's own enqueue is live too: this proves the cap holds
+// end-to-end, not just that the consumer-side revival happens to be inert.
+//
+// With maxContinuations=1: hop 1 is within the cap (Continuations 0->1),
+// so the shared path enqueues AND the revival's identically-keyed
+// (env.Turns+1) enqueue dedups onto it -- one live child, as normal. Hop 2
+// crosses the cap (Continuations 1->2 == maxContinuations+1): the shared
+// path's own doEnqueue is false, so WakeEnqueueAttempted is false, and
+// process must NOT revive -- the chain stops with no live successor.
+func TestWakeService_RevivalRespectsMaxContinuationsCap(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	const maxContinuations = 1
+	w, view, store, q := newTestWakeServiceFull(t, http.DefaultClient, upstream.URL, time.Now, maxContinuations, true)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+	// Drive hops through process() (the same per-message unit Run's loop
+	// calls) until the queue runs dry. A bound well past what the cap
+	// should allow: against the pre-fix code this loop exhausts its budget
+	// while messages are STILL arriving, and the assertions below fail.
+	const hopBudget = 5
+	hops := 0
+	for ; hops < hopBudget; hops++ {
+		msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+		require.NoError(t, err)
+		if len(msgs) == 0 {
+			break
+		}
+		require.Len(t, msgs, 1, "hop %d: exactly one live message at a time -- no duplicate storm", hops)
+		w.process(t.Context(), msgs[0])
+	}
+	require.Less(t, hops, hopBudget, "the chain must stop within the hop budget -- it did not stop at all")
+
+	st, err := q.Stats(t.Context(), wakeQueue)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, st.Visible, "chain must stop once the cap is reached -- no live successor left")
+	assert.EqualValues(t, 0, st.Leased)
+	assert.EqualValues(t, 0, st.Dead, "stopped by the cap, not a failure -- no dead letters")
+
+	rec, _, err := store.Get(t.Context(), "ns", "fn", "sess-1")
+	require.NoError(t, err)
+	assert.EqualValues(t, maxContinuations+1, rec.Stats.Continuations,
+		"Continuations must stop advancing exactly at the cap crossing -- no further turns were dispatched")
+
+	// One more Lease finds nothing: durably stopped, not just transiently
+	// empty mid-hop.
+	msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	assert.Empty(t, msgs)
 }
 
 // TestWakeService_RetryBackoffGrows runs the loop under virtual time (via

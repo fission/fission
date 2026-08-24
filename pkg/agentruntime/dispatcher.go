@@ -95,6 +95,18 @@ type TurnRequest struct {
 type TurnResult struct {
 	StatusCode int
 	Yield      string
+	// WakeEnqueueAttempted reports whether the shared post-response
+	// bookkeeping (step 5 below) decided this turn's continuation was
+	// WITHIN the maxContinuations cap — i.e. doEnqueue was true — REGARDLESS
+	// of whether an enqueuer was wired (d.wake nil) or its EnqueueWake call
+	// itself errored or deduped. It exists so a caller performing its own
+	// out-of-band revival enqueue (the wake consumer's reviveChain,
+	// wake.go) can tell "the cap allowed a continuation here" from "the cap
+	// was already spent" without re-deriving maxContinuations/Continuations
+	// bookkeeping itself — Yield alone is NOT enough, since a function past
+	// the cap keeps yielding "continue" forever; only this flag reflects the
+	// cap decision.
+	WakeEnqueueAttempted bool
 }
 
 // ErrNotAgent is returned by DispatchTurn when (namespace, agent) is not in
@@ -454,7 +466,7 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 		}
 	}
 
-	return TurnResult{StatusCode: resp.StatusCode, Yield: yield}, nil
+	return TurnResult{StatusCode: resp.StatusCode, Yield: yield, WakeEnqueueAttempted: doEnqueue}, nil
 }
 
 // resolveSessionID extracts the session id from r per entry's configured
