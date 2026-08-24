@@ -202,6 +202,40 @@ func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig
 	return sc
 }
 
+// getAgentConfig maps the --agent* flags onto fv1.AgentConfig, merging onto
+// existing so an update only overwrites explicitly-set flags. Field bounds are
+// validated server-side by the Function admission webhook (CLI stays thin).
+func getAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig {
+	if !input.Bool(flagkey.FnAgent) {
+		return existing
+	}
+	ac := &fv1.AgentConfig{}
+	if existing != nil {
+		ac = existing.DeepCopy()
+	}
+	if input.IsSet(flagkey.FnAgentSessionSource) || input.IsSet(flagkey.FnAgentSessionName) {
+		if ac.Session == nil {
+			ac.Session = &fv1.AgentSessionConfig{Source: fv1.SessionSourceHeader, Name: fv1.DefaultAgentSessionHeader}
+		}
+		if input.IsSet(flagkey.FnAgentSessionSource) {
+			ac.Session.Source = fv1.SessionSource(input.String(flagkey.FnAgentSessionSource))
+		}
+		if input.IsSet(flagkey.FnAgentSessionName) {
+			ac.Session.Name = input.String(flagkey.FnAgentSessionName)
+		}
+	}
+	if input.IsSet(flagkey.FnAgentIdleAfter) {
+		ac.IdleAfter = &metav1.Duration{Duration: input.Duration(flagkey.FnAgentIdleAfter)}
+	}
+	if input.IsSet(flagkey.FnAgentArchiveAfter) {
+		ac.ArchiveAfter = &metav1.Duration{Duration: input.Duration(flagkey.FnAgentArchiveAfter)}
+	}
+	if input.IsSet(flagkey.FnAgentMaxSessions) {
+		ac.MaxSessions = int64(input.Int(flagkey.FnAgentMaxSessions))
+	}
+	return ac
+}
+
 // getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
 // or nil when --expose-as-mcp is not set (the function is not advertised as an
 // MCP tool). It merges onto existing (the function's current Tool, or nil on
@@ -581,6 +615,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			Streaming:              getStreamingConfig(input),
 			Tool:                   toolConfig,
 			State:                  getStateConfig(input, nil),
+			Agent:                  getAgentConfig(input, nil),
 			Invocation:             invocation,
 			Versioning:             versioningConfig,
 			ProvisionedConcurrency: provisionedConcurrency,
