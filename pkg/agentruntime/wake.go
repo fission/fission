@@ -174,9 +174,21 @@ type WakeService struct {
 
 // NewWakeService returns a WakeService that enqueues into and consumes from
 // q, dispatching turns via d. now is the service's injected clock (envelope
-// timestamps and MaxAge comparisons).
+// timestamps and MaxAge comparisons). rand starts nil (no jitter — see the
+// rand field's doc comment); production callers must wire a real source via
+// SetRand before Run starts.
 func NewWakeService(logger logr.Logger, q statestore.Queue, d *Dispatcher, now func() time.Time) *WakeService {
 	return &WakeService{logger: logger, q: q, d: d, now: now}
+}
+
+// SetRand wires retry's jitter source post-construction, mirroring
+// Dispatcher.SetWakeEnqueuer's post-construction wiring shape: production
+// callers pass a real source (e.g. math/rand/v2's Float64) before Run
+// starts; tests leave it nil for deterministic (unjittered) backoff. It is a
+// plain field, not synchronized — call it before Run, never concurrently
+// with it.
+func (w *WakeService) SetRand(rand func() float64) {
+	w.rand = rand
 }
 
 // wakeDedupKey is the DedupKey EnqueueWake enqueues under: "<ns>/<agent>/

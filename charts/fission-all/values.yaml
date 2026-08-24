@@ -902,6 +902,10 @@ agentRuntime:
   ##
   sweepInterval: 30s
   archiveRetention: 168h
+  ## Caps yield=continue self-chaining per session (0 = unlimited). Guards a
+  ## misbehaving agent from chaining forever on the agent-wake queue.
+  ##
+  maxContinuations: 1000
   ## Pod resources.
   ##
   resources: {}

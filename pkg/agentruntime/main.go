@@ -37,6 +37,7 @@ package agentruntime
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -80,22 +81,23 @@ const (
 	envSweepInterval    = "AGENT_SWEEP_INTERVAL"
 	envArchiveRetention = "AGENT_ARCHIVE_RETENTION"
 
+	// envMaxContinuations configures the Dispatcher's yield=continue
+	// self-chaining cap. 0 means unlimited (see Dispatcher.maxContinuations).
+	envMaxContinuations = "AGENT_MAX_CONTINUATIONS"
+
 	// defaultSweepInterval / defaultArchiveRetention are applied when the
 	// corresponding env var is unset.
 	defaultSweepInterval    = 30 * time.Second
 	defaultArchiveRetention = 168 * time.Hour // 7 days
+
+	// defaultMaxContinuations is applied when envMaxContinuations is unset.
+	defaultMaxContinuations = 1000
 
 	// dispatcherMaxIdleConnsPerHost bounds the dispatcher's outbound
 	// connection pool to the single router-internal host (see
 	// httpx.PooledTransport) — sized like the workflow invoker's worker pool,
 	// since both are internal clients driving one hot upstream.
 	dispatcherMaxIdleConnsPerHost = 64
-
-	// dispatcherMaxContinuations is a placeholder cap on yield=continue
-	// self-chaining per session. TODO(task 16 or later): read this from an
-	// env var (mirroring envSweepInterval/envArchiveRetention) instead of a
-	// hardcoded literal.
-	dispatcherMaxContinuations = 1000
 )
 
 // Options configures Start. The listener is either pre-bound by the caller
@@ -146,12 +148,20 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("statestore KV capability: %w", err)
 	}
+	queue, err := caps.Queue()
+	if err != nil {
+		return fmt.Errorf("statestore Queue capability: %w", err)
+	}
 
 	sweepInterval, err := envDuration(envSweepInterval, defaultSweepInterval)
 	if err != nil {
 		return err
 	}
 	retention, err := envDuration(envArchiveRetention, defaultArchiveRetention)
+	if err != nil {
+		return err
+	}
+	maxContinuations, err := envInt64(envMaxContinuations, defaultMaxContinuations)
 	if err != nil {
 		return err
 	}
@@ -176,8 +186,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	view := NewAgentView()
 	store := NewSessionStore(kv, time.Now)
-	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, dispatcherMaxContinuations)
+	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
+
+	// WakeService needs the Dispatcher (to call DispatchTurn), so it is built
+	// after the Dispatcher and wired back in via SetWakeEnqueuer — see that
+	// method's doc comment for the construction-cycle rationale. This MUST
+	// happen before the mux starts serving turns.
+	wake := NewWakeService(logger.WithName("wake"), queue, dispatcher, time.Now)
+	wake.SetRand(rand.Float64)
+	dispatcher.SetWakeEnqueuer(wake)
 
 	// No leader election: each replica maintains its own in-memory view and
 	// serves dispatch from it, so each must run the reconciler. The cache is
@@ -208,6 +226,17 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return nil
 	})); err != nil {
 		return fmt.Errorf("adding agentruntime sweeper: %w", err)
+	}
+
+	// The wake service runs as a manager runnable for the same reason the
+	// sweeper does (start after cache sync, stop with the manager); it
+	// delivers the yield=continue self-chain the dispatcher enqueues via
+	// SetWakeEnqueuer above.
+	if err := crMgr.Add(manager.RunnableFunc(func(rctx context.Context) error {
+		wake.Run(rctx)
+		return nil
+	})); err != nil {
+		return fmt.Errorf("adding agentruntime wake service: %w", err)
 	}
 
 	// ready flips true once the Function cache has synced (the manager starts
@@ -278,4 +307,19 @@ func envDuration(key string, def time.Duration) (time.Duration, error) {
 		return 0, fmt.Errorf("parsing %s=%q: %w", key, v, err)
 	}
 	return d, nil
+}
+
+// envInt64 reads key as an int64, returning def when it is unset. A
+// set-but-unparseable value is a startup error, not a silent fallback to def
+// — mirrors envDuration's rationale.
+func envInt64(key string, def int64) (int64, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parsing %s=%q: %w", key, v, err)
+	}
+	return n, nil
 }
