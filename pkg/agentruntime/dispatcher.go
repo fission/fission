@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/uuid"
@@ -186,6 +187,12 @@ type Dispatcher struct {
 	// construction-cycle rationale and the pre-serve contract. nil disables
 	// chaining.
 	wake enqueuer
+
+	// index is the best-effort CurrentPod prediction seam (Task 19),
+	// injected AFTER construction via SetEndpointIndex — see that method's
+	// doc comment. nil disables prediction: DispatchTurn leaves
+	// SessionRecord.CurrentPod untouched rather than clearing it.
+	index *endpointcache.Index
 }
 
 // NewDispatcher returns a Dispatcher. retention is added to an entry's
@@ -218,6 +225,21 @@ func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, cli
 // an unsynchronized write to it safe.
 func (d *Dispatcher) SetWakeEnqueuer(w enqueuer) {
 	d.wake = w
+}
+
+// SetEndpointIndex wires the best-effort CurrentPod prediction seam
+// post-construction (Task 19), mirroring SetWakeEnqueuer's construction-cycle
+// rationale: main.go's Start builds the endpointcache.Index only after the
+// Manager (and the RBAC preflight deciding whether an informer ever feeds it)
+// is set up, well after the Dispatcher itself is constructed. Like
+// SetWakeEnqueuer this is a plain, unsynchronized field write and MUST be
+// called before the dispatcher serves any turn — that pre-serve ordering is
+// what makes the unsynchronized write safe. ix may be nil (prediction stays
+// disabled) or an Index with no informer feeding it (permanently empty
+// Lookup results — the RBAC-degraded case) — DispatchTurn treats both
+// identically: CurrentPod is left untouched, never cleared.
+func (d *Dispatcher) SetEndpointIndex(ix *endpointcache.Index) {
+	d.index = ix
 }
 
 // Handler serves POST /agents/{namespace}/{name}; other methods get 405 (the
@@ -406,6 +428,25 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	streamToSink(sink, resp.Body)
 	elapsed := d.now().Sub(start)
 
+	// Best-effort CurrentPod prediction (Task 19): the ready endpoint
+	// PredictSticky picks for this session's sticky key right now —
+	// PREDICTED, matching the router's own sticky pick while the pod set is
+	// stable, UI truth only, never routing truth (see PredictSticky's doc
+	// comment). Computed ONCE here, outside the mutate closure below: mutate
+	// is pure and casUpdateFresh may invoke it twice on a version-conflict
+	// retry, and PredictSticky is pure too, so a second call would only be
+	// wasted work, never a correctness issue — but there is no reason to pay
+	// it twice. predictedPod stays "" when d.index is nil or no ready
+	// endpoint exists yet; the mutate closure below only overwrites
+	// rec.CurrentPod when it is non-empty, so a transient prediction miss
+	// never blanks a previously-known pod.
+	var predictedPod string
+	if d.index != nil {
+		if ep, ok := endpointcache.PredictSticky(d.index.Lookup(tr.Namespace, tr.Agent, ""), tr.SessionID); ok {
+			predictedPod = ep.Address
+		}
+	}
+
 	// Step 5: post-response bookkeeping. Reads a fresh record — never the
 	// version held from step 3 — because the upstream call above may have
 	// taken long enough for another turn to have CAS-written the record
@@ -429,6 +470,9 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 		rec.Stats.ActiveMillis += elapsed.Milliseconds()
 		if resp.StatusCode >= http.StatusInternalServerError {
 			rec.Stats.Errors++
+		}
+		if predictedPod != "" {
+			rec.CurrentPod = predictedPod
 		}
 		// LastActiveAt refreshes on EVERY branch: a waiting->idle or
 		// continue turn still just happened just now, it is only the

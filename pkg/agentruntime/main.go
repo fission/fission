@@ -48,7 +48,20 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
+	authorizationv1 "k8s.io/api/authorization/v1"
+	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -57,15 +70,168 @@ import (
 	"github.com/fission/fission/pkg/controller"
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
+	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/statestore"
 	_ "github.com/fission/fission/pkg/statestore/client"   // embedded-mode driver
 	_ "github.com/fission/fission/pkg/statestore/memory"   // dev/test driver
 	_ "github.com/fission/fission/pkg/statestore/postgres" // external-mode driver
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
+	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/httpx"
 )
+
+// agentruntimeScheme is the agent runtime Manager's scheme: the Fission CRD
+// types plus the Kubernetes built-ins (EndpointSlice + Pod, for the pool
+// introspection index — Task 19). Built exactly like routerScheme
+// (pkg/router/router.go:87-91) and used UNCONDITIONALLY in the manager
+// Options, never gated on a pool-introspection flag: the generated clientset
+// scheme (scheme.Scheme) alone has no EndpointSlice/Pod kinds registered, so
+// GetInformer(ctx, &discoveryv1.EndpointSlice{}) errors before the RBAC
+// preflight even runs.
+var agentruntimeScheme = runtime.NewScheme()
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(agentruntimeScheme))
+	utilruntime.Must(scheme.AddToScheme(agentruntimeScheme))
+}
+
+// poolWatchNamespaces returns the namespaces the pool introspection cache
+// (EndpointSlice + Pod) watches: the function namespaces, where the
+// executor's per-function Services and pool/specialized pods live. Mirrors
+// router.go's sliceWatchNamespaces exactly.
+func poolWatchNamespaces() []string {
+	return utils.DefaultNSResolver().FunctionNamespaces()
+}
+
+// poolCacheOptions extends base with ByObject entries for EndpointSlice and
+// Pod, called only after checkPoolRBAC has succeeded (see Start) — wiring
+// these unconditionally and letting a forbidden LIST wedge the manager cache
+// sync is exactly the crash-loop this feature must never cause.
+//
+// EndpointSlice is filtered on fv1.MANAGED_BY_LABEL, mirroring the router's
+// own slice watch (router.go:111-113) — the EndpointSlice controller mirrors
+// that label from the owning Service.
+//
+// Pod is filtered on fv1.EXECUTOR_TYPE (Exists), NOT fv1.MANAGED_BY_LABEL:
+// MANAGED_BY_LABEL is set on Fission-owned Services only (gp_service.go,
+// newdeploy.go, container/svc.go) and mirrored onto EndpointSlices — it is
+// NEVER set on a Pod, warm or specialized, in any of the three executor
+// types. A literal MANAGED_BY_LABEL filter on Pod matches zero objects in
+// production, silently emptying the pool panel every install. EXECUTOR_TYPE
+// is the one label present on every Fission-managed pod regardless of
+// executor type or specialization state (getEnvironmentPoolLabels /
+// labelsForFunction in poolmgr, and the newdeploy/container pod templates)
+// — its VALUE differs per executor type, so Exists (not a value match) is
+// what actually scopes the informer to Fission's own pods.
+//
+// Namespace scoping mirrors routerCacheOptions: cluster tenancy watches
+// cluster-wide (functions, and hence their pods/Services, can live in any
+// namespace); other modes scope to poolWatchNamespaces().
+func poolCacheOptions(base crcache.Options) (crcache.Options, error) {
+	podReq, err := labels.NewRequirement(fv1.EXECUTOR_TYPE, selection.Exists, nil)
+	if err != nil {
+		return base, fmt.Errorf("building pod executor-type selector: %w", err)
+	}
+	sliceByObject := crcache.ByObject{
+		Label: labels.SelectorFromSet(labels.Set{fv1.MANAGED_BY_LABEL: fv1.MANAGED_BY_VALUE}),
+	}
+	podByObject := crcache.ByObject{
+		Label: labels.NewSelector().Add(*podReq),
+	}
+	if !utils.ClusterTenancyEnabled() {
+		nsConfig := map[string]crcache.Config{}
+		for _, ns := range poolWatchNamespaces() {
+			nsConfig[ns] = crcache.Config{}
+		}
+		sliceByObject.Namespaces = nsConfig
+		podByObject.Namespaces = nsConfig
+	}
+	base.ByObject = map[client.Object]crcache.ByObject{
+		&discoveryv1.EndpointSlice{}: sliceByObject,
+		&corev1.Pod{}:                podByObject,
+	}
+	return base, nil
+}
+
+// poolSARRetryDelay is the delay between checkPoolRBAC's SAR retry attempts,
+// mirroring router.go's sarRetryDelay: a boot-time apiserver flake must not
+// permanently degrade pool introspection for the replica's whole lifetime.
+const poolSARRetryDelay = 2 * time.Second
+
+// poolRBACCheck names one (group, resource) pair checkPoolRBAC verifies
+// list+watch for.
+type poolRBACCheck struct{ group, resource string }
+
+// checkPoolRBAC verifies — with an actionable error — that the agent runtime
+// can list and watch EndpointSlices and Pods in every namespace the pool
+// introspection cache would watch. Mirrors checkSliceWatchRBAC (router.go:
+// 130-145): without this preflight a missing Role leaves the manager cache
+// retrying a forbidden LIST forever, wedging the whole replica not-ready
+// (dispatch included, since it shares one Manager) rather than degrading
+// just the pool panel. Callers degrade GET /registry/pool to a 503 on error
+// rather than exiting: pool introspection is a read-only UI feature with no
+// effect on turn dispatch, and crash-looping the whole subsystem over a
+// missing optional grant would turn an optional feature into an outage.
+func checkPoolRBAC(ctx context.Context, kubeClient kubernetes.Interface) error {
+	namespaces := poolWatchNamespaces()
+	if utils.ClusterTenancyEnabled() {
+		namespaces = []string{""}
+	}
+	checks := []poolRBACCheck{
+		{group: "discovery.k8s.io", resource: "endpointslices"},
+		{group: "", resource: "pods"},
+	}
+	for _, ns := range namespaces {
+		for _, chk := range checks {
+			for _, verb := range []string{"list", "watch"} {
+				res, err := poolWatchSAR(ctx, kubeClient, ns, chk.group, chk.resource, verb)
+				if err != nil {
+					return fmt.Errorf("error checking %s RBAC in namespace %q: %w", chk.resource, ns, err)
+				}
+				if !res.Status.Allowed {
+					return fmt.Errorf("agentruntime is not allowed to %s %s in namespace %q (reason: %s); "+
+						"grant get/list/watch on endpointslices (discovery.k8s.io) and pods to the agentruntime "+
+						"ServiceAccount to enable pool introspection", verb, chk.resource, ns, res.Status.Reason)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// poolWatchSAR issues one SelfSubjectAccessReview for verb+resource in ns,
+// retrying transient apiserver errors up to 3 times total (mirrors
+// sliceWatchSAR, router.go:213-238).
+func poolWatchSAR(ctx context.Context, kubeClient kubernetes.Interface, ns, group, resource, verb string) (*authorizationv1.SelfSubjectAccessReview, error) {
+	sar := &authorizationv1.SelfSubjectAccessReview{
+		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Namespace: ns,
+				Verb:      verb,
+				Group:     group,
+				Resource:  resource,
+			},
+		},
+	}
+	var res *authorizationv1.SelfSubjectAccessReview
+	var err error
+	for attempt := range 3 {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(poolSARRetryDelay):
+			}
+		}
+		res, err = kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, sar, metav1.CreateOptions{})
+		if err == nil {
+			break
+		}
+	}
+	return res, err
+}
 
 const (
 	// envAllowInsecure, when "true", permits the agent runtime to start
@@ -125,6 +291,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	fissionClient, err := clientGen.GetFissionClient()
 	if err != nil {
 		return fmt.Errorf("failed to get fission client: %w", err)
+	}
+	kubeClient, err := clientGen.GetKubernetesClient()
+	if err != nil {
+		return fmt.Errorf("failed to get kube client: %w", err)
 	}
 	restConfig, err := clientGen.GetRestConfig()
 	if err != nil {
@@ -197,13 +367,36 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	wake.SetRand(rand.Float64)
 	dispatcher.SetWakeEnqueuer(wake)
 
+	// Pool introspection (Task 19): a missing EndpointSlice/Pod RBAC grant
+	// must degrade GET /registry/pool to a 503, never wedge the manager cache
+	// sync (which would take turn dispatch down with it, since dispatch and
+	// pool introspection share one Manager). Checked BEFORE manager
+	// construction because the cache options below depend on the outcome —
+	// mirrors router.go's ordering exactly (checkSliceWatchRBAC before
+	// ctrl.NewManager).
+	poolDegraded := false
+	if rbacErr := checkPoolRBAC(ctx, kubeClient); rbacErr != nil {
+		logger.Error(rbacErr, "disabling pool introspection (GET /registry/pool will report 503)")
+		poolDegraded = true
+	}
+	agentruntimeCache := crmanager.FissionCacheOptions()
+	if !poolDegraded {
+		agentruntimeCache, err = poolCacheOptions(agentruntimeCache)
+		if err != nil {
+			return fmt.Errorf("building pool introspection cache options: %w", err)
+		}
+	}
+
 	// No leader election: each replica maintains its own in-memory view and
-	// serves dispatch from it, so each must run the reconciler. The cache is
-	// scoped to the Fission-watched namespaces (per-namespace RBAC Roles
-	// forbid a cluster-wide watch), mirroring the mcp/router managers.
+	// serves dispatch from it, so each must run the reconciler. The Function
+	// watch stays scoped to the Fission-watched namespaces (per-namespace
+	// RBAC Roles forbid a cluster-wide watch), mirroring the mcp/router
+	// managers; the Scheme is agentruntimeScheme (Ruling B) UNCONDITIONALLY,
+	// not gated on poolDegraded — only the EndpointSlice/Pod ByObject cache
+	// entries above are conditional.
 	crMgr, err := ctrl.NewManager(restConfig, ctrl.Options{
-		Scheme:                 scheme.Scheme,
-		Cache:                  crmanager.FissionCacheOptions(),
+		Scheme:                 agentruntimeScheme,
+		Cache:                  agentruntimeCache,
 		Metrics:                metricsserver.Options{BindAddress: "0"},
 		HealthProbeBindAddress: "0",
 		LeaderElection:         false,
@@ -217,6 +410,33 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err := controller.RegisterTenantScoped(crMgr, &fv1.Function{}, r, "agentruntime-function"); err != nil {
 		return fmt.Errorf("error registering agentruntime function reconciler: %w", err)
 	}
+
+	// index feeds GET /registry/pool's endpoint breakdown and the
+	// Dispatcher's best-effort CurrentPod prediction (endpointcache.
+	// PredictSticky). Created unconditionally — an Index with no informer
+	// feeding it is simply always-empty, which is exactly the degraded
+	// behavior wanted when poolDegraded — and RegisterInformer is skipped
+	// entirely in that case: registering it would call GetInformer for a type
+	// the cache has no RBAC to LIST, wedging cache sync.
+	index := endpointcache.NewIndex()
+	var poolSynced cache.InformerSynced
+	if !poolDegraded {
+		poolSynced, err = endpointcache.RegisterInformer(ctx, crMgr, index, logger)
+		if err != nil {
+			return fmt.Errorf("error registering agentruntime endpointslice informer: %w", err)
+		}
+	}
+	// SetEndpointIndex happens here (not next to SetWakeEnqueuer above)
+	// because index only exists once the manager — and the RBAC preflight
+	// deciding whether it is ever fed — has been set up; see that method's
+	// doc comment for why this ordering is safe (plain field, pre-serve
+	// write). nil would also be a legal (prediction-disabled) value; passing
+	// the always-safe empty-when-degraded Index instead keeps one code path
+	// for both outcomes.
+	dispatcher.SetEndpointIndex(index)
+	poolAPI := NewPoolAPI(crMgr.GetClient(), index, view, authz, func() bool {
+		return poolSynced != nil && poolSynced()
+	}, func() bool { return poolDegraded })
 
 	// The sweeper runs as a manager runnable so it starts after cache sync
 	// (a replica's view is empty until then anyway) and stops with the
@@ -285,6 +505,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(registryAPI.ListAgents)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions", authz.Middleware(http.HandlerFunc(registryAPI.ListSessions)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}", authz.Middleware(http.HandlerFunc(registryAPI.GetSession)))
+
+	// Pool introspection (Task 19): pod/endpoint topology is cluster-operator
+	// data, not per-agent data, so like ListAgents it carries no {namespace}
+	// path value and is mounted behind authz.HTTPMiddleware with the
+	// namespace filter applied manually inside PoolAPI.ServePool.
+	mux.Handle("GET /registry/pool", authz.HTTPMiddleware(http.HandlerFunc(poolAPI.ServePool)))
 
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{

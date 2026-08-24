@@ -21,8 +21,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	discoveryv1 "k8s.io/api/discovery/v1"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/router/endpointcache"
 	"github.com/fission/fission/pkg/statestore"
 )
 
@@ -642,4 +644,117 @@ func TestDispatcher_EnqueuerErrorDoesNotFailTurn(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code, "an enqueuer failure must not surface as a turn failure")
 	assert.Equal(t, 1, fe.callCount(), "the enqueuer must still have been attempted")
+}
+
+// testEndpointIndex builds an endpointcache.Index seeded with one function's
+// ready endpoints via ApplySlice — the same exported entry point the router's
+// own informer feeds in production (endpointSliceHandlers), so this exercises
+// the real slice-to-Endpoint projection rather than a hand-built fixture.
+// ips are bare pod IPs (no port): ApplySlice composes the "ip:port" Address
+// itself from the slice's port, exactly as endpointsFromSlice does — passing
+// an already-"ip:port" string here would make endpointsFromSlice's
+// url.Parse("http://" + ip + ":" + port) fail and silently drop the
+// endpoint.
+func testEndpointIndex(t *testing.T, ns, name string, ips ...string) *endpointcache.Index {
+	t.Helper()
+	ix := endpointcache.NewIndex()
+	port := int32(8888)
+	ready := true
+	eps := make([]discoveryv1.Endpoint, 0, len(ips))
+	for _, ip := range ips {
+		eps = append(eps, discoveryv1.Endpoint{
+			Addresses:  []string{ip},
+			Conditions: discoveryv1.EndpointConditions{Ready: &ready},
+		})
+	}
+	ix.ApplySlice(&discoveryv1.EndpointSlice{
+		Name:      name + "-slice",
+		Namespace: ns,
+		Labels: map[string]string{
+			fv1.FUNCTION_NAME:      name,
+			fv1.FUNCTION_NAMESPACE: ns,
+		},
+		AddressType: discoveryv1.AddressTypeIPv4,
+		Endpoints:   eps,
+		Ports:       []discoveryv1.EndpointPort{{Port: &port}},
+	})
+	return ix
+}
+
+// TestDispatchTurn_CurrentPodPrediction pins the Task 19 CurrentPod
+// bookkeeping: with a non-nil index carrying ready endpoints, DispatchTurn's
+// step-5 write must set SessionRecord.CurrentPod to exactly what
+// endpointcache.PredictSticky would independently compute for the same
+// (lookup, sessionID) — proving the wiring calls the real function rather
+// than some ad hoc pick.
+func TestDispatchTurn_CurrentPodPrediction(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	ix := testEndpointIndex(t, "ns", "fn", "10.0.0.1", "10.0.0.2")
+	d.SetEndpointIndex(ix)
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-predict")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-predict")
+	require.NoError(t, err)
+
+	wantEp, ok := endpointcache.PredictSticky(ix.Lookup("ns", "fn", ""), "sess-predict")
+	require.True(t, ok, "the test fixture must have a predictable ready endpoint")
+	assert.Equal(t, wantEp.Address, got.CurrentPod)
+	assert.NotEmpty(t, got.CurrentPod)
+}
+
+// TestDispatchTurn_CurrentPodPrediction_NilIndex pins the disabled-by-default
+// contract: a Dispatcher that never had SetEndpointIndex called must leave
+// CurrentPod empty rather than erroring or panicking.
+func TestDispatchTurn_CurrentPodPrediction_NilIndex(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+	// No SetEndpointIndex call: d.index stays nil (the zero value).
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-no-index")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-no-index")
+	require.NoError(t, err)
+	assert.Empty(t, got.CurrentPod, "a nil index must leave CurrentPod untouched")
+}
+
+// TestDispatchTurn_CurrentPodPrediction_NoReadyEndpoints pins the
+// prediction-miss half of the "leave it untouched" contract: an index with no
+// ready endpoint for the function (e.g. the pool hasn't specialized yet)
+// must not clear a previously-set CurrentPod.
+func TestDispatchTurn_CurrentPodPrediction_NoReadyEndpoints(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+	d.SetEndpointIndex(endpointcache.NewIndex()) // non-nil, but empty: no endpoints for ns/fn
+
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "sess-stale", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(), CurrentPod: "10.0.0.9:8888",
+	}, 0, time.Hour))
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-stale")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-stale")
+	require.NoError(t, err)
+	assert.Equal(t, "10.0.0.9:8888", got.CurrentPod, "a prediction miss must not clear a previously-known CurrentPod")
 }
