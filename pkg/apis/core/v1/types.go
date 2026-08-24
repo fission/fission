@@ -30,6 +30,15 @@ const (
 	RouteProviderGateway RouteProviderType = "gateway"
 )
 
+const (
+	SessionSourceHeader     SessionSource = "header"
+	SessionSourceQueryParam SessionSource = "queryparam"
+
+	// DefaultAgentSessionHeader is the session-id header used when
+	// AgentConfig.Session is nil.
+	DefaultAgentSessionHeader = "X-Fission-Session"
+)
+
 // Workflow state kinds (RFC-0022). The enum marker on WorkflowStateType must
 // list exactly these values; both grow together as later phases add
 // Parallel/Map/Wait.
@@ -1334,6 +1343,15 @@ type (
 		// +optional
 		Versioning *VersioningConfig `json:"versioning,omitempty"`
 
+		// Agent, when non-nil, declares this function as an agent: its
+		// invocations are session-scoped, dispatched and lifecycle-tracked by
+		// the fission-bundle --agentPort subsystem, with session records kept
+		// in the statestore (never CRDs). Presence is the on switch (like
+		// Streaming, Tool and State): nil (the default) means exactly today's
+		// behavior. Additive and backward compatible.
+		// +optional
+		Agent *AgentConfig `json:"agent,omitempty"`
+
 		// Podspec specifies podspec to use for executor type container based functions
 		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
@@ -1472,6 +1490,58 @@ type (
 		// Name is the header or query-parameter name holding the key,
 		// e.g. "X-Session-Id".
 		Name string `json:"name"`
+	}
+
+	// SessionSource selects where the agent dispatcher extracts the session id
+	// from an incoming request.
+	// +kubebuilder:validation:Enum=header;queryparam
+	SessionSource string
+
+	// AgentSessionConfig declares how the session id is derived from a request.
+	// Requests missing the id get a runtime-minted UUID, returned in the
+	// X-Fission-Session response header.
+	AgentSessionConfig struct {
+		// Source is where to look for the session id.
+		Source SessionSource `json:"source"`
+
+		// Name is the header or query-parameter name holding the session id,
+		// e.g. "X-Fission-Session".
+		Name string `json:"name"`
+	}
+
+	// AgentConfig declares a function's agent behavior: session identity,
+	// idle/archive lifecycle policy, and the live-session quota. Presence of
+	// the enclosing FunctionSpec.Agent is the on switch — there is no separate
+	// enabled flag, so the in-memory zero value and the stored object never
+	// disagree (the same rationale as StreamingConfig).
+	AgentConfig struct {
+		// Session, when non-nil, overrides where the session id comes from.
+		// nil (the default) means the X-Fission-Session request header.
+		// +optional
+		Session *AgentSessionConfig `json:"session,omitempty"`
+
+		// IdleAfter is how long a session stays "active" after its last turn
+		// before the sweeper marks it idle (a status transition, not a pod
+		// operation — pods are released after every turn regardless). Must be
+		// >= 0; zero (or nil) means the platform default (5m).
+		// +optional
+		IdleAfter *metav1.Duration `json:"idleAfter,omitempty"`
+
+		// ArchiveAfter is how long an idle session is kept listed before it is
+		// archived (delisted; record retained on a retention TTL). Must be
+		// >= IdleAfter when both are set; zero (or nil) means the platform
+		// default (24h).
+		// +optional
+		ArchiveAfter *metav1.Duration `json:"archiveAfter,omitempty"`
+
+		// MaxSessions caps live (active or idle) sessions for this agent,
+		// enforced atomically on session creation with the statestore's
+		// counted-write (the same quota mechanism as StateConfig.MaxKeys).
+		// Archived sessions live in a sibling keyspace and never count
+		// against this cap. 0 means unlimited.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxSessions int64 `json:"maxSessions,omitempty"`
 	}
 
 	// InvocationConfig tunes RFC-0024 asynchronous invocation for a function.
