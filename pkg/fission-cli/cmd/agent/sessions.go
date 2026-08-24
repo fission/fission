@@ -93,11 +93,17 @@ type sessionRecord struct {
 // sessionsResponse mirrors ListSessions's response envelope
 // (pkg/agentruntime/registry_api.go sessionsResponse). Next (a pagination
 // cursor) is not surfaced by this CLI yet — `sessions list` always fetches a
-// single page at the server's default/max limit.
+// single page, at maxSessionListLimit (below).
 type sessionsResponse struct {
 	Sessions []sessionRecord `json:"sessions"`
 	Next     string          `json:"next,omitempty"`
 }
+
+// maxSessionListLimit mirrors agentruntime's own maxSessionListLimit
+// (pkg/agentruntime/registry_api.go) — the server clamps any ?limit= above
+// this back down to it, so asking for it directly is the largest single
+// page this CLI can ever get.
+const maxSessionListLimit = 500
 
 type SessionsListSubCommand struct {
 	cmd.CommandActioner
@@ -111,6 +117,14 @@ func SessionsList(input cli.Input) error { return (&SessionsListSubCommand{}).do
 func SessionsGet(input cli.Input) error  { return (&SessionsGetSubCommand{}).do(input) }
 
 func (opts *SessionsListSubCommand) do(input cli.Input) error {
+	// Resolved before any request or stdout write: a structured format
+	// (json/yaml) must never have anything else land on stdout ahead of it,
+	// or `-o json | jq` breaks on the polluting line.
+	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
+	if err != nil {
+		return err
+	}
+
 	agentName := input.String(flagkey.FnName)
 	_, namespace, err := opts.GetResourceNamespace(input)
 	if err != nil {
@@ -121,7 +135,12 @@ func (opts *SessionsListSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
-	reqURL := fmt.Sprintf("%s/registry/agents/%s/%s/sessions", base, url.PathEscape(namespace), url.PathEscape(agentName))
+	// limit=maxSessionListLimit (the server's cap, pkg/agentruntime/registry_api.go):
+	// this CLI fetches a single page and does not follow Next, so asking for
+	// the server's cap rather than its lower default raises the truncation
+	// threshold within that single-GET scope.
+	reqURL := fmt.Sprintf("%s/registry/agents/%s/%s/sessions?limit=%d", base,
+		url.PathEscape(namespace), url.PathEscape(agentName), maxSessionListLimit)
 
 	body, err := agentRuntimeGet(input, reqURL)
 	if err != nil {
@@ -132,16 +151,11 @@ func (opts *SessionsListSubCommand) do(input cli.Input) error {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return fmt.Errorf("decoding sessions response: %w", err)
 	}
-	if resp.Next != "" {
-		// This CLI fetches a single page (the server's default/max limit);
-		// it does not yet follow Next, so a busy agent's session list here
-		// is a truncated prefix, not the whole set.
+	if resp.Next != "" && (format == util.OutputTable || format == util.OutputWide) {
+		// The truncation notice is only a human-readable-table courtesy: a
+		// structured format must decode as exactly the server's payload, so
+		// json/yaml stay silent even when more pages exist.
 		console.Warn("more sessions exist beyond this page; sessions list does not yet page through them")
-	}
-
-	format, err := util.ParseOutputFormat(input.String(flagkey.Output))
-	if err != nil {
-		return err
 	}
 
 	headers := []string{"ID", "STATUS", "TURNS", "CONTINUATIONS", "LAST-ACTIVE", "POD"}
