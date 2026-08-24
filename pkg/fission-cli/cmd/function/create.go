@@ -203,11 +203,15 @@ func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig
 }
 
 // getAgentConfig maps the --agent* flags onto fv1.AgentConfig, merging onto
-// existing so an update only overwrites explicitly-set flags. Field bounds are
-// validated server-side by the Function admission webhook (CLI stays thin).
+// existing so an update only overwrites explicitly-set flags. --agent=false
+// clears the config (mirrors getStateConfig / --state=false); an update that
+// omits --agent entirely never calls this function (see the input.IsSet
+// guard in update.go), so existing is left untouched in that case. Field
+// bounds are validated server-side by the Function admission webhook (CLI
+// stays thin).
 func getAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig {
 	if !input.Bool(flagkey.FnAgent) {
-		return existing
+		return nil
 	}
 	ac := &fv1.AgentConfig{}
 	if existing != nil {
