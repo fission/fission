@@ -194,7 +194,10 @@ rules:
 # warm-unspecialized pool pod (in no EndpointSlice — no function Service
 # selects it yet) is still visible. Read-only; a missing grant here degrades
 # GET /registry/pool to a 503 (checkPoolRBAC's startup preflight) rather than
-# blocking agent turn dispatch, which needs none of this.
+# blocking agent turn dispatch, which needs none of this. No "services" grant
+# here: the informer watches EndpointSlices directly, PoolAPI lists Pods, and
+# checkPoolRBAC's preflight names only endpointslices and pods — nothing in
+# this subsystem reads/lists/watches core Services.
 - apiGroups:
   - discovery.k8s.io
   resources:
@@ -206,7 +209,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services
   - pods
   verbs:
   - get
