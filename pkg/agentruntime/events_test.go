@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,8 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/fission/fission/pkg/statestore"
 )
 
 // pipeResponseWriter is an in-memory http.ResponseWriter backed by an
@@ -220,6 +223,106 @@ func TestPollerPublishesAgentsEventOnViewChange(t *testing.T) {
 		cancel()
 		synctest.Wait()
 	})
+}
+
+// pagingFailureKV wraps a real statestore.KVStore and forces a List failure
+// on a chosen call number, regardless of how many real records exist: it
+// silently shrinks whatever Limit the caller asked for down to 1 on every
+// successful call, so a scope holding >= 2 keys always yields a non-empty
+// Next token and a second List call is always attempted. This is what lets
+// TestPollerSurvivesMidPaginationListError exercise a page-2 failure with
+// only two real session records, instead of needing enough records to
+// force genuine pagination at the real pollPageLimit (500).
+type pagingFailureKV struct {
+	statestore.KVStore
+	calls      int
+	failOnCall int
+}
+
+var errInjectedListFailure = errors.New("injected list failure")
+
+func (k *pagingFailureKV) List(ctx context.Context, s statestore.Scope, prefix string, page statestore.Page) (statestore.KeyPage, error) {
+	k.calls++
+	if k.calls == k.failOnCall {
+		return statestore.KeyPage{}, errInjectedListFailure
+	}
+	return k.KVStore.List(ctx, s, prefix, statestore.Page{Token: page.Token, Limit: 1})
+}
+
+// TestPollerSurvivesMidPaginationListError is the mitigation for the
+// partial-commit bug seedFromPreviousSnapshot exists to prevent: a List
+// error partway through paging one agent's sessions must not make its
+// unread sessions vanish from that tick's snapshot, nor make them look
+// spuriously "new" once the failure clears. The scenario: tick 1 succeeds
+// fully (both sessions land in the snapshot via two size-1 pages); tick 2's
+// second page (of the same two sessions, now re-paginated from scratch)
+// fails. The record collectAgentSessions never reached on tick 2 must be
+// backfilled from tick 1's snapshot — proven by (a) no event for it on the
+// next successful tick 3 (it was never "new" to begin with) and (b) its
+// value in a snapshot replay after tick 2 still matches what tick 1 saw.
+func TestPollerSurvivesMidPaginationListError(t *testing.T) {
+	t.Parallel()
+	kv := &pagingFailureKV{KVStore: newTestKV(t), failOnCall: 4}
+	store := NewSessionStore(kv, time.Now)
+	view := NewAgentView()
+	view.Upsert(registryTestEntry("ns", "agent1", 0))
+
+	ts := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+	rec1 := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: ts}
+	rec2 := SessionRecord{ID: "s2", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: ts}
+	require.NoError(t, store.Create(t.Context(), rec1, 0, time.Hour))
+	require.NoError(t, store.Create(t.Context(), rec2, 0, time.Hour))
+
+	bus := NewBroadcaster()
+	poller := NewPoller(logr.Discard(), view, store, bus, time.Second)
+	client := bus.subscribe(AuthScope{Wildcard: true})
+
+	// Tick 1: both size-1 pages succeed (calls 1 and 2). Full baseline
+	// snapshot, both records reported as new (plus the empty->1-agent
+	// "agents" event, published before the session diffs).
+	poller.pollOnce(t.Context())
+	drainAgentsEvent(t, client)
+	drainSessionEvents(t, client, 2)
+
+	// Tick 2: page 1 succeeds (call 3, returns one record + a Next token),
+	// page 2 fails (call 4 == failOnCall). collectAgentSessions must
+	// backfill the unread record from tick 1's snapshot rather than drop
+	// it.
+	poller.pollOnce(t.Context())
+	assertNoPendingMessage(t, client) // neither record actually changed, so nothing new to report even for the one re-fetched on page 1
+
+	snap := poller.Snapshot(AuthScope{Wildcard: true})
+	require.Len(t, snap, 2, "both records must still be present after the mid-pagination error")
+	byID := map[string]SessionRecord{}
+	for _, r := range snap {
+		byID[r.ID] = r
+	}
+	assert.Equal(t, StatusActive, byID["s1"].Status)
+	assert.Equal(t, StatusActive, byID["s2"].Status)
+
+	// Tick 3: a normal, fully successful poll. If tick 2's backfilled
+	// record had been silently dropped instead of carried over, it would
+	// look "new" here and a phantom session event would fire.
+	poller.pollOnce(t.Context())
+	assertNoPendingMessage(t, client)
+
+	bus.unsubscribe(client)
+}
+
+// drainSessionEvents reads and discards exactly n "session" events from c.
+func drainSessionEvents(t *testing.T, c *sseClient, n int) {
+	t.Helper()
+	for range n {
+		msg := <-c.ch
+		require.Equal(t, "session", msg.eventType)
+	}
+}
+
+// drainAgentsEvent reads and discards exactly one "agents" event from c.
+func drainAgentsEvent(t *testing.T, c *sseClient) {
+	t.Helper()
+	msg := <-c.ch
+	require.Equal(t, "agents", msg.eventType)
 }
 
 // TestEventsHandlerSnapshotOnConnect proves a newly connected client
