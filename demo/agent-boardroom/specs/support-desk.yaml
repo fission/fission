@@ -1,0 +1,70 @@
+include:
+  - fixtures/support-desk.js
+kind: ArchiveUploadSpec
+name: support-desk-src
+
+---
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  name: support-desk
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  # A single JS file needs no build: the deployment archive IS the source,
+  # buildstatus none skips the env's builder entirely (mirrors
+  # test/integration/testdata/nodejs/spec_archive's "deployarchive" package).
+  deployment:
+    type: url
+    url: archive://support-desk-src
+    checksum: {}
+  source:
+    checksum: {}
+status:
+  buildstatus: none
+
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  name: support-desk
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  package:
+    packageref:
+      name: support-desk
+      namespace: default
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 0
+      MinScale: 0
+      SpecializationTimeout: 0
+      TargetCPUPercent: 0
+    StrategyType: execution
+  functionTimeout: 60
+  resources: {}
+  # RFC-0023 keyed state: one JSON key per session (turn count + running
+  # summary), matching fixtures/support-desk.js's minimal GET/PUT usage.
+  # sticky.source/name mirror the agent runtime's own session header, so the
+  # router's real request routing lands on the SAME pod the dispatcher's
+  # CurrentPod prediction shows in the UI (pkg/agentruntime/dispatcher.go's
+  # PredictSticky call) — without this, the displayed "anchor" pod and the
+  # pod that actually served the turn can disagree.
+  state:
+    keyspace: support-desk
+    sticky:
+      source: header
+      name: X-Fission-Session
+  # Agent dispatch (fission-bundle --agentPort): default session source is
+  # already the X-Fission-Session header, so spec.agent only needs to tune
+  # the demo's lifecycle/quota knobs.
+  agent:
+    idleAfter: 2m
+    archiveAfter: 30m
+    maxSessions: 500
