@@ -31,7 +31,7 @@ const (
 	// componentSelector matches the control-plane Deployments. Keep in sync
 	// with the svc: labels in charts/fission-all/templates/*/deployment.yaml —
 	// a component absent here has no spec and no logs in the bundle at all.
-	componentSelector = "svc in (buildermgr, canaryconfig, executor, kubewatcher, mcp, mqtrigger, " +
+	componentSelector = "svc in (agentruntime, buildermgr, canaryconfig, executor, kubewatcher, mcp, mqtrigger, " +
 		"mqtrigger-keda, router, router-internal, statestore, statesvc, storagesvc, tenantcontroller, timer, " +
 		"webhook-service, workflow)"
 
