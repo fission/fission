@@ -101,8 +101,8 @@ It stays here for now so the whole stack (fixtures, specs, load driver) is self-
 
 ## Demo beats checklist
 
-Mapped from `06-demo-plan.md`; check these off live against the `/ui/`
-boardroom view while `loadgen` runs:
+Mapped from the boardroom demo script; check these off live against the
+`/ui/` boardroom view while `loadgen` runs:
 
 - [ ] **Split view** — SESSIONS panel (registry) next to the POOL panel
       (pods), same layout as the substrate demo's boardroom.
@@ -134,8 +134,8 @@ boardroom view while `loadgen` runs:
 
 ## Success metrics `loadgen` prints
 
-At the end of a run (from `06-demo-plan.md`'s "Success metrics" section —
-see that file for the full target numbers):
+At the end of a run (the boardroom demo script's "Success metrics" section
+has the full target numbers):
 
 - **Density** — `sessions:pods` ratio, from the run's session count and
   `GET /registry/pool` filtered to `--environment` (target: >=12x on kind,

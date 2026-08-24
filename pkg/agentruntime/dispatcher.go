@@ -46,7 +46,7 @@ const (
 	YieldWaiting = "waiting"
 	// YieldContinue is the HeaderYield value that asks the runtime to
 	// re-invoke this session asap (self-continuation). Delivered
-	// at-least-once via the agent-wake queue (Task 15).
+	// at-least-once via the agent-wake queue.
 	YieldContinue = "continue"
 
 	// HeaderTurns carries the session's turn count (Stats.Turns BEFORE this
@@ -81,7 +81,7 @@ var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 
 // TurnRequest is one session turn, transport-agnostic: everything
 // DispatchTurn needs to run a turn, independent of whether it arrived over
-// HTTP (the dispatch handler) or via the wake queue (Task 15's consumer).
+// HTTP (the dispatch handler) or via the wake queue's consumer.
 type TurnRequest struct {
 	Namespace, Agent, SessionID string
 	Body                        []byte
@@ -139,7 +139,7 @@ var ErrNotAgent = errors.New("agentruntime: not an agent function")
 var ErrStoreUnavailable = errors.New("agentruntime: session store unavailable")
 
 // enqueuer is the continue-chain seam DispatchTurn calls into on
-// yield=continue (implemented by Task 15's WakeService). A Dispatcher's zero
+// yield=continue (implemented by WakeService). A Dispatcher's zero
 // value has a nil enqueuer, which disables chaining — used by tests that
 // construct a Dispatcher without calling SetWakeEnqueuer.
 type enqueuer interface {
@@ -151,7 +151,7 @@ type enqueuer interface {
 // status/content-type/yield — values only DispatchTurn sees, since it owns
 // the upstream call. Write is called per chunk as DispatchTurn relays the
 // upstream body: the HTTP sink flushes after every Write; the wake sink
-// (Task 15) ignores Begin and discards the body through a bounded counter.
+// ignores Begin and discards the body through a bounded counter.
 type TurnSink interface {
 	Begin(statusCode int, contentType, yield string)
 	io.Writer
@@ -211,8 +211,8 @@ type Dispatcher struct {
 	// chaining.
 	wake enqueuer
 
-	// index is the best-effort CurrentPod prediction seam (Task 19),
-	// injected AFTER construction via SetEndpointIndex — see that method's
+	// index is the best-effort CurrentPod prediction seam, injected AFTER
+	// construction via SetEndpointIndex — see that method's
 	// doc comment. nil disables prediction: DispatchTurn leaves
 	// SessionRecord.CurrentPod untouched rather than clearing it.
 	index *endpointcache.Index
@@ -251,7 +251,7 @@ func (d *Dispatcher) SetWakeEnqueuer(w enqueuer) {
 }
 
 // SetEndpointIndex wires the best-effort CurrentPod prediction seam
-// post-construction (Task 19), mirroring SetWakeEnqueuer's construction-cycle
+// post-construction, mirroring SetWakeEnqueuer's construction-cycle
 // rationale: main.go's Start builds the endpointcache.Index only after the
 // Manager (and the RBAC preflight deciding whether an informer ever feeds it)
 // is set up, well after the Dispatcher itself is constructed. Like
@@ -346,8 +346,7 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 // signed forward to the router internal listener streaming the response into
 // sink (Begin first, then body chunks), then the shared bookkeeping (meters,
 // yield, LastActiveAt, and continue-enqueue). The HTTP handler and the wake
-// consumer (Task 15) both call this — chaining lives HERE so both turn kinds
-// chain.
+// consumer both call this — chaining lives HERE so both turn kinds chain.
 func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink TurnSink) (TurnResult, error) {
 	entry, ok := d.view.Lookup(tr.Namespace, tr.Agent)
 	if !ok {
@@ -485,8 +484,8 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	streamToSink(sink, resp.Body)
 	elapsed := d.now().Sub(start)
 
-	// Best-effort CurrentPod prediction (Task 19): the ready endpoint
-	// PredictSticky picks for this session's sticky key right now —
+	// Best-effort CurrentPod prediction: the ready endpoint PredictSticky
+	// picks for this session's sticky key right now —
 	// PREDICTED, matching the router's own sticky pick while the pod set is
 	// stable, UI truth only, never routing truth (see PredictSticky's doc
 	// comment). Computed ONCE here, outside the mutate closure below: mutate

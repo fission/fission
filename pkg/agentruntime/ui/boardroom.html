@@ -152,7 +152,7 @@ function qs(sel) { return document.querySelector(sel); }
 
 // sessions maps "namespace/agent/id" -> {record, teleports}. teleports is a
 // client-side-only counter of CurrentPod CHANGES seen for that session (not
-// its first assignment) -- the demo's "teleport" story from 06-demo-plan.md.
+// its first assignment) -- the demo's "teleport" story.
 var sessions = new Map();
 var agents = [];
 var pods = [];
@@ -260,8 +260,8 @@ function renderPool() {
 }
 
 // drawAnchors draws one SVG line per active session whose CurrentPod
-// resolves to a pool pod: the "boardroom" visual from 06-demo-plan.md beat 3
-// (session card <-> pod, color-matched).
+// resolves to a pool pod: the "boardroom" visual (session card <-> pod,
+// color-matched).
 function drawAnchors() {
   var svg = qs("#anchor-svg");
   var container = qs("#boardroom-main");

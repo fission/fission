@@ -85,7 +85,7 @@ import (
 
 // agentruntimeScheme is the agent runtime Manager's scheme: the Fission CRD
 // types plus the Kubernetes built-ins (EndpointSlice + Pod, for the pool
-// introspection index — Task 19). Built exactly like routerScheme
+// introspection index). Built exactly like routerScheme
 // (pkg/router/router.go:87-91) and used UNCONDITIONALLY in the manager
 // Options, never gated on a pool-introspection flag: the generated clientset
 // scheme (scheme.Scheme) alone has no EndpointSlice/Pod kinds registered, so
@@ -293,7 +293,7 @@ const (
 	envMaxSessionsDefault = "AGENT_MAX_SESSIONS_DEFAULT"
 
 	// envRegistryPoll configures the SSE registry feed's Poller cadence
-	// (Task 20; see events.go). Read once here, like envSweepInterval.
+	// (see events.go). Read once here, like envSweepInterval.
 	envRegistryPoll = "AGENT_REGISTRY_POLL"
 
 	// defaultSweepInterval / defaultArchiveRetention are applied when the
@@ -432,7 +432,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
 
-	// SSE registry feed (Task 20): a single background Poller diffs
+	// SSE registry feed: a single background Poller diffs
 	// SessionStore.List across view.List() agents and publishes changes to a
 	// Broadcaster; EventsHandler serves GET /registry/events from it. See
 	// events.go's package doc for why this is poll-diff rather than
@@ -452,8 +452,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	wake.SetRand(rand.Float64)
 	dispatcher.SetWakeEnqueuer(wake)
 
-	// Pool introspection (Task 19): a missing EndpointSlice/Pod RBAC grant
-	// must degrade GET /registry/pool to a 503, never wedge the manager cache
+	// Pool introspection: a missing EndpointSlice/Pod RBAC grant must
+	// degrade GET /registry/pool to a 503, never wedge the manager cache
 	// sync (which would take turn dispatch down with it, since dispatch and
 	// pool introspection share one Manager). Checked BEFORE manager
 	// construction because the cache options below depend on the outcome —
@@ -535,7 +535,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	// The registry-events poller runs as a manager runnable for the same
 	// reason the sweeper does (start after cache sync, stop with the
-	// manager); it feeds GET /registry/events (Task 20, events.go).
+	// manager); it feeds GET /registry/events (see events.go).
 	if err := crMgr.Add(manager.RunnableFunc(func(rctx context.Context) error {
 		registryPoller.Run(rctx)
 		return nil
@@ -593,7 +593,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// auth-wrapped dispatcher, which then matches the same pattern again.
 	mux.Handle("POST /agents/{namespace}/{name}", authz.Middleware(dispatcher.Handler()))
 
-	// Registry read API (Task 18): GET /registry/agents carries no
+	// Registry read API: GET /registry/agents carries no
 	// {namespace} path value, so it is mounted behind authz.HTTPMiddleware
 	// (bearer verification only) and filters namespaces manually — see
 	// RegistryAPI.ListAgents. The two per-agent routes below carry
@@ -604,19 +604,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions", authz.Middleware(http.HandlerFunc(registryAPI.ListSessions)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}", authz.Middleware(http.HandlerFunc(registryAPI.GetSession)))
 
-	// Pool introspection (Task 19): pod/endpoint topology is cluster-operator
+	// Pool introspection: pod/endpoint topology is cluster-operator
 	// data, not per-agent data, so like ListAgents it carries no {namespace}
 	// path value and is mounted behind authz.HTTPMiddleware with the
 	// namespace filter applied manually inside PoolAPI.ServePool.
 	mux.Handle("GET /registry/pool", authz.HTTPMiddleware(http.HandlerFunc(poolAPI.ServePool)))
 
-	// SSE registry feed (Task 20): mounted BARE, deliberately NOT behind
+	// SSE registry feed: mounted BARE, deliberately NOT behind
 	// authz.HTTPMiddleware/Middleware — see EventsHandler's doc comment
 	// (events.go) for why a browser EventSource forces auth to happen inside
 	// the handler instead.
 	mux.Handle("GET /registry/events", eventsHandler)
 
-	// Boardroom UI (Task 22): mounted UNAUTHENTICATED — it is a static asset
+	// Boardroom UI: mounted UNAUTHENTICATED — it is a static asset
 	// (embedded HTML/CSS/JS with no server-side data of its own); every API
 	// it calls from the browser (GET /registry/agents, /registry/pool,
 	// /registry/events, and the per-agent sessions routes above) enforces its
