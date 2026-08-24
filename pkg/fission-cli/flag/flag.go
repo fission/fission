@@ -271,6 +271,10 @@ var (
 	FnAgentArchiveAfter  = Flag{Type: Duration, Name: flagkey.FnAgentArchiveAfter, Usage: "How long an idle session stays listed before it is archived (0 = platform default 24h)"}
 	FnAgentMaxSessions   = Flag{Type: Int, Name: flagkey.FnAgentMaxSessions, Usage: "Max live sessions for this agent, enforced atomically on session creation (0 = unlimited)"}
 
+	// `fission agent sessions` introspection CLI (slice 4).
+	AgentSession = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}
+	AgentToken   = Flag{Type: String, Name: flagkey.AgentToken, Usage: "Bearer token for the agent runtime (defaults to FISSION_AGENT_TOKEN; unset works only when agentRuntime.allowInsecure is set)"}
+
 	// RFC-0023 `fission fn state` admin flags.
 	StateKey       = Flag{Type: String, Name: flagkey.StateKey, Usage: "State key to operate on"}
 	StateValue     = Flag{Type: String, Name: flagkey.StateValue, Usage: "Value to store"}
