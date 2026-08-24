@@ -111,15 +111,24 @@ func TestAgentRuntimeSessionDispatch(t *testing.T) {
 
 	// Second turn: supply the minted session id explicitly. The dispatcher
 	// must resolve (not mint a new) session and echo the same id back.
-	attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
-	defer cancel()
-	resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
-	require.NoErrorf(t, err, "POST %s", turnURL)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, sessionID, resp.Header.Get(agentruntime.HeaderSession),
-		"second turn must echo the caller-supplied session id, not mint a new one")
-	assert.Empty(t, resp.Header.Get(agentruntime.HeaderYield))
+	// Wrapped in the same EventuallyWithT/attempt-timeout shape as the first
+	// turn (symmetric with TestMCPToolsListAndCall's tools/list + tools/call
+	// subtests, both of which poll) rather than a single direct call.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "second turn to %s", turnURL) {
+			return
+		}
+		assert.Equal(c, sessionID, resp.Header.Get(agentruntime.HeaderSession),
+			"second turn must echo the caller-supplied session id, not mint a new one")
+		assert.Empty(c, resp.Header.Get(agentruntime.HeaderYield))
+	}, 180*time.Second, 2*time.Second)
 }
 
 // postTurn POSTs one turn to turnURL, carrying sessionID on
