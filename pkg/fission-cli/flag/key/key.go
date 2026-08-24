@@ -163,6 +163,10 @@ const (
 	FnAgentArchiveAfter  = "agent-archive-after"
 	FnAgentMaxSessions   = "agent-max-sessions"
 
+	// `fission agent sessions` introspection CLI (slice 4).
+	AgentSession = "session"
+	AgentToken   = "agent-token"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtInvocationMode    = "invocation-mode"
