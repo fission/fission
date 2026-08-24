@@ -30,6 +30,7 @@ const (
 	RouteProviderGateway RouteProviderType = "gateway"
 )
 
+// Agent-runtime session-source consts and defaults.
 const (
 	SessionSourceHeader     SessionSource = "header"
 	SessionSourceQueryParam SessionSource = "queryparam"
