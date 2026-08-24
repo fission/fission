@@ -175,6 +175,21 @@ rules:
   - list
   - watch
 {{- end }}
+{{- define "agentruntime-rules" }}
+rules:
+# The agent runtime is read-only against Functions (it watches Spec.Agent to
+# build its per-replica AgentView and resolve dispatch targets). Unlike mcp it
+# writes no status condition in v1 (see pkg/agentruntime/reconciler.go) and
+# touches no other resource.
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
 {{- define "statesvc-rules" }}
 rules:
 # statesvc watches Functions to index StateConfigs (quota/keyspace resolution,

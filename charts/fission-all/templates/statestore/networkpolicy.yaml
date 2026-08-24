@@ -27,6 +27,8 @@ spec:
         # drains the RFC-0027 mq-egress-kafka queue.
         - podSelector: { matchLabels: { svc: mqtrigger, messagequeue: statestore } }
         - podSelector: { matchLabels: { svc: mqtrigger, messagequeue: kafka } }
+        # The agent runtime keeps session records in the statestore.
+        - podSelector: { matchLabels: { svc: agentruntime } }
       ports:
         - port: {{ include "fission.statestorePort" . }}
           protocol: TCP

@@ -33,8 +33,9 @@ func TestNetworkPolicySvcLabelsResolveToRealWorkloads(t *testing.T) {
 		"--set", "mcp.enabled=true", "--set", "mcp.allowInsecure=true",
 		"--set", "canaryDeployment.enabled=true",
 		"--set", "workflows.enabled=true",
-		// workflows depends on the statestore; the chart refuses to render
-		// otherwise (statestore/validate.yaml).
+		"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+		// workflows and the agent runtime depend on the statestore; the chart
+		// refuses to render otherwise (statestore/validate.yaml).
 		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
 		"--set", "functionState.enabled=true",
 	)
