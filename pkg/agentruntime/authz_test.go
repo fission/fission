@@ -147,3 +147,61 @@ func TestAuthorizerNilTokenDenyWhenEnabled(t *testing.T) {
 	_, ok := a.ScopeFromTokenInfo(nil)
 	assert.False(t, ok)
 }
+
+// TestScopeFromBearer covers the three cases ScopeFromBearer's doc comment
+// calls out: a valid token yields its scope, a garbage token is refused, and
+// a disabled Authorizer returns a wildcard regardless of what token (if any)
+// was supplied — this is what makes GET /registry/events's auth-disabled
+// stance (see events.go) provable at the Authorizer layer rather than only
+// through the handler.
+func TestScopeFromBearer(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid token scope", func(t *testing.T) {
+		t.Parallel()
+		key := []byte("test-signing-key")
+		a := NewAuthorizer(key)
+		tok := mintToken(t, key, jwt.MapClaims{
+			"sub":                "agent-1",
+			"allowed_namespaces": []any{"ns-a", "ns-b"},
+			"exp":                time.Now().Add(time.Hour).Unix(),
+		})
+
+		scope, ok := a.ScopeFromBearer(tok)
+		require.True(t, ok)
+		assert.False(t, scope.Wildcard)
+		assert.True(t, scope.Allows("ns-a"))
+		assert.True(t, scope.Allows("ns-b"))
+		assert.False(t, scope.Allows("ns-c"))
+	})
+
+	t.Run("garbage token refused", func(t *testing.T) {
+		t.Parallel()
+		a := NewAuthorizer([]byte("test-signing-key"))
+
+		_, ok := a.ScopeFromBearer("not-a-jwt")
+		assert.False(t, ok)
+	})
+
+	t.Run("empty token refused when enabled", func(t *testing.T) {
+		t.Parallel()
+		a := NewAuthorizer([]byte("test-signing-key"))
+
+		_, ok := a.ScopeFromBearer("")
+		assert.False(t, ok)
+	})
+
+	t.Run("disabled wildcard", func(t *testing.T) {
+		t.Parallel()
+		a := NewAuthorizer(nil)
+		require.False(t, a.Enabled())
+
+		scope, ok := a.ScopeFromBearer("anything, even garbage")
+		require.True(t, ok)
+		assert.True(t, scope.Wildcard)
+
+		scope, ok = a.ScopeFromBearer("")
+		require.True(t, ok)
+		assert.True(t, scope.Wildcard)
+	})
+}

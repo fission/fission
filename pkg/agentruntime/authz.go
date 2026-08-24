@@ -275,3 +275,26 @@ func scopeFromScopes(scopes []string) AuthScope {
 	}
 	return AuthScope{Namespaces: scopes}
 }
+
+// ScopeFromBearer verifies token and derives its namespace scope, for a
+// handler that cannot use HTTPMiddleware/Middleware because they rely on the
+// SDK's auth.RequireBearerToken, which only ever looks at the standard
+// Authorization header — GET /registry/events accepts a token via ?token=
+// as well (a browser EventSource cannot set request headers), so its
+// handler extracts the token itself and calls this instead.
+//
+// verifyToken is reused unchanged: no separate, potentially-diverging
+// verification path exists for this entry point. When verification is
+// disabled (no signing key), this returns a wildcard scope regardless of
+// token — mirroring HTTPMiddleware's own pass-through stance — rather than
+// requiring the caller to special-case Enabled() before calling in.
+func (a *Authorizer) ScopeFromBearer(token string) (AuthScope, bool) {
+	if !a.Enabled() {
+		return AuthScope{Wildcard: true}, true
+	}
+	ti, err := a.verifyToken(context.Background(), token, nil)
+	if err != nil {
+		return AuthScope{}, false
+	}
+	return scopeFromScopes(ti.Scopes), true
+}
