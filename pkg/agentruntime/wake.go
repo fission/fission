@@ -76,6 +76,20 @@ const (
 	// AFTER DispatchTurn returns (see process's doc comment) so it never has
 	// to cover a turn's own runtime — only the settle call itself.
 	wakeSettleTimeout = 15 * time.Second
+
+	// wakeDeliveryTimeout bounds one DispatchTurn call, strictly below
+	// wakeLease (mirroring asyncinvoke's invariant A7: a delivery's context
+	// always expires before its lease). Without this bound a turn slower
+	// than wakeLease would still be running when the lease expires and the
+	// message becomes re-leasable, so a second replica (or this same loop's
+	// next poll) could dispatch it again while the first delivery is still
+	// in flight — safe (the eventual stale settle hits the receipt epoch
+	// guard, and functions own their own idempotency per this file's
+	// at-least-once doc comment) but needlessly wasteful. Bounding delivery
+	// below the lease means a hung turn is cancelled and retried on ITS OWN
+	// terms (Nack-with-backoff) well before the lease would force the same
+	// outcome via a second, concurrent delivery.
+	wakeDeliveryTimeout = wakeLease - 30*time.Second
 )
 
 // Dead-letter reasons WakeService assigns. statestore.ReasonRetriesExhausted
@@ -241,13 +255,15 @@ func (w *WakeService) pollOnce(ctx context.Context) int {
 }
 
 // process dispatches one leased wake message and settles it per
-// classifyWakeResult. The terminal settle runs on a FRESH context — built
-// AFTER DispatchTurn returns, never the context DispatchTurn ran the turn
-// on (mirrors asyncinvoke's process, dispatcher.go :246-305, :281-283): a
-// turn can run for as long as the target function does, which can exceed
-// wakeSettleTimeout many times over, so settling against a pre-dispatch
-// timeout context would find it already expired and every settle call would
-// silently fail, stranding the message leased until wakeLease expires.
+// classifyWakeResult. DispatchTurn runs under wakeDeliveryTimeout (bounded
+// below wakeLease — see that constant's doc comment). The terminal settle
+// runs on a FRESH context — built AFTER DispatchTurn returns, never the
+// (possibly now-expired) delivery context (mirrors asyncinvoke's process,
+// dispatcher.go :246-305, :281-283): a turn can run for as long as
+// wakeDeliveryTimeout allows, which can exceed wakeSettleTimeout many times
+// over, so settling against a pre-dispatch timeout context would find it
+// already expired and every settle call would silently fail, stranding the
+// message leased until wakeLease expires.
 func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage) {
 	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), wakeSettleTimeout)
 	defer scancel()
@@ -273,7 +289,11 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 		WakeID:      msg.ID,
 		WakeAttempt: msg.Attempts,
 	}
-	res, derr := w.d.DispatchTurn(ctx, tr, &wakeSink{})
+	sink := &wakeSink{}
+	dctx, dcancel := context.WithTimeout(ctx, wakeDeliveryTimeout)
+	res, derr := w.d.DispatchTurn(dctx, tr, sink)
+	dcancel()
+	w.logger.V(1).Info("wake turn dispatched", "id", msg.ID, "attempt", msg.Attempts, "bytesDrained", sink.counted)
 
 	// Refresh the settle budget now that DispatchTurn has returned — see this
 	// method's doc comment.
@@ -291,7 +311,7 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 	case wakeActionKillHTTP4xx:
 		w.kill(sctx, msg, wakeReasonHTTP4xx)
 	case wakeActionRetry:
-		w.retry(sctx, msg)
+		w.retry(sctx, msg, env)
 	}
 }
 
@@ -358,18 +378,28 @@ func (w *WakeService) kill(ctx context.Context, msg statestore.LeasedMessage, re
 	}
 }
 
-// retry either requeues with backoff or dead-letters when the attempt
-// budget is spent, checked and Killed HERE (with the precise
-// wakeReasonRetriesExhausted reason) BEFORE calling Nack — mirroring
-// asyncinvoke's retry() order (dispatcher.go :321-338) rather than letting
-// the store's own internal Nack-exhaustion path dead-letter it under the
-// store's generic ReasonRetriesExhausted.
-func (w *WakeService) retry(ctx context.Context, msg statestore.LeasedMessage) {
+// retry either requeues with backoff or dead-letters, checked in the same
+// order asyncinvoke's retry() uses (dispatcher.go :321-338):
+//
+//  1. attempt budget spent (msg.Attempts >= statestore.DefaultMaxAttempts):
+//     Kill with the precise wakeReasonRetriesExhausted reason BEFORE calling
+//     Nack, rather than letting the store's own internal Nack-exhaustion
+//     path dead-letter it under the store's generic ReasonRetriesExhausted.
+//  2. the NEXT retry would land past wakeMaxAge (now+backoff exceeds the
+//     envelope's age budget): Kill with wakeReasonExpired now rather than
+//     requeue work that can only expire once the backoff elapses — the true
+//     reason, not a manufactured extra retry cycle.
+//  3. otherwise, Nack with the computed backoff.
+func (w *WakeService) retry(ctx context.Context, msg statestore.LeasedMessage, env wakeEnvelope) {
 	if msg.Attempts >= statestore.DefaultMaxAttempts {
 		w.kill(ctx, msg, wakeReasonRetriesExhausted)
 		return
 	}
 	delay := backoff.ExpFullJitter(wakeBackoffBase, wakeBackoffCap, msg.Attempts, w.rand)
+	if w.now().Add(delay).Sub(env.EnqueueTime) > wakeMaxAge {
+		w.kill(ctx, msg, wakeReasonExpired)
+		return
+	}
 	if err := w.q.Nack(ctx, msg.Receipt, delay); err != nil {
 		w.logSettle("nack", msg.ID, err)
 	}

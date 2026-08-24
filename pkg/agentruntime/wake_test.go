@@ -197,6 +197,121 @@ func TestWakeService_RetryBackoffGrows(t *testing.T) {
 	})
 }
 
+// TestWakeService_DeliveryTimeoutBoundedBelowLease proves DispatchTurn is
+// bounded by wakeDeliveryTimeout, strictly below wakeLease: a RoundTripper
+// that never returns on its own is cancelled well before the lease would
+// expire, settled with a single Nack, and only redelivered once ITS OWN
+// backoff elapses -- never as a second, CONCURRENT delivery racing the
+// first because the lease expired out from under a still-hanging call.
+// Without wakeDeliveryTimeout, this dispatch would still be in flight when
+// wakeLease (5m) elapsed, the message would become re-leasable, and a
+// second delivery would start while the first was still running.
+func TestWakeService_DeliveryTimeoutBoundedBelowLease(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int64
+		client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			attempts.Add(1)
+			<-r.Context().Done() // hangs until DispatchTurn's per-delivery timeout fires
+			return nil, r.Context().Err()
+		})}
+		w, view, _, _ := newTestWakeServiceWithClient(t, client, "http://router.internal", time.Now)
+		view.Upsert(headerEntry("ns", "fn", 0))
+
+		require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		go w.Run(ctx)
+
+		// Still mid-delivery, well short of wakeDeliveryTimeout.
+		synctest.Sleep(wakeDeliveryTimeout - 100*time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 1, attempts.Load(), "still one in-flight delivery, timeout not yet reached")
+
+		// Cross wakeDeliveryTimeout (at the 100ms mark from here): the hung
+		// call is cancelled and the message Nacked with a deterministic ~1s
+		// (wakeBackoffBase, attempt 1) backoff, landing visibleAt ~1s after
+		// the cancellation. This checkpoint (300ms past the crossing) is
+		// comfortably inside that ~1s window, so the dispatch count must
+		// still read 1 -- no concurrent second delivery.
+		synctest.Sleep(400 * time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 1, attempts.Load(), "cancelled and Nacked by the delivery timeout; backoff not yet elapsed")
+
+		// Past the ~1s backoff (this checkpoint lands ~1.2s after the
+		// crossing): a second, SEQUENTIAL delivery begins -- the ordinary
+		// retry, not a lease-expiry race (the original lease wouldn't
+		// expire for minutes yet).
+		synctest.Sleep(900 * time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 2, attempts.Load(), "exactly one new, sequential delivery once the backoff elapses")
+
+		cancel()
+		synctest.Wait()
+	})
+}
+
+// TestWakeService_RunKillsHTTP4xx: a 404 upstream response through the full
+// Run loop dead-letters with reason "http_4xx", never retried.
+func TestWakeService_RunKillsHTTP4xx(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	w, view, _, q := newTestWakeService(t, upstream.URL, time.Now)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	require.NoError(t, w.EnqueueWake(t.Context(), "ns", "fn", "sess-1", 0))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go w.Run(ctx)
+
+	require.Eventually(t, func() bool {
+		dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+		require.NoError(t, err)
+		return len(dead) == 1
+	}, 2*time.Second, 5*time.Millisecond)
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	require.Len(t, dead, 1)
+	assert.Equal(t, wakeReasonHTTP4xx, dead[0].Reason)
+	assert.Equal(t, 1, dead[0].Attempts, "killed on the first attempt, never retried")
+}
+
+// TestWakeService_RetryDeadLettersWhenNextAttemptWouldExpire pins retry's
+// would-expire pre-check (mirroring asyncinvoke's retry() order): when the
+// NEXT attempt's backoff would land past wakeMaxAge, retry Kills with
+// wakeReasonExpired immediately instead of Nacking work that can only
+// expire once the backoff elapses.
+func TestWakeService_RetryDeadLettersWhenNextAttemptWouldExpire(t *testing.T) {
+	t.Parallel()
+	w, _, _, q := newTestWakeService(t, "http://unused.invalid", time.Now)
+
+	// EnqueueTime is old enough that only 500ms of the wakeMaxAge budget
+	// remains -- less than the ~1s (attempt 1) backoff retry is about to
+	// compute.
+	enqueueTime := time.Now().Add(-wakeMaxAge + 500*time.Millisecond)
+	enqueueWakeEnvelope(t, q, wakeEnvelope{
+		Version: wakeEnvelopeVersion, Namespace: "ns", Agent: "fn", Session: "sess-1",
+		EnqueueTime: enqueueTime,
+	})
+
+	msgs, err := q.Lease(t.Context(), wakeQueue, 10, time.Minute)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.Equal(t, 1, msgs[0].Attempts, "first lease, well under the retry-exhaustion budget")
+
+	w.retry(t.Context(), msgs[0], wakeEnvelope{EnqueueTime: enqueueTime})
+
+	dead, err := q.DeadLetters(t.Context(), wakeQueue, statestore.Page{})
+	require.NoError(t, err)
+	require.Len(t, dead, 1)
+	assert.Equal(t, wakeReasonExpired, dead[0].Reason, "the next backoff would land past wakeMaxAge")
+}
+
 // TestWakeService_RetriesExhaustedDeadLetters: once msg.Attempts reaches
 // statestore.DefaultMaxAttempts, the NEXT 5xx is Killed with
 // wakeReasonRetriesExhausted instead of Nacked again (the exhaustion check
