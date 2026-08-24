@@ -117,8 +117,27 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(HeaderSession, sessionID)
 
 	ctx := r.Context()
+	// bgCtx carries no cancellation from the client connection: the
+	// post-response bookkeeping (and the transport-failure bookkeeping below)
+	// must still land even if the caller has already gone away, since it is
+	// what keeps Stats/Status honest and self-heals nothing on its own.
+	bgCtx := context.WithoutCancel(ctx)
 	liveTTL := entry.IdleAfter + entry.ArchiveAfter + d.retention
 	now := d.now()
+
+	// Read + validate the body BEFORE any session record write: an oversized
+	// or unreadable request must never create or refresh a session (a bad
+	// request is a client-side problem, so a read failure here is a 400, not
+	// a 502 — nothing upstream has been touched yet).
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxTurnBodyBytes+1))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "reading request body")
+		return
+	}
+	if len(body) > maxTurnBodyBytes {
+		writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
 
 	// Step 3: bookkeep the session record. A registry write is never a
 	// request gate, EXCEPT session quota on Create.
@@ -133,11 +152,23 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:    now,
 			LastActiveAt: now,
 		}
-		if cerr := d.store.Create(ctx, newRec, entry.MaxSessions, liveTTL); cerr != nil {
-			if errors.Is(cerr, ErrSessionQuota) {
-				writeErr(w, http.StatusTooManyRequests, "session quota exceeded")
-				return
-			}
+		switch cerr := d.store.Create(ctx, newRec, entry.MaxSessions, liveTTL); {
+		case cerr == nil:
+			// created.
+		case errors.Is(cerr, ErrSessionQuota):
+			writeErr(w, http.StatusTooManyRequests, "session quota exceeded")
+			return
+		case errors.Is(cerr, ErrSessionExists):
+			// Another replica (or a concurrent turn) created the same id
+			// between our Get miss and this Create — a lost race, not a
+			// failure. Fall through to the normal activation path instead of
+			// silently dropping this turn's bookkeeping.
+			d.logger.Info("session created concurrently, activating existing record", "namespace", ns, "agent", name, "session", sessionID)
+			d.casUpdateFresh(ctx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+				rec.Status = StatusActive
+				rec.LastActiveAt = now
+			})
+		default:
 			d.logger.Error(cerr, "creating session record", "namespace", ns, "agent", name, "session", sessionID)
 		}
 	case err != nil:
@@ -150,16 +181,6 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 4: forward the turn.
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxTurnBodyBytes+1))
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "reading request body")
-		return
-	}
-	if len(body) > maxTurnBodyBytes {
-		writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
-		return
-	}
-
 	upstream := d.routerURL + utils.UrlForFunction(name, ns)
 	if entry.SessionSource == fv1.SessionSourceQueryParam {
 		upstream += "?" + url.Values{entry.SessionName: {sessionID}}.Encode()
@@ -182,12 +203,25 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	resp, err := d.client.Do(req)
 	if err != nil {
 		d.logger.Error(err, "calling upstream function", "namespace", ns, "agent", name, "session", sessionID)
+		// A failed turn is still a turn: meter it (Errors included) using
+		// bgCtx so the write is not lost if the caller has already gone.
+		d.casUpdateFresh(bgCtx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+			rec.Stats.Turns++
+			rec.Stats.Errors++
+			rec.Status = StatusActive
+			rec.LastActiveAt = d.now()
+		})
 		writeErr(w, http.StatusBadGateway, "calling upstream function")
 		return
 	}
 	defer resp.Body.Close()
 
+	// The yield outcome is surfaced to the caller (not just consumed for our
+	// own bookkeeping below) so callers can observe done-vs-waiting.
 	yield := resp.Header.Get(HeaderYield)
+	if yield != "" {
+		w.Header().Set(HeaderYield, yield)
+	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
 	}
@@ -198,18 +232,22 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	// Step 5: post-response bookkeeping. Reads a fresh record — never the
 	// version held from step 3 — because the upstream call above may have
 	// taken long enough for another turn to have CAS-written the record
-	// underneath it.
-	d.casUpdateFresh(ctx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
+	// underneath it. Uses bgCtx so a client disconnect during/after the
+	// stream does not lose this turn's meter.
+	d.casUpdateFresh(bgCtx, ns, name, sessionID, liveTTL, func(rec *SessionRecord) {
 		rec.Stats.Turns++
 		rec.Stats.ActiveMillis += elapsed.Milliseconds()
 		if resp.StatusCode >= http.StatusInternalServerError {
 			rec.Stats.Errors++
 		}
+		// LastActiveAt refreshes on BOTH branches: a waiting->idle turn still
+		// just happened just now, it is only the session's next-turn clock
+		// (IdleAfter/ArchiveAfter) that starts running from it.
+		rec.LastActiveAt = d.now()
 		if yield == YieldWaiting {
 			rec.Status = StatusIdle
 		} else {
 			rec.Status = StatusActive
-			rec.LastActiveAt = d.now()
 		}
 	})
 }
