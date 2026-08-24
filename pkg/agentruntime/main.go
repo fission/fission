@@ -625,17 +625,40 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	mux.Handle("GET /ui", uiHandler)
 	mux.Handle("GET /ui/", uiHandler)
 
-	// caps is closed here, not via defer, so it outlives the mux: httpserver.
-	// Serve blocks through its own graceful drain before returning, so by the
-	// time it does every in-flight request the mux served has completed and the
-	// statestore is safe to close. (See the capsClosed defer above for the
-	// early-error fallback this replaces.)
+	// caps is closed at the bottom of this function, not via defer and not
+	// inside the Serve goroutine, so it outlives BOTH drain paths that can
+	// still touch the statestore during shutdown: httpserver.Serve's graceful
+	// HTTP drain (mgr.Go below) and crMgr.Start's background runnables
+	// (sweeper, registry poller, and — the one that actually reaches the
+	// statestore after ctx is cancelled — the wake consumer, whose settle/
+	// dispatch bookkeeping deliberately runs on context.WithoutCancel(ctx) so
+	// it can finish during the shutdown window). These two drains are
+	// independent: Serve's server.Shutdown can return near-instantly on a
+	// quiet shutdown, well before crMgr.Start's runnables finish, so closing
+	// caps as soon as Serve drains (as a prior version of this code did) can
+	// close the statestore out from under the wake consumer's detached
+	// bookkeeping. serveDone signals only that the Serve goroutine has
+	// returned; caps.Close() runs exactly once, after WAITING FOR BOTH
+	// crMgr.Start(ctx) to return AND serveDone to close. (See the capsClosed
+	// defer above for the early-error fallback this replaces.)
+	//
+	// Serve is given its own cancellable serveCtx, not ctx directly: on a
+	// normal shutdown both are keyed off the same signal so this changes
+	// nothing, but crMgr.Start(ctx) can also return a non-nil error (a
+	// runnable or cache-sync failure) WITHOUT ctx being cancelled —
+	// controller-runtime never cancels the ctx it was handed. httpserver.Serve
+	// only ever proceeds past its internal <-ctx.Done() wait on cancellation,
+	// so without stopServe() below, <-serveDone would block forever on that
+	// error path and wedge this whole function (and caps.Close with it) even
+	// though the process is still live and should report the error.
 	capsClosed = true
+	serveCtx, stopServe := context.WithCancel(ctx)
+	serveDone := make(chan struct{})
 	mgr.Go(func() error {
-		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
+		defer close(serveDone)
+		httpserver.Serve(serveCtx, logger, mgr, httpserver.ServerOptions{
 			Name: "agentruntime", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
 		})
-		_ = caps.Close()
 		return nil
 	})
 
@@ -647,7 +670,15 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		// mistaken for a scoped deployment.
 		logger.Info("WARNING: starting agentruntime server with authentication DISABLED — every caller can dispatch turns to any agent-enabled function (set JWT_SIGNING_KEY to scope access)", "port", opts.Port)
 	}
-	return crMgr.Start(ctx)
+	mgrErr := crMgr.Start(ctx)
+	// stopServe unblocks Serve's <-ctx.Done() wait even when ctx is still
+	// live (see the comment above serveCtx). On a normal shutdown ctx is
+	// already cancelled by the time crMgr.Start returns, so this is a no-op;
+	// it must run before the receive below, not as a deferred call after it.
+	stopServe()
+	<-serveDone
+	_ = caps.Close()
+	return mgrErr
 }
 
 // envDuration reads key as a time.Duration, returning def when it is unset.
