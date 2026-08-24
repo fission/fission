@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -289,12 +290,25 @@ func scopeFromScopes(scopes []string) AuthScope {
 // token — mirroring HTTPMiddleware's own pass-through stance — rather than
 // requiring the caller to special-case Enabled() before calling in.
 func (a *Authorizer) ScopeFromBearer(token string) (AuthScope, bool) {
+	scope, _, ok := a.ScopeAndExpiryFromBearer(token)
+	return scope, ok
+}
+
+// ScopeAndExpiryFromBearer is ScopeFromBearer plus the token's expiration
+// instant, so a long-lived connection (GET /registry/events, an open SSE
+// stream) can bound itself by the credential that authorized it rather than
+// outliving the token indefinitely. The expiry is the JWT's exp claim
+// (verifyToken already requires and surfaces it as TokenInfo.Expiration). In
+// pass-through dev mode (no signing key) there is no token and so no expiry:
+// the returned time is the zero Time, which the caller treats as "no
+// token-driven deadline" (a hard max-lifetime backstop still applies).
+func (a *Authorizer) ScopeAndExpiryFromBearer(token string) (AuthScope, time.Time, bool) {
 	if !a.Enabled() {
-		return AuthScope{Wildcard: true}, true
+		return AuthScope{Wildcard: true}, time.Time{}, true
 	}
 	ti, err := a.verifyToken(context.Background(), token, nil)
 	if err != nil {
-		return AuthScope{}, false
+		return AuthScope{}, time.Time{}, false
 	}
-	return scopeFromScopes(ti.Scopes), true
+	return scopeFromScopes(ti.Scopes), ti.Expiration, true
 }

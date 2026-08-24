@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -344,7 +345,7 @@ func TestEventsHandlerSnapshotOnConnect(t *testing.T) {
 		poller := NewPoller(logr.Discard(), view, store, bus, time.Second)
 		poller.pollOnce(t.Context())
 
-		h := NewEventsHandler(poller, bus, NewAuthorizer(nil)) // auth disabled: wildcard scope
+		h := NewEventsHandler(t.Context(), poller, bus, NewAuthorizer(nil)) // auth disabled: wildcard scope
 
 		req := httptest.NewRequest(http.MethodGet, "/registry/events", nil).WithContext(t.Context())
 		r, stop := runEventsHandler(t, h, req)
@@ -360,6 +361,81 @@ func TestEventsHandlerSnapshotOnConnect(t *testing.T) {
 	})
 }
 
+// listCountingKV wraps a KVStore and counts List calls, to prove the poller
+// does or does not touch the store on a given tick.
+type listCountingKV struct {
+	statestore.KVStore
+	lists atomic.Int64
+}
+
+func (k *listCountingKV) List(ctx context.Context, s statestore.Scope, prefix string, page statestore.Page) (statestore.KeyPage, error) {
+	k.lists.Add(1)
+	return k.KVStore.List(ctx, s, prefix, page)
+}
+
+// TestPollerSkipsPollWhenNoSubscribers pins the CPU half of fix #6: with zero
+// subscribers the Run loop must NOT run its O(sessions) list-diff cycle, and
+// it must resume the moment a client subscribes.
+func TestPollerSkipsPollWhenNoSubscribers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := &listCountingKV{KVStore: newTestKV(t)}
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		view.Upsert(registryTestEntry("ns", "agent1", 0))
+		require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}, 0, time.Hour))
+
+		bus := NewBroadcaster()
+		poller := NewPoller(logr.Discard(), view, store, bus, time.Second)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		go poller.Run(ctx)
+
+		// Several ticks with no subscribers: the store is never listed.
+		synctest.Sleep(3 * time.Second)
+		synctest.Wait()
+		assert.EqualValues(t, 0, kv.lists.Load(), "the poller must not touch the store while nobody is subscribed")
+
+		// A subscriber arrives: polling resumes on the next tick.
+		bus.subscribe(AuthScope{Wildcard: true})
+		synctest.Sleep(time.Second)
+		synctest.Wait()
+		assert.Positive(t, kv.lists.Load(), "the poller must resume listing once a client subscribes")
+
+		cancel()
+		synctest.Wait()
+	})
+}
+
+// TestEventsHandlerConnectPrimesSnapshot pins the correctness half of fix #6:
+// because Run skips ticks with no subscribers, a client connecting to an
+// idle/fresh process would replay an empty snapshot — so ServeHTTP must prime
+// synchronously on connect. The poller is deliberately NEVER Run and NEVER
+// pre-polled here; the session below can only appear in the connect-time
+// replay if the handler primed the snapshot itself.
+func TestEventsHandlerConnectPrimesSnapshot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := NewSessionStore(newTestKV(t), time.Now)
+		view := NewAgentView()
+		view.Upsert(registryTestEntry("ns", "agent1", 0))
+		require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}, 0, time.Hour))
+
+		bus := NewBroadcaster()
+		poller := NewPoller(logr.Discard(), view, store, bus, time.Second) // never Run, never pre-polled
+		h := NewEventsHandler(t.Context(), poller, bus, NewAuthorizer(nil))
+
+		req := httptest.NewRequest(http.MethodGet, "/registry/events", nil).WithContext(t.Context())
+		r, stop := runEventsHandler(t, h, req)
+
+		eventType, data := readSSEEvent(t, r)
+		assert.Equal(t, "session", eventType)
+		var evt sessionEvent
+		require.NoError(t, json.Unmarshal([]byte(data), &evt))
+		assert.Equal(t, "s1", evt.Record.ID, "connect-time replay must reflect live state primed on connect")
+
+		stop()
+	})
+}
+
 // TestEventsHandlerSlowClientDroppedWithoutStallingFastClient is the
 // slow-consumer test: a client that never reads its response body must be
 // disconnected once its buffered channel overflows, and must never stall
@@ -369,7 +445,7 @@ func TestEventsHandlerSlowClientDroppedWithoutStallingFastClient(t *testing.T) {
 		store := NewSessionStore(newTestKV(t), time.Now)
 		bus := NewBroadcaster()
 		poller := NewPoller(logr.Discard(), NewAgentView(), store, bus, time.Second) // never Run: publish-driven only
-		h := NewEventsHandler(poller, bus, NewAuthorizer(nil))
+		h := NewEventsHandler(t.Context(), poller, bus, NewAuthorizer(nil))
 
 		slowReq := httptest.NewRequest(http.MethodGet, "/registry/events", nil).WithContext(t.Context())
 		_, stopSlow := runEventsHandler(t, h, slowReq) // deliberately never read from
@@ -428,7 +504,7 @@ func TestEventsHandlerNamespaceFiltering(t *testing.T) {
 		store := NewSessionStore(newTestKV(t), time.Now)
 		bus := NewBroadcaster()
 		poller := NewPoller(logr.Discard(), NewAgentView(), store, bus, time.Second)
-		h := NewEventsHandler(poller, bus, authz)
+		h := NewEventsHandler(t.Context(), poller, bus, authz)
 
 		req := httptest.NewRequest(http.MethodGet, "/registry/events?token="+tokA, nil).WithContext(t.Context())
 		r, stop := runEventsHandler(t, h, req)
@@ -459,7 +535,7 @@ func TestEventsHandlerKeepaliveAppears(t *testing.T) {
 		store := NewSessionStore(newTestKV(t), time.Now)
 		bus := NewBroadcaster()
 		poller := NewPoller(logr.Discard(), NewAgentView(), store, bus, time.Second)
-		h := NewEventsHandler(poller, bus, NewAuthorizer(nil))
+		h := NewEventsHandler(t.Context(), poller, bus, NewAuthorizer(nil))
 
 		req := httptest.NewRequest(http.MethodGet, "/registry/events", nil).WithContext(t.Context())
 		r, stop := runEventsHandler(t, h, req)
@@ -483,7 +559,7 @@ func TestEventsHandlerUnauthorizedWithoutToken(t *testing.T) {
 	store := NewSessionStore(newTestKV(t), time.Now)
 	bus := NewBroadcaster()
 	poller := NewPoller(logr.Discard(), NewAgentView(), store, bus, time.Second)
-	h := NewEventsHandler(poller, bus, NewAuthorizer([]byte("test-signing-key")))
+	h := NewEventsHandler(t.Context(), poller, bus, NewAuthorizer([]byte("test-signing-key")))
 
 	req := httptest.NewRequest(http.MethodGet, "/registry/events", nil)
 	rec := httptest.NewRecorder()

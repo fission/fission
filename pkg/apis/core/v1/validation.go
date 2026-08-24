@@ -711,6 +711,15 @@ func (ac *AgentConfig) Validate() error {
 		if !agentSessionNameRegexp.MatchString(ac.Session.Name) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.Session.Name", ac.Session.Name, "must be a non-empty HTTP token (letters, digits, !#$%&'*+.^_`|~-), max 128 chars"))
 		}
+		// The session source name becomes a forwarded header/query-param name.
+		// Reject the reserved runtime credentials and control headers (case-
+		// insensitive): a session source named "Authorization" or in the
+		// "X-Fission-*" family would collide with the runtime's own auth and
+		// wake/turn replay headers on the forwarded request.
+		if strings.EqualFold(ac.Session.Name, "Authorization") ||
+			strings.HasPrefix(strings.ToLower(ac.Session.Name), "x-fission-") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.Session.Name", ac.Session.Name, `must not be a reserved header name ("Authorization" or the "X-Fission-" prefix, case-insensitive)`))
+		}
 	}
 	if ac.IdleAfter != nil && ac.IdleAfter.Duration < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.IdleAfter", ac.IdleAfter.Duration.String(), "must be >= 0"))
