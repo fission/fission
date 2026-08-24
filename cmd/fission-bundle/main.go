@@ -17,6 +17,7 @@ import (
 	cnwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/fission/fission/cmd/fission-bundle/mqtrigger"
+	"github.com/fission/fission/pkg/agentruntime"
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/buildermgr"
 	"github.com/fission/fission/pkg/canaryconfigmgr"
@@ -66,6 +67,7 @@ type CommandLineArgs struct {
 	statestorePort     int
 	workflowPort       int
 	stateAPIPort       int
+	agentPort          int
 
 	// URL values — empty means "not set": the resolver derives the
 	// in-cluster default from POD_NAMESPACE (see svcinfo.AddressResolver)
@@ -220,6 +222,7 @@ func setupCommandLineArgs() *CommandLineArgs {
 	flag.IntVar(&args.statestorePort, "statestorePort", 0, "Port that the embedded statestore should listen on (RFC-0021 embedded mode)")
 	flag.IntVar(&args.workflowPort, "workflowPort", 0, "Port that the workflow engine should listen on (RFC-0022)")
 	flag.IntVar(&args.stateAPIPort, "stateApiPort", 0, "Port that the statesvc function-facing state API should listen on (RFC-0023)")
+	flag.IntVar(&args.agentPort, "agentPort", 0, "Port that the agent runtime should listen on")
 
 	// URL flags
 	flag.StringVar(&args.executorUrl, "executorUrl", "", "Executor URL (default http://executor.<POD_NAMESPACE>)")
@@ -350,6 +353,16 @@ func bundleServices() []bundleService {
 			selected: func(a *CommandLineArgs) bool { return a.mcpPort != 0 },
 			run: func(ctx context.Context, d bundleDeps) error {
 				return mcp.Start(ctx, d.clientGen, d.logger, d.mgr, mcp.Options{Port: d.args.mcpPort, RouterInternalURL: d.resolver.RouterInternalURL()})
+			},
+		},
+		{
+			// The agent runtime dispatches session turns to /fission-function/...
+			// on the router internal listener, signed like the other publishers,
+			// and keeps session records in the statestore.
+			name:     "Fission-AgentRuntime",
+			selected: func(a *CommandLineArgs) bool { return a.agentPort != 0 },
+			run: func(ctx context.Context, d bundleDeps) error {
+				return agentruntime.Start(ctx, d.clientGen, d.logger, d.mgr, agentruntime.Options{Port: d.args.agentPort, RouterInternalURL: d.resolver.RouterInternalURL()})
 			},
 		},
 		{
