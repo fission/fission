@@ -48,3 +48,33 @@ func TestAgentConfigValidate(t *testing.T) {
 		})
 	}
 }
+
+// TestFunctionSpecValidateAgent asserts FunctionSpec.Validate surfaces a bad
+// Agent config via validateForAdmission — proves the spec.Agent != nil clause
+// is reachable and that the wiring is not dead code.
+func TestFunctionSpecValidateAgent(t *testing.T) {
+	t.Parallel()
+
+	base := func() FunctionSpec {
+		return FunctionSpec{
+			Environment: EnvironmentReference{Name: "env", Namespace: "default"},
+		}
+	}
+
+	t.Run("nil agent ok", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("invalid agent surfaced", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Agent = &AgentConfig{MaxSessions: -1}
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("expected error for negative maxSessions")
+		}
+	})
+}
