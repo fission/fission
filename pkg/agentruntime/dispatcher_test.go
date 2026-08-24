@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
+	"github.com/fission/fission/pkg/statestore"
 )
 
 // newTestDispatcher returns a Dispatcher wired to a fresh in-memory
@@ -30,6 +33,30 @@ func newTestDispatcher(t *testing.T, upstreamURL string) (*Dispatcher, *AgentVie
 	view := NewAgentView()
 	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, time.Now)
 	return d, view, store
+}
+
+// newTestDispatcherWithClock is newTestDispatcher with an injected clock
+// shared by the store and the dispatcher, for tests that need to order two
+// writes unambiguously (real time.Now() calls microseconds apart can tie).
+func newTestDispatcherWithClock(t *testing.T, upstreamURL string, now func() time.Time) (*Dispatcher, *AgentView, *SessionStore) {
+	t.Helper()
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, now)
+	view := NewAgentView()
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, now)
+	return d, view, store
+}
+
+// stepClock returns a clock that advances by 1ms on every call, starting
+// after start. Each call is guaranteed strictly greater than the last (safe
+// for concurrent callers), which makes a later write's timestamp
+// unambiguously After() an earlier one — unlike two real time.Now() calls a
+// few instructions apart, which can tie on a coarse system clock.
+func stepClock(start time.Time) func() time.Time {
+	var n atomic.Int64
+	return func() time.Time {
+		return start.Add(time.Duration(n.Add(1)) * time.Millisecond)
+	}
 }
 
 // headerEntry is the default header-sourced AgentEntry used by most cases.
@@ -95,26 +122,58 @@ func TestDispatcher_ExistingSessionIsReused(t *testing.T) {
 	assert.EqualValues(t, 2, got.Stats.Turns, "the second turn must accumulate onto the same record")
 }
 
-func TestDispatcher_YieldWaitingFlipsSessionIdle(t *testing.T) {
+// TestDispatcher_YieldWaitingFlipsSessionIdleAndRefreshesLastActive pins R6:
+// LastActiveAt must be refreshed by the step-5 write on BOTH branches, not
+// just the "stay active" one. It isolates step-3's write (captured at the
+// gate, before the upstream handler is released) from step-5's write
+// (captured after) using a gate — like the flush test — plus a
+// strictly-monotonic fake clock, so the two timestamps can never tie: if
+// step 5 skips the LastActiveAt refresh on the waiting branch, "got" equals
+// "mid" exactly and the After() assertion fails.
+func TestDispatcher_YieldWaitingFlipsSessionIdleAndRefreshesLastActive(t *testing.T) {
 	t.Parallel()
+	release := make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseOnce)
+	reachedUpstream := make(chan struct{})
+
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(reachedUpstream)
+		<-release
 		w.Header().Set(HeaderYield, YieldWaiting)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("done"))
 	}))
 	t.Cleanup(upstream.Close)
-	d, view, store := newTestDispatcher(t, upstream.URL)
+
+	clock := stepClock(time.Now())
+	d, view, store := newTestDispatcherWithClock(t, upstream.URL, clock)
 	view.Upsert(headerEntry("ns", "fn", 0))
 
 	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
 	req.Header.Set(HeaderSession, "sess-yield")
-	rec := httptest.NewRecorder()
-	d.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	respRec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		d.Handler().ServeHTTP(respRec, req)
+		close(done)
+	}()
+
+	<-reachedUpstream // step 3's Get/Create/Update has already committed by now
+	mid, _, err := store.Get(t.Context(), "ns", "fn", "sess-yield")
+	require.NoError(t, err)
+
+	releaseOnce()
+	<-done
+
+	require.Equal(t, http.StatusOK, respRec.Code)
+	assert.Equal(t, YieldWaiting, respRec.Header().Get(HeaderYield), "the yield outcome must be surfaced on the response")
 
 	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-yield")
 	require.NoError(t, err)
 	assert.Equal(t, StatusIdle, got.Status)
+	assert.True(t, got.LastActiveAt.After(mid.LastActiveAt), "LastActiveAt must be refreshed by the post-response write on BOTH branches, including waiting->idle (R6)")
 }
 
 func TestDispatcher_Upstream500IncrementsErrorsAndPassesThrough(t *testing.T) {
@@ -141,6 +200,60 @@ func TestDispatcher_Upstream500IncrementsErrorsAndPassesThrough(t *testing.T) {
 	assert.EqualValues(t, 1, got.Stats.Turns)
 }
 
+func TestDispatcher_TransportFailureRecordsTurnAndError(t *testing.T) {
+	t.Parallel()
+	// Bind then immediately close, giving a URL nothing listens on so Do
+	// fails with a connection-refused error rather than hanging.
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	d, view, store := newTestDispatcher(t, deadURL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderSession, "sess-transport")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadGateway, rec.Code)
+
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-transport")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, got.Stats.Turns, "a transport failure still counts as a turn")
+	assert.EqualValues(t, 1, got.Stats.Errors, "a transport failure must be metered as an error")
+	assert.Equal(t, StatusActive, got.Status)
+}
+
+func TestDispatcher_ConcurrentCreateRaceActivatesInsteadOfDropping(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	var wg sync.WaitGroup
+	codes := make([]int, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
+			req.Header.Set(HeaderSession, "sess-race")
+			rec := httptest.NewRecorder()
+			d.Handler().ServeHTTP(rec, req)
+			codes[i] = rec.Code
+		}(i)
+	}
+	wg.Wait()
+
+	for _, code := range codes {
+		assert.Equal(t, http.StatusOK, code, "a racing Create must never surface as a client-visible error")
+	}
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-race")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, got.Stats.Turns, "both racing turns must still be counted, not silently dropped")
+}
+
 func TestDispatcher_SessionQuotaExceeded(t *testing.T) {
 	t.Parallel()
 	upstream := okUpstream(t)
@@ -165,7 +278,7 @@ func TestDispatcher_SessionQuotaExceeded(t *testing.T) {
 func TestDispatcher_RequestBodyTooLarge(t *testing.T) {
 	t.Parallel()
 	upstream := okUpstream(t)
-	d, view, _ := newTestDispatcher(t, upstream.URL)
+	d, view, store := newTestDispatcher(t, upstream.URL)
 	view.Upsert(headerEntry("ns", "fn", 0))
 
 	huge := strings.NewReader(strings.Repeat("a", maxTurnBodyBytes+1))
@@ -174,6 +287,11 @@ func TestDispatcher_RequestBodyTooLarge(t *testing.T) {
 	d.Handler().ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+
+	sessionID := rec.Header().Get(HeaderSession)
+	require.NotEmpty(t, sessionID, "the session id still resolves (and is reported) even though the turn is rejected")
+	_, _, err := store.Get(t.Context(), "ns", "fn", sessionID)
+	assert.ErrorIs(t, err, statestore.ErrNotFound, "an oversized request must never create a session record (R5)")
 }
 
 func TestDispatcher_NonAgentFunctionNotFound(t *testing.T) {
@@ -278,15 +396,23 @@ func TestDispatcher_StreamsIncrementallyWithPerWriteFlush(t *testing.T) {
 	chunk1 := []byte("first-chunk-payload")
 	chunk2 := []byte("second-chunk-payload")
 	release := make(chan struct{})
+	// releaseOnce is shared between the test body's deliberate release and a
+	// t.Cleanup safety net for a failed/timed-out run — sync.OnceFunc makes
+	// closing twice safe instead of panicking.
+	releaseOnce := sync.OnceFunc(func() { close(release) })
+	t.Cleanup(releaseOnce)
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// This handler runs on the httptest server's own goroutine, not the
+		// test goroutine: require's t.FailNow is documented as unsafe there,
+		// so use assert (t.Errorf), which is goroutine-safe.
 		rc := http.NewResponseController(w)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(chunk1)
-		require.NoError(t, rc.Flush())
+		assert.NoError(t, rc.Flush())
 		<-release
 		_, _ = w.Write(chunk2)
-		require.NoError(t, rc.Flush())
+		assert.NoError(t, rc.Flush())
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -317,7 +443,7 @@ func TestDispatcher_StreamsIncrementallyWithPerWriteFlush(t *testing.T) {
 	}
 	assert.Equal(t, chunk1, got)
 
-	close(release)
+	releaseOnce()
 
 	rest, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
