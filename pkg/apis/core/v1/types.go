@@ -1506,7 +1506,10 @@ type (
 		Source SessionSource `json:"source"`
 
 		// Name is the header or query-parameter name holding the session id,
-		// e.g. "X-Fission-Session".
+		// e.g. "X-Session-Id". It must not be a reserved runtime header name
+		// ("Authorization" or the "X-Fission-" prefix, which the runtime owns):
+		// to use the platform default header (X-Fission-Session), leave the
+		// enclosing Session nil rather than naming it here.
 		Name string `json:"name"`
 	}
 
@@ -1528,10 +1531,13 @@ type (
 		// +optional
 		IdleAfter *metav1.Duration `json:"idleAfter,omitempty"`
 
-		// ArchiveAfter is how long an idle session is kept listed before it is
-		// archived (delisted; record retained on a retention TTL). Must be
-		// >= IdleAfter when both are set; zero (or nil) means the platform
-		// default (24h).
+		// ArchiveAfter is how long an idle session is kept listed, measured from
+		// its LastActiveAt, before it is archived (delisted; record retained on
+		// a retention TTL). Must be >= IdleAfter when both are set; zero (or
+		// nil) means the platform default (24h). The resolved value is always
+		// clamped up to at least the resolved IdleAfter, so no combination of
+		// defaults can archive a session while it is still within its idle
+		// window.
 		// +optional
 		ArchiveAfter *metav1.Duration `json:"archiveAfter,omitempty"`
 

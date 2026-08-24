@@ -258,6 +258,131 @@ func TestDispatcher_ConcurrentCreateRaceActivatesInsteadOfDropping(t *testing.T)
 	assert.EqualValues(t, 2, got.Stats.Turns, "both racing turns must still be counted, not silently dropped")
 }
 
+// errInjectKV wraps a KVStore and forces Get to fail with a chosen error,
+// simulating a degraded statestore. It deliberately embeds statestore.KVStore
+// rather than satisfying CountedKV, which is fine: the fail-closed paths under
+// test are reached on the Get error, before any counted Create.
+type errInjectKV struct {
+	statestore.KVStore
+	getErr error
+	setErr error
+}
+
+func (k *errInjectKV) Get(ctx context.Context, s statestore.Scope, key string) (statestore.Value, error) {
+	if k.getErr != nil {
+		return statestore.Value{}, k.getErr
+	}
+	return k.KVStore.Get(ctx, s, key)
+}
+
+func (k *errInjectKV) Set(ctx context.Context, s statestore.Scope, key string, val []byte, o statestore.SetOptions) error {
+	if k.setErr != nil {
+		return k.setErr
+	}
+	return k.KVStore.Set(ctx, s, key, val, o)
+}
+
+// TestDispatcher_PhantomEnqueueSuppressedWhenWriteLost pins the second half of
+// fix #1: when the step-5 CAS write never lands (every Update fails), the
+// continue-enqueue decision rode on a turn count that was never persisted — a
+// phantom — and must be suppressed. The record is pre-created on the inner
+// store so step-5's Get succeeds and the mutate closure runs (setting
+// doEnqueue=true); the wrapper then fails the Update, so persisted=false must
+// reset doEnqueue and the wired enqueuer must never be called. Pre-fix, the
+// enqueuer fired with the phantom count.
+func TestDispatcher_PhantomEnqueueSuppressedWhenWriteLost(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(HeaderYield, YieldContinue)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	inner := newTestKV(t)
+	// Pre-create the record so step-5's Get finds it before the wrapper starts
+	// failing writes.
+	seed := NewSessionStore(inner, time.Now)
+	require.NoError(t, seed.Create(t.Context(), SessionRecord{
+		ID: "sess-p", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(),
+	}, 0, time.Hour))
+
+	kv := &errInjectKV{KVStore: inner, setErr: errors.New("writes are down")}
+	store := NewSessionStore(kv, time.Now)
+	view := NewAgentView()
+	view.Upsert(headerEntry("ns", "fn", 0))
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+	fe := &fakeEnqueuer{}
+	d.SetWakeEnqueuer(fe)
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "sess-p")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, "a lost bookkeeping write must not fail the turn")
+	assert.Equal(t, 0, fe.callCount(), "no enqueue may fire on a turn count that was never persisted")
+}
+
+// TestDispatcher_StoreDownFailsClosedWhenQuotaBearing pins fix #2: when the
+// agent enforces a MaxSessions budget and the session store is unhealthy (a
+// Get that fails for a reason other than ErrNotFound), the turn is REJECTED
+// with 503 and never forwarded — a store outage must not evaporate the quota
+// gate and let unmetered sessions dispatch. The converse (a non-quota agent
+// keeps the "bookkeeping never gates" rule) is pinned by the sub-test below.
+func TestDispatcher_StoreDownFailsClosedWhenQuotaBearing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("quota-bearing agent fails closed (503)", func(t *testing.T) {
+		t.Parallel()
+		var upstreamHits atomic.Int64
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			upstreamHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+
+		kv := &errInjectKV{KVStore: newTestKV(t), getErr: errors.New("statestore down")}
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		view.Upsert(headerEntry("ns", "fn", 5)) // MaxSessions=5: quota-bearing
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, "sess-x")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		assert.Contains(t, rec.Body.String(), "session store unavailable")
+		assert.EqualValues(t, 0, upstreamHits.Load(), "a fail-closed turn must never reach the upstream function")
+	})
+
+	t.Run("non-quota agent keeps forwarding (bookkeeping never gates)", func(t *testing.T) {
+		t.Parallel()
+		var upstreamHits atomic.Int64
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			upstreamHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+
+		kv := &errInjectKV{KVStore: newTestKV(t), getErr: errors.New("statestore down")}
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		view.Upsert(headerEntry("ns", "fn", 0)) // MaxSessions=0: no quota to protect
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, "sess-y")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code, "with no quota, a store read blip does not gate the turn")
+		assert.EqualValues(t, 1, upstreamHits.Load(), "the turn is still forwarded")
+	})
+}
+
 func TestDispatcher_SessionQuotaExceeded(t *testing.T) {
 	t.Parallel()
 	upstream := okUpstream(t)

@@ -77,6 +77,13 @@ const (
 	// uses to page through one agent's live sessions on each tick, mirroring
 	// Sweeper's sweepPageLimit.
 	pollPageLimit = 500
+
+	// maxSSEStreamLifetime is the hard ceiling on a single GET /registry/events
+	// stream. Independent of token expiry (which may be absent in dev mode), it
+	// caps how long any one connection can pin a slot, so a client that neither
+	// disconnects nor sees its token expire is still recycled — and forces a
+	// browser EventSource to reconnect (and re-authenticate) periodically.
+	maxSSEStreamLifetime = time.Hour
 )
 
 // agentsEventJSON is the fixed wire body of the "agents" event: a hint that
@@ -209,6 +216,12 @@ type Poller struct {
 	bus      *Broadcaster
 	interval time.Duration
 
+	// pollMu serializes whole list-diff-publish cycles so a connect-time prime
+	// (ServeHTTP) and the background ticker never run pollOnce concurrently and
+	// interleave their diffs. It is distinct from mu, which guards only the
+	// snapshot maps during the brief swap.
+	pollMu sync.Mutex
+
 	mu       sync.RWMutex
 	sessions map[sessionKey]SessionRecord
 	agents   map[types.NamespacedName]AgentEntry
@@ -229,7 +242,12 @@ func NewPoller(logger logr.Logger, view *AgentView, store *SessionStore, bus *Br
 }
 
 // Run polls every p.interval until ctx is done, mirroring Sweeper.Run's
-// ticker-loop shape exactly.
+// ticker-loop shape exactly — except it skips the whole list-diff-publish
+// cycle on any tick with zero subscribers. With no client connected there is
+// nobody to publish a diff to and no snapshot anyone will read, so the
+// O(sessions) SessionStore.List round trips per tick would be pure waste; a
+// connecting client primes its own snapshot synchronously (ServeHTTP), so
+// nothing is lost by not polling while idle.
 func (p *Poller) Run(ctx context.Context) {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
@@ -238,7 +256,9 @@ func (p *Poller) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.pollOnce(ctx)
+			if p.bus.count() > 0 {
+				p.pollOnce(ctx)
+			}
 		}
 	}
 }
@@ -259,7 +279,13 @@ func (p *Poller) Snapshot(scope AuthScope) []SessionRecord {
 }
 
 // pollOnce runs one list-diff-publish cycle across every agent in the view.
+// It is called both by Run's ticker and, synchronously, by ServeHTTP to prime
+// a connecting client's snapshot; pollMu serializes the two so their diffs
+// never interleave.
 func (p *Poller) pollOnce(ctx context.Context) {
+	p.pollMu.Lock()
+	defer p.pollMu.Unlock()
+
 	entries := p.view.List()
 
 	currentAgents := make(map[types.NamespacedName]AgentEntry, len(entries))
@@ -273,6 +299,14 @@ func (p *Poller) pollOnce(ctx context.Context) {
 			return
 		}
 		p.collectAgentSessions(ctx, e, currentSessions)
+	}
+	// A cancellation during the collect above (e.g. a client disconnecting mid
+	// connect-prime, whose r.Context() drives this call) can leave
+	// currentSessions partial. Do not swap a partial snapshot in — the missing
+	// records would look "removed" this tick and spuriously "new" the next; the
+	// next full poll will rebuild it.
+	if ctx.Err() != nil {
+		return
 	}
 
 	p.mu.Lock()
@@ -396,15 +430,19 @@ func sessionUnchanged(old, cur SessionRecord) bool {
 // implemented here) so the credential riding the URL is no longer the
 // full-privilege dispatch token itself.
 type EventsHandler struct {
-	poller *Poller
-	bus    *Broadcaster
-	authz  *Authorizer
+	shutdownCtx context.Context
+	poller      *Poller
+	bus         *Broadcaster
+	authz       *Authorizer
 }
 
 // NewEventsHandler returns an EventsHandler serving from poller/bus, using
-// authz to resolve each connection's namespace scope.
-func NewEventsHandler(poller *Poller, bus *Broadcaster, authz *Authorizer) *EventsHandler {
-	return &EventsHandler{poller: poller, bus: bus, authz: authz}
+// authz to resolve each connection's namespace scope. shutdownCtx is the
+// subsystem's lifetime context: an open stream ends when it is cancelled, so a
+// graceful shutdown is not pinned for the full drain timeout by an idle
+// EventSource.
+func NewEventsHandler(shutdownCtx context.Context, poller *Poller, bus *Broadcaster, authz *Authorizer) *EventsHandler {
+	return &EventsHandler{shutdownCtx: shutdownCtx, poller: poller, bus: bus, authz: authz}
 }
 
 // ServeHTTP authorizes the caller, subscribes it to bus, replays the
@@ -419,7 +457,7 @@ func NewEventsHandler(poller *Poller, bus *Broadcaster, authz *Authorizer) *Even
 // so the client may see that id twice in quick succession. Harmless: SSE
 // "session" events are idempotent last-write-wins by id.
 func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.authz.ScopeFromBearer(bearerFromRequest(r))
+	scope, exp, ok := h.authz.ScopeAndExpiryFromBearer(bearerFromRequest(r))
 	if !ok {
 		writeErr(w, http.StatusUnauthorized, "unauthorized: missing or invalid token")
 		return
@@ -437,6 +475,16 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c := h.bus.subscribe(scope)
 	defer h.bus.unsubscribe(c)
 
+	// Prime this connection's snapshot synchronously. The background poller
+	// skips ticks with zero subscribers (see Run), so on a fresh or long-idle
+	// process the snapshot could be empty or stale at connect time; a one-shot
+	// poll here guarantees the connect-time replay below reflects live state.
+	// It runs AFTER subscribe so no event published during the poll is missed
+	// (the same subscribe-before-snapshot ordering the rest of this handler
+	// relies on). Cost is one O(sessions) poll per connect — connects are rare
+	// next to the 2s tick, and pollMu keeps concurrent connects serialized.
+	h.poller.pollOnce(r.Context())
+
 	for _, rec := range h.poller.Snapshot(scope) {
 		data, err := json.Marshal(sessionEvent{Type: "session", Record: rec})
 		if err != nil {
@@ -449,9 +497,33 @@ func (h *EventsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	keepalive := time.NewTicker(sseKeepaliveInterval)
 	defer keepalive.Stop()
+
+	// Hard ceiling on this stream regardless of token or client behavior.
+	hardMax := time.NewTimer(maxSSEStreamLifetime)
+	defer hardMax.Stop()
+
+	// Token-expiry deadline: end the stream when the credential that authorized
+	// it expires, so a stream cannot outlive its token. Absent in dev mode (no
+	// exp) — expiryC stays nil, and a receive on a nil channel blocks forever,
+	// so the select simply never takes this branch.
+	var expiryC <-chan time.Time
+	if !exp.IsZero() {
+		expiryT := time.NewTimer(time.Until(exp))
+		defer expiryT.Stop()
+		expiryC = expiryT.C
+	}
+
 	for {
 		select {
+		case <-h.shutdownCtx.Done():
+			// Subsystem shutting down: end the stream now rather than pinning
+			// the server's drain window for the full keepalive interval.
+			return
 		case <-r.Context().Done():
+			return
+		case <-expiryC:
+			return
+		case <-hardMax.C:
 			return
 		case msg, ok := <-c.ch:
 			if !ok {
