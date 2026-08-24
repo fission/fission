@@ -8,7 +8,10 @@
 // (Spec.Agent != nil), resolves an inbound "/agents/{namespace}/{name}" turn
 // to the matching Function, forwards it to the router internal listener with
 // the same ServiceRouterInternal HMAC signing the other publishers use, and
-// meters the result into a per-session record.
+// meters the result into a per-session record. In v1, only Content-Type and
+// session headers are forwarded upstream, and only Content-Type plus
+// X-Fission-Agent-Yield are returned; custom caller headers are intentionally
+// not proxied in v1 (revisit with the SDK slice).
 //
 // Sessions are statestore records, never CRDs — there is no AgentSession CRD
 // and no reconcile loop over session state. The sweeper that ages sessions
