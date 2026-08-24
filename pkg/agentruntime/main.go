@@ -251,10 +251,17 @@ const (
 	// self-chaining cap. 0 means unlimited (see Dispatcher.maxContinuations).
 	envMaxContinuations = "AGENT_MAX_CONTINUATIONS"
 
+	// envRegistryPoll configures the SSE registry feed's Poller cadence
+	// (Task 20; see events.go). Read once here, like envSweepInterval.
+	envRegistryPoll = "AGENT_REGISTRY_POLL"
+
 	// defaultSweepInterval / defaultArchiveRetention are applied when the
 	// corresponding env var is unset.
 	defaultSweepInterval    = 30 * time.Second
 	defaultArchiveRetention = 168 * time.Hour // 7 days
+
+	// defaultRegistryPollInterval is applied when envRegistryPoll is unset.
+	defaultRegistryPollInterval = 2 * time.Second
 
 	// defaultMaxContinuations is applied when envMaxContinuations is unset.
 	defaultMaxContinuations = 1000
@@ -335,6 +342,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
+	registryPollInterval, err := envDuration(envRegistryPoll, defaultRegistryPollInterval)
+	if err != nil {
+		return err
+	}
 
 	// Fail closed: refuse to serve unauthenticated unless explicitly opted
 	// in. Pass-through grants every caller a wildcard namespace scope and can
@@ -358,6 +369,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	store := NewSessionStore(kv, time.Now)
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
+
+	// SSE registry feed (Task 20): a single background Poller diffs
+	// SessionStore.List across view.List() agents and publishes changes to a
+	// Broadcaster; EventsHandler serves GET /registry/events from it. See
+	// events.go's package doc for why this is poll-diff rather than
+	// push-on-write, and its own doc comment for why it is mounted bare on
+	// the mux below instead of behind authz middleware.
+	registryBus := NewBroadcaster()
+	registryPoller := NewPoller(logger.WithName("registry_events"), view, store, registryBus, registryPollInterval)
+	eventsHandler := NewEventsHandler(registryPoller, registryBus, authz)
 
 	// WakeService needs the Dispatcher (to call DispatchTurn), so it is built
 	// after the Dispatcher and wired back in via SetWakeEnqueuer — see that
@@ -448,6 +469,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("adding agentruntime sweeper: %w", err)
 	}
 
+	// The registry-events poller runs as a manager runnable for the same
+	// reason the sweeper does (start after cache sync, stop with the
+	// manager); it feeds GET /registry/events (Task 20, events.go).
+	if err := crMgr.Add(manager.RunnableFunc(func(rctx context.Context) error {
+		registryPoller.Run(rctx)
+		return nil
+	})); err != nil {
+		return fmt.Errorf("adding agentruntime registry poller: %w", err)
+	}
+
 	// The wake service runs as a manager runnable for the same reason the
 	// sweeper does (start after cache sync, stop with the manager); it
 	// delivers the yield=continue self-chain the dispatcher enqueues via
@@ -511,6 +542,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// path value and is mounted behind authz.HTTPMiddleware with the
 	// namespace filter applied manually inside PoolAPI.ServePool.
 	mux.Handle("GET /registry/pool", authz.HTTPMiddleware(http.HandlerFunc(poolAPI.ServePool)))
+
+	// SSE registry feed (Task 20): mounted BARE, deliberately NOT behind
+	// authz.HTTPMiddleware/Middleware — see EventsHandler's doc comment
+	// (events.go) for why a browser EventSource forces auth to happen inside
+	// the handler instead.
+	mux.Handle("GET /registry/events", eventsHandler)
 
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
