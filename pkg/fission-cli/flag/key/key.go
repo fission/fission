@@ -155,6 +155,14 @@ const (
 	FnStateStickySource  = "state-sticky-source"
 	FnStateStickyName    = "state-sticky-name"
 
+	// Agent runtime config (fn create/update).
+	FnAgent              = "agent"
+	FnAgentSessionSource = "agent-session-source"
+	FnAgentSessionName   = "agent-session-name"
+	FnAgentIdleAfter     = "agent-idle-after"
+	FnAgentArchiveAfter  = "agent-archive-after"
+	FnAgentMaxSessions   = "agent-max-sessions"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtInvocationMode    = "invocation-mode"
