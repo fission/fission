@@ -41,13 +41,14 @@ var (
 // SessionStats is the per-session meter set (G19: full meter schema from day
 // one; Tokens/Cost reserved for the gateway integration, always 0 for now).
 type SessionStats struct {
-	Turns        int64 `json:"turns"`
-	Errors       int64 `json:"errors"`
-	ToolCalls    int64 `json:"toolCalls"`
-	ActiveMillis int64 `json:"activeMillis"`
-	TokensIn     int64 `json:"tokensIn"`
-	TokensOut    int64 `json:"tokensOut"`
-	CostMicroUSD int64 `json:"costMicroUSD"`
+	Turns         int64 `json:"turns"`
+	Errors        int64 `json:"errors"`
+	ToolCalls     int64 `json:"toolCalls"`
+	ActiveMillis  int64 `json:"activeMillis"`
+	TokensIn      int64 `json:"tokensIn"`
+	TokensOut     int64 `json:"tokensOut"`
+	CostMicroUSD  int64 `json:"costMicroUSD"`
+	Continuations int64 `json:"continuations"`
 }
 
 // SessionRecord is the persisted state of one agent session.

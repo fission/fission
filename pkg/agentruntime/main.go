@@ -8,10 +8,12 @@
 // (Spec.Agent != nil), resolves an inbound "/agents/{namespace}/{name}" turn
 // to the matching Function, forwards it to the router internal listener with
 // the same ServiceRouterInternal HMAC signing the other publishers use, and
-// meters the result into a per-session record. In v1, only Content-Type and
-// session headers are forwarded upstream, and only Content-Type plus
-// X-Fission-Agent-Yield are returned; custom caller headers are intentionally
-// not proxied in v1 (revisit with the SDK slice).
+// meters the result into a per-session record. In v1, only Content-Type, the
+// session header, and the runtime's own turn/wake headers (X-Fission-Agent-
+// Turns, and X-Fission-Agent-Wake-Id/-Attempt on wake-delivered turns) are
+// forwarded upstream, and only Content-Type plus X-Fission-Agent-Yield are
+// returned; custom caller headers are intentionally not proxied in v1
+// (revisit with the SDK slice).
 //
 // Sessions are statestore records, never CRDs — there is no AgentSession CRD
 // and no reconcile loop over session state. The sweeper that ages sessions
@@ -88,6 +90,12 @@ const (
 	// httpx.PooledTransport) — sized like the workflow invoker's worker pool,
 	// since both are internal clients driving one hot upstream.
 	dispatcherMaxIdleConnsPerHost = 64
+
+	// dispatcherMaxContinuations is a placeholder cap on yield=continue
+	// self-chaining per session. TODO(task 16 or later): read this from an
+	// env var (mirroring envSweepInterval/envArchiveRetention) instead of a
+	// hardcoded literal.
+	dispatcherMaxContinuations = 1000
 )
 
 // Options configures Start. The listener is either pre-bound by the caller
@@ -168,7 +176,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	view := NewAgentView()
 	store := NewSessionStore(kv, time.Now)
-	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now)
+	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, dispatcherMaxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
 
 	// No leader election: each replica maintains its own in-memory view and
