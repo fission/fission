@@ -65,6 +65,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	"github.com/fission/fission/pkg/agentruntime/ui"
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/pkg/controller"
@@ -548,6 +549,15 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// (events.go) for why a browser EventSource forces auth to happen inside
 	// the handler instead.
 	mux.Handle("GET /registry/events", eventsHandler)
+
+	// Boardroom UI (Task 22): mounted UNAUTHENTICATED — it is a static asset
+	// (embedded HTML/CSS/JS with no server-side data of its own); every API
+	// it calls from the browser (GET /registry/agents, /registry/pool,
+	// /registry/events, and the per-agent sessions routes above) enforces its
+	// own bearer-token auth exactly as it would for any other caller.
+	uiHandler := ui.Handler()
+	mux.Handle("GET /ui", uiHandler)
+	mux.Handle("GET /ui/", uiHandler)
 
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
