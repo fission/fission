@@ -12,6 +12,7 @@ import (
 	wrapper "github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra"
 	"github.com/fission/fission/pkg/fission-cli/cliwrapper/driver/cobra/helptemplate"
 	"github.com/fission/fission/pkg/fission-cli/cmd"
+	"github.com/fission/fission/pkg/fission-cli/cmd/agent"
 	"github.com/fission/fission/pkg/fission-cli/cmd/archive"
 	"github.com/fission/fission/pkg/fission-cli/cmd/canaryconfig"
 	"github.com/fission/fission/pkg/fission-cli/cmd/check"
@@ -91,7 +92,7 @@ func App(clientOptions cmd.ClientOptions) *cobra.Command {
 	groups = append(groups, helptemplate.CreateCmdGroup("Auth Commands(Note: Authentication should be enabled to use a command in this group.)", token.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Basic Commands", environment.Commands(), _package.Commands(), function.Commands(), archive.Commands(), functionalias.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Trigger Commands", httptrigger.Commands(), mqtrigger.Commands(), timetrigger.Commands(), kubewatch.Commands(), topic.Commands()))
-	groups = append(groups, helptemplate.CreateCmdGroup("Workflow Commands", workflow.Commands()))
+	groups = append(groups, helptemplate.CreateCmdGroup("Workflow & Agent Commands", workflow.Commands(), agent.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Deploy Strategies Commands", canaryconfig.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Declarative Application Commands", spec.Commands()))
 	groups = append(groups, helptemplate.CreateCmdGroup("Administration Commands", tenant.Commands()))
