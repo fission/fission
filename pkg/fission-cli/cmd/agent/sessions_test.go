@@ -5,6 +5,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +22,7 @@ import (
 type recordedSessionReq struct {
 	Method string
 	Path   string
+	Query  string
 	Auth   string
 }
 
@@ -35,6 +37,7 @@ func mockAgentRuntime(t *testing.T, status int, body string) *[]recordedSessionR
 		got = append(got, recordedSessionReq{
 			Method: r.Method,
 			Path:   r.URL.Path,
+			Query:  r.URL.RawQuery,
 			Auth:   r.Header.Get("Authorization"),
 		})
 		w.Header().Set("Content-Type", "application/json")
@@ -74,6 +77,7 @@ func TestSessionsListRendersColumns(t *testing.T) {
 	req := (*got)[0]
 	assert.Equal(t, http.MethodGet, req.Method)
 	assert.Equal(t, "/registry/agents/testns/agentfn/sessions", req.Path)
+	assert.Equal(t, "limit=500", req.Query, "list asks for the server's max page (500), not its lower default (100)")
 	assert.Empty(t, req.Auth, "no --agent-token/FISSION_AGENT_TOKEN set: request must go out unauthenticated")
 
 	assert.Contains(t, out, "ID")
@@ -97,6 +101,32 @@ func TestSessionsListRendersColumns(t *testing.T) {
 	sess2Row := lines[2]
 	assert.Contains(t, sess2Row, "-", "sess-2's blank fields render as dashes")
 	assert.NotContains(t, sess2Row, "0001-01-01", "zero time.Time must never leak into the table")
+}
+
+// TestSessionsListJSONStaysParseableWithMorePages is the regression case for
+// the format/warning ordering bug: when the server reports a Next cursor,
+// `-o json` must still be exactly the sessions payload on stdout — no
+// console.Warn line ahead of it — so a consumer piping into `jq` never sees
+// a parse error just because the agent has more sessions than one page.
+func TestSessionsListJSONStaysParseableWithMorePages(t *testing.T) {
+	const bodyWithNext = `{"sessions":[{"id":"sess-1","agent":"agentfn","namespace":"testns","status":"active",
+		"createdAt":"2026-08-20T09:00:00Z","lastActiveAt":"2026-08-20T10:05:00Z","stats":{"turns":1}}],
+		"next":"sess-2"}`
+	mockAgentRuntime(t, http.StatusOK, bodyWithNext)
+
+	in := dummy.TestFlagSetWith(
+		dummy.String(flagkey.FnName, "agentfn"),
+		dummy.String(flagkey.Namespace, "testns"),
+		dummy.String(flagkey.Output, "json"),
+	)
+	out := captureStdout(t, func() error { return SessionsList(in) })
+
+	require.NotContains(t, out, "Warning", "a structured format must never carry the more-pages notice on stdout")
+
+	var decoded []sessionRecord
+	require.NoError(t, json.Unmarshal([]byte(out), &decoded), "stdout must be valid JSON end to end: %s", out)
+	require.Len(t, decoded, 1)
+	assert.Equal(t, "sess-1", decoded[0].ID)
 }
 
 // TestSessionsGetRendersDetail exercises `fission agent sessions get`
