@@ -133,6 +133,12 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 		function.Spec.State = getStateConfig(input, function.Spec.State)
 	}
 
+	// --agent toggles the agent config; the other --agent-* flags merge onto
+	// the existing config (only set fields change).
+	if input.IsSet(flagkey.FnAgent) {
+		function.Spec.Agent = getAgentConfig(input, function.Spec.Agent)
+	}
+
 	// The --async-* flags merge onto the existing InvocationConfig (only set fields
 	// change); an empty --async-on-success/--async-on-failure (or -topic variant)
 	// clears that destination.
