@@ -26,10 +26,19 @@ sub-second resume, live UI.**
   a real agent would call it mid-conversation,
   but the load generator below drives `support-desk` directly,
   so this stays decoupled from the density/teleport story.
+- `fixtures/architect.js` —
+  the swarm-beat agent function.
+  On every turn it spawns 3 deterministically-derived "expert" child sessions on `support-desk`
+  (see `pkg/agentruntime/session.go`'s `SpawnSessionID` / `ParentRef`),
+  carrying `X-Fission-Agent-Parent` on each spawn so the platform records real parentage —
+  the boardroom UI's family tree (below) renders the result.
+  Workers ARE `support-desk` sessions;
+  no separate worker function exists.
 - `specs/` —
   `fission spec`-format YAML: one shared `node` Environment plus a Package + Function per fixture.
   `support-desk`'s Function carries `spec.agent` (session lifecycle) and `spec.state` (keyed-state keyspace, with `sticky` routing on the session header so the router's real request routing lands on the same pod the dispatcher's `CurrentPod` prediction shows in the UI);
-  `order-lookup`'s Function carries `spec.tool`.
+  `order-lookup`'s Function carries `spec.tool`;
+  `architect`'s Function carries `spec.agent` (its own session lifecycle) and a minimal `spec.state` (used only so the fetcher writes the state token file `architect.js` reads its own namespace from).
 - `loadgen/main.go` —
   a stdlib-only Go CLI that drives sessions against the dispatcher and
   prints the demo's success metrics at the end.
@@ -99,6 +108,49 @@ It stays here for now so the whole stack (fixtures, specs, load driver) is self-
    list (`--agents-url`, `--namespace`, `--agent`, `--environment`,
    `--concurrency`, `--timeout`).
 
+## Swarm beat
+
+`architect` (`fixtures/architect.js` / `specs/architect.yaml`) is a second agent function:
+every turn it spawns 3 deterministically-derived "expert" child sessions on `support-desk`,
+carrying real parentage (`X-Fission-Agent-Parent`) end to end.
+This is manual, not part of `loadgen` —
+start one turn by hand and watch the board:
+
+```sh
+# Port-forward as in step 3 above, then:
+curl -i -X POST http://127.0.0.1:8894/agents/default/architect \
+  -H 'Content-Type: application/json' \
+  -H 'X-Fission-Session: architect-demo-1' \
+  -d '{"message":"kick off the swarm"}'
+```
+
+What to watch on the `/ui/` board:
+
+- The response carries `X-Fission-Session: architect-demo-1`
+  (echoed back — the dispatcher minted or resumed that exact id)
+  and a JSON body listing 3 `experts`, each with its derived `childID` and dispatch status.
+- The SESSIONS panel gets a new **root** card for `architect-demo-1`
+  (`default/architect`, no depth badge — a root session has none),
+  with 3 **child** cards indented underneath it, tree-connected,
+  each carrying a `d1` depth badge (`default/support-desk`,
+  same as any other support-desk session in every other respect —
+  same status chip, same click-to-transcript panel).
+- Re-run the exact same `curl` (same `X-Fission-Session: architect-demo-1`):
+  the same 3 child ids reappear —
+  `SpawnSessionID` derives them from `("default/architect/architect-demo-1", "expert-<k>")`,
+  so the SAME turn keeps resuming the SAME 3 children rather than minting new ones each time.
+  Watch their `turns` counter climb instead of the child count growing.
+- If a child session is later archived (or its agent isn't the one this page fetched)
+  while the architect session is still listed,
+  its card would show as a root under an `(unknown parent: ...)` group header instead of disappearing —
+  the family tree never silently drops a card just because its parent fell out of view.
+- Auth note (see `fixtures/architect.js`'s header comment for the full G16 gate writeup):
+  on a `kind`/dev deployment (`AGENT_ALLOW_INSECURE=true`, the default per the Kind quickstart above)
+  no token is needed for `architect` to spawn children.
+  On an `authentication.enabled` install,
+  set `AGENT_RUNTIME_TOKEN` on the `architect` Function's pod env to a dispatch-scoped bearer token —
+  there is no automatic credential handoff from the architect's own inbound call today.
+
 ## Demo beats checklist
 
 Mapped from the boardroom demo script; check these off live against the
@@ -126,8 +178,9 @@ Mapped from the boardroom demo script; check these off live against the
       `support-desk` sessions keep resuming, with 429s visible only past
       the function's `Concurrency` limit (honest backpressure, not
       failure).
-- [ ] **Swarm** (not built by this task) — a planner agent fanning out to
-      expert sub-agents via async-invoke; tracked separately.
+- [ ] **Swarm** — start an `architect` session (see "Swarm beat" below) and
+      watch its 3 expert children appear indented underneath it in the
+      SESSIONS panel, with a `d1` depth badge.
 - [ ] **Burst counter** — `loadgen`'s final report line
       (`density (sessions:pods): NNx`) climbs as `--sessions` grows for a
       fixed pool size.
