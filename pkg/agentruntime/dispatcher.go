@@ -25,6 +25,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/router/endpointcache"
@@ -32,6 +37,9 @@ import (
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/uuid"
 )
+
+// agentTracerName scopes the invoke_agent span's Tracer (see Dispatcher.tracer).
+const agentTracerName = "fission/agentruntime"
 
 const (
 	// HeaderSession is the response header carrying the resolved session id —
@@ -256,6 +264,17 @@ type Dispatcher struct {
 	// doc comment. nil disables prediction: DispatchTurn leaves
 	// SessionRecord.CurrentPod untouched rather than clearing it.
 	index *endpointcache.Index
+
+	// tracerProvider is the invoke_agent span's TracerProvider seam,
+	// injected AFTER construction via SetTracerProvider (mirroring
+	// SetWakeEnqueuer/SetEndpointIndex's construction-cycle rationale) —
+	// see that method's doc comment. nil means "use the process-wide
+	// otel.GetTracerProvider()", which is what fission-bundle's main
+	// installs in production (pkg/utils/otel/provider.go); tests thread an
+	// explicit sdktrace.NewTracerProvider + tracetest.SpanRecorder instead,
+	// since the global default propagator/provider in tests is a no-op that
+	// would make span assertions pass vacuously.
+	tracerProvider trace.TracerProvider
 }
 
 // NewDispatcher returns a Dispatcher. retention is added to an entry's
@@ -305,6 +324,33 @@ func (d *Dispatcher) SetWakeEnqueuer(w enqueuer) {
 // identically: CurrentPod is left untouched, never cleared.
 func (d *Dispatcher) SetEndpointIndex(ix *endpointcache.Index) {
 	d.index = ix
+}
+
+// SetTracerProvider wires the invoke_agent span's TracerProvider seam
+// post-construction, mirroring SetWakeEnqueuer/SetEndpointIndex's plain,
+// unsynchronized pre-serve field-write contract — call it before the
+// dispatcher serves any turn. Production leaves it unset (nil), which makes
+// tracer() fall back to the process-wide otel.GetTracerProvider(); unit
+// tests set an explicit provider (e.g. sdktrace.NewTracerProvider with a
+// tracetest.SpanRecorder syncer) so span assertions are hermetic and do not
+// depend on — or pollute — global otel state.
+func (d *Dispatcher) SetTracerProvider(tp trace.TracerProvider) {
+	d.tracerProvider = tp
+}
+
+// tracer returns the Tracer DispatchTurn starts its invoke_agent span from.
+//
+// GenAI semantic conventions are PRE-STABLE (experimental) as of this pin:
+// go.opentelemetry.io/otel/semconv/v1.37.0 supplies the gen_ai.* attribute
+// keys used below (GenAIOperationNameInvokeAgent = "invoke_agent",
+// GenAIAgentName = "gen_ai.agent.name"). Re-verify attribute names against
+// the semconv package on any future bump — the spec has moved these before.
+func (d *Dispatcher) tracer() trace.Tracer {
+	tp := d.tracerProvider
+	if tp == nil {
+		tp = otel.GetTracerProvider()
+	}
+	return tp.Tracer(agentTracerName)
 }
 
 // Handler serves POST /agents/{namespace}/{name}; other methods get 405 (the
@@ -393,6 +439,42 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 // yield, LastActiveAt, and continue-enqueue). The HTTP handler and the wake
 // consumer both call this — chaining lives HERE so both turn kinds chain.
 func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink TurnSink) (TurnResult, error) {
+	turnSource := "http"
+	if tr.WakeID != "" {
+		turnSource = "wake"
+	}
+	// The invoke_agent span MUST start here — before EVERY early return in
+	// this function (including the entry-lookup miss immediately below) and,
+	// above all, before bgCtx is derived a few lines down: context.
+	// WithoutCancel preserves context VALUES (just not cancellation), and
+	// EnqueueWake is later called with bgCtx (step 5, below) — a span
+	// started any later would silently degrade every yield=continue
+	// continuation to a root span, masked by the wake envelope's
+	// backward-compat Trace-absent fallback (wake.go). `defer span.End()`
+	// immediately after Start covers every return in this function by
+	// construction, and — since it runs as part of a normal function
+	// return — always fires AFTER the step-5 settle below, satisfying "end
+	// after settle" with no separate End() call anywhere else. Never end or
+	// re-parent this span from a bgCtx-derived code path: carrying its
+	// values there via bgCtx is exactly what the wake stitch needs.
+	//
+	// An HTTP turn starts from the caller's ctx, which for the dispatch mux
+	// is already a child of the "fission-agentruntime" server span
+	// (main.go's otelUtils.GetHandlerWithOTEL wrap). A wake-delivered turn
+	// starts from the delivery ctx wake.go's process() extracted from the
+	// wake envelope's optional Trace field, making the continuation's span
+	// a child in the SAME trace as the turn that originally enqueued it —
+	// or, when Trace is absent (no propagator injected anything, or a
+	// pre-observability envelope), a fresh root span, never an error.
+	ctx, span := d.tracer().Start(ctx, "invoke_agent "+tr.Agent, trace.WithAttributes(
+		semconv.GenAIOperationNameInvokeAgent,
+		semconv.GenAIAgentName(tr.Agent),
+		attribute.String("fission.agent.namespace", tr.Namespace),
+		attribute.String("fission.session.id", tr.SessionID),
+		attribute.String("fission.turn.source", turnSource),
+	))
+	defer span.End()
+
 	entry, ok := d.view.Lookup(tr.Namespace, tr.Agent)
 	if !ok {
 		return TurnResult{}, ErrNotAgent
@@ -401,7 +483,10 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	// bgCtx carries no cancellation from the caller: the post-response
 	// bookkeeping (and the transport-failure bookkeeping below) must still
 	// land even if the caller has already gone away, since it is what keeps
-	// Stats/Status honest and self-heals nothing on its own.
+	// Stats/Status honest and self-heals nothing on its own. It DOES carry
+	// every value on ctx — including the invoke_agent span started above —
+	// which is exactly what lets EnqueueWake (step 5) inject this turn's
+	// trace into a continuation's wake envelope.
 	bgCtx := context.WithoutCancel(ctx)
 	liveTTL := entry.IdleAfter + entry.ArchiveAfter + d.retention
 	now := d.now()
@@ -484,6 +569,7 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 			rec.LastActiveAt = now
 		})
 	}
+	span.SetAttributes(attribute.Int64("fission.turn", turnsAtStart))
 
 	// Step 4: forward the turn.
 	upstream := d.routerURL + utils.UrlForFunction(tr.Agent, tr.Namespace)
@@ -533,6 +619,14 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 			rec.Status = StatusActive
 			rec.LastActiveAt = d.now()
 		})
+		// Span status: Error on a transport failure (this branch), Ok on a
+		// normal completion (the final return below) — the two outcomes the
+		// plan pins explicitly. A caller-disconnect (context.Canceled) is
+		// still a span-level Error: that distinction only matters for
+		// Stats.Errors metering above, not for whether this span's own
+		// operation completed successfully.
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return TurnResult{}, fmt.Errorf("calling upstream function: %w", err)
 	}
 	defer resp.Body.Close()
@@ -634,6 +728,8 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 		}
 	}
 
+	span.SetAttributes(attribute.String("fission.yield", yield))
+	span.SetStatus(codes.Ok, "")
 	return TurnResult{StatusCode: resp.StatusCode, Yield: yield, WakeEnqueueAttempted: doEnqueue}, nil
 }
 

@@ -62,6 +62,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/utils/backoff"
@@ -134,6 +137,23 @@ type wakeEnvelope struct {
 	Session     string    `json:"session"`
 	Turns       int64     `json:"turns"` // dedup basis: turn count at enqueue
 	EnqueueTime time.Time `json:"enqueueTime"`
+	// Trace carries the enqueuing invoke_agent span's W3C trace context
+	// (tracecontext + baggage, via propagation.MapCarrier), injected by
+	// EnqueueWake and extracted by process() into the delivery ctx BEFORE
+	// DispatchTurn runs — this is the wake-stitching mechanism: a
+	// continuation's invoke_agent span becomes a child in the SAME trace as
+	// the turn that enqueued it. Optional and additive: a nil/empty map
+	// (pre-observability envelopes, or an EnqueueWake call whose ctx carried
+	// no span/context) decodes and processes identically to today —
+	// decodeWakeEnvelope's json.Unmarshal is lenient about unknown/missing
+	// fields, so this needed NO wakeEnvelopeVersion bump. Deliberately
+	// EXCLUDED from wakeDedupKey (see that function's doc comment): two
+	// enqueues of the same logical continuation (same ns/agent/session/
+	// turns) must still collapse to one message even when their trace
+	// contexts differ — the FIRST enqueue's Trace is the one that survives,
+	// since a deduped EnqueueWake call never overwrites the existing
+	// message body.
+	Trace map[string]string `json:"trace,omitempty"`
 }
 
 // decodeWakeEnvelope parses a leased message body. Deliberately lenient about
@@ -225,6 +245,13 @@ func (w *WakeService) SetRand(rand func() float64) {
 // Acks, Kills, or dead-letters, a later EnqueueWake with the identical key
 // enqueues a fresh message — the overall guarantee is at-least-once, not
 // exactly-once.
+//
+// Deliberately excludes wakeEnvelope.Trace: two enqueues of the same logical
+// continuation must still collapse to one message even when their trace
+// contexts differ (e.g. the shared path's own enqueue and reviveChain's
+// post-Ack revival, which can carry different — but same-trace-id — spans).
+// A deduped EnqueueWake call never rewrites an existing message body, so
+// whichever enqueue reaches the queue FIRST is the one whose Trace wins.
 func wakeDedupKey(ns, agent, session string, turns int64) string {
 	return fmt.Sprintf("%s/%s/%s/%d", ns, agent, session, turns)
 }
@@ -241,6 +268,22 @@ func (w *WakeService) EnqueueWake(ctx context.Context, ns, agent, session string
 		Session:     session,
 		Turns:       turns,
 		EnqueueTime: w.now(),
+	}
+	// Inject whatever trace context ctx carries (the shared path in
+	// DispatchTurn passes bgCtx, which — because the invoke_agent span
+	// starts BEFORE bgCtx is derived, see dispatcher.go — still carries that
+	// turn's own open span; reviveChain passes a ctx carrying the just-
+	// completed delivery's extracted trace, see process()) into the
+	// envelope's Trace field. otel.GetTextMapPropagator() is the PROCESS-
+	// WIDE propagator fission-bundle's main installs (W3C tracecontext +
+	// baggage); ctx carrying no span/extracted context, or the default
+	// no-op propagator (unconfigured tests), yields an empty carrier — left
+	// as env.Trace's zero value (nil), which decodeWakeEnvelope treats
+	// exactly like an absent field.
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if len(carrier) > 0 {
+		env.Trace = map[string]string(carrier)
 	}
 	body, err := json.Marshal(env)
 	if err != nil {
@@ -357,6 +400,19 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 		return
 	}
 
+	// deliveryCtx extracts env.Trace (if present) into ctx — this is the
+	// stitching half of the wake-trace mechanism (see wakeEnvelope.Trace's
+	// doc comment for the injecting half): DispatchTurn starts its
+	// invoke_agent span from dctx below, so a continuation's span becomes a
+	// child in the SAME trace as the turn that enqueued it. An envelope with
+	// no Trace field (nil/empty map) leaves ctx unchanged — DispatchTurn's
+	// span then starts a fresh root trace, which is correct, not degraded:
+	// there was nothing to stitch onto.
+	deliveryCtx := ctx
+	if len(env.Trace) > 0 {
+		deliveryCtx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(env.Trace))
+	}
+
 	tr := TurnRequest{
 		Namespace:   env.Namespace,
 		Agent:       env.Agent,
@@ -367,7 +423,7 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 		WakeAttempt: msg.Attempts,
 	}
 	sink := &wakeSink{}
-	dctx, dcancel := context.WithTimeout(ctx, wakeDeliveryTimeout)
+	dctx, dcancel := context.WithTimeout(deliveryCtx, wakeDeliveryTimeout)
 	res, derr := w.d.DispatchTurn(dctx, tr, sink)
 	dcancel()
 	w.logger.V(1).Info("wake turn dispatched", "id", msg.ID, "attempt", msg.Attempts, "bytesDrained", sink.counted)
@@ -381,7 +437,15 @@ func (w *WakeService) process(ctx context.Context, msg statestore.LeasedMessage)
 	switch classifyWakeResult(res, derr) {
 	case wakeActionAck:
 		if w.ack(sctx, msg) && res.ShouldReviveChain() {
-			w.reviveChain(sctx, env)
+			// Thread the DELIVERY's extracted trace context into the
+			// revival enqueue (plan-review pin): sctx alone is rebuilt from
+			// the POLL LOOP's ctx (context.WithoutCancel(ctx) above, on
+			// this method's own `ctx` param) and never carries the trace
+			// this delivery ran under — reviveChain's EnqueueWake call would
+			// otherwise inject nothing, silently breaking the stitch on
+			// exactly the chain-death race reviveChain exists to close. See
+			// withDeliveryTrace's doc comment.
+			w.reviveChain(withDeliveryTrace(sctx, deliveryCtx), env)
 		}
 	case wakeActionKillNotAgent:
 		w.logger.V(1).Info("wake dead-lettered: not an agent function", "id", msg.ID, "namespace", env.Namespace, "agent", env.Agent, "session", env.Session, "attempts", msg.Attempts)
@@ -465,6 +529,22 @@ func (w *WakeService) ack(ctx context.Context, msg statestore.LeasedMessage) boo
 		return false
 	}
 	return true
+}
+
+// withDeliveryTrace returns base with deliveryCtx's SpanContext attached (if
+// valid), and base unchanged otherwise. It exists so process's post-Ack
+// revival enqueue can carry the just-completed delivery's trace even though
+// its settle ctx (sctx) is independently derived from the POLL LOOP's ctx
+// (never from deliveryCtx) — see process's reviveChain call site. Only the
+// SpanContext VALUE is copied; base's own cancellation/deadline (sctx's
+// settle-scoped timeout) is left untouched, since trace.ContextWithSpanContext
+// only ever sets a context value, never a deadline.
+func withDeliveryTrace(base, deliveryCtx context.Context) context.Context {
+	sc := trace.SpanContextFromContext(deliveryCtx)
+	if !sc.IsValid() {
+		return base
+	}
+	return trace.ContextWithSpanContext(base, sc)
 }
 
 // reviveChain closes the self-dedup chain-death window documented on
