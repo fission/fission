@@ -398,9 +398,9 @@ func diffSessions(prev, current map[sessionKey]SessionRecord) []SessionRecord {
 // sessionUnchanged reports whether old and cur are identical on the fields
 // the poller diffs: Status, LastActiveAt, Stats.Turns, CurrentPod. Every
 // other field the poller ignores is either immutable after Create
-// (Namespace, Agent, ID, CreatedAt) or not yet meaningful for the feed
-// (the rest of Stats). LastActiveAt is compared with Equal, not ==: both
-// values here round-tripped through JSON, but Equal is the correct
+// (Namespace, Agent, ID, CreatedAt, Parent, Depth) or not yet meaningful for
+// the feed (the rest of Stats). LastActiveAt is compared with Equal, not ==:
+// both values here round-tripped through JSON, but Equal is the correct
 // time.Time comparison regardless.
 func sessionUnchanged(old, cur SessionRecord) bool {
 	return old.Status == cur.Status &&
