@@ -319,25 +319,30 @@ const (
 	// artifact traffic at the wrong service rather than failing loudly.
 	envStoragesvcURL = "STORAGESVC_URL"
 
-	// envMaxArtifactBytes / envMaxSessionArtifactBytes configure
-	// WorkspaceHandler's per-artifact cap and per-session budget
-	// (workspace.go's handlePut doc). Read once here, like the other agent
-	// runtime knobs.
+	// envMaxArtifactBytes / envMaxSessionArtifactBytes / envMaxSessionArtifacts
+	// configure WorkspaceHandler's per-artifact byte cap, per-session byte
+	// budget, and per-session artifact-COUNT budget (workspace.go's handlePut
+	// doc — the count budget is what closes the zero-byte-artifact bypass a
+	// bytes-only budget leaves open, and what structurally bounds a session's
+	// LIST response size). Read once here, like the other agent runtime knobs.
 	envMaxArtifactBytes        = "AGENT_MAX_ARTIFACT_BYTES"
 	envMaxSessionArtifactBytes = "AGENT_MAX_SESSION_ARTIFACT_BYTES"
+	envMaxSessionArtifacts     = "AGENT_MAX_SESSION_ARTIFACTS"
 
 	// defaultSweepInterval / defaultArchiveRetention are applied when the
 	// corresponding env var is unset.
 	defaultSweepInterval    = 30 * time.Second
 	defaultArchiveRetention = 168 * time.Hour // 7 days
 
-	// defaultMaxArtifactBytes / defaultMaxSessionArtifactBytes are applied
-	// when the corresponding env var is unset. 0 for the session budget
-	// means unlimited (see WorkspaceHandler.maxSessionArtifactBytes); the
+	// defaultMaxArtifactBytes / defaultMaxSessionArtifactBytes /
+	// defaultMaxSessionArtifacts are applied when the corresponding env var
+	// is unset. 0 for either session budget means unlimited (see
+	// WorkspaceHandler.maxSessionArtifactBytes/maxSessionArtifacts); the
 	// per-artifact cap has no such "0 means unlimited" escape hatch — it
 	// always bounds a single PUT.
 	defaultMaxArtifactBytes        int64 = 32 << 20
 	defaultMaxSessionArtifactBytes int64 = 256 << 20
+	defaultMaxSessionArtifacts     int64 = 1000
 
 	// defaultRegistryPollInterval is applied when envRegistryPoll is unset.
 	defaultRegistryPollInterval = 2 * time.Second
@@ -467,6 +472,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
+	maxSessionArtifacts, err := envInt64(envMaxSessionArtifacts, defaultMaxSessionArtifacts)
+	if err != nil {
+		return err
+	}
 
 	// Fail closed: refuse to serve unauthenticated unless explicitly opted
 	// in. Pass-through grants every caller a wildcard namespace scope and can
@@ -521,7 +530,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		}
 		wsClient = newWorkspaceClient(storagesvcURL, wsrt)
 	}
-	wsHandler := NewWorkspaceHandler(logger.WithName("workspace"), view, store, wsClient, retention, maxArtifactBytes, maxSessionArtifactBytes)
+	wsHandler := NewWorkspaceHandler(logger.WithName("workspace"), view, store, wsClient, retention, maxArtifactBytes, maxSessionArtifactBytes, maxSessionArtifacts)
 
 	// SSE registry feed: a single background Poller diffs
 	// SessionStore.List across view.List() agents and publishes changes to a

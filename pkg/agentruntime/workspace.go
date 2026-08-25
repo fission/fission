@@ -37,9 +37,12 @@
 //     (Q32). Residual orphans from records that TTL out unswept (e.g. a
 //     deleted agent Function) join the already-named orphan-sweep
 //     follow-up, not solved here.
-//  5. Quota (PUT only): a per-artifact cap (AGENT_MAX_ARTIFACT_BYTES) and a
-//     per-session budget (AGENT_MAX_SESSION_ARTIFACT_BYTES) — see
-//     handlePut's doc for the pre-check/write/settle ordering.
+//  5. Quota (PUT only): a per-artifact byte cap (AGENT_MAX_ARTIFACT_BYTES), a
+//     per-session byte budget (AGENT_MAX_SESSION_ARTIFACT_BYTES), and a
+//     per-session artifact-COUNT budget (AGENT_MAX_SESSION_ARTIFACTS — the
+//     bytes-only budget's zero-byte-artifact bypass, and what structurally
+//     bounds a session's LIST response size) — see handlePut's doc for the
+//     delta-accounting and pre-check/write/settle ordering.
 //
 // Streaming: the request body is spooled (spoolWorkspaceBody) rather than
 // buffered whole — bounded in-memory up to workspaceSpoolThresholdBytes,
@@ -100,6 +103,22 @@ const (
 	// connection pool, matching pkg/storagesvc/client's own
 	// storagesvcIdleConnsPerHost sizing for the same single upstream.
 	workspaceIdleConnsPerHost = 16
+
+	// workspaceListMaxResponseBytes bounds how much of a storagesvc LIST
+	// response workspaceClient.list will buffer. Tied to the artifact-COUNT
+	// budget (AGENT_MAX_SESSION_ARTIFACTS, defaultMaxSessionArtifacts items
+	// in main.go): a session's list JSON is at most roughly
+	// defaultMaxSessionArtifacts items * (workspaceMarker + ns + agent +
+	// session + a maxWorkspacePathBytes path + a size field + JSON
+	// punctuation), which comfortably fits well under this cap at the
+	// default count budget — a legitimate list never truncates. A caller
+	// that somehow produced a bigger response already violated the count
+	// budget upstream (or storagesvc/agentruntime disagree on it); either
+	// way this is defense in depth, not the primary bound: without it an
+	// unbounded io.ReadAll of a hostile or corrupted upstream response would
+	// be a shared-control-plane memory amplification (one LIST call turning
+	// into an unbounded allocation), not merely a slow one.
+	workspaceListMaxResponseBytes int64 = 8 << 20
 )
 
 // workspaceSegmentCharset is the allowed charset for a non-marker workspace
@@ -175,6 +194,22 @@ func validateWorkspaceRouteIdentity(w http.ResponseWriter, ns, name, session str
 	}
 	if !sessionIDPattern.MatchString(session) || strings.HasPrefix(session, CheckpointKeyPrefix) {
 		writeErr(w, http.StatusBadRequest, "invalid session id")
+		return false
+	}
+	// sessionIDPattern's charset (identical to workspaceSegmentCharset) still
+	// admits ".", "..", and a leading "_" — none of which resolveSessionID
+	// itself ever mints, but a caller can still SUPPLY a session id matching
+	// one, and this route treats {session} as a wire path segment.
+	// validateWorkspaceSegment closes exactly that gap: without it, such a
+	// session id sails through this check and only fails downstream at
+	// storagesvc's own validateWorkspaceID (pkg/storagesvc/workspace.go),
+	// surfacing as an opaque 502 here instead of this layer's own 400 —
+	// contradicting this function's "mirrors storagesvc's rules exactly"
+	// defense-in-depth claim. Every session id this check newly rejects was
+	// already guaranteed to fail at storagesvc, so this only replaces a 502
+	// with a 400 — no previously-working id is affected.
+	if err := validateWorkspaceSegment(session); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid session id: "+err.Error())
 		return false
 	}
 	return true
@@ -358,7 +393,14 @@ func (c *workspaceClient) put(ctx context.Context, id string, sp *workspaceSpool
 }
 
 // get issues GET /v1/workspace?id=<id>. The caller must Close the returned
-// body. Returns errWorkspaceNotFound on a storagesvc 404.
+// body. Returns errWorkspaceNotFound on a storagesvc 404. size is -1 when
+// storagesvc's Content-Length header was absent or unparsable — the caller
+// (handleGet) must treat that as "unknown", NOT as an actual 0-byte body:
+// blindly parsing with ", _" and defaulting to 0 would make handleGet
+// declare "Content-Length: 0" while still copying a non-empty stream, which
+// Go's server enforces by silently truncating the response to empty. In
+// contract storagesvc always sets the header (workspaceGetHandler stats
+// before streaming), so -1 is a robustness path, not a live one.
 func (c *workspaceClient) get(ctx context.Context, id string) (io.ReadCloser, int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/workspace?id="+url.QueryEscape(id), nil)
 	if err != nil {
@@ -376,7 +418,10 @@ func (c *workspaceClient) get(ctx context.Context, id string) (io.ReadCloser, in
 		defer resp.Body.Close()
 		return nil, 0, fmt.Errorf("storagesvc GET %s: status %d: %s", id, resp.StatusCode, readLimitedBody(resp.Body))
 	}
-	size, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	size, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if err != nil {
+		size = -1
+	}
 	return resp.Body, size, nil
 }
 
@@ -409,7 +454,10 @@ type workspaceListStoragesvcResp struct {
 	Items []workspaceListStoragesvcItem `json:"items"`
 }
 
-// list issues GET /v1/workspace/list?prefix=<prefix>.
+// list issues GET /v1/workspace/list?prefix=<prefix>. The response body is
+// read through workspaceListMaxResponseBytes — see that constant's doc for
+// why an unbounded io.ReadAll here would be a memory-amplification vector,
+// not merely a slow one.
 func (c *workspaceClient) list(ctx context.Context, prefix string) ([]workspaceListStoragesvcItem, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/workspace/list?prefix="+url.QueryEscape(prefix), nil)
 	if err != nil {
@@ -423,9 +471,18 @@ func (c *workspaceClient) list(ctx context.Context, prefix string) ([]workspaceL
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("storagesvc LIST %s: status %d: %s", prefix, resp.StatusCode, readLimitedBody(resp.Body))
 	}
-	body, err := io.ReadAll(resp.Body)
+	// Read one byte past the cap: landing exactly at cap+1 (rather than a
+	// silently truncated cap bytes that json.Unmarshal might still happen to
+	// parse as valid-but-wrong JSON) means the response really did exceed
+	// the bound, mirroring the PUT-side over-read-detection shape
+	// (spoolWorkspaceBody's LimitReader(cap+1)) rather than the truncate-
+	// and-hope alternative.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, workspaceListMaxResponseBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(body)) > workspaceListMaxResponseBytes {
+		return nil, fmt.Errorf("storagesvc LIST %s: response exceeds the %d byte cap", prefix, workspaceListMaxResponseBytes)
 	}
 	var out workspaceListStoragesvcResp
 	if err := json.Unmarshal(body, &out); err != nil {
@@ -445,6 +502,7 @@ type WorkspaceHandler struct {
 
 	maxArtifactBytes        int64
 	maxSessionArtifactBytes int64 // 0 means unlimited.
+	maxSessionArtifacts     int64 // 0 means unlimited.
 }
 
 // NewWorkspaceHandler returns a WorkspaceHandler. client nil disables the
@@ -452,10 +510,17 @@ type WorkspaceHandler struct {
 // storagesvc URL — see main.go's STORAGESVC_URL handling). retention is the
 // same archive-retention duration NewDispatcher receives, used identically
 // to compute a settled record's refreshed live-key TTL (see liveTTL).
-func NewWorkspaceHandler(logger logr.Logger, view *AgentView, store *SessionStore, client *workspaceClient, retention time.Duration, maxArtifactBytes, maxSessionArtifactBytes int64) *WorkspaceHandler {
+// maxSessionArtifacts bounds the number of DISTINCT artifact paths a session
+// may hold (0 = unlimited) — the count-side counterpart to
+// maxSessionArtifactBytes, closing the zero-byte-artifact bypass a
+// bytes-only budget leaves open (an unbounded number of 0-byte PUTs always
+// passes a bytes check) and structurally bounding how large a single LIST
+// response for the session can ever legitimately be.
+func NewWorkspaceHandler(logger logr.Logger, view *AgentView, store *SessionStore, client *workspaceClient, retention time.Duration, maxArtifactBytes, maxSessionArtifactBytes, maxSessionArtifacts int64) *WorkspaceHandler {
 	return &WorkspaceHandler{
 		logger: logger, view: view, store: store, client: client, retention: retention,
 		maxArtifactBytes: maxArtifactBytes, maxSessionArtifactBytes: maxSessionArtifactBytes,
+		maxSessionArtifacts: maxSessionArtifacts,
 	}
 }
 
@@ -491,6 +556,34 @@ func (wh *WorkspaceHandler) requireSession(w http.ResponseWriter, r *http.Reques
 	return rec, true
 }
 
+// probeExisting looks up id's CURRENT size (and whether it exists at all)
+// via a LIST scoped to the session prefix, filtered to the exact id — the
+// only sizing primitive the frozen storagesvc wire contract offers (no
+// HEAD/info route). Both handlePut (to settle an overwrite by DELTA rather
+// than double-counting the write) and handleDelete (to know how much to
+// decrement) share this lookup.
+//
+// A LIST failure is logged at V(1) and treated as "does not exist"
+// (size 0, found false) — the accepted-drift fallback: handlePut then
+// settles as a plain create (the honest worst case being a slightly
+// over-counted budget, never an under-counted one that could bypass it) and
+// handleDelete simply skips its counter decrement (documented at its own
+// call site). Neither caller-visible outcome (the PUT/DELETE still
+// succeeds) depends on the probe succeeding — only the bookkeeping does.
+func (wh *WorkspaceHandler) probeExisting(ctx context.Context, ns, agent, session, id string) (size int64, found bool) {
+	items, err := wh.client.list(ctx, workspaceSessionPrefix(ns, agent, session))
+	if err != nil {
+		wh.logger.V(1).Info("probing existing workspace object failed; treating as not-yet-existing", "id", id, "namespace", ns, "agent", agent, "session", session, "error", err.Error())
+		return 0, false
+	}
+	for _, it := range items {
+		if it.ID == id {
+			return it.Size, true
+		}
+	}
+	return 0, false
+}
+
 // workspaceDisabledMsg is the 503 body every route answers with when
 // STORAGESVC_URL is unset — see main.go's envStoragesvcURL handling.
 const workspaceDisabledMsg = "workspace disabled: STORAGESVC_URL not configured"
@@ -503,16 +596,32 @@ type workspacePutResp struct {
 
 // handlePut serves PUT /workspace/{namespace}/{name}/{session}/{path...}.
 //
-// Quota ordering (Global Constraints): pre-check the per-session budget
-// (using the fresh record's ArtifactBytes read by requireSession) -> write
-// to storagesvc -> CAS-settle the counters via casUpdateFresh. The settle
-// closure is func(*SessionRecord) with no error return, so the budget check
-// CANNOT live inside it — it must happen before the write, as a pre-check.
-// That ordering leaves a small accepted overshoot window: two PUTs racing
-// right at the budget can both pass the pre-check (each reads the budget as
-// not-yet-exceeded) and both write, overshooting by up to one artifact's
-// worth of bytes before the next pre-check observes the settled total.
-// Mirrors the G19 honesty notes on other best-effort session meters.
+// Delta accounting: storagesvc's PUT is an OVERWRITE-in-place (Task 1's
+// wire contract has no separate create/replace verb), so unconditionally
+// adding the new size on every PUT would turn the per-session byte budget
+// into a cumulative-WRITE budget rather than a stored-bytes one — a session
+// that legitimately rewrites one 32MiB file 8 times would hit the default
+// 256MiB budget and 429-lock, and a later DELETE would only decrement by the
+// object's CURRENT size, leaving permanent phantom residue (a nonzero
+// counter backed by zero live objects). probeExisting looks up the prior
+// size (and whether the path existed at all) BEFORE the write; both the
+// pre-check and the post-write settle use that delta — oldSize subtracted,
+// newSize added, ArtifactCount incremented only when the path did not
+// already exist. A rewrite of an unchanged-size file nets to a zero-byte
+// delta, exactly matching what actually changed on storagesvc.
+//
+// Quota ordering (Global Constraints): pre-check the per-session budgets
+// (bytes AND count — see maxSessionArtifacts) -> write to storagesvc ->
+// CAS-settle the counters via casUpdateFresh. The settle closure is
+// func(*SessionRecord) with no error return, so the budget checks CANNOT
+// live inside it — they must happen before the write, as a pre-check. That
+// ordering leaves an accepted overshoot window, and it is NOT bounded to
+// "one artifact's worth": with N PUTs racing concurrently, every one of them
+// can read the pre-settle (not-yet-exceeded) budget and all N write before
+// any settle lands, so the real worst case is (N-1)*maxArtifactBytes — there
+// is no per-session in-flight-write semaphore bounding N itself. Mirrors the
+// G19 honesty notes on other best-effort session meters; a per-session
+// in-flight cap is a follow-up, not built here.
 func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	if wh.client == nil {
 		writeErr(w, http.StatusServiceUnavailable, workspaceDisabledMsg)
@@ -557,12 +666,22 @@ func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if wh.maxSessionArtifactBytes > 0 && rec.Stats.ArtifactBytes+sp.size > wh.maxSessionArtifactBytes {
-		writeErr(w, http.StatusTooManyRequests, "session artifact budget exceeded")
+	id := workspaceID(ns, agent, session, path)
+	oldSize, existed := wh.probeExisting(r.Context(), ns, agent, session, id)
+
+	if wh.maxSessionArtifactBytes > 0 && rec.Stats.ArtifactBytes+(sp.size-oldSize) > wh.maxSessionArtifactBytes {
+		writeErr(w, http.StatusTooManyRequests, "session artifact byte budget exceeded")
+		return
+	}
+	// Zero-byte artifacts (and any artifact that shrinks the byte delta to
+	// ~0) still consume ONE slot of this budget when the path is new — the
+	// count check is what closes the bypass a bytes-only budget leaves open
+	// (an unbounded number of 0-byte PUTs always satisfies a bytes check).
+	if !existed && wh.maxSessionArtifacts > 0 && rec.Stats.ArtifactCount+1 > wh.maxSessionArtifacts {
+		writeErr(w, http.StatusTooManyRequests, "session artifact count budget exceeded")
 		return
 	}
 
-	id := workspaceID(ns, agent, session, path)
 	size, err := wh.client.put(r.Context(), id, sp)
 	if err != nil {
 		wh.logger.Error(err, "writing workspace object", "namespace", ns, "agent", agent, "session", session, "path", path)
@@ -571,8 +690,14 @@ func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	casUpdateFresh(r.Context(), wh.logger, wh.store, ns, agent, session, wh.liveTTL(ns, agent), func(rec *SessionRecord) {
-		rec.Stats.ArtifactCount++
-		rec.Stats.ArtifactBytes += size
+		if !existed {
+			rec.Stats.ArtifactCount++
+		}
+		// Clamped at 0: a probe that raced a concurrent delete/rewrite of
+		// the SAME path (oldSize stale by the time this settles) must never
+		// drive the counter negative — the same defensive clamp DELETE's
+		// own settle applies.
+		rec.Stats.ArtifactBytes = max(0, rec.Stats.ArtifactBytes+(size-oldSize))
 	})
 
 	writeJSON(w, http.StatusOK, workspacePutResp{Path: path, Size: size})
@@ -614,7 +739,15 @@ func (wh *WorkspaceHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	defer body.Close()
 
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	// size == -1 means storagesvc's Content-Length was absent/unparsable
+	// (workspaceClient.get's doc) — omit the header rather than declaring a
+	// wrong length: Go's server enforces whatever Content-Length it is told,
+	// so writing "0" here while still copying a non-empty body would
+	// silently truncate the response to empty. Omitting it instead falls
+	// back to chunked transfer encoding, which is always correct.
+	if size >= 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	}
 	if _, err := io.Copy(w, body); err != nil {
 		wh.logger.Error(err, "streaming workspace object", "namespace", ns, "agent", agent, "session", session, "path", path)
 	}
@@ -627,16 +760,21 @@ type workspaceDeleteResp struct {
 
 // handleDelete serves DELETE /workspace/{namespace}/{name}/{session}/{path...}.
 // Idempotent (a missing artifact is still a 200, matching storagesvc's own
-// DELETE contract). The frozen storagesvc wire contract has no HEAD/info
-// route, so the byte size needed to decrement Stats.ArtifactBytes is looked
-// up via a LIST scoped to the session prefix, filtered to the exact id —
-// the cheapest primitive the contract offers (an alternative GET-then-
-// discard would transfer the whole artifact just to read a header). A
-// failed list is logged and treated as "size unknown": the delete itself
-// still proceeds and still returns 200 (idempotent-delete is the contract),
-// it only means the counter settle below is skipped — accepted drift, the
-// same "residue accepted" stance the purge/prefix-delete paths take
-// elsewhere in this feature.
+// DELETE contract). The byte size needed to decrement Stats.ArtifactBytes
+// comes from probeExisting — the frozen storagesvc wire contract has no
+// HEAD/info route, so this is a LIST scoped to the session prefix, filtered
+// to the exact id (the cheapest primitive the contract offers; a GET-then-
+// discard would transfer the whole artifact just to read a header). That
+// list is O(N) in the session's live artifact count per delete — O(N^2) for
+// a client tearing a session down file-by-file — but N is now structurally
+// bounded by maxSessionArtifacts (handlePut's count budget), and this same
+// call is bounded in RESPONSE SIZE by workspaceListMaxResponseBytes, so
+// neither the per-call cost nor the memory it buffers is unbounded. A probe
+// failure is treated as "does not exist" (see probeExisting's doc): the
+// delete itself still proceeds and still returns 200 (idempotent-delete is
+// the contract), it only means the counter settle below is skipped —
+// accepted drift, the same "residue accepted" stance the purge/prefix-delete
+// paths take elsewhere in this feature.
 func (wh *WorkspaceHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if wh.client == nil {
 		writeErr(w, http.StatusServiceUnavailable, workspaceDisabledMsg)
@@ -656,20 +794,7 @@ func (wh *WorkspaceHandler) handleDelete(w http.ResponseWriter, r *http.Request)
 	}
 
 	id := workspaceID(ns, agent, session, path)
-	prefix := workspaceSessionPrefix(ns, agent, session)
-
-	var size int64
-	found := false
-	if items, err := wh.client.list(r.Context(), prefix); err != nil {
-		wh.logger.Error(err, "listing workspace session for delete-size lookup", "namespace", ns, "agent", agent, "session", session, "path", path)
-	} else {
-		for _, it := range items {
-			if it.ID == id {
-				size, found = it.Size, true
-				break
-			}
-		}
-	}
+	size, found := wh.probeExisting(r.Context(), ns, agent, session, id)
 
 	if err := wh.client.del(r.Context(), id); err != nil {
 		wh.logger.Error(err, "deleting workspace object", "namespace", ns, "agent", agent, "session", session, "path", path)

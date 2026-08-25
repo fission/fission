@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,6 +41,15 @@ type fakeStoragesvc struct {
 	mu    sync.Mutex
 	objs  map[string][]byte
 	calls int
+
+	// failList, when set, makes GET /v1/workspace/list answer 500 — for
+	// TestWorkspacePut_ProbeFailureTreatedAsCreate's probe-failure pin.
+	failList atomic.Bool
+	// listPadBytes, when nonzero, pads the LIST response with an extra JSON
+	// field of that many bytes — for TestWorkspaceClientList_BoundedRead,
+	// which needs a response that legitimately exceeds
+	// workspaceListMaxResponseBytes without needing that many real objects.
+	listPadBytes atomic.Int64
 }
 
 func newFakeStoragesvc(t *testing.T, master []byte) (*httptest.Server, *fakeStoragesvc) {
@@ -84,10 +94,21 @@ func newFakeStoragesvc(t *testing.T, master []byte) (*httptest.Server, *fakeStor
 	mux.HandleFunc("GET /v1/workspace/list", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.calls++
+		if f.failList.Load() {
+			f.mu.Unlock()
+			http.Error(w, "simulated list failure", http.StatusInternalServerError)
+			return
+		}
 		prefix := r.URL.Query().Get("prefix")
 		type item struct {
 			ID   string `json:"id"`
 			Size int64  `json:"size"`
+		}
+		type listResp struct {
+			Items []item `json:"items"`
+			// Pad is TestWorkspaceClientList_BoundedRead's oversized-response
+			// simulator (see listPadBytes) — never set outside that test.
+			Pad string `json:"_pad,omitempty"`
 		}
 		var items []item
 		for id, body := range f.objs {
@@ -95,8 +116,13 @@ func newFakeStoragesvc(t *testing.T, master []byte) (*httptest.Server, *fakeStor
 				items = append(items, item{ID: id, Size: int64(len(body))})
 			}
 		}
+		pad := f.listPadBytes.Load()
 		f.mu.Unlock()
-		resp, _ := json.Marshal(map[string]any{"items": items})
+		out := listResp{Items: items}
+		if pad > 0 {
+			out.Pad = strings.Repeat("p", int(pad))
+		}
+		resp, _ := json.Marshal(out)
 		_, _ = w.Write(resp)
 	})
 
@@ -125,6 +151,14 @@ func (f *fakeStoragesvc) has(id string) bool {
 // hmacauth.ServiceSigner exactly as main.go's Start does.
 func newTestWorkspaceHandler(t *testing.T, master []byte, storagesvcURL string, maxArtifactBytes, maxSessionArtifactBytes int64) (*WorkspaceHandler, *AgentView, *SessionStore) {
 	t.Helper()
+	return newTestWorkspaceHandlerWithCountBudget(t, master, storagesvcURL, maxArtifactBytes, maxSessionArtifactBytes, 0)
+}
+
+// newTestWorkspaceHandlerWithCountBudget is newTestWorkspaceHandler with an
+// explicit maxSessionArtifacts (the count budget), for tests exercising it
+// directly.
+func newTestWorkspaceHandlerWithCountBudget(t *testing.T, master []byte, storagesvcURL string, maxArtifactBytes, maxSessionArtifactBytes, maxSessionArtifacts int64) (*WorkspaceHandler, *AgentView, *SessionStore) {
+	t.Helper()
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
@@ -133,7 +167,7 @@ func newTestWorkspaceHandler(t *testing.T, master []byte, storagesvcURL string, 
 		rt := hmacauth.ServiceSigner(master, hmacauth.ServiceStoragesvc, http.DefaultTransport, time.Now)
 		client = newWorkspaceClient(storagesvcURL, rt)
 	}
-	wh := NewWorkspaceHandler(logr.Discard(), view, store, client, time.Hour, maxArtifactBytes, maxSessionArtifactBytes)
+	wh := NewWorkspaceHandler(logr.Discard(), view, store, client, time.Hour, maxArtifactBytes, maxSessionArtifactBytes, maxSessionArtifacts)
 	return wh, view, store
 }
 
@@ -371,7 +405,9 @@ func TestWorkspacePut_OverCap413_NothingStored(t *testing.T) {
 
 // TestWorkspacePut_OverBudget429 is the quota pre-check pin: a session
 // already near AGENT_MAX_SESSION_ARTIFACT_BYTES rejects a PUT that would
-// push it over, BEFORE the storagesvc write.
+// push it over, BEFORE the storagesvc WRITE. It costs exactly ONE upstream
+// call — the probeExisting LIST that delta-accounting needs to tell an
+// overwrite from a create (M1's fix) — never the PUT itself.
 func TestWorkspacePut_OverBudget429(t *testing.T) {
 	t.Parallel()
 	master := []byte("ws-429-master")
@@ -393,7 +429,130 @@ func TestWorkspacePut_OverBudget429(t *testing.T) {
 	mux.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusTooManyRequests, w.Code)
-	assert.Zero(t, fake.callCount(), "an over-budget PUT must never reach storagesvc")
+	assert.EqualValues(t, 1, fake.callCount(), "an over-budget PUT must reach storagesvc only for the delta-accounting probe (LIST), never the PUT itself")
+	assert.False(t, fake.has("_workspace_/ns-a/agent-x/sess-1/more.txt"), "nothing must be stored on a 429")
+}
+
+// TestWorkspacePut_OverwriteDeltaAccounting is finding M1's core pin:
+// rewriting the SAME path multiple times (with different sizes) must settle
+// ArtifactBytes to the CURRENT stored size, not the cumulative sum of every
+// write, and ArtifactCount must stay at 1 — never re-incrementing for a path
+// that already existed. A budget sized to fit only ONE of the larger bodies
+// (not N of them) proves the settle is delta-based, not additive: a naive
+// additive implementation would 429 on the second or third rewrite.
+func TestWorkspacePut_OverwriteDeltaAccounting(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-delta-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	// Budget fits exactly one 40-byte body plus slack, never two.
+	wh, view, store := newTestWorkspaceHandler(t, master, upstream.URL, 1<<20, 50)
+	view.Upsert(headerEntry("ns-a", "agent-x", 0))
+	identity := NewIdentityVerifier(master, nil, view)
+
+	mux := http.NewServeMux()
+	mountWorkspaceRoutes(mux, wh, IdentityOrJWTOwnWorkspace(identity, NewAuthorizer(nil).Middleware))
+	require.NoError(t, store.Create(t.Context(), newActiveSessionRecord("ns-a", "agent-x", "sess-1", time.Now()), 0, time.Hour))
+	tok := identityToken(master, "ns-a", "agent-x")
+
+	sizes := []int{10, 40, 20, 40} // grows, shrinks, grows again — all under budget only if delta-settled
+	for i, sz := range sizes {
+		body := strings.Repeat("z", sz)
+		req := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/same.txt", "ns-a", "agent-x", tok, body)
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		require.Equalf(t, http.StatusOK, w.Code, "rewrite #%d (size %d) must succeed under a budget sized for ONE body, not the cumulative sum: %s", i, sz, w.Body.String())
+
+		rec, _, err := store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+		require.NoError(t, err)
+		assert.EqualValuesf(t, sz, rec.Stats.ArtifactBytes, "after rewrite #%d, ArtifactBytes must equal the CURRENT stored size, not a cumulative sum", i)
+		assert.EqualValuesf(t, 1, rec.Stats.ArtifactCount, "rewrite #%d must not re-increment ArtifactCount for a path that already existed", i)
+	}
+	assert.True(t, fake.has("_workspace_/ns-a/agent-x/sess-1/same.txt"))
+
+	// DELETE must restore the budget to exactly 0, not leave phantom residue
+	// from the (now-irrelevant) earlier write sizes.
+	delReq := identityWorkspaceRequest(http.MethodDelete, "/workspace/ns-a/agent-x/sess-1/same.txt", "ns-a", "agent-x", tok, "")
+	delRec := httptest.NewRecorder()
+	mux.ServeHTTP(delRec, delReq)
+	require.Equal(t, http.StatusOK, delRec.Code)
+
+	rec, _, err := store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	assert.Zero(t, rec.Stats.ArtifactBytes, "delete must restore the byte budget fully")
+	assert.Zero(t, rec.Stats.ArtifactCount)
+}
+
+// TestWorkspacePut_ProbeFailureTreatedAsCreate is M1's accepted-drift pin:
+// when probeExisting's LIST call fails, handlePut must treat the path as
+// not-yet-existing (oldSize=0, count bumped) rather than blocking the write
+// — a probe outage degrades bookkeeping accuracy, never availability.
+func TestWorkspacePut_ProbeFailureTreatedAsCreate(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-probefail-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	fake.failList.Store(true)
+	wh, view, store := newTestWorkspaceHandler(t, master, upstream.URL, 1<<20, 0)
+	view.Upsert(headerEntry("ns-a", "agent-x", 0))
+	identity := NewIdentityVerifier(master, nil, view)
+
+	mux := http.NewServeMux()
+	mountWorkspaceRoutes(mux, wh, IdentityOrJWTOwnWorkspace(identity, NewAuthorizer(nil).Middleware))
+	require.NoError(t, store.Create(t.Context(), newActiveSessionRecord("ns-a", "agent-x", "sess-1", time.Now()), 0, time.Hour))
+	tok := identityToken(master, "ns-a", "agent-x")
+
+	const artifact = "twelve bytes"
+	req := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/a.txt", "ns-a", "agent-x", tok, artifact)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, "a probe failure must not block the PUT")
+
+	rec, _, err := store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rec.Stats.ArtifactCount, "probe failure must fall back to treating the path as new")
+	assert.EqualValues(t, len(artifact), rec.Stats.ArtifactBytes)
+}
+
+// TestWorkspacePut_CountBudget429 is finding M2(a)/(c)'s pin: a session at
+// its AGENT_MAX_SESSION_ARTIFACTS ceiling rejects a NEW-path PUT even when
+// the body is 0 bytes (closing the bytes-budget bypass), while a rewrite of
+// an ALREADY-EXISTING path (which does not consume a new count slot) still
+// succeeds.
+func TestWorkspacePut_CountBudget429(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-countbudget-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	wh, view, store := newTestWorkspaceHandlerWithCountBudget(t, master, upstream.URL, 1<<20, 0, 1) // count budget of 1
+	view.Upsert(headerEntry("ns-a", "agent-x", 0))
+	identity := NewIdentityVerifier(master, nil, view)
+
+	mux := http.NewServeMux()
+	mountWorkspaceRoutes(mux, wh, IdentityOrJWTOwnWorkspace(identity, NewAuthorizer(nil).Middleware))
+	require.NoError(t, store.Create(t.Context(), newActiveSessionRecord("ns-a", "agent-x", "sess-1", time.Now()), 0, time.Hour))
+	tok := identityToken(master, "ns-a", "agent-x")
+
+	firstReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/first.txt", "ns-a", "agent-x", tok, "")
+	firstRec := httptest.NewRecorder()
+	mux.ServeHTTP(firstRec, firstReq)
+	require.Equal(t, http.StatusOK, firstRec.Code, "the first (zero-byte) artifact must consume the one available count slot")
+
+	t.Run("a second distinct zero-byte path is rejected — the count budget, not the byte budget, catches it", func(t *testing.T) {
+		secondReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/second.txt", "ns-a", "agent-x", tok, "")
+		secondRec := httptest.NewRecorder()
+		mux.ServeHTTP(secondRec, secondReq)
+		assert.Equal(t, http.StatusTooManyRequests, secondRec.Code)
+		assert.False(t, fake.has("_workspace_/ns-a/agent-x/sess-1/second.txt"))
+	})
+
+	t.Run("rewriting the SAME existing path is still allowed — it consumes no new count slot", func(t *testing.T) {
+		rewriteReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/first.txt", "ns-a", "agent-x", tok, "updated")
+		rewriteRec := httptest.NewRecorder()
+		mux.ServeHTTP(rewriteRec, rewriteReq)
+		assert.Equal(t, http.StatusOK, rewriteRec.Code)
+	})
+
+	rec, _, err := store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, rec.Stats.ArtifactCount)
 }
 
 // TestWorkspacePathValidation_400 exercises the four path-traversal/encoding
@@ -427,6 +586,66 @@ func TestWorkspacePathValidation_400(t *testing.T) {
 		})
 	}
 	assert.Zero(t, fake.callCount(), "every case here must be rejected before any storagesvc call")
+}
+
+// TestWorkspaceSessionValidation_400 is finding 4's pin: sessionIDPattern
+// alone admits ".", "..", and a leading "_" as a session id (its charset is
+// permissive), and only storagesvc's own validateWorkspaceID rejects those
+// as a path segment — surfacing as an opaque 502 rather than this layer's
+// own 400, contradicting the "mirrors storagesvc's rules exactly" defense-
+// in-depth claim. validateWorkspaceRouteIdentity now additionally runs
+// validateWorkspaceSegment(session), closing the gap: these ids must 400
+// here, before any storagesvc call.
+func TestWorkspaceSessionValidation_400(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-session400-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	wh, _, _ := newTestWorkspaceHandler(t, master, upstream.URL, 1<<20, 0)
+
+	mux := http.NewServeMux()
+	mountWorkspaceRoutes(mux, wh, passthroughAuth)
+
+	tests := []struct {
+		name    string
+		session string
+	}{
+		// "." and ".." are given ENCODED (%2E): a literal "/workspace/.../."
+		// or "/workspace/.../.." is redirected (307) by net/http's own path
+		// cleaning before ever reaching the mux pattern match — the encoded
+		// form is what actually exercises this layer's validation, exactly
+		// like the {path...} traversal case in TestWorkspacePathValidation_400.
+		{"single dot (encoded)", "%2E"},
+		{"double dot (encoded)", "%2E%2E"},
+		{"leading underscore", "_hidden"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/workspace/ns-a/agent-x/"+tt.session, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+		})
+	}
+	assert.Zero(t, fake.callCount(), "a malformed session id must never reach storagesvc")
+}
+
+// TestWorkspaceClientList_BoundedRead is finding M2(b)'s pin: a storagesvc
+// LIST response larger than workspaceListMaxResponseBytes must error out
+// (never be fully buffered) — the fake pads its response with an oversized
+// filler field to simulate a hostile/corrupted upstream without needing
+// thousands of real objects.
+func TestWorkspaceClientList_BoundedRead(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-listbound-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	fake.listPadBytes.Store(workspaceListMaxResponseBytes + 1024)
+
+	rt := hmacauth.ServiceSigner(master, hmacauth.ServiceStoragesvc, http.DefaultTransport, time.Now)
+	client := newWorkspaceClient(upstream.URL, rt)
+
+	_, err := client.list(t.Context(), "_workspace_/ns-a/agent-x/sess-1/")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds")
 }
 
 // TestWorkspaceMeters_BumpAndDecrement is the settle-ordering pin: a
