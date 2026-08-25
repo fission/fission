@@ -62,6 +62,17 @@ const (
 	HeaderWakeID      = "X-Fission-Agent-Wake-Id"
 	HeaderWakeAttempt = "X-Fission-Agent-Wake-Attempt"
 
+	// HeaderParent is the request header a caller may set on a turn that
+	// creates a session, naming the spawning parent session in ParentRef's
+	// canonical "<namespace>/<agent>/<id>" form. It is consulted ONLY when
+	// this turn is the one that creates the session record (DispatchTurn's
+	// ErrNotFound branch, via resolveParentage) — Parent/Depth are
+	// immutable after Create (session.go), so on resume or on a
+	// create-race loss the header is only ever compared against the
+	// already-stored value, never applied; a mismatch there is dropped
+	// with a V(1) log, never an error, never a write.
+	HeaderParent = "X-Fission-Agent-Parent"
+
 	// maxTurnBodyBytes caps a buffered turn request body. The HMAC
 	// ServiceSigner binds the signature to a body hash (pkg/auth/hmac/hmac.go),
 	// so the request body MUST be fully buffered (and replayable via GetBody)
@@ -89,6 +100,14 @@ type TurnRequest struct {
 	ContentType                 string
 	WakeID                      string // non-empty only for wake-delivered turns
 	WakeAttempt                 int    // 1-based, wake-delivered turns only
+	// ParentHeader is the raw HeaderParent value from the inbound HTTP
+	// request, copied in by dispatch() — the only place that sees
+	// *http.Request. The wake consumer (wake.go) builds its TurnRequest
+	// with no such header, so ParentHeader is always "" there; that zero
+	// value is exactly what makes a wake-recreated session fall back to
+	// root (no Parent, Depth 0) with NO change to wake.go — see
+	// resolveParentage.
+	ParentHeader string
 }
 
 // TurnResult is the outcome of one DispatchTurn call: the HTTP handler
@@ -138,6 +157,15 @@ var ErrNotAgent = errors.New("agentruntime: not an agent function")
 // there is no budget to protect, so the long-standing "bookkeeping never gates
 // a turn" rule still applies there.
 var ErrStoreUnavailable = errors.New("agentruntime: session store unavailable")
+
+// ErrSpawnDepthExceeded is returned by DispatchTurn when a turn that would
+// CREATE a new session names a parent (HeaderParent) whose resolved chain
+// depth (parent.Depth+1) exceeds maxSpawnDepth. It is returned by
+// resolveParentage BEFORE Create runs — no record is minted for a rejected
+// spawn. The HTTP handler (dispatch) maps it to 400; it can never be
+// produced by the wake consumer's re-dispatch (TurnRequest.ParentHeader is
+// always "" there, so resolveParentage never reaches the cap check).
+var ErrSpawnDepthExceeded = errors.New("agentruntime: spawn depth exceeded")
 
 // enqueuer is the continue-chain seam DispatchTurn calls into on
 // yield=continue (implemented by WakeService). A Dispatcher's zero
@@ -206,6 +234,17 @@ type Dispatcher struct {
 	// unlimited). See DispatchTurn's step-5 bookkeeping closure.
 	maxContinuations int64
 
+	// maxSpawnDepth caps the depth resolveParentage will admit a spawned
+	// session to: parent.Depth+1 <= maxSpawnDepth, checked BEFORE Create.
+	// Unlike maxContinuations, 0 is NOT "unlimited" here — 0 means "no
+	// spawning", rejecting every parented create. That divergence is
+	// deliberate: this cap exists to bound resource exhaustion from an
+	// unbounded spawn tree, and "unlimited" is never a safe default for
+	// that guard. A root session (no claimed parent, or an unreadable/
+	// unparseable claim) is never subject to this cap regardless of its
+	// value — see resolveParentage.
+	maxSpawnDepth int64
+
 	// wake is the continue-chain seam. It is injected AFTER construction via
 	// SetWakeEnqueuer — see that method's doc comment for the
 	// construction-cycle rationale and the pre-serve contract. nil disables
@@ -223,9 +262,10 @@ type Dispatcher struct {
 // IdleAfter+ArchiveAfter to compute the live-key TTL passed to
 // SessionStore.Create/Update (orphan self-expiry covers idle + archive-wait +
 // archived-copy retention in one live-key lease). maxContinuations caps
-// yield=continue self-chaining per session (0 = unlimited); the wake
-// enqueuer itself is wired separately via SetWakeEnqueuer.
-func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, client *http.Client, routerURL string, retention time.Duration, now func() time.Time, maxContinuations int64) *Dispatcher {
+// yield=continue self-chaining per session (0 = unlimited); maxSpawnDepth
+// caps spawn-chain depth (0 = no spawning, see the field's doc comment); the
+// wake enqueuer itself is wired separately via SetWakeEnqueuer.
+func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, client *http.Client, routerURL string, retention time.Duration, now func() time.Time, maxContinuations int64, maxSpawnDepth int64) *Dispatcher {
 	return &Dispatcher{
 		logger:           logger,
 		view:             view,
@@ -235,6 +275,7 @@ func NewDispatcher(logger logr.Logger, view *AgentView, store *SessionStore, cli
 		retention:        retention,
 		now:              now,
 		maxContinuations: maxContinuations,
+		maxSpawnDepth:    maxSpawnDepth,
 	}
 }
 
@@ -320,11 +361,12 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tr := TurnRequest{
-		Namespace:   ns,
-		Agent:       name,
-		SessionID:   sessionID,
-		Body:        body,
-		ContentType: r.Header.Get("Content-Type"),
+		Namespace:    ns,
+		Agent:        name,
+		SessionID:    sessionID,
+		Body:         body,
+		ContentType:  r.Header.Get("Content-Type"),
+		ParentHeader: r.Header.Get(HeaderParent),
 	}
 	sink := &httpSink{w: w, rc: http.NewResponseController(w)}
 	// DispatchTurn's errors arrive BEFORE sink.Begin (no status has been
@@ -337,6 +379,8 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusServiceUnavailable, "session store unavailable")
 		case errors.Is(err, ErrNotAgent):
 			writeErr(w, http.StatusNotFound, "not an agent function")
+		case errors.Is(err, ErrSpawnDepthExceeded):
+			writeErr(w, http.StatusBadRequest, "spawn depth exceeded")
 		default:
 			writeErr(w, http.StatusBadGateway, "calling upstream function")
 		}
@@ -375,6 +419,10 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	rec, version, err := d.store.Get(ctx, tr.Namespace, tr.Agent, tr.SessionID)
 	switch {
 	case errors.Is(err, statestore.ErrNotFound):
+		parent, depth, perr := d.resolveParentage(ctx, tr.Namespace, tr.Agent, tr.ParentHeader)
+		if perr != nil {
+			return TurnResult{}, perr
+		}
 		newRec := SessionRecord{
 			ID:           tr.SessionID,
 			Agent:        tr.Agent,
@@ -382,6 +430,8 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 			Status:       StatusActive,
 			CreatedAt:    now,
 			LastActiveAt: now,
+			Parent:       parent,
+			Depth:        depth,
 		}
 		switch cerr := d.store.Create(ctx, newRec, entry.MaxSessions, liveTTL); {
 		case cerr == nil:
@@ -396,6 +446,11 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 			d.logger.Info("session created concurrently, activating existing record", "namespace", tr.Namespace, "agent", tr.Agent, "session", tr.SessionID)
 			d.casUpdateFresh(ctx, tr.Namespace, tr.Agent, tr.SessionID, liveTTL, func(rec *SessionRecord) {
 				turnsAtStart = rec.Stats.Turns
+				// This turn lost the create race: the winner's Create already
+				// fixed Parent/Depth immutably. Our own ParentHeader (if any)
+				// names a claim that was never applied — only compared, for
+				// diagnostics.
+				d.checkParentHeaderIgnored(tr.Namespace, tr.Agent, tr.SessionID, tr.ParentHeader, rec)
 				rec.Status = StatusActive
 				rec.LastActiveAt = now
 			})
@@ -420,6 +475,10 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 		}
 	default:
 		turnsAtStart = rec.Stats.Turns
+		// A resumed session's Parent/Depth are already fixed at Create; a
+		// ParentHeader on THIS turn (if any) is only ever compared against
+		// them, never applied.
+		d.checkParentHeaderIgnored(tr.Namespace, tr.Agent, tr.SessionID, tr.ParentHeader, &rec)
 		d.casUpdate(ctx, tr.Namespace, tr.Agent, tr.SessionID, rec, version, liveTTL, func(rec *SessionRecord) {
 			rec.Status = StatusActive
 			rec.LastActiveAt = now
@@ -576,6 +635,84 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 	}
 
 	return TurnResult{StatusCode: resp.StatusCode, Yield: yield, WakeEnqueueAttempted: doEnqueue}, nil
+}
+
+// resolveParentage resolves the Parent/Depth to mint for a session-CREATING
+// turn from its raw ParentHeader. It is called ONLY from DispatchTurn's
+// ErrNotFound (create) branch — see HeaderParent's doc comment for why every
+// other branch only ever compares, via checkParentHeaderIgnored. Depth is
+// NEVER taken off the wire: it is always parent.Depth+1, read from the
+// claimed parent's OWN stored record, so a forged or stale header can at
+// worst misattribute lineage, never fabricate a depth that skips the cap.
+//
+// Resolution:
+//   - header == "": root (nil parent, depth 0) — the common case (no spawn).
+//   - unparseable header: root, logged at V(1) (the header is caller input,
+//     not a store-health signal, so this is not worth Error level).
+//   - parseable header: Get the claimed parent from the LIVE keyspace; on
+//     ANY error (not just ErrNotFound — see the note below) fall back to
+//     GetArchived. Found in either: depth = parent.Depth + 1. If
+//     int64(depth) > maxSpawnDepth, returns ErrSpawnDepthExceeded — the
+//     caller MUST NOT proceed to Create; no record is minted for a rejected
+//     spawn. Unreadable in BOTH keyspaces: logged "parent claim dropped",
+//     admitted as root.
+//
+// Depth-cap nuance: falling back to root on ANY parent-Get error — not just
+// ErrNotFound — means a transient store hiccup fragments what should have
+// been one long lineage into a fresh, separately-capped chain rather than
+// extending the existing one. That is benign for the resource-exhaustion
+// case this cap actually guards: a live runaway spawn loop is, by
+// construction, still actively reading and writing its own parent chain, so
+// its records stay readable and the cap still bites it. The fragmentation
+// risk only lands on the rare, already-cold case of a legitimate deep chain
+// whose parent record was transiently unreadable at exactly the wrong
+// moment — annoying, never a resource-exhaustion hole.
+func (d *Dispatcher) resolveParentage(ctx context.Context, ns, agent, header string) (*ParentRef, int, error) {
+	if header == "" {
+		return nil, 0, nil
+	}
+	parent, ok := ParseParentRef(header)
+	if !ok {
+		d.logger.V(1).Info("unparseable parent header, admitting as root", "namespace", ns, "agent", agent, "headerLen", len(header))
+		return nil, 0, nil
+	}
+
+	rec, _, err := d.store.Get(ctx, parent.Namespace, parent.Agent, parent.ID)
+	if err != nil {
+		rec, _, err = d.store.GetArchived(ctx, parent.Namespace, parent.Agent, parent.ID)
+	}
+	if err != nil {
+		d.logger.V(1).Info("parent claim dropped, admitting as root", "namespace", ns, "agent", agent, "parent", parent.String())
+		return nil, 0, nil
+	}
+
+	depth := rec.Depth + 1
+	if int64(depth) > d.maxSpawnDepth {
+		return nil, 0, ErrSpawnDepthExceeded
+	}
+	return &parent, depth, nil
+}
+
+// checkParentHeaderIgnored logs (V(1), never an error, never a write) when
+// header is present and disagrees with rec's already-stored parentage. It is
+// called from every DispatchTurn branch EXCEPT the creation path: the record
+// already exists there, so Parent/Depth (immutable after Create) can only be
+// compared against a claim on this turn, never applied. Comparing the raw
+// header string against ParentRef.String() (rather than parsing header
+// first) is deliberate and still correct: ParentRef.String() is exactly
+// ParseParentRef's canonical form, so it also catches an unparseable header
+// as a mismatch, with no separate parse-and-branch needed here.
+func (d *Dispatcher) checkParentHeaderIgnored(ns, agent, session, header string, rec *SessionRecord) {
+	if header == "" {
+		return
+	}
+	stored := ""
+	if rec.Parent != nil {
+		stored = rec.Parent.String()
+	}
+	if header != stored {
+		d.logger.V(1).Info("parent header ignored: turn did not create this session", "namespace", ns, "agent", agent, "session", session, "stored", stored)
+	}
 }
 
 // resolveSessionID extracts the session id from r per entry's configured

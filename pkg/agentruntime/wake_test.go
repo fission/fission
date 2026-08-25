@@ -63,7 +63,7 @@ func newTestWakeServiceFull(t *testing.T, client *http.Client, upstreamURL strin
 
 	store := NewSessionStore(kv, now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, client, upstreamURL, time.Hour, now, maxContinuations)
+	d := NewDispatcher(logr.Discard(), view, store, client, upstreamURL, time.Hour, now, maxContinuations, defaultMaxSpawnDepth)
 	w := NewWakeService(logr.Discard(), q, d, now)
 	if wireEnqueuer {
 		d.SetWakeEnqueuer(w)
