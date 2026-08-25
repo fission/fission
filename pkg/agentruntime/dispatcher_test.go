@@ -760,7 +760,7 @@ func TestDispatcher_ContinuationCapStopsEnqueueing(t *testing.T) {
 // TestDispatcher_HeaderTurnsReflectsPreTurnCount pins HeaderTurns: it must
 // carry the record's Stats.Turns as read BEFORE the current turn, so a
 // stateless upstream fixture can bound its own loop. It also pins the
-// converse for the wake replay headers (Task 15): a plain HTTP turn carries
+// converse for the wake replay headers: a plain HTTP turn carries
 // no WakeID, so HeaderWakeID/HeaderWakeAttempt must be absent, never set to
 // an empty string a function could mistake for a wake delivery.
 func TestDispatcher_HeaderTurnsReflectsPreTurnCount(t *testing.T) {
@@ -789,7 +789,7 @@ func TestDispatcher_HeaderTurnsReflectsPreTurnCount(t *testing.T) {
 
 // TestDispatcher_WakeTurnSetsWakeHeaders pins the wake-delivered replay
 // headers, exercised directly via DispatchTurn since WakeID has no HTTP
-// surface (it is set by Task 15's wake consumer, not the HTTP handler).
+// surface (it is set by the wake consumer, not the HTTP handler).
 func TestDispatcher_WakeTurnSetsWakeHeaders(t *testing.T) {
 	t.Parallel()
 	var gotID, gotAttempt string
@@ -872,7 +872,7 @@ func testEndpointIndex(t *testing.T, ns, name string, ips ...string) *endpointca
 	return ix
 }
 
-// TestDispatchTurn_CurrentPodPrediction pins the Task 19 CurrentPod
+// TestDispatchTurn_CurrentPodPrediction pins the CurrentPod
 // bookkeeping: with a non-nil index carrying ready endpoints, DispatchTurn's
 // step-5 write must set SessionRecord.CurrentPod to exactly what
 // endpointcache.PredictSticky would independently compute for the same

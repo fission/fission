@@ -142,7 +142,7 @@ func TestSweeperIdleTransitionSkipsOnCASConflict(t *testing.T) {
 }
 
 // TestSweeperArchiveSkipsOnReviveRace covers the specific race carried from
-// Task 9's review: a turn revives (re-activates) a session between the
+// A turn revives (re-activates) a session between the
 // sweeper's re-Get and its Archive call. SessionStore.Archive's CAS-delete
 // then conflicts and aborts, undoing its speculative archived-copy write.
 // The sweeper must treat that as a silent skip, and the live record must
