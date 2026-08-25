@@ -77,6 +77,13 @@ spec:
         - name: STATESVC_URL
           value: "http://statesvc.{{ .Release.Namespace }}:{{ include "fission.statesvcPort" . }}"
         {{- end }}
+        {{- if .Values.agentRuntime.enabled }}
+        # The executor stamps this URL into agent-identity-bearing function
+        # pods as AGENT_RUNTIME_URL (the dispatch endpoint spawned agents
+        # call home to); unset (feature off) keeps pods byte-identical.
+        - name: AGENT_RUNTIME_URL
+          value: "http://agentruntime.{{ .Release.Namespace }}:{{ include "fission.agentRuntimePort" . }}"
+        {{- end }}
         - name: FETCHER_MINCPU
           value: {{ .Values.fetcher.resource.cpu.requests | quote }}
         - name: FETCHER_MINMEM
