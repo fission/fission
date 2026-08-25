@@ -2,13 +2,26 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// identity.go implements the G16 agent-identity bearer verification on the
-// dispatch route ONLY (POST /agents/{namespace}/{name}) — a second,
-// exclusive auth path alongside authz.go's JWT verification, for a pod's own
-// spawn/dispatch calls carrying the HKDF-derived token Task 1
+// identity.go implements the G16 agent-identity bearer verification,
+// originally on the dispatch route ONLY (POST /agents/{namespace}/{name}) —
+// a second, exclusive auth path alongside authz.go's JWT verification, for a
+// pod's own spawn/dispatch calls carrying the HKDF-derived token Task 1
 // (DeriveAgentIdentityKey, pkg/auth/hmac/keys.go) and Task 2 (the fetcher's
-// .fission-agent-token file) produced. It never reaches the registry/SSE
-// routes: IdentityOrJWT is wired onto the dispatch mount only (main.go).
+// .fission-agent-token file) produced.
+//
+// AMENDED (G12 session workspace, a later slice): the identity bearer now
+// also authenticates the session workspace routes
+// (PUT/GET/DELETE /workspace/{namespace}/{name}/{session}/{path...} and the
+// list route, workspace.go) — a SECOND surface, with a STRICTER
+// authorization rule than dispatch's. The shared verification steps (1-4
+// below) are factored into verifyClaims; each surface then applies its own
+// step-5 authorization closure: dispatch's verify keeps ns-only equality
+// (cross-agent dispatch in the same namespace is the spawn shape), while
+// workspace's verifyOwnWorkspace additionally requires agent equality
+// (own-workspace only in v1 — see verifyOwnWorkspace's doc for the future
+// cross-agent-sharing relaxation this parallels). It still never reaches the
+// registry/SSE routes: IdentityOrJWT/IdentityOrJWTOwnWorkspace are wired onto
+// the dispatch and workspace mounts only (main.go).
 package agentruntime
 
 import (
@@ -27,9 +40,11 @@ const (
 	// compares — the same claims-ride-beside-the-token shape as statesvc's
 	// bearer channel (pkg/statesvc/auth.go, stateapi.HeaderNamespace/
 	// HeaderKeyspace). The presence of either header (not the Authorization
-	// scheme) selects the identity verification path on the dispatch route
-	// EXCLUSIVELY — see IdentityOrJWT. Named alongside the dispatcher's own
-	// X-Fission-Agent-* header family (dispatcher.go:37-74) but distinct in
+	// scheme) selects the identity verification path EXCLUSIVELY on either of
+	// the two mounts that consult it — the dispatch route (IdentityOrJWT) and
+	// the session workspace routes (IdentityOrJWTOwnWorkspace, workspace.go).
+	// Named alongside the dispatcher's own X-Fission-Agent-* header family
+	// (dispatcher.go:37-74) but distinct in
 	// kind: those are turn-protocol headers forwarded to/from the function;
 	// these two are AUTHENTICATION claims consumed here and never proxied
 	// upstream.
@@ -61,9 +76,12 @@ func NewIdentityVerifier(master, masterOld []byte, view *AgentView) *IdentityVer
 	return &IdentityVerifier{master: master, masterOld: masterOld, view: view}
 }
 
-// verify implements the identity path's five checks, in order, writing the
-// HTTP error response itself and returning false on the first one that
-// fails; true means the caller is authorized to proceed straight to next.
+// verifyClaims implements the identity path's shared checks 1-4, in order,
+// writing the HTTP error response itself and returning ok=false on the first
+// one that fails. It is the extracted "verify core" both surfaces
+// (dispatch's verify and workspace's verifyOwnWorkspace) build on — each
+// composes its own step-5 authorization closure on top of the returned,
+// now-authenticated claims.
 //
 //  1. Parse the bearer token. Empty (missing header, non-Bearer scheme, or
 //     an empty token) -> 401.
@@ -79,61 +97,92 @@ func NewIdentityVerifier(master, masterOld []byte, view *AgentView) *IdentityVer
 //  4. Revocation check AFTER the compare, not before: view.Lookup so an
 //     invalid-token holder never learns whether the claimed agent exists.
 //     Missing -> 401.
-//  5. Inline authorization — the plan-review blocker this file exists for:
-//     the claimed namespace must equal the dispatch path's {namespace} (set
-//     by the outer mux before this wrapper runs). The claimed AGENT
-//     identifies the CALLER, not the target: dispatch to a different agent
-//     in the SAME namespace is the spawn shape (architect -> support-desk)
-//     and is allowed. Mismatch -> 403.
-func (v *IdentityVerifier) verify(w http.ResponseWriter, r *http.Request) bool {
-	claimedNS := r.Header.Get(HeaderIdentityNamespace)
-	claimedAgent := r.Header.Get(HeaderIdentityName)
+func (v *IdentityVerifier) verifyClaims(w http.ResponseWriter, r *http.Request) (claimedNS, claimedAgent string, ok bool) {
+	claimedNS = r.Header.Get(HeaderIdentityNamespace)
+	claimedAgent = r.Header.Get(HeaderIdentityName)
 
 	token, isBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !isBearer || token == "" {
 		http.Error(w, "missing agent identity bearer token", http.StatusUnauthorized)
-		return false
+		return "", "", false
 	}
 
 	if len(v.master) == 0 && len(v.masterOld) == 0 {
 		http.Error(w, "agent identity requires FISSION_INTERNAL_AUTH_SECRET on the agent runtime", http.StatusUnauthorized)
-		return false
+		return "", "", false
 	}
 
-	ok := 0
+	match := 0
 	for _, master := range [][]byte{v.master, v.masterOld} {
 		if len(master) == 0 {
 			continue
 		}
 		want := hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, claimedNS, claimedAgent))
-		ok |= subtle.ConstantTimeCompare([]byte(token), []byte(want))
+		match |= subtle.ConstantTimeCompare([]byte(token), []byte(want))
 	}
-	if ok != 1 {
+	if match != 1 {
 		http.Error(w, "invalid agent identity token", http.StatusUnauthorized)
-		return false
+		return "", "", false
 	}
 
 	if _, live := v.view.Lookup(claimedNS, claimedAgent); !live {
 		http.Error(w, "invalid agent identity token", http.StatusUnauthorized)
-		return false
+		return "", "", false
 	}
 
+	return claimedNS, claimedAgent, true
+}
+
+// verify is the dispatch route's step-5 authorization on top of
+// verifyClaims: the claimed namespace must equal the dispatch path's
+// {namespace} (set by the outer mux before this wrapper runs). The claimed
+// AGENT identifies the CALLER, not the target: dispatch to a different agent
+// in the SAME namespace is the spawn shape (architect -> support-desk) and
+// is allowed. Mismatch -> 403.
+func (v *IdentityVerifier) verify(w http.ResponseWriter, r *http.Request) bool {
+	claimedNS, _, ok := v.verifyClaims(w, r)
+	if !ok {
+		return false
+	}
 	if claimedNS != r.PathValue("namespace") {
 		http.Error(w, "forbidden: agent identity token not authorized for this namespace", http.StatusForbidden)
 		return false
 	}
-
 	return true
 }
 
-// IdentityOrJWT wraps next with the dispatch route's dual auth: the identity
-// path when identity is non-nil and the request carries either identity
-// claim header, otherwise the existing jwt middleware unchanged.
+// verifyOwnWorkspace is the session workspace routes' step-5 authorization
+// on top of verifyClaims — the G16 surface amendment (see this file's
+// package doc): STRICTER than dispatch's verify, requiring BOTH the claimed
+// namespace AND the claimed agent to equal the workspace path's
+// {namespace}/{name}. Own-workspace only in v1: a pod may read/write/list/
+// delete only its own session's artifacts, never another agent's — even one
+// in the same namespace, which verify's dispatch-side check would allow.
+// Cross-agent workspace sharing (parallel to dispatch's cross-agent spawn
+// allowance) is a later relaxation, deliberately not built here. Mismatch on
+// either claim -> 403.
+func (v *IdentityVerifier) verifyOwnWorkspace(w http.ResponseWriter, r *http.Request) bool {
+	claimedNS, claimedAgent, ok := v.verifyClaims(w, r)
+	if !ok {
+		return false
+	}
+	if claimedNS != r.PathValue("namespace") || claimedAgent != r.PathValue("name") {
+		http.Error(w, "forbidden: agent identity token not authorized for this workspace", http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
+// identityOrJWT is the shared combinator behind IdentityOrJWT and
+// IdentityOrJWTOwnWorkspace: identity path when identity is non-nil and the
+// request carries either identity claim header (verified by check, the
+// surface-specific step-5 closure — (*IdentityVerifier).verify or
+// verifyOwnWorkspace), otherwise the existing jwt middleware unchanged.
 //
 // identity is nil exactly when the JWT signing key is unset (allowInsecure
 // dev mode) — main.go only constructs an IdentityVerifier when
 // authz.Enabled(). That is what makes the allowInsecure row of the truth
-// table hold without IdentityOrJWT needing any other signal of its own: with
+// table hold without this needing any other signal of its own: with
 // identity == nil the returned handler is jwt(next) and nothing else, so it
 // is a bytewise no-op passthrough exactly as today (authz.HTTPMiddleware
 // returns next unwrapped when the key is empty, authz.go:85-90) — a request
@@ -142,7 +191,7 @@ func (v *IdentityVerifier) verify(w http.ResponseWriter, r *http.Request) bool {
 // all, and so cannot be 401'd by the "no master secret configured" check.
 //
 // When identity is non-nil, the two credential channels are mutually
-// exclusive by construction: identity headers present selects verify()
+// exclusive by construction: identity headers present selects check
 // EXCLUSIVELY — success calls next.ServeHTTP directly (bypassing jwt
 // entirely, even when the request also carries an Authorization: Bearer JWT
 // — identity wins), and failure returns the identity path's own error
@@ -150,7 +199,7 @@ func (v *IdentityVerifier) verify(w http.ResponseWriter, r *http.Request) bool {
 // downgrade a rejected identity token to a JWT check by also supplying a
 // stolen or forged bearer). Identity headers absent delegates unchanged to
 // jwt(next), built once here rather than per-request.
-func IdentityOrJWT(identity *IdentityVerifier, jwt func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+func identityOrJWT(identity *IdentityVerifier, jwt func(http.Handler) http.Handler, check func(*IdentityVerifier, http.ResponseWriter, *http.Request) bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		jwtHandler := jwt(next)
 		if identity == nil {
@@ -161,9 +210,22 @@ func IdentityOrJWT(identity *IdentityVerifier, jwt func(http.Handler) http.Handl
 				jwtHandler.ServeHTTP(w, r)
 				return
 			}
-			if identity.verify(w, r) {
+			if check(identity, w, r) {
 				next.ServeHTTP(w, r)
 			}
 		})
 	}
+}
+
+// IdentityOrJWT wraps next with the dispatch route's dual auth: see
+// identityOrJWT. Uses (*IdentityVerifier).verify (ns-only equality).
+func IdentityOrJWT(identity *IdentityVerifier, jwt func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return identityOrJWT(identity, jwt, (*IdentityVerifier).verify)
+}
+
+// IdentityOrJWTOwnWorkspace wraps next with the session workspace routes'
+// dual auth: see identityOrJWT. Uses (*IdentityVerifier).verifyOwnWorkspace
+// (ns AND agent equality — own-workspace only, the G16 surface amendment).
+func IdentityOrJWTOwnWorkspace(identity *IdentityVerifier, jwt func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+	return identityOrJWT(identity, jwt, (*IdentityVerifier).verifyOwnWorkspace)
 }
