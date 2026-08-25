@@ -831,11 +831,18 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 
 	parentRef := agentruntime.ParentRef{Namespace: ns.Name, Agent: fnName, ID: parentSessionID}
 	expectedChildID := agentruntime.SpawnSessionID(parentRef, "expert-1")
+	childURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + expectedChildID
 
 	// Turn 2 on the parent session: {"spawn":true} asks the fixture to spawn
-	// its one child. The fixture reports the derived id back as "spawned" —
-	// compared against expectedChildID below.
+	// its one child. The fixture's inner dispatch to the child is a separate,
+	// best-effort network hop from inside the pod (spawn.js's spawnChild doc
+	// comment) that this outer turn's own 200 does not reflect the success
+	// of — so a transient failure there would otherwise strand a
+	// registry-only retry loop polling for a record that never arrives. This
+	// loop instead re-issues the WHOLE spawn turn on every attempt, giving a
+	// flaky inner dispatch further attempts to actually land.
 	var reportedSpawnID string
+	var childRec agentruntime.SessionRecord
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
 		defer cancel()
@@ -847,18 +854,31 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "spawn turn to %s", turnURL) {
 			return
 		}
-		body, err := io.ReadAll(resp.Body)
+		turnBody, err := io.ReadAll(resp.Body)
 		if !assert.NoErrorf(c, err, "reading spawn turn response body") {
 			return
 		}
 		var payload struct {
 			Spawned string `json:"spawned"`
 		}
-		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding spawn turn response body %q", body) {
+		if !assert.NoErrorf(c, json.Unmarshal(turnBody, &payload), "decoding spawn turn response body %q", turnBody) {
 			return
 		}
 		reportedSpawnID = payload.Spawned
-	}, 180*time.Second, 2*time.Second)
+
+		registryCtx, registryCancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer registryCancel()
+		regBody, status, err := getRegistry(registryCtx, f, childURL)
+		if !assert.NoErrorf(c, err, "GET %s", childURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", childURL, regBody) {
+			return
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(regBody, &childRec), "decoding %s body %q", childURL, regBody) {
+			return
+		}
+	}, 180*time.Second, 3*time.Second)
 	require.NotEmptyf(t, reportedSpawnID, "spawn turn on session %s never reported a spawned id", parentSessionID)
 
 	// 1. CROSS-LANGUAGE AGREEMENT: Go's agentruntime.SpawnSessionID and the
@@ -867,31 +887,14 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		"cross-language derivation mismatch: Go agentruntime.SpawnSessionID(%+v, %q) = %s, fixture spawnSessionID reported %s",
 		parentRef, "expert-1", expectedChildID, reportedSpawnID)
 
-	// And the registry must show a session record living at EXACTLY that id,
+	// And the registry shows a session record living at EXACTLY that id,
 	// admitted with the parent's triple and depth 1 — this is what actually
 	// proves the two independent derivations converged on a real admission
 	// row, not just matching strings.
-	childURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + expectedChildID
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
-		defer cancel()
-		body, status, err := getRegistry(attemptCtx, f, childURL)
-		if !assert.NoErrorf(c, err, "GET %s", childURL) {
-			return
-		}
-		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", childURL, body) {
-			return
-		}
-		var rec agentruntime.SessionRecord
-		if !assert.NoErrorf(c, json.Unmarshal(body, &rec), "decoding %s body %q", childURL, body) {
-			return
-		}
-		if !assert.NotNilf(c, rec.Parent, "child session %s must carry a parent, got nil (body=%s)", expectedChildID, body) {
-			return
-		}
-		assert.Equalf(c, parentRef, *rec.Parent, "child session %s parent mismatch", expectedChildID)
-		assert.Equalf(c, 1, rec.Depth, "child session %s must be depth 1, got %d", expectedChildID, rec.Depth)
-	}, 60*time.Second, 2*time.Second)
+	if assert.NotNilf(t, childRec.Parent, "child session %s must carry a parent, got nil", expectedChildID) {
+		assert.Equalf(t, parentRef, *childRec.Parent, "child session %s parent mismatch", expectedChildID)
+	}
+	assert.Equalf(t, 1, childRec.Depth, "child session %s must be depth 1, got %d", expectedChildID, childRec.Depth)
 
 	// 2. IDEMPOTENT SPAWN: re-dispatch the parent's spawn turn. The fixture
 	// derives the SAME childID (same parent session, same stepKey) and
@@ -899,6 +902,12 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	// child mean this resumes the existing child record rather than minting
 	// a second one. List the function's sessions and confirm exactly ONE
 	// carries this parent.
+	//
+	// This MUST run before part 4's depth chain: that chain's first hop
+	// (chainParent = parentRef, depth 0) is ALSO a direct child of
+	// parentSessionID, so counting "children of parentSessionID" after the
+	// chain exists would no longer isolate this assertion to the fixture's
+	// own spawn.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
 		defer cancel()
