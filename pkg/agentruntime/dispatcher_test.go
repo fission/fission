@@ -1226,6 +1226,63 @@ func TestDispatcher_UnparseableParentHeaderAdmitsAsRoot(t *testing.T) {
 	}
 }
 
+// TestDispatcher_CrossNamespaceParentHeaderAdmitsAsRootIndistinguishably
+// pins the security fix: a HeaderParent naming a DIFFERENT namespace than
+// the dispatched one must never be resolved (never Get another tenant's
+// record), and the outcome must be byte-indistinguishable regardless of
+// whether the foreign session exists — otherwise a caller scoped to one
+// namespace could probe another tenant's session existence and exact spawn
+// depth via the minted child's parent/depth fields and the depth-cap
+// 400-vs-200 split. The existing-parent case is planted at depth ==
+// defaultMaxSpawnDepth specifically so that, were cross-namespace
+// resolution allowed, the child would hit the cap (400) instead of the 200
+// both cases must produce here.
+func TestDispatcher_CrossNamespaceParentHeaderAdmitsAsRootIndistinguishably(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	// Plant a real, live session in a FOREIGN namespace, at exactly the
+	// depth that would blow the cap for a same-namespace child.
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "foreign-parent", Agent: "fn", Namespace: "other", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(), Depth: defaultMaxSpawnDepth,
+	}, 0, time.Hour))
+
+	existingParent := ParentRef{Namespace: "other", Agent: "fn", ID: "foreign-parent"}
+	ghostParent := ParentRef{Namespace: "other", Agent: "fn", ID: "no-such-session"}
+
+	dispatch := func(sessionID string, parent ParentRef) (int, SessionRecord) {
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, sessionID)
+		req.Header.Set(HeaderParent, parent.String())
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+
+		got, _, err := store.Get(t.Context(), "ns", "fn", sessionID)
+		require.NoError(t, err)
+		return rec.Code, got
+	}
+
+	existingCode, existingRec := dispatch("child-cross-existing", existingParent)
+	ghostCode, ghostRec := dispatch("child-cross-ghost", ghostParent)
+
+	require.Equal(t, http.StatusOK, existingCode, "an existing foreign-namespace parent must never surface as anything but root-degraded 200")
+	require.Equal(t, http.StatusOK, ghostCode)
+	assert.Nil(t, existingRec.Parent, "a foreign-namespace ref must never be resolved into Parent, existing or not")
+	assert.Nil(t, ghostRec.Parent)
+	assert.Equal(t, 0, existingRec.Depth)
+	assert.Equal(t, 0, ghostRec.Depth)
+
+	// The two outcomes must be identical in every parentage-relevant
+	// respect: this is the actual security property (a foreign namespace's
+	// session existence must not be observable).
+	assert.Equal(t, existingCode, ghostCode)
+	assert.Equal(t, existingRec.Parent, ghostRec.Parent)
+	assert.Equal(t, existingRec.Depth, ghostRec.Depth)
+}
+
 // raceOnceNotFoundKV wraps a KVStore and forces exactly ONE Get on one
 // specific (scope, key) to fail with statestore.ErrNotFound, regardless of
 // what is actually stored there — a deterministic stand-in for

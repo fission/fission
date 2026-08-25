@@ -859,7 +859,9 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 			return
 		}
 		var payload struct {
-			Spawned string `json:"spawned"`
+			Spawned     string `json:"spawned"`
+			SpawnStatus int    `json:"spawnStatus"`
+			SpawnBody   string `json:"spawnBody"`
 		}
 		if !assert.NoErrorf(c, json.Unmarshal(turnBody, &payload), "decoding spawn turn response body %q", turnBody) {
 			return
@@ -886,7 +888,17 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		if !assert.NoErrorf(c, err, "GET %s", childURL) {
 			return
 		}
-		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", childURL, regBody) {
+		// If the fixture's INNER dispatch (spawn.js's spawnChild, a separate
+		// best-effort network hop from inside the pod) keeps failing
+		// deterministically, the child record never gets created and this
+		// GET 404s on every attempt for the full 180s. Naming the inner
+		// dispatch's own last-observed status/body here (payload.SpawnStatus/
+		// SpawnBody, reported by the fixture on every turn -- see spawn.js's
+		// header comment) turns that into a pinpointed failure instead of an
+		// opaque registry 404.
+		if !assert.Equalf(c, http.StatusOK, status,
+			"GET %s (body=%s); the fixture's inner dispatch to the child last reported HTTP status=%d body=%q",
+			childURL, regBody, payload.SpawnStatus, payload.SpawnBody) {
 			return
 		}
 		if !assert.NoErrorf(c, json.Unmarshal(regBody, &childRec), "decoding %s body %q", childURL, regBody) {

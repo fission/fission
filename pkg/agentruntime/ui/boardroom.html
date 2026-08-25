@@ -251,6 +251,12 @@
 var STATUS_COLOR = { active: "#3ddc84", idle: "#f2b705", archived: "#5a6472" };
 var STATUS_ORDER = { active: 0, idle: 1, archived: 2 };
 
+// MAX_SESSION_PAGES bounds pollAgentSessions's page-cursor loop (500 sessions
+// per page => 50,000 sessions for one agent). Without a ceiling, a buggy
+// server -- or a registry bug that returns a repeating cursor -- wedges this
+// agent's poll tick forever, looping on `next` with no forward progress.
+var MAX_SESSION_PAGES = 100;
+
 // TOKEN is read once from the page's URL fragment (#token=...), never the
 // query string: a fragment is never sent to the server or logged by a
 // fronting proxy, unlike EventsHandler's own ?token= transport (which exists
@@ -425,11 +431,23 @@ function buildFamilyForest() {
 
 // renderSubtree renders `entry` plus every descendant reachable through
 // childrenOf, each level indented one step deeper than its parent.
-function renderSubtree(entry, childrenOf, level) {
+//
+// `printed` guards against a parent cycle: a record whose ancestor chain
+// revisits a node it already produced (self-parent, or two-or-more records
+// naming each other as parent) would otherwise recurse forever. Once a
+// session's key is in `printed`, this returns immediately instead of
+// descending into it again -- the same guard printSessionTree (the CLI's
+// `--tree` printer, pkg/fission-cli/cmd/agent/sessions.go) uses, and for the
+// same reason: it is the smallest change that guarantees every member is
+// rendered exactly once, cycle or not.
+function renderSubtree(entry, childrenOf, level, printed) {
+  var key = sessionKey(entry.record);
+  if (printed.has(key)) return "";
+  printed.add(key);
   var html = sessionCardHTML(entry, level);
-  var kids = (childrenOf.get(sessionKey(entry.record)) || []).slice().sort(compareEntries);
+  var kids = (childrenOf.get(key) || []).slice().sort(compareEntries);
   kids.forEach(function (child) {
-    html += renderSubtree(child, childrenOf, level + 1);
+    html += renderSubtree(child, childrenOf, level + 1, printed);
   });
   return html;
 }
@@ -441,9 +459,10 @@ function groupHeaderHTML(parentRef) {
 function renderSessions() {
   var forest = buildFamilyForest();
   var html = "";
+  var printed = new Set();
 
   forest.roots.slice().sort(compareEntries).forEach(function (entry) {
-    html += renderSubtree(entry, forest.childrenOf, 0);
+    html += renderSubtree(entry, forest.childrenOf, 0, printed);
   });
 
   // Deterministic group order: sort by the parent ref string itself, not
@@ -452,8 +471,22 @@ function renderSessions() {
   Array.from(forest.unknownGroups.keys()).sort().forEach(function (parentKey) {
     html += groupHeaderHTML(parentKey);
     forest.unknownGroups.get(parentKey).slice().sort(compareEntries).forEach(function (entry) {
-      html += renderSubtree(entry, forest.childrenOf, 0);
+      html += renderSubtree(entry, forest.childrenOf, 0, printed);
     });
+  });
+
+  // Leftover pass: a parent cycle (every member has a parent field set AND
+  // that parent is present in the current session set, so none of them ever
+  // lands in `roots` or `unknownGroups`, and nothing outside the cycle
+  // points into it) would otherwise vanish from the board entirely instead
+  // of rendering. Anything still unprinted after the two passes above gets
+  // its own top-level card -- mirrors the CLI tree printer's group 3.
+  var leftover = [];
+  sessions.forEach(function (entry) {
+    if (!printed.has(sessionKey(entry.record))) leftover.push(entry);
+  });
+  leftover.sort(compareEntries).forEach(function (entry) {
+    html += renderSubtree(entry, forest.childrenOf, 0, printed);
   });
 
   qs("#sessions-list").innerHTML = html || emptyState("no sessions yet");
@@ -570,10 +603,17 @@ async function loadPool() {
 // pages fetched before the failure still land (freshened), matching
 // collectAgentSessions's own "a page fetched before the error already landed
 // in out" comment. The next 5s tick retries this agent from the top.
+//
+// Hitting MAX_SESSION_PAGES is treated the same way as a fetch error: the
+// accumulated `seen` set is partial by construction, so running the
+// delete-on-absence pass against it would delete live cards past the
+// ceiling -- same rule as the partial-failure path above, just a different
+// reason the set is incomplete. Sessions upserted from pages fetched before
+// the ceiling still land.
 async function pollAgentSessions(a) {
   var seen = new Set();
   var pageToken = "";
-  for (;;) {
+  for (var page = 0; page < MAX_SESSION_PAGES; page++) {
     var path = "/registry/agents/" + encodeURIComponent(a.namespace) + "/" +
       encodeURIComponent(a.name) + "/sessions?limit=500" +
       (pageToken ? "&page=" + encodeURIComponent(pageToken) : "");
@@ -584,14 +624,19 @@ async function pollAgentSessions(a) {
       upsertSession(rec);
       seen.add(sessionKey(rec));
     });
-    if (!data.next) break;
+    if (!data.next) {
+      sessions.forEach(function (entry, key) {
+        if (entry.record.namespace === a.namespace && entry.record.agent === a.name && !seen.has(key)) {
+          sessions.delete(key);
+        }
+      });
+      return;
+    }
     pageToken = data.next;
   }
-  sessions.forEach(function (entry, key) {
-    if (entry.record.namespace === a.namespace && entry.record.agent === a.name && !seen.has(key)) {
-      sessions.delete(key);
-    }
-  });
+  // Ceiling hit with a cursor still outstanding: proceed with the partial
+  // set already upserted above, but skip the delete pass -- see the doc
+  // comment.
 }
 
 // pollSessionsTick is the SSE-unavailable fallback: it walks every known
