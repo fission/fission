@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -40,7 +41,7 @@ func SessionCommands() *cobra.Command {
 		Short: "List an agent function's sessions",
 	}, SessionsList, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
-		Optional: []flag.Flag{flag.Namespace, flag.Output, flag.AgentToken},
+		Optional: []flag.Flag{flag.Namespace, flag.Output, flag.AgentToken, flag.AgentSessionsTree},
 	})
 	getCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "get",
@@ -73,6 +74,23 @@ type sessionStats struct {
 	Continuations int64 `json:"continuations"`
 }
 
+// parentRef mirrors agentruntime.ParentRef's wire shape (pkg/agentruntime/
+// session.go) — the qualified <namespace>/<agent>/<id> reference to a
+// spawning session. Kept as its own small mirror rather than importing
+// ParentRef, for the same no-import reason sessionRecord below documents.
+type parentRef struct {
+	Namespace string `json:"namespace"`
+	Agent     string `json:"agent"`
+	ID        string `json:"id"`
+}
+
+// key returns p's canonical "<namespace>/<agent>/<id>" form — the same
+// string agentruntime.ParentRef.String() produces, and the form --tree
+// groups children by (a bare id is ambiguous across agents).
+func (p parentRef) key() string {
+	return p.Namespace + "/" + p.Agent + "/" + p.ID
+}
+
 // sessionRecord mirrors agentruntime.SessionRecord's wire shape. The CLI
 // decodes its own copy rather than importing pkg/agentruntime, the same
 // reasoning history.go gives for historyEvent: the server package pulls in
@@ -88,6 +106,19 @@ type sessionRecord struct {
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 	CurrentPod   string       `json:"currentPod,omitempty"`
 	Stats        sessionStats `json:"stats"`
+	// Parent and Depth mirror SessionRecord's spawn-parentage fields
+	// (pkg/agentruntime/session.go). Depth is tagged omitzero, matching the
+	// server: json/v2's omitempty only drops null/""/{}/[], not a zero int,
+	// so a root session's Depth (0) would otherwise appear on the wire (and
+	// re-marshal, under --tree -o json) as an explicit "depth":0.
+	Parent *parentRef `json:"parent,omitempty"`
+	Depth  int        `json:"depth,omitzero"`
+}
+
+// key returns s's canonical "<namespace>/<agent>/<id>" form, the same shape
+// parentRef.key() produces, so a child's Parent.key() looks it up directly.
+func (s sessionRecord) key() string {
+	return s.Namespace + "/" + s.Agent + "/" + s.ID
 }
 
 // sessionsResponse mirrors ListSessions's response envelope
@@ -135,6 +166,11 @@ func (opts *SessionsListSubCommand) do(input cli.Input) error {
 	if err != nil {
 		return err
 	}
+
+	if input.Bool(flagkey.AgentSessionsTree) {
+		return listSessionsTree(input, format, base, namespace, agentName)
+	}
+
 	// limit=maxSessionListLimit (the server's cap, pkg/agentruntime/registry_api.go):
 	// this CLI fetches a single page and does not follow Next, so asking for
 	// the server's cap rather than its lower default raises the truncation
@@ -173,6 +209,164 @@ func (opts *SessionsListSubCommand) do(input cli.Input) error {
 	wideRow := func(s sessionRecord) []string { return []string{timeOrDash(s.CreatedAt)} }
 
 	return util.PrintObjects(format, resp.Sessions, headers, row, wideExtra, wideRow)
+}
+
+// listSessionsTree implements `sessions list --tree`: unlike the plain list
+// above, it loops the server's page cursor to exhaustion first — a
+// truncated page would show orphaned children (a child whose parent landed
+// on an earlier, un-fetched page looks parentless) and hide parents (a
+// parent past the fetched page never appears at all) — then renders the
+// spawn family as an indented tree.
+func listSessionsTree(input cli.Input, format util.OutputFormat, base, namespace, agentName string) error {
+	sessions, err := fetchAllSessionPages(input, base, namespace, agentName)
+	if err != nil {
+		return sessionsFriendlyError(err, namespace, agentName)
+	}
+
+	// --tree's only effect on a structured format is the exhaustive fetch
+	// above: json/yaml already render the full flat array PrintStructured
+	// produces for the plain list, just complete instead of one page, and
+	// carry no console.Warn (there is nothing left un-fetched to warn about).
+	if handled, err := util.PrintStructured(format, sessions); err != nil || handled {
+		return err
+	}
+
+	// OutputWide has no extra tree-specific column; it renders identically
+	// to the default table.
+	printSessionTree(os.Stdout, sessions)
+	return nil
+}
+
+// fetchAllSessionPages GETs every page of an agent's sessions, following the
+// server's "next" cursor (the "page" query param, mirroring registry_api.go)
+// until it comes back empty.
+func fetchAllSessionPages(input cli.Input, base, namespace, agentName string) ([]sessionRecord, error) {
+	var all []sessionRecord
+	page := ""
+	for {
+		reqURL := fmt.Sprintf("%s/registry/agents/%s/%s/sessions?limit=%d", base,
+			url.PathEscape(namespace), url.PathEscape(agentName), maxSessionListLimit)
+		if page != "" {
+			reqURL += "&page=" + url.QueryEscape(page)
+		}
+
+		body, err := agentRuntimeGet(input, reqURL)
+		if err != nil {
+			return nil, err
+		}
+		var resp sessionsResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return nil, fmt.Errorf("decoding sessions response: %w", err)
+		}
+		all = append(all, resp.Sessions...)
+		if resp.Next == "" {
+			return all, nil
+		}
+		page = resp.Next
+	}
+}
+
+// printSessionTree renders sessions as an indented parent/child tree to w.
+// Children are keyed by their parent's full <namespace>/<agent>/<id> triple
+// (parentRef.key(); a bare id is ambiguous across agents) rather than by
+// object identity, so the walk below is a pure lookup over that map.
+//
+// Three groups, all guaranteed visible (never silently dropped):
+//  1. roots (Parent == nil), printed with their reachable descendants;
+//  2. a child whose parent triple was not among the fetched records renders
+//     under an explicit "(unknown: <ref>)" node instead of vanishing;
+//  3. anything still unprinted after (1) and (2) has a parent that IS among
+//     the fetched records but is unreachable from any root — a self-parent
+//     or a cycle in a buggy/hostile server response — and is rendered as its
+//     own top-level entry rather than dropped or looped over forever.
+//
+// Every row's indent is the record's own Depth field (already the absolute
+// spawn-chain depth the server computed at creation time), not a depth
+// recomputed from how much of the tree this walk could reconstruct — so an
+// orphan under an "(unknown: ...)" node still indents at its true depth.
+func printSessionTree(w io.Writer, sessions []sessionRecord) {
+	tw := util.NewTabWriter(w)
+	fmt.Fprintln(tw, strings.Join([]string{"ID", "STATUS", "DEPTH", "TURNS", "CONTINUATIONS", "LAST-ACTIVE", "POD"}, "\t"))
+
+	byKey := make(map[string]sessionRecord, len(sessions))
+	childrenOf := make(map[string][]sessionRecord)
+	var roots []sessionRecord
+	for _, s := range sessions {
+		byKey[s.key()] = s
+		if s.Parent == nil {
+			roots = append(roots, s)
+		} else {
+			pk := s.Parent.key()
+			childrenOf[pk] = append(childrenOf[pk], s)
+		}
+	}
+
+	byID := func(recs []sessionRecord) {
+		sort.Slice(recs, func(i, j int) bool { return recs[i].ID < recs[j].ID })
+	}
+	byID(roots)
+	for k := range childrenOf {
+		byID(childrenOf[k])
+	}
+
+	printed := make(map[string]bool, len(sessions))
+	var printSubtree func(s sessionRecord)
+	printSubtree = func(s sessionRecord) {
+		key := s.key()
+		if printed[key] {
+			return // already printed via another path (e.g. a cycle) — never twice.
+		}
+		printed[key] = true
+		writeSessionTreeRow(tw, s)
+		for _, child := range childrenOf[key] {
+			printSubtree(child)
+		}
+	}
+
+	for _, root := range roots {
+		printSubtree(root)
+	}
+
+	var unknownParents []string
+	for pk := range childrenOf {
+		if _, ok := byKey[pk]; !ok {
+			unknownParents = append(unknownParents, pk)
+		}
+	}
+	sort.Strings(unknownParents)
+	for _, pk := range unknownParents {
+		fmt.Fprintf(tw, "(unknown: %s)\t-\t-\t-\t-\t-\t-\n", pk)
+		for _, child := range childrenOf[pk] {
+			printSubtree(child)
+		}
+	}
+
+	var leftover []sessionRecord
+	for _, s := range sessions {
+		if !printed[s.key()] {
+			leftover = append(leftover, s)
+		}
+	}
+	byID(leftover)
+	for _, s := range leftover {
+		printSubtree(s)
+	}
+
+	tw.Flush()
+}
+
+// writeSessionTreeRow writes one session's row, indenting its ID cell two
+// spaces per level of s.Depth.
+func writeSessionTreeRow(w io.Writer, s sessionRecord) {
+	fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%d\t%s\t%s\n",
+		strings.Repeat("  ", s.Depth)+s.ID,
+		s.Status,
+		s.Depth,
+		s.Stats.Turns,
+		s.Stats.Continuations,
+		timeOrDash(s.LastActiveAt),
+		stringOrDash(s.CurrentPod),
+	)
 }
 
 func (opts *SessionsGetSubCommand) do(input cli.Input) error {
