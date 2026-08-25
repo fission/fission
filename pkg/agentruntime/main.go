@@ -287,6 +287,19 @@ const (
 	// self-chaining cap. 0 means unlimited (see Dispatcher.maxContinuations).
 	envMaxContinuations = "AGENT_MAX_CONTINUATIONS"
 
+	// envMaxSpawnDepth configures the Dispatcher's spawn-chain depth cap
+	// (see Dispatcher.maxSpawnDepth / resolveParentage / ErrSpawnDepthExceeded).
+	// Unset uses defaultMaxSpawnDepth (3). This is a DELIBERATE divergence
+	// from envMaxContinuations: there, 0 means unlimited; here, an explicit
+	// 0 means "no spawning" — every parented create is rejected. The cap
+	// guards spawn-tree resource exhaustion, so "unlimited" is never the
+	// right unset-equivalent default for this particular knob. What makes
+	// "unset -> 3" and "explicit 0 -> 0 (none)" distinguishable at all is
+	// envInt64's own contract: it substitutes the default only when the env
+	// var is EMPTY, and parses an explicit "0" as the int64 0, not as a
+	// signal to fall back.
+	envMaxSpawnDepth = "AGENT_MAX_SPAWN_DEPTH"
+
 	// envMaxSessionsDefault is the platform-wide live-session ceiling applied
 	// to an agent whose spec sets no MaxSessions of its own. 0 means no default
 	// (unbounded). Read once here, like envMaxContinuations.
@@ -306,6 +319,11 @@ const (
 
 	// defaultMaxContinuations is applied when envMaxContinuations is unset.
 	defaultMaxContinuations = 1000
+
+	// defaultMaxSpawnDepth is applied when envMaxSpawnDepth is unset. See
+	// envMaxSpawnDepth's doc comment for why an explicit 0 is NOT the same
+	// as unset.
+	defaultMaxSpawnDepth = 3
 
 	// defaultMaxSessionsDefault is applied when envMaxSessionsDefault is unset:
 	// a conservative platform ceiling that bounds unqualified session creation
@@ -404,6 +422,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
+	maxSpawnDepth, err := envInt64(envMaxSpawnDepth, defaultMaxSpawnDepth)
+	if err != nil {
+		return err
+	}
 	registryPollInterval, err := envDuration(envRegistryPoll, defaultRegistryPollInterval)
 	if err != nil {
 		return err
@@ -438,7 +460,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// history/checkpoint HTTP surface; it has no append path, so it is not a
 	// dispatcher dependency.
 	hist := NewHistoryStore(eventLog, kv)
-	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
+	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations, maxSpawnDepth)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, hist, sweepInterval, retention, time.Now)
 
 	// SSE registry feed: a single background Poller diffs

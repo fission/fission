@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,7 +37,7 @@ func newTestDispatcher(t *testing.T, upstreamURL string) (*Dispatcher, *AgentVie
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, time.Now, 0)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 	return d, view, store
 }
 
@@ -48,7 +49,7 @@ func newTestDispatcherWithClock(t *testing.T, upstreamURL string, now func() tim
 	kv := newTestKV(t)
 	store := NewSessionStore(kv, now)
 	view := NewAgentView()
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, now, 0)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstreamURL, time.Hour, now, 0, defaultMaxSpawnDepth)
 	return d, view, store
 }
 
@@ -312,7 +313,7 @@ func TestDispatcher_PhantomEnqueueSuppressedWhenWriteLost(t *testing.T) {
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
 	view.Upsert(headerEntry("ns", "fn", 0))
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 	fe := &fakeEnqueuer{}
 	d.SetWakeEnqueuer(fe)
 
@@ -347,7 +348,7 @@ func TestDispatcher_StoreDownFailsClosedWhenQuotaBearing(t *testing.T) {
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
 		view.Upsert(headerEntry("ns", "fn", 5)) // MaxSessions=5: quota-bearing
-		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 
 		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
 		req.Header.Set(HeaderSession, "sess-x")
@@ -372,7 +373,7 @@ func TestDispatcher_StoreDownFailsClosedWhenQuotaBearing(t *testing.T) {
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
 		view.Upsert(headerEntry("ns", "fn", 0)) // MaxSessions=0: no quota to protect
-		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 
 		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
 		req.Header.Set(HeaderSession, "sess-y")
@@ -412,7 +413,7 @@ func TestDispatcher_CreateWriteFailureFailsClosedWhenQuotaBearing(t *testing.T) 
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
 		view.Upsert(headerEntry("ns", "fn", 5)) // MaxSessions=5: quota-bearing
-		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 
 		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
 		req.Header.Set(HeaderSession, "sess-create-fail")
@@ -437,7 +438,7 @@ func TestDispatcher_CreateWriteFailureFailsClosedWhenQuotaBearing(t *testing.T) 
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
 		view.Upsert(headerEntry("ns", "fn", 0)) // MaxSessions=0: no quota to protect
-		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
 
 		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
 		req.Header.Set(HeaderSession, "sess-create-fail-ok")
@@ -738,7 +739,7 @@ func TestDispatcher_ContinuationCapStopsEnqueueing(t *testing.T) {
 	store := NewSessionStore(kv, time.Now)
 	view := NewAgentView()
 	view.Upsert(headerEntry("ns", "fn", 0))
-	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 1)
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 1, defaultMaxSpawnDepth)
 	fe := &fakeEnqueuer{}
 	d.SetWakeEnqueuer(fe)
 
@@ -1029,4 +1030,299 @@ func TestResolveSessionIDRejectsCheckpointPrefix(t *testing.T) {
 	got, ok2 := resolveSessionID(req2, entry)
 	assert.True(t, ok2)
 	assert.Equal(t, "s2", got)
+}
+
+// --- spawn parentage (Task 2): parent header, record-derived depth, cap ---
+
+// TestDispatcher_CreateWithLiveParentInheritsDepth pins the base case: a
+// turn that CREATES a session with a HeaderParent naming a live parent
+// stores that parent and depth = parent.Depth + 1.
+func TestDispatcher_CreateWithLiveParentInheritsDepth(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "parent-1", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(),
+	}, 0, time.Hour))
+	parent := ParentRef{Namespace: "ns", Agent: "fn", ID: "parent-1"}
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "child-1")
+	req.Header.Set(HeaderParent, parent.String())
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	got, _, err := store.Get(t.Context(), "ns", "fn", "child-1")
+	require.NoError(t, err)
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, parent, *got.Parent)
+	assert.Equal(t, 1, got.Depth)
+}
+
+// TestDispatcher_CreateWithArchivedParentInheritsDepth pins that depth
+// resolution falls through to the archived keyspace when the claimed parent
+// has already aged out of live — resolveParentage's Get(live) miss ->
+// GetArchived path.
+func TestDispatcher_CreateWithArchivedParentInheritsDepth(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	require.NoError(t, store.Create(t.Context(), SessionRecord{
+		ID: "parent-arch", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(), Depth: 2,
+	}, 0, time.Hour))
+	live, version, err := store.Get(t.Context(), "ns", "fn", "parent-arch")
+	require.NoError(t, err)
+	require.NoError(t, store.Archive(t.Context(), live, version, time.Hour))
+	_, _, err = store.Get(t.Context(), "ns", "fn", "parent-arch")
+	require.ErrorIs(t, err, statestore.ErrNotFound, "the parent must actually be gone from live for this test to mean anything")
+
+	parent := ParentRef{Namespace: "ns", Agent: "fn", ID: "parent-arch"}
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "child-arch")
+	req.Header.Set(HeaderParent, parent.String())
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	got, _, err := store.Get(t.Context(), "ns", "fn", "child-arch")
+	require.NoError(t, err)
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, parent, *got.Parent)
+	assert.Equal(t, 3, got.Depth, "depth inherits from the archived parent's own depth (2) + 1")
+}
+
+// TestDispatcher_CreateWithUnreadableParentAdmitsAsRoot pins the
+// "parent claim dropped" fallback: a HeaderParent naming a session absent
+// from BOTH keyspaces must never fail the turn, only drop the claim.
+func TestDispatcher_CreateWithUnreadableParentAdmitsAsRoot(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	parent := ParentRef{Namespace: "ns", Agent: "fn", ID: "ghost-parent"}
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "child-ghost")
+	req.Header.Set(HeaderParent, parent.String())
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, "an unreadable parent claim must admit the turn as root, not fail it")
+	got, _, err := store.Get(t.Context(), "ns", "fn", "child-ghost")
+	require.NoError(t, err)
+	assert.Nil(t, got.Parent)
+	assert.Equal(t, 0, got.Depth)
+}
+
+// TestDispatcher_SpawnDepthCapRejectsBeyondLimit chains real creates out to
+// the default cap (3) and pins that the NEXT spawn (depth 4) is rejected
+// with 400 and, critically, mints NO record at all.
+func TestDispatcher_SpawnDepthCapRejectsBeyondLimit(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL) // maxSpawnDepth = defaultMaxSpawnDepth (3)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	create := func(id, parentHeader string) int {
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, id)
+		if parentHeader != "" {
+			req.Header.Set(HeaderParent, parentHeader)
+		}
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	depthOf := func(id string) int {
+		got, _, err := store.Get(t.Context(), "ns", "fn", id)
+		require.NoError(t, err)
+		return got.Depth
+	}
+
+	require.Equal(t, http.StatusOK, create("s0", ""))
+	require.Equal(t, 0, depthOf("s0"))
+
+	require.Equal(t, http.StatusOK, create("s1", ParentRef{Namespace: "ns", Agent: "fn", ID: "s0"}.String()))
+	require.Equal(t, 1, depthOf("s1"))
+
+	require.Equal(t, http.StatusOK, create("s2", ParentRef{Namespace: "ns", Agent: "fn", ID: "s1"}.String()))
+	require.Equal(t, 2, depthOf("s2"))
+
+	require.Equal(t, http.StatusOK, create("s3", ParentRef{Namespace: "ns", Agent: "fn", ID: "s2"}.String()))
+	require.Equal(t, 3, depthOf("s3"), "depth 3 is within the default cap of 3")
+
+	code := create("s4", ParentRef{Namespace: "ns", Agent: "fn", ID: "s3"}.String())
+	assert.Equal(t, http.StatusBadRequest, code, "depth 4 exceeds the cap and must be rejected")
+	_, _, err := store.Get(t.Context(), "ns", "fn", "s4")
+	assert.ErrorIs(t, err, statestore.ErrNotFound, "a rejected spawn must not mint any record")
+}
+
+// TestDispatcher_ResumeIgnoresMismatchingParentHeader pins the
+// creation-only rule from the resume side: a HeaderParent sent on a turn
+// that does NOT create the session (the record already exists) is compared
+// against the stored value and, on a mismatch, dropped — never applied,
+// never a failure.
+func TestDispatcher_ResumeIgnoresMismatchingParentHeader(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	d, view, store := newTestDispatcher(t, upstream.URL)
+	view.Upsert(headerEntry("ns", "fn", 0))
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "sess-resume")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	before, _, err := store.Get(t.Context(), "ns", "fn", "sess-resume")
+	require.NoError(t, err)
+	assert.Nil(t, before.Parent)
+
+	req2 := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req2.Header.Set(HeaderSession, "sess-resume")
+	req2.Header.Set(HeaderParent, "ns/fn/some-other-parent")
+	rec2 := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec2, req2)
+	require.Equal(t, http.StatusOK, rec2.Code, "a mismatching header on resume must never fail the turn")
+
+	after, _, err := store.Get(t.Context(), "ns", "fn", "sess-resume")
+	require.NoError(t, err)
+	assert.Nil(t, after.Parent, "stored parentage must be unchanged by a resume-time header")
+	assert.Equal(t, 0, after.Depth)
+}
+
+// TestDispatcher_UnparseableParentHeaderAdmitsAsRoot pins that a header
+// which fails ParseParentRef (wrong segment count, or an invalid charset in
+// a segment) is treated exactly like an absent one on the creation path.
+func TestDispatcher_UnparseableParentHeaderAdmitsAsRoot(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	for i, header := range []string{"a/b", "a/b/c/d", "BAD_NS/agent/id"} {
+		t.Run(header, func(t *testing.T) {
+			t.Parallel()
+			d, view, store := newTestDispatcher(t, upstream.URL)
+			view.Upsert(headerEntry("ns", "fn", 0))
+
+			id := "sess-unparse-" + strconv.Itoa(i)
+			req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+			req.Header.Set(HeaderSession, id)
+			req.Header.Set(HeaderParent, header)
+			rec := httptest.NewRecorder()
+			d.Handler().ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			got, _, err := store.Get(t.Context(), "ns", "fn", id)
+			require.NoError(t, err)
+			assert.Nil(t, got.Parent)
+			assert.Equal(t, 0, got.Depth)
+		})
+	}
+}
+
+// raceOnceNotFoundKV wraps a KVStore and forces exactly ONE Get on one
+// specific (scope, key) to fail with statestore.ErrNotFound, regardless of
+// what is actually stored there — a deterministic stand-in for
+// DispatchTurn's initial Get racing a concurrent Create, used by
+// TestDispatcher_CreateRaceIgnoresParentHeader (a real two-goroutine race,
+// like TestDispatcher_ConcurrentCreateRaceActivatesInsteadOfDropping uses
+// elsewhere, cannot pin which turn's header "wins" — this can). Every other
+// (scope, key) — notably a claimed parent's own record, read from inside
+// resolveParentage — passes through untouched.
+type raceOnceNotFoundKV struct {
+	statestore.KVStore
+	scope statestore.Scope
+	key   string
+	fired bool
+}
+
+func (k *raceOnceNotFoundKV) Get(ctx context.Context, s statestore.Scope, key string) (statestore.Value, error) {
+	if !k.fired && s == k.scope && key == k.key {
+		k.fired = true
+		return statestore.Value{}, statestore.ErrNotFound
+	}
+	return k.KVStore.Get(ctx, s, key)
+}
+
+// TestDispatcher_CreateRaceIgnoresParentHeader pins the create-race branch
+// of the creation-only rule: when this turn's own Get misses (ErrNotFound)
+// but another turn already won the Create — carrying its OWN parentage —
+// this turn's HeaderParent must never be applied, only compared. The
+// pre-seeded record's parentage (parent-a) must survive untouched even
+// though this turn claims a DIFFERENT, independently-resolvable parent
+// (parent-b).
+func TestDispatcher_CreateRaceIgnoresParentHeader(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	inner := newTestKV(t)
+
+	seed := NewSessionStore(inner, time.Now)
+	parentA := ParentRef{Namespace: "ns", Agent: "fn", ID: "parent-a"}
+	require.NoError(t, seed.Create(t.Context(), SessionRecord{
+		ID: "sess-race-parent", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(),
+		Parent: &parentA, Depth: 1,
+	}, 0, time.Hour))
+	require.NoError(t, seed.Create(t.Context(), SessionRecord{
+		ID: "parent-b", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		CreatedAt: time.Now(), LastActiveAt: time.Now(),
+	}, 0, time.Hour))
+
+	kv := &raceOnceNotFoundKV{KVStore: inner, scope: sessionScope("ns", "fn"), key: "sess-race-parent"}
+	store := NewSessionStore(kv, time.Now)
+	view := NewAgentView()
+	view.Upsert(headerEntry("ns", "fn", 0))
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, defaultMaxSpawnDepth)
+
+	parentB := ParentRef{Namespace: "ns", Agent: "fn", ID: "parent-b"}
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "sess-race-parent")
+	req.Header.Set(HeaderParent, parentB.String())
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code, "a create-race loss must never surface as a client-visible error")
+	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-race-parent")
+	require.NoError(t, err)
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, parentA, *got.Parent, "the winning create's parentage must survive — this turn's own header must be ignored")
+	assert.Equal(t, 1, got.Depth)
+}
+
+// TestDispatcher_ExplicitZeroSpawnDepthRejectsAnySpawn pins the
+// AGENT_MAX_SPAWN_DEPTH=0 decision documented on envMaxSpawnDepth: unlike
+// maxContinuations, an explicit 0 means "no spawning" (every parented
+// create rejected), not "unlimited". A root turn (no claimed parent) is
+// unaffected by the cap at any value.
+func TestDispatcher_ExplicitZeroSpawnDepthRejectsAnySpawn(t *testing.T) {
+	t.Parallel()
+	upstream := okUpstream(t)
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	view := NewAgentView()
+	view.Upsert(headerEntry("ns", "fn", 0))
+	d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0, 0)
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req.Header.Set(HeaderSession, "root-under-zero-cap")
+	rec := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, "a root turn is not a spawn and must be unaffected by maxSpawnDepth=0")
+
+	parent := ParentRef{Namespace: "ns", Agent: "fn", ID: "root-under-zero-cap"}
+	req2 := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+	req2.Header.Set(HeaderSession, "child-under-zero-cap")
+	req2.Header.Set(HeaderParent, parent.String())
+	rec2 := httptest.NewRecorder()
+	d.Handler().ServeHTTP(rec2, req2)
+	assert.Equal(t, http.StatusBadRequest, rec2.Code, "AGENT_MAX_SPAWN_DEPTH=0 must reject every parented create")
+
+	_, _, err := store.Get(t.Context(), "ns", "fn", "child-under-zero-cap")
+	assert.ErrorIs(t, err, statestore.ErrNotFound, "a rejected spawn must not mint any record")
 }
