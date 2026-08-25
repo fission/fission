@@ -698,6 +698,321 @@ func TestAgentRuntimeHistory(t *testing.T) {
 	}, 60*time.Second, 2*time.Second)
 }
 
+// sessionsListDTO decodes ListSessions's response
+// (pkg/agentruntime/registry_api.go's unexported sessionsResponse) — Sessions
+// is typed as the real agentruntime.SessionRecord (exported, same package
+// this test already imports) rather than a hand-duplicated DTO, since its
+// wire shape (including the Parent/Depth fields this test asserts on) is
+// exactly what GetSession/ListSessions marshal.
+type sessionsListDTO struct {
+	Sessions []agentruntime.SessionRecord `json:"sessions"`
+	Next     string                       `json:"next,omitempty"`
+}
+
+// postAgentTurn POSTs one turn to turnURL carrying sessionID on
+// agentruntime.HeaderSession when non-empty, parentHeader on
+// agentruntime.HeaderParent when non-empty, and body as the raw JSON
+// request body. Generalizes postTurn (fixed "{}" body, no parent header) for
+// TestAgentRuntimeSpawnParentage's needs: turns that ask the fixture to spawn
+// ({"spawn":true}) and depth-chain turns dispatched directly by this test
+// with only a parent header, no fixture-side spawning involved at all.
+func postAgentTurn(ctx context.Context, f *framework.Framework, turnURL, sessionID, parentHeader, body string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, turnURL, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if sessionID != "" {
+		req.Header.Set(agentruntime.HeaderSession, sessionID)
+	}
+	if parentHeader != "" {
+		req.Header.Set(agentruntime.HeaderParent, parentHeader)
+	}
+	return f.HTTPClient().Do(req)
+}
+
+// TestAgentRuntimeSpawnParentage exercises RFC-0031 slice 5's session
+// parentage wire path end-to-end against a real cluster (Task 5 of the
+// parent-graph plan): pkg/agentruntime/dispatcher.go's X-Fission-Agent-Parent
+// creation-only header handling and session.go's ParentRef/SpawnSessionID
+// derivation, GetSession's parent/depth wire shape, and the live 400 the
+// spawn-depth cap returns.
+//
+// The fixture (test/integration/testdata/nodejs/agentspawn/spawn.js) is a
+// minimal cousin of demo/agent-boardroom/fixtures/architect.js: on a turn
+// whose body carries {"spawn":true} it spawns exactly ONE child session on
+// ITSELF for stepKey "expert-1", using a byte-identical JS twin of
+// SpawnSessionID.
+//
+// Four things are asserted, in order:
+//
+//  1. Cross-language id agreement (the load-bearing assertion): this test
+//     computes expected := agentruntime.SpawnSessionID(parentRef, "expert-1")
+//     in Go and GETs EXACTLY that id from the registry — 200, with parent
+//     equal to the parent's triple and depth == 1. It also compares expected
+//     against the fixture's own reported "spawned" id, so a derivation drift
+//     on either side (hash, prefix, truncation length) fails with a message
+//     naming which side disagreed, not just a registry 404.
+//  2. Idempotent spawn: re-dispatching the parent's spawn turn a second time
+//     must not mint a second child — ListSessions must still show exactly one
+//     session whose parent.id is the parent session.
+//  3. Root-degrade: a fresh session dispatched with a parent header naming a
+//     NONEXISTENT session must still succeed (200, root-admitted per
+//     resolveParentage's "parent claim dropped" fallback) and its registry
+//     record must carry no parent and depth 0.
+//  4. Depth cap: chaining sessions directly (this test dispatches turns to
+//     each derived id itself, carrying only a parent header — no fixture-side
+//     spawning needed, since resolveParentage runs entirely off the STORED
+//     parent record before the function is ever invoked) from the depth-0
+//     parent through depth 1, 2, 3 succeeds; the depth-4 attempt must return
+//     HTTP 400 (AGENT_MAX_SPAWN_DEPTH is unset in CI, so the default cap of 3
+//     makes depth 4 the first rejection).
+func TestAgentRuntimeSpawnParentage(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-spawn-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-spawn-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		Code: framework.WriteTestData(t, "nodejs/agentspawn/spawn.js"),
+		// The fixture spawns children on ITSELF: it needs to know its own
+		// namespace and function name to build both the outbound dispatch
+		// URL and the ParentRef header it stamps on the child. This test
+		// already knows both before creating the function, so it passes
+		// them as plain env vars rather than making the fixture depend on
+		// the (unrelated) RFC-0023 state-token file the way architect.js
+		// does.
+		EnvVars: []string{
+			"SELF_NAMESPACE=" + ns.Name,
+			"SELF_AGENT_NAME=" + fnName,
+		},
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// Same CLI-update workaround as the other tests in this file
+	// (FunctionOptions has no Agent field yet).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// Turn 1: no session header, no spawn. Mints the parent (root, depth 0)
+	// session this whole test hangs off of.
+	var parentSessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, "", "", `{}`)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "root turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "root turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		parentSessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, parentSessionID, "root turn never minted a session id")
+
+	parentRef := agentruntime.ParentRef{Namespace: ns.Name, Agent: fnName, ID: parentSessionID}
+	expectedChildID := agentruntime.SpawnSessionID(parentRef, "expert-1")
+
+	// Turn 2 on the parent session: {"spawn":true} asks the fixture to spawn
+	// its one child. The fixture reports the derived id back as "spawned" —
+	// compared against expectedChildID below.
+	var reportedSpawnID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, parentSessionID, "", `{"spawn":true}`)
+		if !assert.NoErrorf(c, err, "POST %s (spawn turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "spawn turn to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading spawn turn response body") {
+			return
+		}
+		var payload struct {
+			Spawned string `json:"spawned"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding spawn turn response body %q", body) {
+			return
+		}
+		reportedSpawnID = payload.Spawned
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmptyf(t, reportedSpawnID, "spawn turn on session %s never reported a spawned id", parentSessionID)
+
+	// 1. CROSS-LANGUAGE AGREEMENT: Go's agentruntime.SpawnSessionID and the
+	// fixture's JS twin must derive the SAME id from the SAME parent+stepKey.
+	assert.Equalf(t, expectedChildID, reportedSpawnID,
+		"cross-language derivation mismatch: Go agentruntime.SpawnSessionID(%+v, %q) = %s, fixture spawnSessionID reported %s",
+		parentRef, "expert-1", expectedChildID, reportedSpawnID)
+
+	// And the registry must show a session record living at EXACTLY that id,
+	// admitted with the parent's triple and depth 1 — this is what actually
+	// proves the two independent derivations converged on a real admission
+	// row, not just matching strings.
+	childURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + expectedChildID
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, childURL)
+		if !assert.NoErrorf(c, err, "GET %s", childURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", childURL, body) {
+			return
+		}
+		var rec agentruntime.SessionRecord
+		if !assert.NoErrorf(c, json.Unmarshal(body, &rec), "decoding %s body %q", childURL, body) {
+			return
+		}
+		if !assert.NotNilf(c, rec.Parent, "child session %s must carry a parent, got nil (body=%s)", expectedChildID, body) {
+			return
+		}
+		assert.Equalf(c, parentRef, *rec.Parent, "child session %s parent mismatch", expectedChildID)
+		assert.Equalf(c, 1, rec.Depth, "child session %s must be depth 1, got %d", expectedChildID, rec.Depth)
+	}, 60*time.Second, 2*time.Second)
+
+	// 2. IDEMPOTENT SPAWN: re-dispatch the parent's spawn turn. The fixture
+	// derives the SAME childID (same parent session, same stepKey) and
+	// spawns again — the dispatcher's Create(IfVersion=0) semantics on the
+	// child mean this resumes the existing child record rather than minting
+	// a second one. List the function's sessions and confirm exactly ONE
+	// carries this parent.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, parentSessionID, "", `{"spawn":true}`)
+		if !assert.NoErrorf(c, err, "POST %s (second spawn turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusOK, resp.StatusCode, "second spawn turn to %s", turnURL)
+	}, 180*time.Second, 2*time.Second)
+
+	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
+		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", sessionsURL, body) {
+			return
+		}
+		var payload sessionsListDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", sessionsURL, body) {
+			return
+		}
+		children := 0
+		for _, s := range payload.Sessions {
+			if s.Parent != nil && s.Parent.ID == parentSessionID {
+				children++
+			}
+		}
+		assert.Equalf(c, 1, children,
+			"session %s must have exactly one child after re-dispatching the spawn turn (idempotent spawn), got %d (sessions=%+v)",
+			parentSessionID, children, payload.Sessions)
+	}, 60*time.Second, 2*time.Second)
+
+	// 3. ROOT-DEGRADE: a fresh session dispatched with a parent header naming
+	// a session that does not exist must still be admitted (200), as a root
+	// (no parent, depth 0) — resolveParentage's "parent claim dropped,
+	// admitting as root" fallback, not an error surfaced to the caller.
+	rootDegradeSessionID := "root-degrade-" + ns.ID
+	fakeParentHeader := ns.Name + "/" + fnName + "/does-not-exist-xyz"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, rootDegradeSessionID, fakeParentHeader, `{}`)
+		if !assert.NoErrorf(c, err, "POST %s (root-degrade turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusOK, resp.StatusCode,
+			"a turn naming a nonexistent parent must still be admitted as root (200), not rejected")
+	}, 180*time.Second, 2*time.Second)
+
+	rootDegradeURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + rootDegradeSessionID
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, rootDegradeURL)
+		if !assert.NoErrorf(c, err, "GET %s", rootDegradeURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", rootDegradeURL, body) {
+			return
+		}
+		var rec agentruntime.SessionRecord
+		if !assert.NoErrorf(c, json.Unmarshal(body, &rec), "decoding %s body %q", rootDegradeURL, body) {
+			return
+		}
+		assert.Nilf(c, rec.Parent, "session %s named a nonexistent parent, so it must carry NO parent, got %+v", rootDegradeSessionID, rec.Parent)
+		assert.Equalf(c, 0, rec.Depth, "session %s named a nonexistent parent, so it must be depth 0, got %d", rootDegradeSessionID, rec.Depth)
+	}, 60*time.Second, 2*time.Second)
+
+	// 4. DEPTH CAP: chain sessions directly from the depth-0 parent —
+	// resolveParentage computes depth from the STORED parent record alone,
+	// before the function is ever invoked, so this test can dispatch each
+	// hop itself with just a parent header; no fixture-side spawning is
+	// needed for this part at all. AGENT_MAX_SPAWN_DEPTH is unset in CI, so
+	// the default cap (3) makes a would-be depth-4 session the first
+	// rejection.
+	chainStepKey := "chain"
+	chainParent := parentRef // depth 0
+	for depth := 1; depth <= 3; depth++ {
+		childID := agentruntime.SpawnSessionID(chainParent, chainStepKey)
+		parentHeader := chainParent.String()
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+			defer cancel()
+			resp, err := postAgentTurn(attemptCtx, f, turnURL, childID, parentHeader, `{}`)
+			if !assert.NoErrorf(c, err, "POST %s (depth-%d chain turn)", turnURL, depth) {
+				return
+			}
+			defer resp.Body.Close()
+			assert.Equalf(c, http.StatusOK, resp.StatusCode, "depth-%d chain turn (session %s, parent %s) must be admitted", depth, childID, parentHeader)
+		}, 180*time.Second, 2*time.Second)
+		chainParent = agentruntime.ParentRef{Namespace: ns.Name, Agent: fnName, ID: childID}
+	}
+
+	depth4ParentHeader := chainParent.String() // chainParent is now the depth-3 session
+	depth4ChildID := agentruntime.SpawnSessionID(chainParent, chainStepKey)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, depth4ChildID, depth4ParentHeader, `{}`)
+		if !assert.NoErrorf(c, err, "POST %s (depth-4 chain turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusBadRequest, resp.StatusCode,
+			"depth-4 spawn (session %s, parent %s) must be rejected — AGENT_MAX_SPAWN_DEPTH defaults to 3 in CI", depth4ChildID, depth4ParentHeader)
+	}, 60*time.Second, 2*time.Second)
+}
+
 // nextSSEFrame reads one SSE message from r: comment lines (starting with
 // ':', e.g. the ": keepalive" lines events.go's ServeHTTP writes) are
 // skipped entirely, then an "event:" line and a "data:" line are read up to
