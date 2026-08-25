@@ -85,8 +85,33 @@
   .badge.warm { color: var(--muted); margin-left: 0; }
   .badge.provisioned { color: var(--accent); border-color: var(--accent); }
   .badge.ready { color: var(--active); border-color: var(--active); margin-left: auto; }
+  /* Family-tree badge: depth sits right after the card id, not pushed to the
+     far right the way the trailing status badge is (its margin-left stays
+     the general .badge auto, since it renders LAST in .card-top). */
+  .badge.depth { color: var(--accent); border-color: var(--accent); margin-left: 0; }
   .teleport { color: var(--accent); }
   .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+  /* Family tree: one row per session card, indented by nesting level
+     (inline style, computed from the parent chain -- see renderSubtree).
+     The connector glyph marks a child row; a root row has none. */
+  .card-row { display: flex; align-items: flex-start; gap: 4px; }
+  .card-row > .card { flex: 1 1 auto; min-width: 0; }
+  .tree-connector {
+    flex: none;
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace;
+    line-height: 1;
+    padding-top: 10px;
+  }
+  .group-header {
+    font-size: 11px;
+    font-style: italic;
+    color: var(--muted);
+    margin: 12px 0 4px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .card-list > .group-header:first-child { border-top: none; padding-top: 0; margin-top: 0; }
   #anchor-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; }
   .card[data-key] { cursor: pointer; }
   .card[data-key]:hover { border-color: var(--accent); }
@@ -313,7 +338,36 @@ function renderStats() {
 
 function emptyState(msg) { return '<div class="empty">' + esc(msg) + "</div>"; }
 
-function sessionCardHTML(entry) {
+// compareEntries is the deterministic sibling order shared by every level of
+// the family tree (and, before the tree existed, the flat list): active
+// before idle before archived, most-recently-active first within a status.
+function compareEntries(a, b) {
+  var oa = STATUS_ORDER[a.record.status], ob = STATUS_ORDER[b.record.status];
+  if (oa !== ob) return oa - ob;
+  var byActive = (b.record.lastActiveAt || "").localeCompare(a.record.lastActiveAt || "");
+  if (byActive !== 0) return byActive;
+  // Final tiebreak for full determinism: siblings spawned by parallel
+  // requests (e.g. architect.js's 3 concurrent expert POSTs) can share both
+  // status and lastActiveAt, which would otherwise fall back to Map
+  // insertion order -- i.e. arrival order, not deterministic across renders.
+  return sessionKey(a.record).localeCompare(sessionKey(b.record));
+}
+
+// parentKeyOf returns the sessionKey-shaped "<ns>/<agent>/<id>" string for a
+// record's parent field (session.go's ParentRef, carried on the wire as
+// {namespace,agent,id} -- see SessionRecord.Parent), or "" for a root
+// session (parent omitted/omitzero on the wire).
+function parentKeyOf(r) {
+  return r.parent ? r.parent.namespace + "/" + r.parent.agent + "/" + r.parent.id : "";
+}
+
+// sessionCardHTML renders one card. `level` is this card's DEPTH IN THE
+// RENDERED TREE (0 = no indent), which drives the connector/indent and is
+// distinct from SessionRecord.Depth (the platform's absolute spawn-chain
+// depth, shown as the "dN" badge) -- a child under an "(unknown parent)"
+// group header is drawn at tree level 0 even though its own record.depth may
+// be >0.
+function sessionCardHTML(entry, level) {
   var r = entry.record;
   var color = STATUS_COLOR[r.status] || STATUS_COLOR.archived;
   var shortId = r.id.slice(0, 8);
@@ -321,23 +375,88 @@ function sessionCardHTML(entry) {
   if (entry.teleports > 0) {
     meta += ' · <span class="teleport">teleports ' + entry.teleports + "</span>";
   }
+  var depthBadge = r.depth ? '<span class="badge depth">d' + esc(r.depth) + "</span>" : "";
   // data-key carries the exact sessions Map key (not the sanitized DOM id,
   // which is lossy) so the click handler below can look the record back up.
-  return '<div class="card" id="' + cardId(r) + '" data-key="' + esc(sessionKey(r)) + '" style="border-left-color:' + color + '">' +
+  var card = '<div class="card" id="' + cardId(r) + '" data-key="' + esc(sessionKey(r)) + '" style="border-left-color:' + color + '">' +
     '<div class="card-top"><span class="dot" style="background:' + color + '"></span>' +
-    '<span class="card-id">' + esc(shortId) + "</span>" +
+    '<span class="card-id">' + esc(shortId) + "</span>" + depthBadge +
     '<span class="badge status-' + esc(r.status) + '">' + esc(r.status) + "</span></div>" +
     '<div class="card-agent">' + esc(r.namespace) + "/" + esc(r.agent) + "</div>" +
     '<div class="card-meta">' + meta + "</div></div>";
+  if (level === 0) {
+    return '<div class="card-row">' + card + "</div>";
+  }
+  return '<div class="card-row" style="margin-left:' + (level * 18) +
+    'px"><span class="tree-connector">└</span>' + card + "</div>";
+}
+
+// buildFamilyForest partitions the current session set into a forest: `roots`
+// (no parent field at all), `childrenOf` (keyed by the PARENT's sessionKey,
+// for children whose parent is itself in the current card set), and
+// `unknownGroups` (keyed by the raw, unresolvable parent ref string, for
+// children whose parent is NOT in the current card set -- e.g. the parent
+// session already archived off the list, or belongs to an agent this page
+// never fetched). Every live entry lands in exactly one of the three
+// buckets, so the render pass below is a complete, non-duplicating walk.
+function buildFamilyForest() {
+  var childrenOf = new Map();
+  var roots = [];
+  var unknownGroups = new Map();
+
+  sessions.forEach(function (entry) {
+    var r = entry.record;
+    if (!r.parent) {
+      roots.push(entry);
+      return;
+    }
+    var pKey = parentKeyOf(r);
+    if (sessions.has(pKey)) {
+      if (!childrenOf.has(pKey)) childrenOf.set(pKey, []);
+      childrenOf.get(pKey).push(entry);
+      return;
+    }
+    if (!unknownGroups.has(pKey)) unknownGroups.set(pKey, []);
+    unknownGroups.get(pKey).push(entry);
+  });
+
+  return { childrenOf: childrenOf, roots: roots, unknownGroups: unknownGroups };
+}
+
+// renderSubtree renders `entry` plus every descendant reachable through
+// childrenOf, each level indented one step deeper than its parent.
+function renderSubtree(entry, childrenOf, level) {
+  var html = sessionCardHTML(entry, level);
+  var kids = (childrenOf.get(sessionKey(entry.record)) || []).slice().sort(compareEntries);
+  kids.forEach(function (child) {
+    html += renderSubtree(child, childrenOf, level + 1);
+  });
+  return html;
+}
+
+function groupHeaderHTML(parentRef) {
+  return '<div class="group-header">(unknown parent: ' + esc(parentRef) + ")</div>";
 }
 
 function renderSessions() {
-  var items = Array.from(sessions.values()).sort(function (a, b) {
-    var oa = STATUS_ORDER[a.record.status], ob = STATUS_ORDER[b.record.status];
-    if (oa !== ob) return oa - ob;
-    return (b.record.lastActiveAt || "").localeCompare(a.record.lastActiveAt || "");
+  var forest = buildFamilyForest();
+  var html = "";
+
+  forest.roots.slice().sort(compareEntries).forEach(function (entry) {
+    html += renderSubtree(entry, forest.childrenOf, 0);
   });
-  qs("#sessions-list").innerHTML = items.map(sessionCardHTML).join("") || emptyState("no sessions yet");
+
+  // Deterministic group order: sort by the parent ref string itself, not
+  // insertion order (a Map iterates in insertion order, which would jitter
+  // across renders as different children arrive first).
+  Array.from(forest.unknownGroups.keys()).sort().forEach(function (parentKey) {
+    html += groupHeaderHTML(parentKey);
+    forest.unknownGroups.get(parentKey).slice().sort(compareEntries).forEach(function (entry) {
+      html += renderSubtree(entry, forest.childrenOf, 0);
+    });
+  });
+
+  qs("#sessions-list").innerHTML = html || emptyState("no sessions yet");
 }
 
 function podCardHTML(p) {
@@ -430,33 +549,58 @@ async function loadPool() {
   scheduleRender();
 }
 
-// pollSessionsTick is the SSE-unavailable fallback: it re-lists every known
-// agent's sessions and treats each agent's page as ground truth, dropping
-// any previously-seen session for that agent that no longer appears (the
-// SSE feed never sends deletions either -- see events.go's package doc --
-// so this is the same reconciliation the feed's own fallback advice
-// prescribes). limit=500 (maxSessionListLimit) covers the demo's session
-// counts in one page; a production poller would walk `next`.
+// pollAgentSessions re-lists ONE agent's ENTIRE live-session set, paging the
+// `page` cursor to exhaustion (mirroring events.go's collectAgentSessions,
+// the SSE path's own server-side poller), then treats the full accumulated
+// set as ground truth: any previously-seen session for this agent that does
+// not appear in it is dropped (the SSE feed never sends deletions either --
+// see events.go's package doc -- so this is the same reconciliation the
+// feed's own fallback advice prescribes).
+//
+// Bug fixed here: this used to fetch exactly ONE ?limit=500 page and delete
+// every session absent from THAT page -- past 500 live sessions for one
+// agent, a truncated first page deleted LIVE cards, not just orphans. Paging
+// to exhaustion before running the delete pass is the actual fix; limit=500
+// per page is just a page size now, not an assumed ceiling.
+//
+// On a page-fetch error partway through, this agent's walk is abandoned for
+// the tick with NO delete pass run at all: an incomplete `seen` set would
+// otherwise delete every live session past the point of failure, which is
+// the same class of bug this function exists to fix. Sessions upserted from
+// pages fetched before the failure still land (freshened), matching
+// collectAgentSessions's own "a page fetched before the error already landed
+// in out" comment. The next 5s tick retries this agent from the top.
+async function pollAgentSessions(a) {
+  var seen = new Set();
+  var pageToken = "";
+  for (;;) {
+    var path = "/registry/agents/" + encodeURIComponent(a.namespace) + "/" +
+      encodeURIComponent(a.name) + "/sessions?limit=500" +
+      (pageToken ? "&page=" + encodeURIComponent(pageToken) : "");
+    var res = await apiGet(path);
+    if (!res.ok) return; // abort this agent's walk; no deletion this tick
+    var data = await res.json();
+    (data.sessions || []).forEach(function (rec) {
+      upsertSession(rec);
+      seen.add(sessionKey(rec));
+    });
+    if (!data.next) break;
+    pageToken = data.next;
+  }
+  sessions.forEach(function (entry, key) {
+    if (entry.record.namespace === a.namespace && entry.record.agent === a.name && !seen.has(key)) {
+      sessions.delete(key);
+    }
+  });
+}
+
+// pollSessionsTick is the SSE-unavailable fallback: it walks every known
+// agent via pollAgentSessions (see its doc comment for the pagination fix).
 async function pollSessionsTick() {
   await loadAgents();
   for (var i = 0; i < agents.length; i++) {
-    var a = agents[i];
     try {
-      var path = "/registry/agents/" + encodeURIComponent(a.namespace) + "/" +
-        encodeURIComponent(a.name) + "/sessions?limit=500";
-      var res = await apiGet(path);
-      if (!res.ok) continue;
-      var data = await res.json();
-      var seen = new Set();
-      (data.sessions || []).forEach(function (rec) {
-        upsertSession(rec);
-        seen.add(sessionKey(rec));
-      });
-      sessions.forEach(function (entry, key) {
-        if (entry.record.namespace === a.namespace && entry.record.agent === a.name && !seen.has(key)) {
-          sessions.delete(key);
-        }
-      });
+      await pollAgentSessions(agents[i]);
     } catch (e) { /* leave this agent's sessions stale for one tick */ }
   }
   scheduleRender();
