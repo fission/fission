@@ -122,6 +122,33 @@ func TestAgentRuntimeSessionDispatch(t *testing.T) {
 	}, 180*time.Second, 2*time.Second)
 	require.NotEmpty(t, sessionID, "first turn never minted a session id")
 
+	// Negative path (Task 7 step 2): this function was created WITHOUT
+	// State, so its AgentEntry.StateKeyspace is empty and GetHistory's
+	// early-return branch (registry_api.go) must answer 200 with an empty
+	// history — never touching the (nonexistent) statesvc-backed history
+	// store, and never a 404/500. One extra GET on this test's already-
+	// minted session is enough; it does not need its own function/skip
+	// setup (TestAgentRuntimeHistory below covers the WITH-State positive
+	// path against a separate function).
+	historyURL := f.AgentRuntimeBaseURL() + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/history"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, historyURL)
+		if !assert.NoErrorf(c, err, "GET %s", historyURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s", historyURL) {
+			return
+		}
+		var payload historyResponseDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", historyURL, body) {
+			return
+		}
+		assert.Equalf(c, int64(0), payload.Head, "a no-State agent's session must report head:0, got %d", payload.Head)
+		assert.Emptyf(c, payload.Events, "a no-State agent's session must report an empty events list, got %+v", payload.Events)
+	}, 60*time.Second, 2*time.Second)
+
 	// Second turn: supply the minted session id explicitly. The dispatcher
 	// must resolve (not mint a new) session and echo the same id back.
 	// Wrapped in the same EventuallyWithT/attempt-timeout shape as the first
@@ -454,6 +481,211 @@ func TestAgentRuntimeRegistrySmoke(t *testing.T) {
 	assert.Truef(t, foundSessionID,
 		"no session frame from %s carried the session id %s minted earlier in this test; the snapshot replay may be broken",
 		eventsURL, sessionID)
+}
+
+// historyEventDTO / historyResponseDTO / checkpointDTO decode the registry
+// history/checkpoint routes' wire shape (pkg/agentruntime/registry_api.go's
+// historyEvent/historyResponse, and pkg/agentruntime/history.go's
+// CheckpointRecord). Payload is Go []byte in both: encoding/json
+// base64-decodes a []byte field on Unmarshal automatically, the same
+// encoding the server used to marshal it, so no manual base64 step is needed
+// here beyond decoding the JSON envelope underneath.
+type historyEventDTO struct {
+	Seq     int64     `json:"seq"`
+	Type    string    `json:"type"`
+	Payload []byte    `json:"payload"`
+	At      time.Time `json:"at"`
+}
+
+type historyResponseDTO struct {
+	Head   int64             `json:"head"`
+	Events []historyEventDTO `json:"events"`
+}
+
+type checkpointDTO struct {
+	V                 int             `json:"v"`
+	CoveredThroughSeq int64           `json:"coveredThroughSeq"`
+	Kind              string          `json:"kind"`
+	Payload           json.RawMessage `json:"payload"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	Turn              int64           `json:"turn"`
+}
+
+// decodeEventTurn decodes e's payload (test/integration/testdata/nodejs/
+// agenthistory/history.js's {v,turn,step,kind,at} envelope, mirroring
+// demo/agent-boardroom/fixtures/support-desk.js's wire contract) and returns
+// its turn field.
+func decodeEventTurn(c *assert.CollectT, e historyEventDTO) (int, bool) {
+	var p struct {
+		Turn int `json:"turn"`
+	}
+	if !assert.NoErrorf(c, json.Unmarshal(e.Payload, &p), "decoding history event payload %s", e.Payload) {
+		return 0, false
+	}
+	return p.Turn, true
+}
+
+// TestAgentRuntimeHistory exercises RFC-0027 G13's session history and
+// checkpoint wire path end-to-end: a function created with `--agent`
+// (applied via the same CLI-update workaround as the other tests in this
+// file) and State: true (framework.FunctionOptions, the same pattern
+// TestFunctionState uses) writes real per-turn history events and a
+// mid-session checkpoint through statesvc's scoped EventLog/KV routes — see
+// test/integration/testdata/nodejs/agenthistory/history.js, which mirrors
+// demo/agent-boardroom/fixtures/support-desk.js's wire contract (the
+// committed Task 6 reference implementation of the append path) — and the
+// agent runtime's registry introspection surface (GET .../sessions/{id}/
+// history, GET .../sessions/{id}/checkpoint) must reflect those writes.
+//
+// Two turns on one session id suffice: the fixture writes turn_start+yield
+// per turn (4 events total across both turns) and a checkpoint on the
+// SECOND turn (0-based turn=1; the fixture's CHECKPOINT_EVERY=2, half the
+// demo's every-5th-turn cadence, since this is a wire-path test, not the
+// demo's density story).
+//
+// Like TestFunctionState, this needs the real statesvc-backed function-state
+// token, which only reaches function pods under static tenancy — skip
+// rather than assert a known-unsupported combination on the
+// dynamic/cluster-tenancy CI legs (same TenancyMode guard, same reasoning).
+func TestAgentRuntimeHistory(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+	stateSvcReachableOrSkip(t, ctx, f)
+	if mode := f.TenancyMode(t, ctx); mode != "static" {
+		t.Skipf("function state is static-tenancy only for now; tenancy mode is %q (per-namespace state key is a follow-up)", mode)
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-history-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-history-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name:  fnName,
+		Env:   envName,
+		Code:  framework.WriteTestData(t, "nodejs/agenthistory/history.js"),
+		State: true,
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// FunctionOptions has no Agent field (see TestAgentRuntimeSessionDispatch's
+	// comment on the same workaround); this leaves Spec.State intact
+	// (update.go passes the existing State config through when no
+	// --state* flags are given on the update).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// First turn: no session header. Mints a session id (0-based turn 0 on
+	// the dispatcher's HeaderTurns), same shape as
+	// TestAgentRuntimeSessionDispatch's first turn.
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, "")
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "first turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "first turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "first turn never minted a session id")
+
+	// Second turn: same session id explicitly (0-based turn 1). This is the
+	// turn the fixture checkpoints on (CHECKPOINT_EVERY=2).
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "second turn to %s", turnURL) {
+			return
+		}
+		assert.Equal(c, sessionID, resp.Header.Get(agentruntime.HeaderSession),
+			"second turn must echo the caller-supplied session id, not mint a new one")
+	}, 180*time.Second, 2*time.Second)
+
+	// The registry history must reflect both turns' events: at least 4 (2
+	// per turn), the first event's payload carrying turn:0 and the last
+	// carrying turn:1, head advanced past 0, and both event kinds present.
+	historyURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/history"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, historyURL)
+		if !assert.NoErrorf(c, err, "GET %s", historyURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", historyURL, body) {
+			return
+		}
+		var payload historyResponseDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", historyURL, body) {
+			return
+		}
+		if !assert.GreaterOrEqualf(c, len(payload.Events), 4,
+			"session %s should have at least 4 history events (2 per turn x 2 turns), got %d", sessionID, len(payload.Events)) {
+			return
+		}
+		assert.Greaterf(c, payload.Head, int64(0), "history head must have advanced past 0, got %d", payload.Head)
+
+		firstTurn, ok := decodeEventTurn(c, payload.Events[0])
+		if !ok {
+			return
+		}
+		lastTurn, ok := decodeEventTurn(c, payload.Events[len(payload.Events)-1])
+		if !ok {
+			return
+		}
+		assert.Equalf(c, 0, firstTurn, "the first history event must carry turn:0")
+		assert.Equalf(c, 1, lastTurn, "the last history event must carry turn:1")
+
+		kinds := make(map[string]bool, len(payload.Events))
+		for _, e := range payload.Events {
+			kinds[e.Type] = true
+		}
+		assert.Truef(c, kinds["turn_start"], "history events must include a turn_start event, got types %+v", kinds)
+		assert.Truef(c, kinds["yield"], "history events must include a yield event, got types %+v", kinds)
+	}, 60*time.Second, 2*time.Second)
+
+	// The checkpoint written on the second turn (0-based turn=1) must be
+	// visible through the registry checkpoint route.
+	checkpointURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/checkpoint"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, checkpointURL)
+		if !assert.NoErrorf(c, err, "GET %s", checkpointURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", checkpointURL, body) {
+			return
+		}
+		var payload checkpointDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", checkpointURL, body) {
+			return
+		}
+		assert.Greaterf(c, payload.CoveredThroughSeq, int64(0), "checkpoint coveredThroughSeq must be > 0, got %d", payload.CoveredThroughSeq)
+		assert.Equalf(c, int64(1), payload.Turn, "checkpoint must have been written at 0-based turn 1 (fixture CHECKPOINT_EVERY=2), got %d", payload.Turn)
+	}, 60*time.Second, 2*time.Second)
 }
 
 // nextSSEFrame reads one SSE message from r: comment lines (starting with
