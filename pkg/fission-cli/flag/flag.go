@@ -275,7 +275,7 @@ var (
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession      = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}
 	AgentToken        = Flag{Type: String, Name: flagkey.AgentToken, Usage: "Bearer token for the agent runtime (defaults to FISSION_AGENT_TOKEN; unset works only when agentRuntime.allowInsecure is set)"}
-	AgentSessionsTree = Flag{Type: Bool, Name: flagkey.AgentSessionsTree, Usage: "Render sessions as a parent/child spawn tree, paging through every session first (ignores the single-page truncation the plain list applies)"}
+	AgentSessionsTree = Flag{Type: Bool, Name: flagkey.AgentSessionsTree, Usage: "Render sessions as a parent/child spawn tree, paging through every session first (ignores the single-page truncation the plain list applies); with -o json/yaml the output stays a flat, fully-paginated array rather than a nested tree"}
 
 	// RFC-0023 `fission fn state` admin flags.
 	StateKey       = Flag{Type: String, Name: flagkey.StateKey, Usage: "State key to operate on"}

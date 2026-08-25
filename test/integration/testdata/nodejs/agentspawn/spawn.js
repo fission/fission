@@ -5,8 +5,13 @@
 // "expert-1" and dispatches ONE turn to that child on ITSELF (same
 // namespace, same function) with X-Fission-Session set to the derived id and
 // X-Fission-Agent-Parent set to this session's own ParentRef. Every turn
-// (spawn or not) replies 200 with {"session","parent","spawned"}, where
-// "spawned" is the derived child id (or null when this turn did not spawn).
+// (spawn or not) replies 200 with {"session","parent","spawned","spawnStatus",
+// "spawnBody"}, where "spawned" is the derived child id (or null when this
+// turn did not spawn) and spawnStatus/spawnBody are the inner dispatch's own
+// last-observed HTTP status and response body (0/"" when no spawn was
+// attempted, or on a network error before any response arrived) -- present
+// specifically so a caller-side test can name what the inner dispatch
+// actually saw instead of just timing out on a registry 404.
 //
 // spawnSessionID below is the same byte-identical JS twin of
 // pkg/agentruntime/session.go's SpawnSessionID that architect.js carries
@@ -80,13 +85,23 @@ async function spawnChild(parentRef, stepKey) {
       body: JSON.stringify({}),
     });
     if (!res.ok) {
-      console.error(`agentspawn: spawn ${stepKey} (${childID}) failed: HTTP ${res.status}`);
-      return { childID: childID, ok: false, status: res.status };
+      // Best-effort body read for diagnostics -- res.text() itself should
+      // not throw here (the response already completed with a status), but
+      // this is a test fixture's failure-reporting path, not the happy
+      // path, so it stays defensive anyway.
+      let bodyText = '';
+      try {
+        bodyText = await res.text();
+      } catch (err) {
+        bodyText = `<failed to read body: ${err}>`;
+      }
+      console.error(`agentspawn: spawn ${stepKey} (${childID}) failed: HTTP ${res.status} body=${bodyText}`);
+      return { childID: childID, ok: false, status: res.status, body: bodyText };
     }
-    return { childID: childID, ok: true, status: res.status };
+    return { childID: childID, ok: true, status: res.status, body: '' };
   } catch (err) {
     console.error(`agentspawn: spawn ${stepKey} (${childID}) failed: ${err}`);
-    return { childID: childID, ok: false, status: 0, error: String(err) };
+    return { childID: childID, ok: false, status: 0, body: '', error: String(err) };
   }
 }
 
@@ -98,9 +113,10 @@ module.exports = async function (context) {
   const parentRef = `${SELF_NAMESPACE}/${SELF_AGENT_NAME}/${sessionID}`;
 
   // req.body arrives pre-parsed as an object for a JSON content type in the
-  // common case, but support-desk.js (this same testdata family) defends
-  // against a raw-string body too -- mirror that defensiveness here rather
-  // than assume the parsed-object case always holds.
+  // common case, but support-desk.js (demo/agent-boardroom/fixtures/, not
+  // this testdata family) defends against a raw-string body too -- mirror
+  // that defensiveness here rather than assume the parsed-object case always
+  // holds.
   let body = req.body;
   if (typeof body === 'string') {
     try {
@@ -114,15 +130,29 @@ module.exports = async function (context) {
   // spawned is reported whenever this turn spawned, REGARDLESS of whether
   // the inner dispatch call itself succeeded -- the derivation never fails,
   // only the network call can (see spawnChild's best-effort doc comment).
+  // spawnStatus/spawnBody carry that inner dispatch's own last-observed
+  // outcome (0/"" when nothing was attempted) so a caller-side test failure
+  // can name what actually happened inside the pod, instead of surfacing
+  // only as a generic registry-side 404 after its own timeout.
   let spawned = null;
+  let spawnStatus = 0;
+  let spawnBody = '';
   if (shouldSpawn) {
     const result = await spawnChild(parentRef, STEP_KEY);
     spawned = result.childID;
+    spawnStatus = result.status;
+    spawnBody = result.error ? `<network error: ${result.error}>` : result.body;
   }
 
   return {
     status: 200,
-    body: JSON.stringify({ session: sessionID, parent: parentRef, spawned: spawned }),
+    body: JSON.stringify({
+      session: sessionID,
+      parent: parentRef,
+      spawned: spawned,
+      spawnStatus: spawnStatus,
+      spawnBody: spawnBody,
+    }),
     headers: { 'Content-Type': 'application/json' },
   };
 };

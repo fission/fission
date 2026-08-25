@@ -229,6 +229,45 @@ func TestSessionsListTreePaginatesToExhaustion(t *testing.T) {
 	assert.Contains(t, out, "page2-a")
 }
 
+// twoNodeCycleFixture fabricates a parent cycle: cyc-a claims cyc-b as its
+// parent, and cyc-b claims cyc-a right back. Both records are present in the
+// single fetched page (so neither lands under the "(unknown: ...)" bucket),
+// and neither has Parent == nil (so neither is a root either) -- the exact
+// shape the tree printer's group-3 leftover fallback exists for.
+const twoNodeCycleFixture = `{"sessions":[
+	{"id":"cyc-a","agent":"agentfn","namespace":"testns","status":"active",
+	 "createdAt":"2026-08-20T09:00:00Z","stats":{"turns":1},
+	 "parent":{"namespace":"testns","agent":"agentfn","id":"cyc-b"},"depth":1},
+	{"id":"cyc-b","agent":"agentfn","namespace":"testns","status":"active",
+	 "createdAt":"2026-08-20T09:05:00Z","stats":{"turns":1},
+	 "parent":{"namespace":"testns","agent":"agentfn","id":"cyc-a"},"depth":1}
+]}`
+
+// TestSessionsListTreeHandlesTwoNodeCycle pins printSessionTree's cycle
+// safety: a fabricated 2-node parent cycle (each record names the other as
+// its parent) must render BOTH members exactly once, with no hang, instead
+// of looping forever or silently vanishing from the output. The tree
+// printer is already safe against this (the `printed` guard in
+// printSubtree); this test is the pin the final review asked for.
+func TestSessionsListTreeHandlesTwoNodeCycle(t *testing.T) {
+	mockAgentRuntime(t, http.StatusOK, twoNodeCycleFixture)
+
+	in := dummy.TestFlagSetWith(
+		dummy.String(flagkey.FnName, "agentfn"),
+		dummy.String(flagkey.Namespace, "testns"),
+	)
+	in.SetBool(flagkey.AgentSessionsTree, true)
+	// If printSubtree's `printed` guard regressed, this call would hang on
+	// the cycle forever; the test binary's own -timeout is the backstop that
+	// turns that into a failure rather than a silent CI wedge.
+	out := captureStdout(t, func() error { return SessionsList(in) })
+
+	lines := splitNonEmptyLines(out)
+	require.Len(t, lines, 3, "header + cyc-a + cyc-b, each exactly once:\n%s", out)
+	assert.Equal(t, 1, strings.Count(out, "cyc-a"))
+	assert.Equal(t, 1, strings.Count(out, "cyc-b"))
+}
+
 // findLine returns the first line in lines containing substr, failing the
 // test if none does.
 func findLine(t *testing.T, lines []string, substr string) string {
