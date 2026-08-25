@@ -97,7 +97,18 @@ module.exports = async function (context) {
   // "<namespace>/<agent>/<id>".
   const parentRef = `${SELF_NAMESPACE}/${SELF_AGENT_NAME}/${sessionID}`;
 
-  const body = req.body;
+  // req.body arrives pre-parsed as an object for a JSON content type in the
+  // common case, but support-desk.js (this same testdata family) defends
+  // against a raw-string body too -- mirror that defensiveness here rather
+  // than assume the parsed-object case always holds.
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = body.trim() === '' ? {} : JSON.parse(body);
+    } catch (err) {
+      body = {};
+    }
+  }
   const shouldSpawn = !!(body && typeof body === 'object' && body.spawn === true);
 
   // spawned is reported whenever this turn spawned, REGARDLESS of whether
