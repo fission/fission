@@ -387,6 +387,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("statestore Queue capability: %w", err)
 	}
+	eventLog, err := caps.EventLog()
+	if err != nil {
+		return fmt.Errorf("statestore EventLog capability: %w", err)
+	}
 
 	sweepInterval, err := envDuration(envSweepInterval, defaultSweepInterval)
 	if err != nil {
@@ -429,6 +433,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 
 	view := NewAgentView()
 	store := NewSessionStore(kv, time.Now)
+	// hist is constructed here (over the same direct statestore handles as
+	// store/queue) but not yet threaded into a consumer — the history/
+	// checkpoint HTTP surface and dispatcher wiring land in a later slice.
+	hist := NewHistoryStore(eventLog, kv)
+	_ = hist
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
 
