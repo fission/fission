@@ -235,7 +235,7 @@ see the doc comments next to `pkg/agentruntime/dispatcher.go`'s `tracer()` and `
 
 Fission bundles no collector or backend — `fission-bundle` only installs the TracerProvider and W3C propagator
 (`pkg/utils/otel/provider.go`) and points them at whatever OTLP endpoint you configure.
-With no collector reachable, the SDK falls back to `NeverSample`:
+With no OTLP endpoint configured, the SDK falls back to `NeverSample`:
 trace-ids still propagate end to end (see Task 3's integration test, `TestAgentRuntimeTraceContextPropagation`),
 but nothing is exported anywhere, so there's nothing to look at.
 
