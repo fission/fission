@@ -9,9 +9,14 @@ package agentruntime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
+	"strings"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/fission/fission/pkg/statestore"
 )
@@ -45,6 +50,54 @@ var (
 	ErrUpdateArchived = errors.New("agentruntime: refusing to Update an archived session record into the live keyspace")
 )
 
+// ParentRef is the qualified reference to a spawning session. A bare session
+// id cannot identify a parent: ids are unique only within one
+// (namespace, agent) scope (see sessionKey in events.go), and cross-agent
+// parentage is the Handoff/multi-agent-orchestration extension point.
+type ParentRef struct {
+	Namespace string `json:"namespace"`
+	Agent     string `json:"agent"`
+	ID        string `json:"id"`
+}
+
+// String is the canonical wire/display form "<ns>/<agent>/<id>". All three
+// components are charset-constrained and cannot contain '/', so the form is
+// unambiguous and ParseParentRef can split on '/'.
+func (p ParentRef) String() string {
+	return p.Namespace + "/" + p.Agent + "/" + p.ID
+}
+
+// ParseParentRef parses the canonical form; ok=false on anything but three
+// non-empty charset-valid segments (validate id against sessionIDPattern and
+// ns/agent against DNS-label shape the way the dispatcher's route values are).
+func ParseParentRef(s string) (ParentRef, bool) {
+	parts := strings.Split(s, "/")
+	if len(parts) != 3 {
+		return ParentRef{}, false
+	}
+	ns, agent, id := parts[0], parts[1], parts[2]
+	if ns == "" || agent == "" || id == "" {
+		return ParentRef{}, false
+	}
+	if len(validation.IsDNS1123Label(ns)) != 0 || len(validation.IsDNS1123Label(agent)) != 0 {
+		return ParentRef{}, false
+	}
+	if !sessionIDPattern.MatchString(id) {
+		return ParentRef{}, false
+	}
+	return ParentRef{Namespace: ns, Agent: agent, ID: id}, true
+}
+
+// SpawnSessionID derives the deterministic child session id for one logical
+// spawn: same parent + same stepKey => same id, always — which makes the
+// shipped Create(IfVersion=0) the exactly-once admission row (ErrSessionExists
+// = already admitted = the dispatch proceeds as a resume).
+// Lowercase hex (spec amendment): "c-" + hex(sha256(parent.String()+"/"+stepKey))[:32].
+func SpawnSessionID(parent ParentRef, stepKey string) string {
+	sum := sha256.Sum256([]byte(parent.String() + "/" + stepKey))
+	return "c-" + hex.EncodeToString(sum[:])[:32]
+}
+
 // SessionStats is the per-session meter set (G19: full meter schema from day
 // one; Tokens/Cost reserved for the gateway integration, always 0 for now).
 type SessionStats struct {
@@ -68,6 +121,18 @@ type SessionRecord struct {
 	LastActiveAt time.Time     `json:"lastActiveAt"`
 	CurrentPod   string        `json:"currentPod,omitempty"` // best-effort UI truth, never routing truth
 	Stats        SessionStats  `json:"stats"`
+
+	// Parent is the spawning session, if this session was created by a spawn
+	// admission rather than a direct inbound turn. IMMUTABLE after Create: set
+	// only by the dispatcher's creation path (Task 2), never touched by Update.
+	Parent *ParentRef `json:"parent,omitempty"`
+	// Depth is the spawn-chain depth: 0 for a root session, parent.Depth+1 for
+	// a spawned child. IMMUTABLE after Create, for the same reason as Parent.
+	//
+	// Tagged omitzero, not omitempty: encoding/json/v2's omitempty omits only
+	// a JSON null/""/{}/[] and does NOT drop a zero int, so the root-session
+	// value (0) would otherwise appear on the wire as an explicit "depth":0.
+	Depth int `json:"depth,omitzero"`
 }
 
 // SessionStore persists SessionRecords in a statestore KVStore. Live records
@@ -100,6 +165,22 @@ func archivedScope(ns, agent string) statestore.Scope {
 // Update or Archive.
 func (s *SessionStore) Get(ctx context.Context, ns, agent, id string) (SessionRecord, int64, error) {
 	v, err := s.kv.Get(ctx, sessionScope(ns, agent), id)
+	if err != nil {
+		return SessionRecord{}, 0, err
+	}
+	var rec SessionRecord
+	if err := json.Unmarshal(v.Data, &rec); err != nil {
+		return SessionRecord{}, 0, err
+	}
+	return rec, v.Version, nil
+}
+
+// GetArchived returns the archived record for id and its KV version, reading
+// from archivedScope. Same decode and ErrNotFound-passthrough contract as
+// Get; used as depth resolution's second look when a parent has already left
+// the live keyspace.
+func (s *SessionStore) GetArchived(ctx context.Context, ns, agent, id string) (SessionRecord, int64, error) {
+	v, err := s.kv.Get(ctx, archivedScope(ns, agent), id)
 	if err != nil {
 		return SessionRecord{}, 0, err
 	}
