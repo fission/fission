@@ -11,9 +11,9 @@
 // State contract (RFC-0023, see pkg/fetcher/statetoken.go and
 // pkg/statesvc/handler.go): the fetcher writes a StateCredentials JSON file
 // {namespace, keyspace, token} to FISSION_STATE_TOKEN_PATH at specialize
-// time; FISSION_STATE_URL is the statesvc base URL. This fixture keeps it
-// minimal, per the task brief: one JSON key per session (turn count + a
-// short running summary), fetched with GET and written back with PUT.
+// time; FISSION_STATE_URL is the statesvc base URL. This fixture keeps the
+// per-session KV blob minimal (turn count + a short running summary),
+// fetched with GET and written back with PUT.
 //
 //   GET  {FISSION_STATE_URL}/v1/state/{sessionID}
 //   PUT  {FISSION_STATE_URL}/v1/state/{sessionID}
@@ -21,16 +21,73 @@
 //   X-Fission-State-Namespace: <namespace>
 //   X-Fission-State-Keyspace: <keyspace>
 //
+// On top of that blob (RFC-0027 §G13, see pkg/agentruntime/history.go), this
+// fixture also writes REAL per-turn history to the statesvc EventLog and a
+// periodic checkpoint to the statesvc KV CAS route, so the boardroom UI's
+// session transcript panel has something genuine to render:
+//
+//   POST {FISSION_STATE_URL}/v1/eventlog/append   {stream,expectedSeq,events}
+//   POST {FISSION_STATE_URL}/v1/eventlog/read     {stream,fromSeq,limit}
+//   POST {FISSION_STATE_URL}/v1/eventlog/head     {stream}
+//   POST {FISSION_STATE_URL}/v1/state/agentckpt.{sessionID}/cas
+//        {expectVersion,value}
+//
+// The history stream name ("agentlog/" + sessionID) and the checkpoint key
+// prefix ("agentckpt.") must match pkg/agentruntime/history.go's
+// HistoryStreamPrefix / CheckpointKeyPrefix exactly — the platform side reads
+// through those same names, never hand-derived twice.
+//
 // When FISSION_STATE_URL/FISSION_STATE_TOKEN_PATH are unset (functionState
 // disabled, or a dev cluster with no statestore) the fixture falls back to
-// an in-process Map so it still answers turns — that memory does not survive
-// a pod recycle, unlike the real state-backed path.
+// an in-process Map for the KV blob, and skips history/checkpoint writes
+// entirely — that memory does not survive a pod recycle, unlike the real
+// state-backed path.
 
 const fs = require('fs');
 
 const SESSION_HEADER = 'x-fission-session'; // express lower-cases header names
+// TURNS_HEADER carries the session's turn count from BEFORE this turn
+// (pkg/agentruntime/dispatcher.go's HeaderTurns) — stable across
+// at-least-once redeliveries of the SAME turn, which is exactly why it (and
+// not a locally-incremented counter) is the replay key for history writes
+// below. A direct curl with no dispatcher in front sends no such header;
+// parseTurnHeader falls back to 0, so any such calls collide on "turn 0" and
+// dedupe against each other — harmless for a demo fixture, not a real bug.
+const TURNS_HEADER = 'x-fission-agent-turns';
 const YIELD_HEADER = 'X-Fission-Agent-Yield';
 const MAX_SUMMARY_CHARS = 240;
+
+// HISTORY_STREAM_PREFIX / CHECKPOINT_KEY_PREFIX mirror
+// pkg/agentruntime/history.go's HistoryStreamPrefix / CheckpointKeyPrefix.
+const HISTORY_STREAM_PREFIX = 'agentlog/';
+const CHECKPOINT_KEY_PREFIX = 'agentckpt.';
+// STATE_VERSION_HEADER mirrors stateapi.HeaderVersion — the response header
+// GET /v1/state/{key} sets with the value's current KV version, which is how
+// this fixture learns the expectVersion for its next checkpoint CAS write
+// (the CAS route's 204/412 responses never carry the new version).
+const STATE_VERSION_HEADER = 'X-Fission-State-Version';
+// CHECKPOINT_EVERY: write a checkpoint on every Nth turn (1-based turn
+// number, i.e. turn header value + 1).
+const CHECKPOINT_EVERY = 5;
+// MAX_APPEND_ATTEMPTS bounds the EventLog CAS-append retry loop: one
+// straight-through attempt plus a few resync-and-retry cycles after a 412.
+const MAX_APPEND_ATTEMPTS = 4;
+// MAX_CHECKPOINT_ATTEMPTS bounds the checkpoint KV CAS retry loop similarly.
+const MAX_CHECKPOINT_ATTEMPTS = 2;
+
+// SIMULATED_ORDERS mirrors fixtures/order-lookup.js's static ORDERS table
+// (duplicated, not imported: the two fixtures package into separate
+// archives/functions and specs/order-lookup.yaml is explicit that the
+// loadgen path stays decoupled from an actual order-lookup call). It exists
+// only to give the simulated tool_call/tool_result history events a
+// realistic-looking payload.
+const SIMULATED_ORDERS = [
+  { orderId: '1001', item: 'Wireless Mouse', status: 'shipped' },
+  { orderId: '1002', item: 'Mechanical Keyboard', status: 'processing' },
+  { orderId: '1003', item: 'USB-C Dock', status: 'delivered' },
+  { orderId: '1004', item: '4K Monitor', status: 'shipped' },
+  { orderId: '1005', item: 'Noise-Cancelling Headphones', status: 'processing' },
+];
 
 const STATE_URL = process.env.FISSION_STATE_URL || '';
 const TOKEN_PATH = process.env.FISSION_STATE_TOKEN_PATH || '';
@@ -58,6 +115,267 @@ function stateHeaders(extra) {
     },
     extra,
   );
+}
+
+// nowISO returns the current time as an RFC3339Nano string, the shape
+// encoding/json/v2 expects for a Go time.Time field.
+function nowISO() {
+  return new Date().toISOString();
+}
+
+// toBase64 / fromBase64 convert between a UTF-8 string and the base64 the
+// wire uses for EventInput.Payload / CASRequest.Value (both Go []byte
+// fields).
+function toBase64(str) {
+  return Buffer.from(str, 'utf8').toString('base64');
+}
+function fromBase64(b64) {
+  return Buffer.from(b64, 'base64').toString('utf8');
+}
+
+// parseTurnHeader reads TURNS_HEADER; see its declaration for why an absent
+// or unparsable header falls back to 0 rather than throwing.
+function parseTurnHeader(raw) {
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function historyStream(sessionID) {
+  return HISTORY_STREAM_PREFIX + sessionID;
+}
+function checkpointKey(sessionID) {
+  return CHECKPOINT_KEY_PREFIX + sessionID;
+}
+
+function simulatedOrder(turn) {
+  return SIMULATED_ORDERS[turn % SIMULATED_ORDERS.length];
+}
+
+// buildTurnEvents returns the four synthetic events for one turn: turn_start
+// (step 0), a simulated order-lookup tool_call/tool_result pair (steps 1-2),
+// and yield (step 3, last). Every payload carries the {v,turn,step,kind,at}
+// envelope the brief specifies; event-specific detail rides under
+// payload.detail so the required keys stay uniform across kinds.
+function buildTurnEvents(turn, message) {
+  const order = simulatedOrder(turn);
+  const specs = [
+    { step: 0, kind: 'turn_start', detail: { message: message } },
+    { step: 1, kind: 'tool_call', detail: { tool: 'order-lookup', input: { orderId: order.orderId } } },
+    { step: 2, kind: 'tool_result', detail: { tool: 'order-lookup', output: order } },
+    { step: 3, kind: 'yield', detail: {} },
+  ];
+  return specs.map(function (s) {
+    return {
+      type: s.kind,
+      payload: { v: 1, turn: turn, step: s.step, kind: s.kind, at: nowISO(), detail: s.detail },
+    };
+  });
+}
+
+async function eventLogHead(sessionID) {
+  const res = await fetch(`${STATE_URL}/v1/eventlog/head`, {
+    method: 'POST',
+    headers: stateHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ stream: historyStream(sessionID) }),
+  });
+  if (!res.ok) {
+    throw new Error(`eventlog head for ${sessionID} failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.head;
+}
+
+async function eventLogRead(sessionID, fromSeq, limit) {
+  const res = await fetch(`${STATE_URL}/v1/eventlog/read`, {
+    method: 'POST',
+    headers: stateHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ stream: historyStream(sessionID), fromSeq: fromSeq, limit: limit }),
+  });
+  if (!res.ok) {
+    throw new Error(`eventlog read for ${sessionID} failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.events || [];
+}
+
+// eventLogAppend appends events at expectedSeq. On a 412 CAS conflict it
+// returns {conflict:true, head} (head taken from the error envelope, per the
+// wire contract's writeEventConflict) instead of throwing, so the caller can
+// resync and retry.
+async function eventLogAppend(sessionID, expectedSeq, events) {
+  const res = await fetch(`${STATE_URL}/v1/eventlog/append`, {
+    method: 'POST',
+    headers: stateHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({
+      stream: historyStream(sessionID),
+      expectedSeq: expectedSeq,
+      events: events.map(function (e) {
+        return { type: e.type, payload: toBase64(JSON.stringify(e.payload)) };
+      }),
+    }),
+  });
+  if (res.status === 412) {
+    let body = {};
+    try {
+      body = await res.json();
+    } catch (err) {
+      // malformed conflict body: fall through with head=null, the caller
+      // resyncs with a fresh Head call instead.
+    }
+    return { conflict: true, head: typeof body.head === 'number' ? body.head : null };
+  }
+  if (!res.ok) {
+    throw new Error(`eventlog append for ${sessionID} failed: ${res.status}`);
+  }
+  const data = await res.json();
+  return { conflict: false, head: data.head };
+}
+
+// dropAlreadyWrittenSteps reads the stream's tail at head and filters out any
+// of pending's events whose {turn,step} already appears there — the replay
+// contract: a redelivered turn (same TURNS_HEADER value) must never
+// double-append a step, whether or not the append that actually wrote it
+// also happened to answer this pod with a 412.
+async function dropAlreadyWrittenSteps(sessionID, turn, pending, head) {
+  const tailFrom = Math.max(0, head - (pending.length + 8));
+  const tail = await eventLogRead(sessionID, tailFrom, 50);
+  const present = new Set();
+  for (const ev of tail) {
+    try {
+      const p = JSON.parse(fromBase64(ev.payload));
+      if (p && p.turn === turn && typeof p.step === 'number') {
+        present.add(p.step);
+      }
+    } catch (err) {
+      // not a v1 {turn,step} payload this fixture understands (or a
+      // different event kind entirely) -- irrelevant to replay dedup.
+    }
+  }
+  return pending.filter(function (e) {
+    return !present.has(e.payload.step);
+  });
+}
+
+// appendTurnHistory CAS-appends this turn's history events, replay-safe
+// against both a genuine 412 (concurrent writer) and a clean at-least-once
+// redelivery that never conflicts at all (delivery 1 appended and died
+// before responding; delivery 2's Head call already reflects delivery 1's
+// write, so its append would silently succeed again without the tail-read
+// dedup below). Returns the stream's head after this turn's events are
+// present (whether this call wrote them or a prior delivery did).
+async function appendTurnHistory(sessionID, turn, message) {
+  let head = await eventLogHead(sessionID);
+  let pending = buildTurnEvents(turn, message);
+
+  for (let attempt = 0; attempt < MAX_APPEND_ATTEMPTS && pending.length > 0; attempt++) {
+    if (head > 0) {
+      pending = await dropAlreadyWrittenSteps(sessionID, turn, pending, head);
+      if (pending.length === 0) {
+        break;
+      }
+    }
+    const result = await eventLogAppend(sessionID, head, pending);
+    if (!result.conflict) {
+      head = result.head;
+      pending = [];
+      break;
+    }
+    head = result.head !== null ? result.head : await eventLogHead(sessionID);
+    // loop again: the next iteration's dropAlreadyWrittenSteps re-reads the
+    // tail at the resynced head and filters pending down to whatever is
+    // still missing.
+  }
+
+  if (pending.length > 0) {
+    console.error(
+      `support-desk: session ${sessionID} turn ${turn}: gave up appending ${pending.length} history event(s) after ${MAX_APPEND_ATTEMPTS} attempts`,
+    );
+  }
+
+  return head;
+}
+
+// getCheckpoint reads the current checkpoint record (if any) plus its KV
+// version, so a subsequent CAS write knows the right expectVersion. A 404
+// (no checkpoint yet) is not an error: version 0 means create-only, matching
+// statestore.SetOptions.IfVersion's documented semantics.
+async function getCheckpoint(sessionID) {
+  const res = await fetch(`${STATE_URL}/v1/state/${encodeURIComponent(checkpointKey(sessionID))}`, {
+    headers: stateHeaders(),
+  });
+  if (res.status === 404) {
+    return { version: 0, record: null };
+  }
+  if (!res.ok) {
+    throw new Error(`checkpoint GET for ${sessionID} failed: ${res.status}`);
+  }
+  const version = parseInt(res.headers.get(STATE_VERSION_HEADER) || '0', 10);
+  const record = await res.json();
+  return { version: version, record: record };
+}
+
+// writeCheckpointCAS attempts one CAS write; returns false (not throws) on a
+// 412 conflict so the caller can resync and retry.
+async function writeCheckpointCAS(sessionID, record, expectVersion) {
+  const res = await fetch(`${STATE_URL}/v1/state/${encodeURIComponent(checkpointKey(sessionID))}/cas`, {
+    method: 'POST',
+    headers: stateHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ expectVersion: expectVersion, value: toBase64(JSON.stringify(record)) }),
+  });
+  if (res.status === 412) {
+    return false;
+  }
+  if (!res.ok) {
+    throw new Error(`checkpoint CAS for ${sessionID} failed: ${res.status}`);
+  }
+  return true;
+}
+
+// maybeCheckpoint writes a checkpoint every CHECKPOINT_EVERY-th turn. Before
+// overwriting, it reads the EXISTING checkpoint's boundary and the tail of
+// events since that old boundary -- that tail (not an empty one read after
+// the new boundary is already written) is the demonstrable "projection":
+// what a real agent would read instead of full history to resume context.
+// The KV CAS conflict path is bounded and best-effort: unlike EventLog
+// append, a KV CAS 412 body carries no head/version to resync from
+// (writeStoreErr's generic mapping, no Head field attached), so a conflict
+// here just re-reads the current version and retries up to
+// MAX_CHECKPOINT_ATTEMPTS before giving up until the next cycle.
+async function maybeCheckpoint(sessionID, turn, session, head) {
+  const turnNumber = turn + 1;
+  if (turnNumber % CHECKPOINT_EVERY !== 0) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < MAX_CHECKPOINT_ATTEMPTS; attempt++) {
+    const existing = await getCheckpoint(sessionID);
+    const boundary = existing.record ? existing.record.coveredThroughSeq : 0;
+    const tail = await eventLogRead(sessionID, boundary, 200);
+
+    const record = {
+      v: 1,
+      coveredThroughSeq: head,
+      kind: 'text-summary',
+      payload: {
+        summary: session.summary,
+        turnsCovered: turnNumber,
+        projectedFromSeq: boundary,
+        tailEvents: tail.length,
+      },
+      createdAt: nowISO(),
+      turn: turn,
+    };
+
+    if (await writeCheckpointCAS(sessionID, record, existing.version)) {
+      return { record: record, tailCount: tail.length, boundary: boundary };
+    }
+    // 412: another writer moved the checkpoint since our GET -- resync (the
+    // next loop iteration's getCheckpoint) rather than blindly retry the
+    // same expectVersion.
+  }
+
+  console.error(`support-desk: session ${sessionID} turn ${turn}: checkpoint CAS conflict, skipping this cycle`);
+  return null;
 }
 
 async function loadSession(sessionID) {
@@ -113,6 +431,7 @@ module.exports = async function (context) {
   const req = context.request;
   const sessionID = req.headers[SESSION_HEADER] || 'unknown';
   const message = extractMessage(req.body);
+  const turn = parseTurnHeader(req.headers[TURNS_HEADER]);
 
   let session;
   try {
@@ -131,11 +450,32 @@ module.exports = async function (context) {
     console.error(`support-desk: saving session ${sessionID} failed: ${err}`);
   }
 
+  // Real per-turn history + checkpoint, on top of the KV blob above. Only
+  // attempted when the state API is reachable (stateCreds set) -- the
+  // memoryFallback path skips this entirely, same as it always has for the
+  // KV blob's own state-unavailable case.
+  let projection = null;
+  if (stateCreds) {
+    try {
+      const head = await appendTurnHistory(sessionID, turn, message);
+      projection = await maybeCheckpoint(sessionID, turn, session, head);
+    } catch (err) {
+      console.error(`support-desk: history/checkpoint for session ${sessionID} turn ${turn} failed: ${err}`);
+    }
+  }
+
+  let replyText = `Turn ${session.turns} for session ${sessionID}. Running summary: ${session.summary}`;
+  if (projection) {
+    replyText +=
+      ` | checkpoint written through seq ${projection.record.coveredThroughSeq}` +
+      ` (projected from seq ${projection.boundary}, ${projection.tailCount} event(s) since boundary)`;
+  }
+
   const reply = {
     session: sessionID,
     turn: session.turns,
     summary: session.summary,
-    reply: `Turn ${session.turns} for session ${sessionID}. Running summary: ${session.summary}`,
+    reply: replyText,
   };
 
   return {
