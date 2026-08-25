@@ -466,10 +466,11 @@ func TestDispatchTurn_OutboundRequestCarriesTraceparent(t *testing.T) {
 }
 
 // TestAgentruntimeMux_FiltersSSEAndUIFromServerSpans pins the mux-wrap
-// filter (main.go): /registry/events and /ui (both the bare route and
-// everything under /ui/, since otelUtils.UrlsToIgnore is HasPrefix) must
-// produce NO server span, while an ordinary route still does — proving the
-// filter engaged rather than the whole pipeline being silently dead.
+// filter (main.go): /registry/events, /ui (both the bare route and
+// everything under /ui/, since otelUtils.UrlsToIgnore is HasPrefix), and the
+// kubelet probe routes /healthz + /readyz must all produce NO server span,
+// while an ordinary route still does — proving the filter engaged rather
+// than the whole pipeline being silently dead.
 func TestAgentruntimeMux_FiltersSSEAndUIFromServerSpans(t *testing.T) {
 	// Not t.Parallel(): withGlobalTracerProvider mutates global otel state.
 	tp, rec := newTestTracerProvider(t)
@@ -481,17 +482,22 @@ func TestAgentruntimeMux_FiltersSSEAndUIFromServerSpans(t *testing.T) {
 	mux.HandleFunc("GET /ui", ok)
 	mux.HandleFunc("GET /ui/", ok)
 	mux.HandleFunc("GET /healthz", ok)
-	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui"))
+	mux.HandleFunc("GET /readyz", ok)
+	// A control route NOT in the filter list, mirroring another route
+	// main.go actually registers unfiltered — proves the filter mechanism
+	// itself is what suppressed the others, not a dead otel pipeline.
+	mux.HandleFunc("GET /registry/agents", ok)
+	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui", "/healthz", "/readyz"))
 
-	for _, path := range []string{"/registry/events", "/ui", "/ui/console"} {
+	for _, path := range []string{"/registry/events", "/ui", "/ui/console", "/healthz", "/readyz"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code, path)
 	}
-	assert.Empty(t, rec.Ended(), "filtered routes must produce NO server span")
+	assert.Empty(t, rec.Ended(), "filtered routes (including the kubelet probes) must produce NO server span")
 
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/registry/agents", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
