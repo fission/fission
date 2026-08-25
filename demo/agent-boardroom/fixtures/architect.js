@@ -109,7 +109,10 @@ if (STATE_URL && TOKEN_PATH) {
   try {
     stateCreds = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8'));
   } catch (err) {
-    console.error(`architect: could not read state token file ${TOKEN_PATH}: ${err}`);
+    // err.code/err.name only: a raw JSON.parse SyntaxError embeds a source
+    // snippet, and the token is the last field in the file (same leak class
+    // the agent-credentials read below guards against).
+    console.error(`architect: could not read state token file ${TOKEN_PATH}: ${err.code || err.name}`);
   }
 }
 
