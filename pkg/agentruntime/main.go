@@ -439,7 +439,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// dispatcher dependency.
 	hist := NewHistoryStore(eventLog, kv)
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
-	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
+	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, hist, sweepInterval, retention, time.Now)
 
 	// SSE registry feed: a single background Poller diffs
 	// SessionStore.List across view.List() agents and publishes changes to a

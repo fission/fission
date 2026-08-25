@@ -6,6 +6,7 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/json/v2"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -15,11 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // sweeperTestEntry returns an AgentEntry with short, distinct lifecycle
 // windows so IdleAfter and ArchiveAfter thresholds are easy to straddle in a
-// synctest bubble.
+// synctest bubble. StateKeyspace is left empty (history disabled).
 func sweeperTestEntry(ns, agent string) AgentEntry {
 	return AgentEntry{
 		Namespace:    ns,
@@ -28,6 +30,94 @@ func sweeperTestEntry(ns, agent string) AgentEntry {
 		ArchiveAfter: time.Hour,
 		MaxSessions:  0,
 	}
+}
+
+// sweeperTestEntryWithHistory is sweeperTestEntry with a state keyspace (and
+// optionally the HistoryTrim knob) turned on, for the history-lifecycle
+// tests.
+func sweeperTestEntryWithHistory(ns, agent, keyspace string, historyTrim bool) AgentEntry {
+	e := sweeperTestEntry(ns, agent)
+	e.StateKeyspace = keyspace
+	e.HistoryTrim = historyTrim
+	return e
+}
+
+// appendHistoryEvents appends n events to sessionID's history stream and
+// returns the resulting head sequence.
+func appendHistoryEvents(t *testing.T, ctx context.Context, el statestore.EventLog, ns, keyspace, sessionID string, n int) int64 {
+	t.Helper()
+	stream := stateapi.StreamName(ns, keyspace, HistoryClientStream(sessionID))
+	events := make([]statestore.Event, n)
+	for i := range events {
+		events[i] = statestore.Event{Type: "e"}
+	}
+	head, err := el.Append(ctx, stream, statestore.AppendAny, events)
+	require.NoError(t, err)
+	return head
+}
+
+// setTestCheckpoint writes a checkpoint record with the given coverage
+// boundary directly through kv, exactly as the SDK's checkpoint write would
+// land (HistoryStore has no write path of its own).
+func setTestCheckpoint(t *testing.T, ctx context.Context, kv statestore.KVStore, ns, keyspace, sessionID string, coveredThroughSeq int64) {
+	t.Helper()
+	data, err := json.Marshal(CheckpointRecord{V: 1, CoveredThroughSeq: coveredThroughSeq, Kind: "summary"})
+	require.NoError(t, err)
+	require.NoError(t, kv.Set(ctx, stateScope(ns, keyspace), CheckpointKeyPrefix+sessionID, data, statestore.SetOptions{}))
+}
+
+// countingEventLog wraps a statestore.EventLog and counts Head/Trim calls, so
+// a test can assert the sweeper never touched history for a no-keyspace
+// agent.
+type countingEventLog struct {
+	statestore.EventLog
+	headCalls, trimCalls int
+}
+
+func (w *countingEventLog) Head(ctx context.Context, stream string) (int64, error) {
+	w.headCalls++
+	return w.EventLog.Head(ctx, stream)
+}
+
+func (w *countingEventLog) Trim(ctx context.Context, stream string, belowSeq int64) error {
+	w.trimCalls++
+	return w.EventLog.Trim(ctx, stream, belowSeq)
+}
+
+// countingKV wraps a statestore.KVStore and counts Get/Delete calls (the only
+// operations HistoryStore's checkpoint methods issue), for the same
+// no-keyspace assertion.
+type countingKV struct {
+	statestore.KVStore
+	getCalls, deleteCalls int
+}
+
+func (w *countingKV) Get(ctx context.Context, s statestore.Scope, key string) (statestore.Value, error) {
+	w.getCalls++
+	return w.KVStore.Get(ctx, s, key)
+}
+
+func (w *countingKV) Delete(ctx context.Context, s statestore.Scope, key string, ifVersion int64) error {
+	w.deleteCalls++
+	return w.KVStore.Delete(ctx, s, key, ifVersion)
+}
+
+// headInjectingEventLog wraps a statestore.EventLog so its Head call can, as
+// a side effect, run onHead after computing the head it returns — used to
+// simulate a new event landing in the exact window between the sweeper's
+// Head capture and its later Trim call, without needing a production-only
+// test seam at that point.
+type headInjectingEventLog struct {
+	statestore.EventLog
+	onHead func()
+}
+
+func (w *headInjectingEventLog) Head(ctx context.Context, stream string) (int64, error) {
+	head, err := w.EventLog.Head(ctx, stream)
+	if err == nil && w.onHead != nil {
+		w.onHead()
+	}
+	return head, err
 }
 
 func TestSweeperActiveToIdleAfterIdleAfter(t *testing.T) {
@@ -42,7 +132,7 @@ func TestSweeperActiveToIdleAfterIdleAfter(t *testing.T) {
 		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}
 		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
 
 		// Not yet due: less than IdleAfter has elapsed.
 		time.Sleep(entry.IdleAfter - time.Second)
@@ -74,7 +164,7 @@ func TestSweeperIdleToArchivedAfterArchiveAfter(t *testing.T) {
 		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
 		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
 
 		// Not yet due.
 		time.Sleep(entry.ArchiveAfter - time.Second)
@@ -121,7 +211,7 @@ func TestSweeperIdleTransitionSkipsOnCASConflict(t *testing.T) {
 		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
 		time.Sleep(entry.IdleAfter + time.Second)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
 		sweeper.beforeCAS = func() {
 			// Simulate a second replica winning the race: it idles the
 			// record first, landing between this sweeper's Get and Update.
@@ -162,7 +252,7 @@ func TestSweeperArchiveSkipsOnReviveRace(t *testing.T) {
 		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
 		time.Sleep(entry.ArchiveAfter + time.Second)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
 		var revivedAt time.Time
 		sweeper.beforeCAS = func() {
 			// A live turn revives the session, landing between this
@@ -225,7 +315,7 @@ func TestSweeperArchiveSkipsOnListToGetStalenessWindow(t *testing.T) {
 		revived.Stats.Turns = 1
 		require.NoError(t, store.Update(ctx, revived, version, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
 		// staleSnapshot is what the sweeper's List call would have returned
 		// before the revive landed; sweepRecord must re-validate against a
 		// fresh Get rather than trusting it.
@@ -274,7 +364,7 @@ func TestSweeperIdleSkipsOnListToGetStalenessWindow(t *testing.T) {
 		touched.Stats.Turns = 1
 		require.NoError(t, store.Update(ctx, touched, version, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
 		// staleSnapshot is what the sweeper's List call would have returned
 		// before the turn landed; sweepRecord must re-validate against a
 		// fresh Get rather than trusting it.
@@ -293,7 +383,7 @@ func TestSweeperRunRespectsContextCancel(t *testing.T) {
 		kv := newTestKV(t)
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
-		sweeper := NewSweeper(logr.Discard(), view, store, 10*time.Millisecond, time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, 10*time.Millisecond, time.Hour, time.Now)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
@@ -312,5 +402,239 @@ func TestSweeperRunRespectsContextCancel(t *testing.T) {
 		default:
 			t.Fatal("Run did not return promptly after ctx cancel")
 		}
+	})
+}
+
+// TestSweeperArchiveTrimsHistoryToPreArchiveHeadAndDeletesCheckpoint pins the
+// archive-time history cleanup: once store.Archive commits, the sweeper trims
+// history below headAtDecision+1 (dropping every event that existed at the
+// moment it decided to archive) and deletes the checkpoint.
+func TestSweeperArchiveTrimsHistoryToPreArchiveHeadAndDeletesCheckpoint(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 4)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 4)
+		hist := NewHistoryStore(el, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		assert.Empty(t, events, "every event that existed at the archive decision must be trimmed")
+
+		_, err = hist.GetCheckpoint(ctx, "ns", "ks1", "s1")
+		assert.ErrorIs(t, err, statestore.ErrNotFound, "checkpoint must be deleted once the archive commits")
+	})
+}
+
+// TestSweeperArchiveTrimSurvivesLateAppendedEvents pins constraint 3: the
+// trim bound is fixed at the PRE-archive head, never a re-read current head.
+// An event landing in the window between the sweeper's Head capture and its
+// later Trim call (headInjectingEventLog simulates this without a
+// production-only seam) must survive.
+func TestSweeperArchiveTrimSurvivesLateAppendedEvents(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 4)
+		wrapped := &headInjectingEventLog{EventLog: el}
+		wrapped.onHead = func() {
+			// A same-id session re-created (or still being turned) in the
+			// window after the sweeper captured its decision head: this
+			// event must survive the later trim, which is bounded by the
+			// head captured before this ran.
+			appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 1)
+		}
+		hist := NewHistoryStore(wrapped, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		require.Len(t, events, 1, "the late-appended event must survive the pre-archive-head-bounded trim")
+		assert.EqualValues(t, 5, events[0].Seq)
+	})
+}
+
+// TestSweeperArchiveCASConflictLeavesHistoryUntouched pins constraint 2: an
+// Archive CAS conflict (a concurrent turn revives the session) must leave
+// history and the checkpoint completely untouched.
+func TestSweeperArchiveCASConflictLeavesHistoryUntouched(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 4)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 4)
+		hist := NewHistoryStore(el, hkv)
+
+		time.Sleep(entry.ArchiveAfter + time.Second)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper.beforeCAS = func() {
+			// A live turn revives the session, landing between the
+			// sweeper's Get and its Archive CAS.
+			live, version, err := store.Get(ctx, "ns", "agent1", "s1")
+			require.NoError(t, err)
+			live.Status = StatusActive
+			live.LastActiveAt = time.Now()
+			require.NoError(t, store.Update(ctx, live, version, time.Hour))
+		}
+
+		sweeper.sweepOnce(ctx)
+
+		got, _, err := store.Get(ctx, "ns", "agent1", "s1")
+		require.NoError(t, err)
+		assert.Equal(t, StatusActive, got.Status, "the revived record must still be live, not archived")
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		assert.Len(t, events, 4, "history must be untouched when the archive CAS conflicts")
+
+		_, err = hist.GetCheckpoint(ctx, "ns", "ks1", "s1")
+		assert.NoError(t, err, "checkpoint must be untouched when the archive CAS conflicts")
+	})
+}
+
+// TestSweeperKnobTrimsLiveSessionToCheckpointBoundary pins the
+// HistoryTrim-knob path: a live (not-yet-idle) session on an agent with
+// HistoryTrim=true is trimmed, on every sweep visit, below its checkpoint's
+// CoveredThroughSeq+1.
+func TestSweeperKnobTrimsLiveSessionToCheckpointBoundary(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", true)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 5)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 3)
+		hist := NewHistoryStore(el, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper.sweepOnce(ctx)
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		require.Len(t, events, 2, "events below the checkpoint boundary must be trimmed")
+		assert.EqualValues(t, 4, events[0].Seq)
+		assert.EqualValues(t, 5, events[1].Seq)
+
+		got, _, err := store.Get(ctx, "ns", "agent1", "s1")
+		require.NoError(t, err)
+		assert.Equal(t, StatusActive, got.Status, "the knob trim must not itself change session status")
+	})
+}
+
+// TestSweeperKnobFalseLeavesLiveSessionHistoryUntouched is the negative
+// counterpart: with HistoryTrim=false, the sweeper never trims a live
+// session's history even when a checkpoint exists.
+func TestSweeperKnobFalseLeavesLiveSessionHistoryUntouched(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 5)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 3)
+		hist := NewHistoryStore(el, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper.sweepOnce(ctx)
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		assert.Len(t, events, 5, "with HistoryTrim=false the sweeper must never trim live history")
+	})
+}
+
+// TestSweeperNoKeyspaceAgentNeverTouchesHistoryStore pins constraint 6: an
+// agent with StateKeyspace == "" (history disabled) must never cause the
+// sweeper to call into the HistoryStore at all, through any lifecycle
+// transition.
+func TestSweeperNoKeyspaceAgentNeverTouchesHistoryStore(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1") // StateKeyspace == "", HistoryTrim == false
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		countedEl := &countingEventLog{EventLog: el}
+		countedKV := &countingKV{KVStore: hkv}
+		hist := NewHistoryStore(countedEl, countedKV)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		// Drive it past archive due, so the only reason history stays
+		// untouched is the StateKeyspace=="" guard, not "never reached the
+		// archive path".
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		assert.Zero(t, countedEl.headCalls, "Head must never be called for a no-keyspace agent")
+		assert.Zero(t, countedEl.trimCalls, "Trim must never be called for a no-keyspace agent")
+		assert.Zero(t, countedKV.getCalls, "checkpoint Get must never be called for a no-keyspace agent")
+		assert.Zero(t, countedKV.deleteCalls, "checkpoint Delete must never be called for a no-keyspace agent")
+
+		list, _, err := store.List(ctx, "ns", "agent1", "", 10)
+		require.NoError(t, err)
+		assert.Empty(t, list, "the archive transition itself must still have happened")
 	})
 }
