@@ -5,6 +5,7 @@
 package v1
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,10 @@ func TestAgentConfigValidate(t *testing.T) {
 		{"session name authorization lowercase reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: "authorization"}}, true},
 		{"session name X-Fission- prefix reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: "X-Fission-Session"}}, true},
 		{"session name x-fission- lowercase prefix reserved", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceQueryParam, Name: "x-fission-foo"}}, true},
+		// agentSessionNameRegexp's {1,128} boundary: 128 chars is the last
+		// accepted length, 129 the first rejected one.
+		{"session name at 128 chars ok", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: strings.Repeat("a", 128)}}, false},
+		{"session name at 129 chars rejected", AgentConfig{Session: &AgentSessionConfig{Source: SessionSourceHeader, Name: strings.Repeat("a", 129)}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

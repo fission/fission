@@ -414,8 +414,7 @@ func TestAgentRuntimeRegistrySmoke(t *testing.T) {
 	// events.go's bearerFromRequest doc). The connect-time snapshot replay
 	// (ServeHTTP) writes any already-known session BEFORE the streaming
 	// loop starts, so the very first line off the wire must be an
-	// `event: ...` frame — read it under a short deadline and close
-	// promptly rather than draining the stream.
+	// `event: ...` frame.
 	eventsURL := base + "/registry/events"
 	eventsCtx, eventsCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer eventsCancel()
@@ -428,10 +427,92 @@ func TestAgentRuntimeRegistrySmoke(t *testing.T) {
 	require.Equalf(t, http.StatusOK, resp.StatusCode, "GET %s", eventsURL)
 	require.Equalf(t, "text/event-stream", resp.Header.Get("Content-Type"), "GET %s Content-Type", eventsURL)
 
-	line, err := bufio.NewReader(resp.Body).ReadString('\n')
-	require.NoErrorf(t, err, "reading first SSE line from %s", eventsURL)
-	assert.Truef(t, strings.HasPrefix(strings.TrimSpace(line), "event:"),
-		"first SSE line from %s must be an event: frame (connect-time snapshot), got %q", eventsURL, line)
+	reader := bufio.NewReader(resp.Body)
+	firstEvent, firstData, err := nextSSEFrame(reader)
+	require.NoErrorf(t, err, "reading first SSE frame from %s", eventsURL)
+	assert.NotEmptyf(t, firstEvent, "first SSE frame from %s must be an event: frame (connect-time snapshot), got event=%q data=%q", eventsURL, firstEvent, firstData)
+
+	// Strengthen beyond "a stream of the right shape opened": prove the
+	// connect-time snapshot actually replayed THIS test's session, which
+	// falsifies a broken snapshot replay (a missing or corrupted record)
+	// rather than just a dead endpoint. The FIRST frame is not assumed to be
+	// it: CI runs the agent runtime with AGENT_ALLOW_INSECURE=true, which
+	// gives every caller a wildcard scope, so the snapshot can also carry
+	// sessions from the OTHER agent-runtime tests running in parallel in
+	// this suite, and Poller.Snapshot's ordering is explicitly unspecified
+	// (events.go). So this scans every remaining "session" frame in the
+	// stream, bounded by eventsCtx's 10s deadline, for a record whose id
+	// matches the sessionID minted earlier in this same test.
+	foundSessionID := sseFrameMatchesSession(firstEvent, firstData, sessionID)
+	for !foundSessionID {
+		evt, data, ferr := nextSSEFrame(reader)
+		if ferr != nil {
+			break // eventsCtx's deadline was reached, or the stream ended
+		}
+		foundSessionID = sseFrameMatchesSession(evt, data, sessionID)
+	}
+	assert.Truef(t, foundSessionID,
+		"no session frame from %s carried the session id %s minted earlier in this test; the snapshot replay may be broken",
+		eventsURL, sessionID)
+}
+
+// nextSSEFrame reads one SSE message from r: comment lines (starting with
+// ':', e.g. the ": keepalive" lines events.go's ServeHTTP writes) are
+// skipped entirely, then an "event:" line and a "data:" line are read up to
+// the frame's terminating blank line, mirroring the exact
+// "event: %s\ndata: %s\n\n" shape writeSSEEvent (events.go) writes. It
+// returns the underlying read error (io.EOF at stream end, or a
+// context-deadline error once the request's context is done) when a full
+// frame cannot be read.
+func nextSSEFrame(r *bufio.Reader) (event, data string, err error) {
+	for {
+		line, rerr := r.ReadString('\n')
+		if rerr != nil {
+			return "", "", rerr
+		}
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+			continue // a stray blank line between frames
+		case strings.HasPrefix(trimmed, ":"):
+			// Comment/keepalive frame: it carries no event:/data: lines of
+			// its own, just its own terminating blank line — consume that
+			// and keep looking for the next real frame.
+			if _, rerr := r.ReadString('\n'); rerr != nil {
+				return "", "", rerr
+			}
+			continue
+		case strings.HasPrefix(trimmed, "event:"):
+			event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+		default:
+			continue
+		}
+		dataLine, rerr := r.ReadString('\n')
+		if rerr != nil {
+			return "", "", rerr
+		}
+		data = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(dataLine), "data:"))
+		// Consume the frame's terminating blank line; tolerate it being
+		// missing (e.g. the stream ends right after this frame) since the
+		// frame itself was already read successfully.
+		_, _ = r.ReadString('\n')
+		return event, data, nil
+	}
+}
+
+// sseFrameMatchesSession reports whether a "session" SSE frame's data
+// carries a record whose id equals wantSessionID (agentruntime.
+// sessionEvent's wire shape, events.go).
+func sseFrameMatchesSession(event, data, wantSessionID string) bool {
+	if event != "session" || data == "" {
+		return false
+	}
+	var payload struct {
+		Record struct {
+			ID string `json:"id"`
+		} `json:"record"`
+	}
+	return json.Unmarshal([]byte(data), &payload) == nil && payload.Record.ID == wantSessionID
 }
 
 // getRegistry issues a plain authenticated GET to url (via f.HTTPClient(),
