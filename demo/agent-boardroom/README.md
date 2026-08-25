@@ -190,6 +190,80 @@ Mapped from the boardroom demo script; check these off live against the
       (`density (sessions:pods): NNx`) climbs as `--sessions` grows for a
       fixed pool size.
 
+## Observability
+
+The agent runtime and `pkg/mcp` emit OTel traces for the boardroom demo's
+request paths — no meters yet (that stays a follow-up; see the observability
+plan's Global Constraints).
+This section is a reference, not a walkthrough:
+the spans exist whether or not a collector is running,
+so nothing here is required to run the demo itself.
+
+### What spans exist
+
+- **`invoke_agent <agent>`** —
+  one span per agent turn, started in `pkg/agentruntime/dispatcher.go`'s `DispatchTurn`,
+  a child of the inbound HTTP request's server span.
+  Attributes: `gen_ai.operation.name=invoke_agent`, `gen_ai.agent.name`,
+  plus `fission.agent.namespace`, `fission.session.id`, `fission.turn`, `fission.turn.source` (`http` or `wake`),
+  and on completion `fission.yield` + a span status (`Error` on transport failure, `Ok` otherwise).
+  **Wake-stitched:** when a turn yields `continue`, the dispatcher injects its span's trace context
+  into the wake envelope it enqueues (`pkg/agentruntime/wake.go`),
+  and the woken continuation's `invoke_agent` span is started as a child of THAT context —
+  so a whole self-continuation chain (turn, yield, wake, turn, yield, wake, ...)
+  is ONE trace end to end, not a new root span per turn.
+  A wake delivered without the trace field (e.g. from a pre-upgrade envelope) degrades gracefully
+  to a fresh root span, never an error.
+- **`execute_tool <tool>`** —
+  one span per MCP tool call, started in `pkg/mcp/server.go`'s `callTool`.
+  Attributes: `gen_ai.operation.name=execute_tool`, `gen_ai.tool.name`, `fission.agent.namespace` of the target function.
+  When the caller's `_meta` carries a valid W3C `traceparent` (MCP 2026-07-28's reserved trace-context keys —
+  `traceparent`/`tracestate`/`baggage`), the span parents to that extracted context instead of a fresh one,
+  so a caller-supplied trace also stitches through a tool call.
+  `_meta` is untrusted input handled additive-only: absent or malformed values never error and never log above `V(1)`.
+- **Server spans** on both muxes —
+  `fission-agentruntime` (the agent runtime's mux, `/registry/events`, `/ui`, `/healthz`, `/readyz` excluded so SSE and the UI never get spans)
+  and `fission-mcp` (the `/mcp` mux, no filter needed).
+  These are what `invoke_agent` and `execute_tool` parent to on the inbound side.
+
+Span names and attribute keys follow the OTel **GenAI semantic conventions,
+pinned at `go.opentelemetry.io/otel/semconv/v1.37.0`**
+(pre-stable/experimental — the spec has moved these keys before; re-verify on any future semconv bump,
+see the doc comments next to `pkg/agentruntime/dispatcher.go`'s `tracer()` and `pkg/mcp/tracing.go`).
+
+### Seeing traces locally
+
+Fission bundles no collector or backend — `fission-bundle` only installs the TracerProvider and W3C propagator
+(`pkg/utils/otel/provider.go`) and points them at whatever OTLP endpoint you configure.
+With no collector reachable, the SDK falls back to `NeverSample`:
+trace-ids still propagate end to end (see Task 3's integration test, `TestAgentRuntimeTraceContextPropagation`),
+but nothing is exported anywhere, so there's nothing to look at.
+
+The `kind-opentelemetry` skaffold profile points `openTelemetry.otlpCollectorEndpoint` at
+`otel-collector.opentelemetry-operator-system.svc:4317`,
+but it deploys no collector itself — bring your own via the OpenTelemetry Operator, roughly:
+
+```sh
+# 1. Install the operator (cert-manager is its own prerequisite; see the
+#    operator's own install docs for that step).
+helm upgrade --install opentelemetry-operator open-telemetry/opentelemetry-operator \
+  -n opentelemetry-operator-system --create-namespace
+
+# 2. Apply a Collector CR named "otel-collector" in that same namespace, with
+#    an otlp receiver on :4317 and whatever exporter you want traces to land
+#    on (a "debug" exporter to start, or a real backend's OTLP exporter).
+kubectl apply -n opentelemetry-operator-system -f your-otelcollector-cr.yaml
+```
+
+Then redeploy with `SKAFFOLD_PROFILE=kind-opentelemetry make skaffold-deploy`
+so the agent runtime and mcp pick up the endpoint.
+
+**Reference OTLP backends:**
+[Langfuse](https://langfuse.com) and [Arize Phoenix](https://phoenix.arize.com) both accept OTLP directly
+and understand the GenAI semconv attributes above out of the box — either is a reasonable target
+for the Collector CR's exporter if you want to actually look at the `invoke_agent`/`execute_tool` traces
+this demo produces (docs mention only; neither ships with Fission).
+
 ## Success metrics `loadgen` prints
 
 At the end of a run (the boardroom demo script's "Success metrics" section
