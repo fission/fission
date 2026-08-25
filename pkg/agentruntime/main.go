@@ -310,10 +310,34 @@ const (
 	// (see events.go). Read once here, like envSweepInterval.
 	envRegistryPoll = "AGENT_REGISTRY_POLL"
 
+	// envStoragesvcURL configures the session workspace routes' (workspace.go)
+	// upstream storagesvc base URL. Confirmed ABSENT from the agentruntime
+	// deployment as of this slice (chart wiring is a later slice) — empty
+	// means the workspace routes are DISABLED (503 "workspace disabled"),
+	// deliberately never guessed from a convention like
+	// "http://storagesvc.<namespace>": a wrong guess would silently point
+	// artifact traffic at the wrong service rather than failing loudly.
+	envStoragesvcURL = "STORAGESVC_URL"
+
+	// envMaxArtifactBytes / envMaxSessionArtifactBytes configure
+	// WorkspaceHandler's per-artifact cap and per-session budget
+	// (workspace.go's handlePut doc). Read once here, like the other agent
+	// runtime knobs.
+	envMaxArtifactBytes        = "AGENT_MAX_ARTIFACT_BYTES"
+	envMaxSessionArtifactBytes = "AGENT_MAX_SESSION_ARTIFACT_BYTES"
+
 	// defaultSweepInterval / defaultArchiveRetention are applied when the
 	// corresponding env var is unset.
 	defaultSweepInterval    = 30 * time.Second
 	defaultArchiveRetention = 168 * time.Hour // 7 days
+
+	// defaultMaxArtifactBytes / defaultMaxSessionArtifactBytes are applied
+	// when the corresponding env var is unset. 0 for the session budget
+	// means unlimited (see WorkspaceHandler.maxSessionArtifactBytes); the
+	// per-artifact cap has no such "0 means unlimited" escape hatch — it
+	// always bounds a single PUT.
+	defaultMaxArtifactBytes        int64 = 32 << 20
+	defaultMaxSessionArtifactBytes int64 = 256 << 20
 
 	// defaultRegistryPollInterval is applied when envRegistryPoll is unset.
 	defaultRegistryPollInterval = 2 * time.Second
@@ -435,6 +459,14 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return err
 	}
+	maxArtifactBytes, err := envInt64(envMaxArtifactBytes, defaultMaxArtifactBytes)
+	if err != nil {
+		return err
+	}
+	maxSessionArtifactBytes, err := envInt64(envMaxSessionArtifactBytes, defaultMaxSessionArtifactBytes)
+	if err != nil {
+		return err
+	}
 
 	// Fail closed: refuse to serve unauthenticated unless explicitly opted
 	// in. Pass-through grants every caller a wildcard namespace scope and can
@@ -472,6 +504,24 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	hist := NewHistoryStore(eventLog, kv)
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations, maxSpawnDepth)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, hist, sweepInterval, retention, time.Now)
+
+	// Session workspace routes (workspace.go): a SMALL internal client to
+	// storagesvc's /v1/workspace surface, built the same way the dispatcher's
+	// own router-internal client is above (otelhttp transport, master-signed
+	// hmacauth.ServiceSigner) rather than extending pkg/storagesvc/client
+	// (whose ClientInterface targets the archive upload/download contract).
+	// wsClient stays nil when STORAGESVC_URL is unset — see envStoragesvcURL's
+	// doc comment — which is what makes every workspace route answer 503
+	// "workspace disabled" instead of agentruntime guessing a URL.
+	var wsClient *workspaceClient
+	if storagesvcURL := os.Getenv(envStoragesvcURL); storagesvcURL != "" {
+		var wsrt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(workspaceIdleConnsPerHost))
+		if master := storagesvcClient.HMACSecretFromEnv(); len(master) > 0 {
+			wsrt = hmacauth.ServiceSigner(master, hmacauth.ServiceStoragesvc, wsrt, time.Now)
+		}
+		wsClient = newWorkspaceClient(storagesvcURL, wsrt)
+	}
+	wsHandler := NewWorkspaceHandler(logger.WithName("workspace"), view, store, wsClient, retention, maxArtifactBytes, maxSessionArtifactBytes)
 
 	// SSE registry feed: a single background Poller diffs
 	// SessionStore.List across view.List() agents and publishes changes to a
@@ -643,10 +693,21 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// exactly: the outer mux performs the {namespace}/{name} match (and sets
 	// the path values authz.Middleware / IdentityOrJWT's identity path read)
 	// before calling into the auth-wrapped dispatcher, which then matches the
-	// same pattern again. IdentityOrJWT is the dispatch route's ONLY mount —
-	// registry/SSE routes below stay on authz.Middleware/HTTPMiddleware
-	// directly, so the identity bearer never reaches them.
+	// same pattern again. IdentityOrJWT is the dispatch route's mount; the
+	// session workspace routes below are the identity bearer's ONLY other
+	// mount (via IdentityOrJWTOwnWorkspace, a STRICTER own-workspace-only
+	// closure — see identity.go's verifyOwnWorkspace) — registry/SSE routes
+	// stay on authz.Middleware/HTTPMiddleware directly, so the identity
+	// bearer never reaches them.
 	mux.Handle("POST /agents/{namespace}/{name}", IdentityOrJWT(identityVerifier, authz.Middleware)(dispatcher.Handler()))
+
+	// Session workspace routes (workspace.go): PUT/GET/DELETE artifacts plus
+	// a list route, mounted inside the SAME otel wrap as everything else
+	// (handler := otelUtils.GetHandlerWithOTEL(mux, ...) below wraps the
+	// whole mux, so registering here rather than separately is what keeps
+	// these routes spanned). wsHandler itself answers 503 on every route when
+	// wsClient is nil (STORAGESVC_URL unset).
+	mountWorkspaceRoutes(mux, wsHandler, IdentityOrJWTOwnWorkspace(identityVerifier, authz.Middleware))
 
 	// Registry read API: GET /registry/agents carries no
 	// {namespace} path value, so it is mounted behind authz.HTTPMiddleware

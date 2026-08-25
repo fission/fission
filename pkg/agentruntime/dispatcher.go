@@ -898,25 +898,31 @@ func streamToSink(sink TurnSink, src io.Reader) {
 // actually landed, so a caller whose post-write action depends on the mutated
 // state having been persisted (the step-5 continue-enqueue) can tell a real
 // persist from a phantom one that never reached the store.
-func (d *Dispatcher) casUpdate(ctx context.Context, ns, agent, id string, rec SessionRecord, version int64, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
+//
+// Package-level (not a Dispatcher method) so the session workspace routes
+// (workspace.go, a later slice) can settle their ArtifactCount/ArtifactBytes
+// counters through the exact same retry-once-on-conflict logic without a
+// second, drifting copy — Dispatcher's own casUpdate/casUpdateFresh methods
+// below are thin delegates to these, byte-identical in behavior.
+func casUpdate(ctx context.Context, logger logr.Logger, store *SessionStore, ns, agent, id string, rec SessionRecord, version int64, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
 	mutate(&rec)
-	err := d.store.Update(ctx, rec, version, liveTTL)
+	err := store.Update(ctx, rec, version, liveTTL)
 	if err == nil {
 		return true
 	}
 	if !errors.Is(err, statestore.ErrVersionConflict) {
-		d.logger.Error(err, "updating session record", "namespace", ns, "agent", agent, "session", id)
+		logger.Error(err, "updating session record", "namespace", ns, "agent", agent, "session", id)
 		return false
 	}
 
-	fresh, freshVersion, gerr := d.store.Get(ctx, ns, agent, id)
+	fresh, freshVersion, gerr := store.Get(ctx, ns, agent, id)
 	if gerr != nil {
-		d.logger.Error(gerr, "re-getting session record after conflict", "namespace", ns, "agent", agent, "session", id)
+		logger.Error(gerr, "re-getting session record after conflict", "namespace", ns, "agent", agent, "session", id)
 		return false
 	}
 	mutate(&fresh)
-	if uerr := d.store.Update(ctx, fresh, freshVersion, liveTTL); uerr != nil {
-		d.logger.Error(uerr, "updating session record after retry", "namespace", ns, "agent", agent, "session", id)
+	if uerr := store.Update(ctx, fresh, freshVersion, liveTTL); uerr != nil {
+		logger.Error(uerr, "updating session record after retry", "namespace", ns, "agent", agent, "session", id)
 		return false
 	}
 	return true
@@ -926,14 +932,27 @@ func (d *Dispatcher) casUpdate(ctx context.Context, ns, agent, id string, rec Se
 // delegates to casUpdate. Used whenever an unbounded amount of work (an
 // upstream call) may have happened since any previously held version was
 // read. It returns casUpdate's persisted flag (false also when the fresh Get
-// itself fails).
-func (d *Dispatcher) casUpdateFresh(ctx context.Context, ns, agent, id string, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
-	rec, version, err := d.store.Get(ctx, ns, agent, id)
+// itself fails). Package-level for the same reason casUpdate is — see its
+// doc comment.
+func casUpdateFresh(ctx context.Context, logger logr.Logger, store *SessionStore, ns, agent, id string, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
+	rec, version, err := store.Get(ctx, ns, agent, id)
 	if err != nil {
-		d.logger.Error(err, "getting session record for update", "namespace", ns, "agent", agent, "session", id)
+		logger.Error(err, "getting session record for update", "namespace", ns, "agent", agent, "session", id)
 		return false
 	}
-	return d.casUpdate(ctx, ns, agent, id, rec, version, liveTTL, mutate)
+	return casUpdate(ctx, logger, store, ns, agent, id, rec, version, liveTTL, mutate)
+}
+
+// casUpdate is Dispatcher's delegate to the package-level casUpdate, over
+// this Dispatcher's own logger and store.
+func (d *Dispatcher) casUpdate(ctx context.Context, ns, agent, id string, rec SessionRecord, version int64, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
+	return casUpdate(ctx, d.logger, d.store, ns, agent, id, rec, version, liveTTL, mutate)
+}
+
+// casUpdateFresh is Dispatcher's delegate to the package-level
+// casUpdateFresh, over this Dispatcher's own logger and store.
+func (d *Dispatcher) casUpdateFresh(ctx context.Context, ns, agent, id string, liveTTL time.Duration, mutate func(*SessionRecord)) bool {
+	return casUpdateFresh(ctx, d.logger, d.store, ns, agent, id, liveTTL, mutate)
 }
 
 // writeErr answers with a small {"error": msg} JSON object at status.

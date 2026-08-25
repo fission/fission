@@ -100,6 +100,14 @@ func SpawnSessionID(parent ParentRef, stepKey string) string {
 
 // SessionStats is the per-session meter set (G19: full meter schema from day
 // one; Tokens/Cost reserved for the gateway integration, always 0 for now).
+//
+// ArtifactCount/ArtifactBytes (G12 session workspace, a later slice) meter
+// the session's storagesvc workspace usage: bumped on a successful PUT,
+// decremented (clamped at 0) on a successful DELETE — see workspace.go's
+// quota pre-check/settle ordering. They are deliberately excluded from
+// sessionUnchanged's diffed field set (events.go): an artifact write/delete
+// must not churn the SSE registry feed, which exists for turn/status
+// activity, not storage bookkeeping.
 type SessionStats struct {
 	Turns         int64 `json:"turns"`
 	Errors        int64 `json:"errors"`
@@ -109,6 +117,8 @@ type SessionStats struct {
 	TokensOut     int64 `json:"tokensOut"`
 	CostMicroUSD  int64 `json:"costMicroUSD"`
 	Continuations int64 `json:"continuations"`
+	ArtifactCount int64 `json:"artifactCount,omitzero"`
+	ArtifactBytes int64 `json:"artifactBytes,omitzero"`
 }
 
 // SessionRecord is the persisted state of one agent session.

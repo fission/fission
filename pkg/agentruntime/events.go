@@ -399,9 +399,14 @@ func diffSessions(prev, current map[sessionKey]SessionRecord) []SessionRecord {
 // the poller diffs: Status, LastActiveAt, Stats.Turns, CurrentPod. Every
 // other field the poller ignores is either immutable after Create
 // (Namespace, Agent, ID, CreatedAt, Parent, Depth) or not yet meaningful for
-// the feed (the rest of Stats). LastActiveAt is compared with Equal, not ==:
-// both values here round-tripped through JSON, but Equal is the correct
-// time.Time comparison regardless.
+// the feed (the rest of Stats). This deliberately includes
+// Stats.ArtifactCount/ArtifactBytes (G12 session workspace, a later slice):
+// a workspace PUT/DELETE settles those counters via its own CAS write, and
+// that write must NOT be treated as an SSE-worthy session change — the feed
+// exists for turn/status activity, not storage bookkeeping, and diffing them
+// here would churn the feed on every artifact write. LastActiveAt is
+// compared with Equal, not ==: both values here round-tripped through JSON,
+// but Equal is the correct time.Time comparison regardless.
 func sessionUnchanged(old, cur SessionRecord) bool {
 	return old.Status == cur.Status &&
 		old.LastActiveAt.Equal(cur.LastActiveAt) &&
