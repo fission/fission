@@ -25,6 +25,78 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestDispatchRouteIdentityComposition mounts the dispatch route exactly as
+// main.go wires it post-Task-3 — IdentityOrJWT(identity, authz.Middleware)
+// (dispatcher.Handler()), not authz.Middleware alone — and proves a valid
+// G16 identity bearer reaches the upstream function through the real mux,
+// the same falsifiable upstream-hit-counter signal
+// TestDispatchRouteAuthComposition uses for the JWT path.
+func TestDispatchRouteIdentityComposition(t *testing.T) {
+	t.Parallel()
+	key := []byte("route-composition-identity-key")
+	master := []byte("route-composition-identity-master")
+
+	var upstreamHits atomic.Int64
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	d, view, _ := newTestDispatcher(t, upstream.URL)
+	// "fn" is both the dispatch target (the {name} path value) and the
+	// caller's own claimed identity here: the dispatcher's own path lookup
+	// and the identity revocation check both need a live view entry, and
+	// self-dispatch (an agent turn-chaining into itself) is a real shape, so
+	// one registered agent covers both.
+	view.Upsert(headerEntry("ns-a", "fn", 0))
+	authz := NewAuthorizer(key)
+	identity := NewIdentityVerifier(master, nil, view)
+
+	mux := http.NewServeMux()
+	mux.Handle("POST /agents/{namespace}/{name}", IdentityOrJWT(identity, authz.Middleware)(d.Handler()))
+
+	tok := identityToken(master, "ns-a", "fn")
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns-a/fn", strings.NewReader("hello"))
+	req.Header.Set(HeaderIdentityNamespace, "ns-a")
+	req.Header.Set(HeaderIdentityName, "fn")
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.EqualValues(t, 1, upstreamHits.Load())
+}
+
+// TestRegistryRouteRejectsIdentityBearer proves identity never reaches a
+// registry route: GET /registry/agents is mounted (as main.go does) behind
+// plain authz.HTTPMiddleware, never IdentityOrJWT — so a request carrying
+// the identity claim headers plus a validly-derived G16 bearer is still
+// 401'd, because that bearer is not a JWT and the registry route only ever
+// verifies JWTs.
+func TestRegistryRouteRejectsIdentityBearer(t *testing.T) {
+	t.Parallel()
+	key := []byte("registry-route-key")
+	master := []byte("registry-route-master")
+	authz := NewAuthorizer(key)
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	tok := identityToken(master, "ns-a", "caller-agent")
+	req := httptest.NewRequest(http.MethodGet, "/registry/agents", nil)
+	req.Header.Set(HeaderIdentityNamespace, "ns-a")
+	req.Header.Set(HeaderIdentityName, "caller-agent")
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code, "a G16 identity bearer must never authenticate a registry route")
+}
+
 // TestDispatchRouteAuthComposition asserts the triple the brief calls the
 // highest-value coverage for the dispatch route: a correctly-scoped token
 // reaches the upstream function (200), a wrong-namespace token is rejected
