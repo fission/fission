@@ -125,7 +125,9 @@ func TestDispatchTurn_ServerSpanAndInvokeAgentChild(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.Handle("POST /agents/{namespace}/{name}", d.Handler())
-	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui"))
+	// Filter list kept in sync with main.go's (4 entries); this test only
+	// exercises the dispatch route, but drift here masked a real gap once.
+	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui", "/healthz", "/readyz"))
 
 	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hello"))
 	req.Header.Set(HeaderSession, "sess-span")
