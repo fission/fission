@@ -866,6 +866,20 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		}
 		reportedSpawnID = payload.Spawned
 
+		// CROSS-LANGUAGE AGREEMENT, checked HERE (not just after the loop):
+		// if the JS twin ever derived a DIFFERENT id than Go's
+		// agentruntime.SpawnSessionID, the child would be created at that
+		// other id and the registry GET below for expectedChildID would
+		// 404 on every attempt — timing this whole loop out after 180s with
+		// an opaque 404 instead of pinpointing the actual mismatch. Failing
+		// (and returning) here on a real drift instead prints the mismatch
+		// on the very first attempt.
+		if !assert.Equalf(c, expectedChildID, reportedSpawnID,
+			"cross-language derivation mismatch: Go agentruntime.SpawnSessionID(%+v, %q) = %s, fixture spawnSessionID reported %s",
+			parentRef, "expert-1", expectedChildID, reportedSpawnID) {
+			return
+		}
+
 		registryCtx, registryCancel := context.WithTimeout(ctx, registryAttemptTimeout)
 		defer registryCancel()
 		regBody, status, err := getRegistry(registryCtx, f, childURL)
@@ -881,13 +895,12 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	}, 180*time.Second, 3*time.Second)
 	require.NotEmptyf(t, reportedSpawnID, "spawn turn on session %s never reported a spawned id", parentSessionID)
 
-	// 1. CROSS-LANGUAGE AGREEMENT: Go's agentruntime.SpawnSessionID and the
-	// fixture's JS twin must derive the SAME id from the SAME parent+stepKey.
-	assert.Equalf(t, expectedChildID, reportedSpawnID,
-		"cross-language derivation mismatch: Go agentruntime.SpawnSessionID(%+v, %q) = %s, fixture spawnSessionID reported %s",
-		parentRef, "expert-1", expectedChildID, reportedSpawnID)
-
-	// And the registry shows a session record living at EXACTLY that id,
+	// 1. CROSS-LANGUAGE AGREEMENT: already asserted inside the loop above
+	// (checked before the registry GET, so a real mismatch is pinpointed on
+	// the first attempt instead of surfacing as a 180s registry-404
+	// timeout). By this point Go's agentruntime.SpawnSessionID and the
+	// fixture's JS twin are known to agree on expectedChildID, and the
+	// registry shows a session record living at EXACTLY that id,
 	// admitted with the parent's triple and depth 1 — this is what actually
 	// proves the two independent derivations converged on a real admission
 	// row, not just matching strings.
