@@ -434,10 +434,10 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	view := NewAgentView()
 	store := NewSessionStore(kv, time.Now)
 	// hist is constructed here (over the same direct statestore handles as
-	// store/queue) but not yet threaded into a consumer — the history/
-	// checkpoint HTTP surface and dispatcher wiring land in a later slice.
+	// store/queue) and threaded into RegistryAPI below for the read-only
+	// history/checkpoint HTTP surface; it has no append path, so it is not a
+	// dispatcher dependency.
 	hist := NewHistoryStore(eventLog, kv)
-	_ = hist
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations)
 	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, sweepInterval, retention, time.Now)
 
@@ -608,10 +608,12 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// RegistryAPI.ListAgents. The two per-agent routes below carry
 	// {namespace}, so they use authz.Middleware exactly like the dispatch
 	// route above.
-	registryAPI := NewRegistryAPI(logger.WithName("registry_api"), view, store, authz)
+	registryAPI := NewRegistryAPI(logger.WithName("registry_api"), view, store, hist, authz)
 	mux.Handle("GET /registry/agents", authz.HTTPMiddleware(http.HandlerFunc(registryAPI.ListAgents)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions", authz.Middleware(http.HandlerFunc(registryAPI.ListSessions)))
 	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}", authz.Middleware(http.HandlerFunc(registryAPI.GetSession)))
+	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}/history", authz.Middleware(http.HandlerFunc(registryAPI.GetHistory)))
+	mux.Handle("GET /registry/agents/{namespace}/{name}/sessions/{id}/checkpoint", authz.Middleware(http.HandlerFunc(registryAPI.GetCheckpoint)))
 
 	// Pool introspection: pod/endpoint topology is cluster-operator
 	// data, not per-agent data, so like ListAgents it carries no {namespace}
