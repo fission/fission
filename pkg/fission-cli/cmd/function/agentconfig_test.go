@@ -81,4 +81,22 @@ func TestGetAgentConfig(t *testing.T) {
 		}, ac)
 		assert.Equal(t, int64(10), existing.MaxSessions, "the original is not mutated")
 	})
+
+	t.Run("history trim flag set -> HistoryTrimBelowCheckpoint populated", func(t *testing.T) {
+		t.Parallel()
+		in := dummy.TestFlagSet()
+		in.SetBool(flagkey.FnAgent, true)
+		in.SetBool(flagkey.FnAgentHistoryTrim, true)
+		ac := getAgentConfig(in, nil)
+		assert.Equal(t, &fv1.AgentConfig{HistoryTrimBelowCheckpoint: true}, ac)
+	})
+
+	t.Run("history trim flag unset -> field left at existing value", func(t *testing.T) {
+		t.Parallel()
+		existing := &fv1.AgentConfig{HistoryTrimBelowCheckpoint: true}
+		in := dummy.TestFlagSet()
+		in.SetBool(flagkey.FnAgent, true)
+		ac := getAgentConfig(in, existing)
+		assert.True(t, ac.HistoryTrimBelowCheckpoint, "unset flag must not clear the existing value on update")
+	})
 }

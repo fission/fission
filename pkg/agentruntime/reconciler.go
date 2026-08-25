@@ -72,7 +72,7 @@ func (r *AgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	entry := entryFromAgentConfig(fn.Namespace, fn.Name, fn.Spec.Agent, r.maxSessionsDefault)
+	entry := entryFromAgentConfig(fn.Namespace, fn.Name, fn.Spec.Agent, fn.Spec.State, r.maxSessionsDefault)
 	r.view.Upsert(entry)
 	return ctrl.Result{}, nil
 }

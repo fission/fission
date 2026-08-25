@@ -162,6 +162,7 @@ const (
 	FnAgentIdleAfter     = "agent-idle-after"
 	FnAgentArchiveAfter  = "agent-archive-after"
 	FnAgentMaxSessions   = "agent-max-sessions"
+	FnAgentHistoryTrim   = "agent-history-trim"
 
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession = "session"
