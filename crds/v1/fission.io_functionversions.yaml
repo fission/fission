@@ -792,6 +792,13 @@ spec:
                           defaults can archive a session while it is still within its idle
                           window.
                         type: string
+                      historyTrimBelowCheckpoint:
+                        description: |-
+                          HistoryTrimBelowCheckpoint, when true, lets the agent runtime's sweeper
+                          trim this agent's session fact logs below each session's committed
+                          checkpoint coverage boundary (G13). Requires State: a knob that can
+                          never act (no state keyspace means no history) is rejected at admission.
+                        type: boolean
                       idleAfter:
                         description: |-
                           IdleAfter is how long a session stays "active" after its last turn

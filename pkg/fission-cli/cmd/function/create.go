@@ -237,6 +237,9 @@ func getAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig
 	if input.IsSet(flagkey.FnAgentMaxSessions) {
 		ac.MaxSessions = int64(input.Int(flagkey.FnAgentMaxSessions))
 	}
+	if input.IsSet(flagkey.FnAgentHistoryTrim) {
+		ac.HistoryTrimBelowCheckpoint = input.Bool(flagkey.FnAgentHistoryTrim)
+	}
 	return ac
 }
 

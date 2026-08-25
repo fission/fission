@@ -46,6 +46,19 @@ type AgentEntry struct {
 	// MaxSessions is the live-session quota, unchanged from the spec (0 means
 	// unbounded).
 	MaxSessions int64
+
+	// StateKeyspace is the resolved state keyspace (fv1.StateConfig.
+	// EffectiveKeyspace) this agent's session history lives under. Empty
+	// means Spec.State == nil, which means history is disabled for this
+	// agent (no keyspace, nothing to read or trim).
+	StateKeyspace string
+
+	// HistoryTrim mirrors AgentConfig.HistoryTrimBelowCheckpoint: whether the
+	// sweeper may trim this agent's session fact logs below each session's
+	// committed checkpoint coverage boundary. Only meaningful when
+	// StateKeyspace is non-empty — admission rejects a true value with no
+	// State, so the two never disagree on a validly-admitted config.
+	HistoryTrim bool
 }
 
 // AgentView is the per-replica in-memory read model of Functions with
@@ -98,8 +111,16 @@ func (v *AgentView) List() []AgentEntry {
 // entryFromAgentConfig builds the defaults-applied AgentEntry for a Function
 // whose Spec.Agent is non-nil. maxSessionsDefault is the platform-wide live
 // session ceiling applied when the spec sets no MaxSessions of its own (0
-// disables the default, leaving the agent unbounded).
-func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig, maxSessionsDefault int64) AgentEntry {
+// disables the default, leaving the agent unbounded). sc is the function's
+// Spec.State (nil when the function has no state config): when non-nil, its
+// EffectiveKeyspace resolves StateKeyspace; when nil, StateKeyspace stays
+// empty, which is the "history disabled" signal Tasks 4-5 key off of. The
+// fetcher's additional Environment gate (AllowedFunctionsPerContainerInfinite
+// -> no token) is deliberately not replicated here: a Function-only
+// reconciler cannot see the Environment, and the divergence is benign — with
+// no token ever written, the stream is never written either, so the
+// registry's Head is 0 and history reads as empty regardless of keyspace.
+func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig, sc *fv1.StateConfig, maxSessionsDefault int64) AgentEntry {
 	e := AgentEntry{
 		Namespace:     ns,
 		Name:          name,
@@ -108,6 +129,10 @@ func entryFromAgentConfig(ns, name string, ac *fv1.AgentConfig, maxSessionsDefau
 		IdleAfter:     DefaultIdleAfter,
 		ArchiveAfter:  DefaultArchiveAfter,
 		MaxSessions:   ac.MaxSessions,
+		HistoryTrim:   ac.HistoryTrimBelowCheckpoint,
+	}
+	if sc != nil {
+		e.StateKeyspace = sc.EffectiveKeyspace(name)
 	}
 	if ac.Session != nil {
 		e.SessionSource = ac.Session.Source

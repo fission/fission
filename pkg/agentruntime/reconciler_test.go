@@ -207,3 +207,48 @@ func TestAgentReconcilerSkipsInvalidStoredConfig(t *testing.T) {
 	_, ok := view.Lookup("default", "bad")
 	assert.False(t, ok, "an agent with an invalid stored config must not be served from the view")
 }
+
+// TestAgentReconcilerStateKeyspace pins the end-to-end G13 plumbing: the
+// reconciler resolves Spec.State into AgentEntry.StateKeyspace via
+// StateConfig.EffectiveKeyspace, and carries HistoryTrimBelowCheckpoint
+// through as HistoryTrim. A function with no State resolves to an empty
+// keyspace, the "history disabled" signal Tasks 4-5 key off of.
+func TestAgentReconcilerStateKeyspace(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no State -> empty keyspace", func(t *testing.T) {
+		t.Parallel()
+		fn := agentFn("no-state", &fv1.AgentConfig{})
+		r, view, _ := newTestReconciler(t, fn)
+		key := types.NamespacedName{Namespace: "default", Name: "no-state"}
+
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+		require.NoError(t, err)
+
+		e, ok := view.Lookup("default", "no-state")
+		require.True(t, ok)
+		assert.Empty(t, e.StateKeyspace)
+		assert.False(t, e.HistoryTrim)
+	})
+
+	t.Run("State + HistoryTrimBelowCheckpoint carried through", func(t *testing.T) {
+		t.Parallel()
+		fn := &fv1.Function{
+			Name: "with-state", Namespace: "default", Generation: 1,
+			Spec: fv1.FunctionSpec{
+				Agent: &fv1.AgentConfig{HistoryTrimBelowCheckpoint: true},
+				State: &fv1.StateConfig{Keyspace: "custom-ks"},
+			},
+		}
+		r, view, _ := newTestReconciler(t, fn)
+		key := types.NamespacedName{Namespace: "default", Name: "with-state"}
+
+		_, err := r.Reconcile(t.Context(), ctrl.Request{NamespacedName: key})
+		require.NoError(t, err)
+
+		e, ok := view.Lookup("default", "with-state")
+		require.True(t, ok)
+		assert.Equal(t, "custom-ks", e.StateKeyspace)
+		assert.True(t, e.HistoryTrim)
+	})
+}

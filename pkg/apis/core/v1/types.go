@@ -1549,6 +1549,13 @@ type (
 		// +optional
 		// +kubebuilder:validation:Minimum=0
 		MaxSessions int64 `json:"maxSessions,omitempty"`
+
+		// HistoryTrimBelowCheckpoint, when true, lets the agent runtime's sweeper
+		// trim this agent's session fact logs below each session's committed
+		// checkpoint coverage boundary (G13). Requires State: a knob that can
+		// never act (no state keyspace means no history) is rejected at admission.
+		// +optional
+		HistoryTrimBelowCheckpoint bool `json:"historyTrimBelowCheckpoint,omitempty"`
 	}
 
 	// InvocationConfig tunes RFC-0024 asynchronous invocation for a function.

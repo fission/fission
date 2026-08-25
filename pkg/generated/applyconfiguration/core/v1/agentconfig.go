@@ -27,10 +27,13 @@ type AgentConfigApplyConfiguration struct {
 	// operation — pods are released after every turn regardless). Must be
 	// >= 0; zero (or nil) means the platform default (5m).
 	IdleAfter *metav1.Duration `json:"idleAfter,omitempty"`
-	// ArchiveAfter is how long an idle session is kept listed before it is
-	// archived (delisted; record retained on a retention TTL). Must be
-	// >= IdleAfter when both are set; zero (or nil) means the platform
-	// default (24h).
+	// ArchiveAfter is how long an idle session is kept listed, measured from
+	// its LastActiveAt, before it is archived (delisted; record retained on
+	// a retention TTL). Must be >= IdleAfter when both are set; zero (or
+	// nil) means the platform default (24h). The resolved value is always
+	// clamped up to at least the resolved IdleAfter, so no combination of
+	// defaults can archive a session while it is still within its idle
+	// window.
 	ArchiveAfter *metav1.Duration `json:"archiveAfter,omitempty"`
 	// MaxSessions caps live (active or idle) sessions for this agent,
 	// enforced atomically on session creation with the statestore's
@@ -38,6 +41,11 @@ type AgentConfigApplyConfiguration struct {
 	// Archived sessions live in a sibling keyspace and never count
 	// against this cap. 0 means unlimited.
 	MaxSessions *int64 `json:"maxSessions,omitempty"`
+	// HistoryTrimBelowCheckpoint, when true, lets the agent runtime's sweeper
+	// trim this agent's session fact logs below each session's committed
+	// checkpoint coverage boundary (G13). Requires State: a knob that can
+	// never act (no state keyspace means no history) is rejected at admission.
+	HistoryTrimBelowCheckpoint *bool `json:"historyTrimBelowCheckpoint,omitempty"`
 }
 
 // AgentConfigApplyConfiguration constructs a declarative configuration of the AgentConfig type for use with
@@ -75,5 +83,13 @@ func (b *AgentConfigApplyConfiguration) WithArchiveAfter(value metav1.Duration) 
 // If called multiple times, the MaxSessions field is set to the value of the last call.
 func (b *AgentConfigApplyConfiguration) WithMaxSessions(value int64) *AgentConfigApplyConfiguration {
 	b.MaxSessions = &value
+	return b
+}
+
+// WithHistoryTrimBelowCheckpoint sets the HistoryTrimBelowCheckpoint field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the HistoryTrimBelowCheckpoint field is set to the value of the last call.
+func (b *AgentConfigApplyConfiguration) WithHistoryTrimBelowCheckpoint(value bool) *AgentConfigApplyConfiguration {
+	b.HistoryTrimBelowCheckpoint = &value
 	return b
 }
