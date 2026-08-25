@@ -1242,7 +1242,13 @@ func parseTraceparent(v string) (traceID, spanID string, ok bool) {
 func TestAgentRuntimeTraceContextPropagation(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// 6 minutes, matching TestAgentRuntimeSpawnParentage's sibling budget:
+	// setup (CreateEnv/CreateFunction/WaitForFunction/CLI update, cold
+	// specialize) runs before the EventuallyWithT loop below, whose own
+	// budget is turnAttemptTimeout*3 (180s) -- a tighter overall ctx would
+	// let CI setup eat most of that polling budget before the first attempt
+	// even starts.
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	f := framework.Connect(t)
