@@ -5,6 +5,8 @@
 package agentruntime
 
 import (
+	"encoding/json/v2"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -297,4 +299,160 @@ func TestSessionStoreListPagination(t *testing.T) {
 		ids = append(ids, r.ID)
 	}
 	assert.ElementsMatch(t, []string{"a", "b", "c"}, ids)
+}
+
+func TestParentRefStringParseRoundtrip(t *testing.T) {
+	t.Parallel()
+
+	p := ParentRef{Namespace: "ns1", Agent: "myagent", ID: "sess-1"}
+	s := p.String()
+	assert.Equal(t, "ns1/myagent/sess-1", s)
+
+	got, ok := ParseParentRef(s)
+	require.True(t, ok)
+	assert.Equal(t, p, got)
+}
+
+func TestParentRefParseRejectsMalformed(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"two segments":          "ns1/myagent",
+		"four segments":         "ns1/myagent/sess-1/extra",
+		"empty namespace":       "/myagent/sess-1",
+		"empty agent":           "ns1//sess-1",
+		"empty id":              "ns1/myagent/",
+		"empty string":          "",
+		"bad charset namespace": "NS_1/myagent/sess-1",
+		"bad charset agent":     "ns1/My_Agent/sess-1",
+		"bad charset id":        "ns1/myagent/sess!1",
+		"id has slash":          "ns1/myagent/sess/1/x",
+	}
+	for name, s := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, ok := ParseParentRef(s)
+			assert.False(t, ok, "expected ParseParentRef(%q) to fail", s)
+		})
+	}
+}
+
+// TestSpawnSessionIDFixedVector pins the derivation to one exact input/output
+// pair so a future change to the hash, prefix, or truncation length is caught
+// as a test failure rather than silently reshaping every derived child id.
+func TestSpawnSessionIDFixedVector(t *testing.T) {
+	t.Parallel()
+
+	parent := ParentRef{Namespace: "ns", Agent: "a", ID: "sess-1"}
+	id := SpawnSessionID(parent, "step-1")
+
+	const want = "c-27304abfe9308ae9849ace27841bc098"
+	assert.Equal(t, want, id)
+	assert.Len(t, id, 34)
+}
+
+func TestSpawnSessionIDDeterministicAndDistinct(t *testing.T) {
+	t.Parallel()
+
+	parent := ParentRef{Namespace: "ns", Agent: "a", ID: "sess-1"}
+
+	a1 := SpawnSessionID(parent, "step-1")
+	a2 := SpawnSessionID(parent, "step-1")
+	assert.Equal(t, a1, a2, "same parent + same stepKey must derive the same id every time")
+
+	b := SpawnSessionID(parent, "step-2")
+	assert.NotEqual(t, a1, b, "distinct stepKeys must derive distinct ids")
+
+	otherParent := ParentRef{Namespace: "ns", Agent: "a", ID: "sess-2"}
+	c := SpawnSessionID(otherParent, "step-1")
+	assert.NotEqual(t, a1, c, "distinct parents must derive distinct ids")
+}
+
+func TestSpawnSessionIDMatchesSessionIDPatternAndAvoidsReservedPrefix(t *testing.T) {
+	t.Parallel()
+
+	parent := ParentRef{Namespace: "ns", Agent: "a", ID: "sess-1"}
+	id := SpawnSessionID(parent, "step-1")
+
+	assert.True(t, sessionIDPattern.MatchString(id), "derived id must satisfy the dispatcher's sessionIDPattern")
+	assert.False(t, strings.HasPrefix(id, CheckpointKeyPrefix), "derived id must not collide with the reserved checkpoint-key prefix")
+}
+
+func TestSessionStoreGetArchivedReadsWhatArchiveWrote(t *testing.T) {
+	t.Parallel()
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	ctx := t.Context()
+
+	parent := ParentRef{Namespace: "ns", Agent: "a", ID: "root-1"}
+	rec := SessionRecord{ID: "s1", Agent: "a", Namespace: "ns", Status: StatusActive, Parent: &parent, Depth: 3}
+	require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+
+	_, version, err := store.Get(ctx, "ns", "a", "s1")
+	require.NoError(t, err)
+	require.NoError(t, store.Archive(ctx, rec, version, 7*24*time.Hour))
+
+	got, aVersion, err := store.GetArchived(ctx, "ns", "a", "s1")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, aVersion)
+	assert.Equal(t, StatusArchived, got.Status)
+	assert.Equal(t, "s1", got.ID)
+	require.NotNil(t, got.Parent, "Parent must survive the archive round-trip — depth resolution's second look depends on it")
+	assert.Equal(t, parent, *got.Parent)
+	assert.Equal(t, 3, got.Depth, "Depth must survive the archive round-trip")
+}
+
+func TestSessionStoreGetArchivedNotFound(t *testing.T) {
+	t.Parallel()
+	kv := newTestKV(t)
+	store := NewSessionStore(kv, time.Now)
+	ctx := t.Context()
+
+	_, _, err := store.GetArchived(ctx, "ns", "a", "does-not-exist")
+	require.ErrorIs(t, err, statestore.ErrNotFound)
+}
+
+// TestSessionRecordParentDepthJSONRoundtrip pins the wire contract: Parent
+// and Depth roundtrip through JSON, and both are omitted (not present as
+// null/0 keys) when zero-valued, matching every other omitempty field on
+// SessionRecord.
+func TestSessionRecordParentDepthJSONRoundtrip(t *testing.T) {
+	t.Parallel()
+
+	parent := ParentRef{Namespace: "ns", Agent: "a", ID: "sess-1"}
+	rec := SessionRecord{
+		ID:        "child-1",
+		Agent:     "a",
+		Namespace: "ns",
+		Status:    StatusActive,
+		Parent:    &parent,
+		Depth:     2,
+	}
+
+	data, err := json.Marshal(rec)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"parent":`)
+	assert.Contains(t, string(data), `"depth":2`)
+
+	var got SessionRecord
+	require.NoError(t, json.Unmarshal(data, &got))
+	require.NotNil(t, got.Parent)
+	assert.Equal(t, parent, *got.Parent)
+	assert.Equal(t, 2, got.Depth)
+}
+
+func TestSessionRecordParentDepthOmittedWhenZero(t *testing.T) {
+	t.Parallel()
+
+	rec := SessionRecord{ID: "s1", Agent: "a", Namespace: "ns", Status: StatusActive}
+
+	data, err := json.Marshal(rec)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"parent"`)
+	assert.NotContains(t, string(data), `"depth"`)
+
+	var got SessionRecord
+	require.NoError(t, json.Unmarshal(data, &got))
+	assert.Nil(t, got.Parent)
+	assert.Zero(t, got.Depth)
 }
