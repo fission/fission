@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	"pgregory.net/rapid"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/router/endpointcache"
@@ -379,6 +380,71 @@ func TestDispatcher_StoreDownFailsClosedWhenQuotaBearing(t *testing.T) {
 		d.Handler().ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code, "with no quota, a store read blip does not gate the turn")
+		assert.EqualValues(t, 1, upstreamHits.Load(), "the turn is still forwarded")
+	})
+}
+
+// TestDispatcher_CreateWriteFailureFailsClosedWhenQuotaBearing extends fix #2
+// (TestDispatcher_StoreDownFailsClosedWhenQuotaBearing above) to the SIBLING
+// code path that can leave the store unable to bookkeep a brand-new session:
+// that test pins the Get-failure branch (dispatcher.go:412-420, a Get that
+// fails for a reason other than ErrNotFound). This one pins the
+// Create-failure branch (dispatcher.go:402-411): the Get correctly reports
+// ErrNotFound (this session id has never been seen), but the subsequent
+// Create call's underlying Set itself fails for a reason that is neither
+// ErrSessionQuota nor a lost create-race — a write-path outage, not a
+// read-path one. errInjectKV never satisfies statestore.CountedKV (it only
+// embeds the narrower KVStore interface), so Create always takes the plain
+// Set path regardless of MaxSessions, and setErr fires there.
+func TestDispatcher_CreateWriteFailureFailsClosedWhenQuotaBearing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("quota-bearing agent fails closed (503)", func(t *testing.T) {
+		t.Parallel()
+		var upstreamHits atomic.Int64
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			upstreamHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+
+		kv := &errInjectKV{KVStore: newTestKV(t), setErr: errors.New("writes are down")}
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		view.Upsert(headerEntry("ns", "fn", 5)) // MaxSessions=5: quota-bearing
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, "sess-create-fail")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		assert.Contains(t, rec.Body.String(), "session store unavailable")
+		assert.EqualValues(t, 0, upstreamHits.Load(), "a fail-closed turn must never reach the upstream function")
+	})
+
+	t.Run("non-quota agent keeps forwarding (bookkeeping never gates)", func(t *testing.T) {
+		t.Parallel()
+		var upstreamHits atomic.Int64
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			upstreamHits.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+
+		kv := &errInjectKV{KVStore: newTestKV(t), setErr: errors.New("writes are down")}
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		view.Upsert(headerEntry("ns", "fn", 0)) // MaxSessions=0: no quota to protect
+		d := NewDispatcher(logr.Discard(), view, store, http.DefaultClient, upstream.URL, time.Hour, time.Now, 0)
+
+		req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", strings.NewReader("hi"))
+		req.Header.Set(HeaderSession, "sess-create-fail-ok")
+		rec := httptest.NewRecorder()
+		d.Handler().ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code, "with no quota, a Create write failure does not gate the turn")
 		assert.EqualValues(t, 1, upstreamHits.Load(), "the turn is still forwarded")
 	})
 }
@@ -882,4 +948,62 @@ func TestDispatchTurn_CurrentPodPrediction_NoReadyEndpoints(t *testing.T) {
 	got, _, err := store.Get(t.Context(), "ns", "fn", "sess-stale")
 	require.NoError(t, err)
 	assert.Equal(t, "10.0.0.9:8888", got.CurrentPod, "a prediction miss must not clear a previously-known CurrentPod")
+}
+
+// isSessionIDCharset is an independent (non-regexp) predicate for
+// sessionIDPattern's character class, so TestSessionIDPatternRapid's
+// property is not just checking the regexp against a re-derivation of
+// itself.
+func isSessionIDCharset(s string) bool {
+	for i := range len(s) {
+		b := s[i]
+		switch {
+		case b >= 'A' && b <= 'Z':
+		case b >= 'a' && b <= 'z':
+		case b >= '0' && b <= '9':
+		case b == '.' || b == '_' || b == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// TestSessionIDPatternRapid pins sessionIDPattern as a property: a candidate
+// is accepted iff it is 1-128 BYTES long and every byte is in the
+// [A-Za-z0-9._-] class. The class is entirely single-byte ASCII, so a byte-
+// wise oracle is exact even against multi-byte-rune input: any string
+// containing a non-ASCII rune fails both the regexp (the rune itself is
+// outside the character class) and isSessionIDCharset (its UTF-8 encoding's
+// individual bytes fall outside every accepted byte range), so byte-length
+// and rune-length never need to be reconciled.
+//
+// rapid.String() alone would almost never land an all-in-class string, so it
+// would essentially only exercise rejection; mixing in
+// rapid.StringMatching for the in-class alphabet gives the accept side real
+// coverage too.
+func TestSessionIDPatternRapid(t *testing.T) {
+	t.Parallel()
+	rapid.Check(t, func(rt *rapid.T) {
+		s := rapid.OneOf(
+			rapid.StringMatching(`[A-Za-z0-9._-]{0,200}`),
+			rapid.String(),
+		).Draw(rt, "candidate")
+
+		got := sessionIDPattern.MatchString(s)
+		want := len(s) >= 1 && len(s) <= 128 && isSessionIDCharset(s)
+		if got != want {
+			rt.Fatalf("sessionIDPattern.MatchString(%q) = %v, want %v (len=%d)", s, got, want, len(s))
+		}
+	})
+}
+
+// TestSessionIDPatternBoundary pins the exact 128/129-byte accept/reject
+// boundary deterministically: rapid's random search is not guaranteed to
+// land exactly on a boundary value, so this is not implied by
+// TestSessionIDPatternRapid above.
+func TestSessionIDPatternBoundary(t *testing.T) {
+	t.Parallel()
+	assert.True(t, sessionIDPattern.MatchString(strings.Repeat("a", 128)), "128 bytes must be accepted")
+	assert.False(t, sessionIDPattern.MatchString(strings.Repeat("a", 129)), "129 bytes must be rejected")
 }

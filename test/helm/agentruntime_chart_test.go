@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 
 	"github.com/fission/fission/pkg/svcinfo"
@@ -156,5 +157,66 @@ func TestAgentRuntimeChartPoolRBAC(t *testing.T) {
 			}
 		}
 		require.True(t, found, "no agentruntime ClusterRole was rendered under tenancy.mode=dynamic")
+	})
+}
+
+// TestAgentRuntimeChartAuthGates guards the render-time auth gate in
+// deployment.yaml (the {{ else }} `required` clause guarding
+// agentRuntime.enabled) and its positive counterpart: with
+// authentication.enabled, the Deployment must carry JWT_SIGNING_KEY sourced
+// from the shared authentication secret and must NOT also carry
+// AGENT_ALLOW_INSECURE — the two are mutually exclusive branches of the same
+// {{- if }}/{{- else if }}/{{- else }} conditional, so both ends of that
+// branch are worth pinning together. Without EITHER authentication.enabled
+// or agentRuntime.allowInsecure, the chart must refuse to render rather than
+// silently deploy the dispatch endpoint unauthenticated.
+func TestAgentRuntimeChartAuthGates(t *testing.T) {
+	t.Run("authentication.enabled renders JWT_SIGNING_KEY, not AGENT_ALLOW_INSECURE", func(t *testing.T) {
+		docs := render(t,
+			"--set", "agentRuntime.enabled=true",
+			"--set", "authentication.enabled=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+		c := firstContainer(t, deployment(t, docs, svcinfo.SvcAgentRuntime))
+
+		var jwtEnv *corev1.EnvVar
+		for i := range c.Env {
+			if c.Env[i].Name == "JWT_SIGNING_KEY" {
+				jwtEnv = &c.Env[i]
+				break
+			}
+		}
+		// JWT_SIGNING_KEY is a valueFrom secretKeyRef, not a literal value —
+		// containerEnv (helmrender_test.go) deliberately skips valueFrom
+		// entries, so this walks Env directly rather than going through it.
+		require.NotNil(t, jwtEnv, "JWT_SIGNING_KEY must be rendered when authentication.enabled")
+		require.NotNilf(t, jwtEnv.ValueFrom, "JWT_SIGNING_KEY must be sourced from a secret, not a literal value (got %+v)", jwtEnv)
+		require.NotNil(t, jwtEnv.ValueFrom.SecretKeyRef, "JWT_SIGNING_KEY must come from a secretKeyRef")
+		assert.Equal(t, "jwtSigningKey", jwtEnv.ValueFrom.SecretKeyRef.Key)
+
+		for _, e := range c.Env {
+			assert.NotEqualf(t, "AGENT_ALLOW_INSECURE", e.Name,
+				"AGENT_ALLOW_INSECURE must not render alongside authentication.enabled")
+		}
+	})
+
+	t.Run("neither authentication nor allowInsecure refuses to render", func(t *testing.T) {
+		_, err := renderErr(t,
+			"--set", "agentRuntime.enabled=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+		require.Error(t, err, "agentRuntime.enabled with no auth stance chosen must fail the render")
+		assert.Contains(t, err.Error(), "agentRuntime.enabled requires authentication.enabled",
+			"the failure must name the value the operator has to change")
+	})
+
+	t.Run("enabled without statestore refuses to render (statestore gate)", func(t *testing.T) {
+		// allowInsecure=true so the auth gate above cannot fire first and mask
+		// which gate actually failed — the same "wrong refusal" trap
+		// internalauth_chart_test.go documents.
+		_, err := renderErr(t,
+			"--set", "agentRuntime.enabled=true",
+			"--set", "agentRuntime.allowInsecure=true")
+		require.Error(t, err, "agentRuntime.enabled without a statestore must fail the render")
+		assert.Contains(t, err.Error(), "a statestore-dependent feature",
+			"the failure must name the statestore gate, not some other refusal")
 	})
 }
