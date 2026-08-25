@@ -645,17 +645,33 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 // claimed parent's OWN stored record, so a forged or stale header can at
 // worst misattribute lineage, never fabricate a depth that skips the cap.
 //
+// Cross-AGENT parentage within one namespace is the supported shape
+// (Handoff/multi-agent-orchestration). Cross-NAMESPACE parentage is
+// rejected: the dispatcher's store handle is unscoped, so resolving a
+// foreign-namespace ref would Get another tenant's record on the strength
+// of a caller-supplied header alone, and the minted child's depth (readable
+// back by the caller in its own namespace) plus the depth-cap's 400-vs-200
+// split would together leak that tenant's session existence and exact spawn
+// depth — a cross-tenant oracle. This is a security ruling (RFC amendment
+// recorded separately), not a functional gap: nothing on this branch uses
+// cross-namespace parentage.
+//
 // Resolution:
 //   - header == "": root (nil parent, depth 0) — the common case (no spawn).
 //   - unparseable header: root, logged at V(1) (the header is caller input,
 //     not a store-health signal, so this is not worth Error level).
-//   - parseable header: Get the claimed parent from the LIVE keyspace; on
-//     ANY error (not just ErrNotFound — see the note below) fall back to
-//     GetArchived. Found in either: depth = parent.Depth + 1. If
-//     int64(depth) > maxSpawnDepth, returns ErrSpawnDepthExceeded — the
-//     caller MUST NOT proceed to Create; no record is minted for a rejected
-//     spawn. Unreadable in BOTH keyspaces: logged "parent claim dropped",
-//     admitted as root.
+//   - parseable header naming a DIFFERENT namespace than ns: root, logged at
+//     V(1) — treated identically to an unparseable header (same fields,
+//     same level) so the response is byte-indistinguishable regardless of
+//     whether the foreign session exists.
+//   - parseable, same-namespace header: Get the claimed parent from the
+//     LIVE keyspace; on ANY error (not just ErrNotFound — see the note
+//     below) fall back to GetArchived. Found in either: depth =
+//     parent.Depth + 1. If int64(depth) > maxSpawnDepth, returns
+//     ErrSpawnDepthExceeded — the caller MUST NOT proceed to Create; no
+//     record is minted for a rejected spawn. Unreadable in BOTH keyspaces:
+//     logged "parent claim dropped" (with both Get errors), admitted as
+//     root.
 //
 // Depth-cap nuance: falling back to root on ANY parent-Get error — not just
 // ErrNotFound — means a transient store hiccup fragments what should have
@@ -676,13 +692,30 @@ func (d *Dispatcher) resolveParentage(ctx context.Context, ns, agent, header str
 		d.logger.V(1).Info("unparseable parent header, admitting as root", "namespace", ns, "agent", agent, "headerLen", len(header))
 		return nil, 0, nil
 	}
+	if parent.Namespace != ns {
+		// Tenant isolation: never Get a foreign namespace's record on the
+		// strength of a caller-supplied header. Logged and admitted exactly
+		// like the unparseable-header case above, on purpose — a foreign-ns
+		// claim must be indistinguishable from an unparseable one to the
+		// caller (see the doc comment above).
+		d.logger.V(1).Info("cross-namespace parent header, admitting as root", "namespace", ns, "agent", agent, "headerLen", len(header))
+		return nil, 0, nil
+	}
 
-	rec, _, err := d.store.Get(ctx, parent.Namespace, parent.Agent, parent.ID)
+	rec, _, liveErr := d.store.Get(ctx, parent.Namespace, parent.Agent, parent.ID)
+	err := liveErr
 	if err != nil {
 		rec, _, err = d.store.GetArchived(ctx, parent.Namespace, parent.Agent, parent.ID)
 	}
 	if err != nil {
-		d.logger.V(1).Info("parent claim dropped, admitting as root", "namespace", ns, "agent", agent, "parent", parent.String())
+		// Both Get errors are attached (when they differ) so a store outage
+		// that silently fragments a legitimate lineage is diagnosable after
+		// the fact, instead of looking identical to a plain not-found.
+		if errors.Is(liveErr, err) {
+			d.logger.V(1).Info("parent claim dropped, admitting as root", "namespace", ns, "agent", agent, "parent", parent.String(), "err", err)
+		} else {
+			d.logger.V(1).Info("parent claim dropped, admitting as root", "namespace", ns, "agent", agent, "parent", parent.String(), "liveErr", liveErr, "archivedErr", err)
+		}
 		return nil, 0, nil
 	}
 

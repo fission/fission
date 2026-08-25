@@ -123,8 +123,10 @@ func (s sessionRecord) key() string {
 
 // sessionsResponse mirrors ListSessions's response envelope
 // (pkg/agentruntime/registry_api.go sessionsResponse). Next (a pagination
-// cursor) is not surfaced by this CLI yet — `sessions list` always fetches a
-// single page, at maxSessionListLimit (below).
+// cursor) is not surfaced directly to the caller: the plain (non-`--tree`)
+// `sessions list` fetches a single page, at maxSessionListLimit (below), and
+// `--tree` instead consumes Next itself, via fetchAllSessionPages, to walk
+// every page to exhaustion before rendering the family tree.
 type sessionsResponse struct {
 	Sessions []sessionRecord `json:"sessions"`
 	Next     string          `json:"next,omitempty"`
@@ -135,6 +137,13 @@ type sessionsResponse struct {
 // this back down to it, so asking for it directly is the largest single
 // page this CLI can ever get.
 const maxSessionListLimit = 500
+
+// maxSessionPages bounds fetchAllSessionPages's page-cursor loop (500
+// sessions per page => 50,000 sessions for one agent). Without a ceiling, a
+// buggy server -- or a registry bug that returns a repeating cursor -- hangs
+// `sessions list --tree` forever, looping on `next` with no forward
+// progress.
+const maxSessionPages = 100
 
 type SessionsListSubCommand struct {
 	cmd.CommandActioner
@@ -239,11 +248,15 @@ func listSessionsTree(input cli.Input, format util.OutputFormat, base, namespace
 
 // fetchAllSessionPages GETs every page of an agent's sessions, following the
 // server's "next" cursor (the "page" query param, mirroring registry_api.go)
-// until it comes back empty.
+// until it comes back empty, or until maxSessionPages is reached — whichever
+// comes first. Hitting the ceiling returns what was fetched so far (never an
+// error: a partial family tree is more useful than none) with a warning on
+// stderr; the caller gets a possibly-incomplete set, exactly the same shape
+// a page-fetch error would have left it in.
 func fetchAllSessionPages(input cli.Input, base, namespace, agentName string) ([]sessionRecord, error) {
 	var all []sessionRecord
 	page := ""
-	for {
+	for i := 0; i < maxSessionPages; i++ {
 		reqURL := fmt.Sprintf("%s/registry/agents/%s/%s/sessions?limit=%d", base,
 			url.PathEscape(namespace), url.PathEscape(agentName), maxSessionListLimit)
 		if page != "" {
@@ -264,6 +277,8 @@ func fetchAllSessionPages(input cli.Input, base, namespace, agentName string) ([
 		}
 		page = resp.Next
 	}
+	console.Warn(fmt.Sprintf("sessions list --tree: stopped after %d pages with more sessions remaining (server keeps returning a cursor); showing a partial, possibly-incomplete family tree", maxSessionPages))
+	return all, nil
 }
 
 // printSessionTree renders sessions as an indented parent/child tree to w.
