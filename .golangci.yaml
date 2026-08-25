@@ -29,6 +29,7 @@ linters:
             - "!**/pkg/executor/executortype/poolmgr/gp_pod.go"
             - "!**/pkg/executor/client/client.go"
             - "!**/pkg/executor/executortype/poolmgr/oci_specialize.go"
+            - "!**/pkg/fetcher/agenttoken.go"
             - "!**/pkg/fetcher/config/config.go"
             - "!**/pkg/fetcher/fetcher.go"
             - "!**/pkg/fetcher/statetoken.go"
