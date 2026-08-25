@@ -127,11 +127,14 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		ImagePullPolicy:        gp.runtimeImagePullPolicy,
 		TerminationMessagePath: "/dev/termination-log",
 		Resources:              env.Spec.Resources,
-		// RFC-0023: the function-agnostic state API location. The per-function
-		// token is NOT an env var here — a generic pod's user container starts
-		// before its function is known; the fetcher writes the token file at
-		// specialize time (FISSION_STATE_TOKEN_PATH points the SDK at it).
-		Env: util.StateAPIEnvVars(gp.fetcherConfig.SharedMountPath()),
+		// RFC-0023 + G16: the function-agnostic state/agent-runtime API
+		// locations. The per-function/per-agent tokens are NOT env vars here —
+		// a generic pod's user container starts before its function is known;
+		// the fetcher writes the token files at specialize time
+		// (FISSION_STATE_TOKEN_PATH / FISSION_AGENT_TOKEN_PATH point the SDK
+		// at them).
+		Env: append(util.StateAPIEnvVars(gp.fetcherConfig.SharedMountPath()),
+			util.AgentAPIEnvVars(gp.fetcherConfig.SharedMountPath())...),
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/

@@ -179,10 +179,13 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 			Name:  fv1.ResourceVersionCount,
 			Value: fmt.Sprintf("%d", rvCount),
 		},
-		// RFC-0023 state API env (nil when functionState is off). The token
-		// itself arrives via the specialize-on-startup fetcher, which writes
-		// it to the shared mount (see fetcher.StateTokenFileName).
-	}, util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)
+		// RFC-0023 state API env (nil when functionState is off) and G16
+		// agent runtime env (nil when agentRuntime is off). The tokens
+		// themselves arrive via the specialize-on-startup fetcher, which
+		// writes them to the shared mount (see fetcher.StateTokenFileName,
+		// fetcher.AgentTokenFileName).
+	}, append(util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath()),
+		util.AgentAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)...)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,

@@ -876,6 +876,17 @@ func (fetcher *Fetcher) SpecializePod(ctx context.Context, fetchReq FunctionFetc
 		}
 	}
 
+	// G16: materialize the per-agent identity token BEFORE specializing, for
+	// the same reason and on the same shared-mount mechanism as the state
+	// token above. Derived pod-locally from the fetcher's own master secret —
+	// the secret and the token never ride the (pod-visible) specialize
+	// request.
+	if loadReq.AgentName != "" {
+		if err := fetcher.writeAgentTokenFile(loadReq); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("error writing agent token file: %w", err)
+		}
+	}
+
 	// Specialize the pod
 
 	var contentType string
