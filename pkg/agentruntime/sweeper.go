@@ -171,7 +171,19 @@ func (s *Sweeper) trimToCheckpoint(ctx context.Context, entry AgentEntry, rec Se
 	if ckpt.CoveredThroughSeq <= 0 {
 		return
 	}
-	if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, ckpt.CoveredThroughSeq+1); err != nil {
+	// Clamp to the stream's own head: CoveredThroughSeq lives in the
+	// checkpoint record, which is writable by anything holding the
+	// keyspace's bearer token (the same credential the SDK's history writer
+	// holds), so a forged value must not trim past what actually exists.
+	head, err := s.hist.Head(ctx, entry.Namespace, entry.StateKeyspace, rec.ID)
+	if err != nil {
+		s.logSweepErr(err, "sweeper: history head lookup for knob trim failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		return
+	}
+	if head == 0 {
+		return
+	}
+	if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, min(ckpt.CoveredThroughSeq, head)+1); err != nil {
 		s.logSweepErr(err, "sweeper: knob history trim failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 	}
 }
@@ -229,17 +241,35 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 		s.beforeCAS()
 	}
 
-	// Head capture: after the fresh-Get re-validation above (so it never runs
-	// for a record the sweeper just skipped) and before store.Archive below.
-	// A Head error logs and proceeds with headAtDecision = 0, which disables
-	// the post-archive trim below but never blocks the archive itself.
+	// Head + checkpoint-version capture: after the fresh-Get re-validation
+	// above (so it never runs for a record the sweeper just skipped) and
+	// before store.Archive below. A Head error logs and proceeds with
+	// headAtDecision = 0, which disables the post-archive TRIM below but
+	// never blocks the archive itself. The checkpoint version is captured
+	// here too — not re-read after the archive commits — so the post-archive
+	// delete can be CAS-bound at the version that existed at decision time:
+	// a same-id session re-created in the archive window writes a checkpoint
+	// at a NEW version, and the CAS-delete below then fails instead of
+	// erasing it.
 	var headAtDecision int64
+	var ckptVersion int64
+	var ckptExisted bool
 	if entry.StateKeyspace != "" {
 		var headErr error
 		headAtDecision, headErr = s.hist.Head(ctx, entry.Namespace, entry.StateKeyspace, rec.ID)
 		if headErr != nil {
 			s.logSweepErr(headErr, "sweeper: history head lookup before archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 			headAtDecision = 0
+		}
+		v, ckptErr := s.hist.GetCheckpointVersion(ctx, entry.Namespace, entry.StateKeyspace, rec.ID)
+		switch {
+		case ckptErr == nil:
+			ckptVersion = v
+			ckptExisted = true
+		case errors.Is(ckptErr, statestore.ErrNotFound):
+			// No checkpoint at decision time: nothing to delete below.
+		default:
+			s.logSweepErr(ckptErr, "sweeper: get checkpoint version before archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 		}
 	}
 
@@ -252,21 +282,35 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 		return
 	}
 
-	// History/checkpoint cleanup only after a committed archive (a
-	// CAS-conflicted or errored archive above already returned, leaving
-	// history and the checkpoint untouched). Bounded by headAtDecision, the
-	// PRE-archive head — never a re-read current head, so a same-id session
-	// re-created in the archive window keeps its first events. Trim/delete
-	// errors here are logged and NOT retried: orphan history/checkpoint
-	// residue is accepted, covered by RFC-0027's deferred orphan-stream age
-	// sweep.
-	if entry.StateKeyspace == "" || headAtDecision <= 0 {
+	if entry.StateKeyspace == "" {
 		return
 	}
-	if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, headAtDecision+1); err != nil {
-		s.logSweepErr(err, "sweeper: trimming archived session history failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+
+	// History trim, bounded by headAtDecision (the PRE-archive head — never a
+	// re-read current head, so a same-id session re-created in the archive
+	// window keeps its first events). headAtDecision <= 0 (no history, or a
+	// Head error above) means nothing to trim. Trim/delete errors here are
+	// logged and NOT retried: orphan history/checkpoint residue is accepted,
+	// covered by RFC-0027's deferred orphan-stream age sweep.
+	if headAtDecision > 0 {
+		if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, headAtDecision+1); err != nil {
+			s.logSweepErr(err, "sweeper: trimming archived session history failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		}
 	}
-	if err := s.hist.DeleteCheckpoint(ctx, entry.Namespace, entry.StateKeyspace, rec.ID); err != nil {
-		s.logSweepErr(err, "sweeper: deleting archived session checkpoint failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+
+	// Checkpoint delete: gated only on whether a checkpoint existed AT THE
+	// PRE-ARCHIVE CAPTURE (not on headAtDecision — a session with a
+	// checkpoint but zero history events, or a Head error captured above,
+	// must not leak its checkpoint forever). CAS-bound at the captured
+	// version: a fresh checkpoint written in the archive window fails the
+	// CAS and is left in place rather than erased.
+	if ckptExisted {
+		if err := s.hist.DeleteCheckpointIfVersion(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, ckptVersion); err != nil {
+			if errors.Is(err, statestore.ErrVersionConflict) {
+				s.logger.V(1).Info("sweeper: checkpoint delete skipped, fresh checkpoint appeared", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+				return
+			}
+			s.logSweepErr(err, "sweeper: deleting archived session checkpoint failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		}
 	}
 }

@@ -33,6 +33,12 @@ const (
 // enough.
 const eventLogSmallBodyCap = 4096
 
+// maxEventTypeBytes bounds EventInput.Type, which the append-body envelope
+// otherwise leaves capped only by the whole-request LimitReader (bodyCap in
+// eventAppend) — a caller could otherwise spend the payload-sized budget on
+// type-string bytes instead of the per-event Payload cap.
+const maxEventTypeBytes = 128
+
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	_ = httpx.WriteJSON(w, status, stateapi.Error{Error: msg, Code: code})
 }
@@ -309,6 +315,10 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 	}
 	events := make([]statestore.Event, len(req.Events))
 	for i, ev := range req.Events {
+		if ev.Type == "" || len(ev.Type) > maxEventTypeBytes {
+			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "event type must be 1-128 bytes")
+			return
+		}
 		if int64(len(ev.Payload)) > maxValueBytes {
 			writeValueTooLarge(w)
 			return

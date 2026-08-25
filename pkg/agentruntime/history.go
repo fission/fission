@@ -30,6 +30,14 @@ const HistoryStreamPrefix = "agentlog/"
 // CheckpointKeyPrefix namespaces the checkpoint KV key within the
 // function-state keyspace. "." is the separator (not "/"): the checkpoint id
 // is a single path segment, one key per session, never a sub-hierarchy.
+//
+// This prefix is a RESERVED keyspace within function-state: session ids
+// starting with CheckpointKeyPrefix are rejected at the dispatcher
+// (resolveSessionID, dispatcher.go) precisely so a caller-chosen session id
+// can never collide with a checkpoint key, and no other code path should
+// ever write a "/v1/state/{key}" record whose key starts with
+// "agentckpt." — doing so would land on (and be indistinguishable from) a
+// session's checkpoint.
 const CheckpointKeyPrefix = "agentckpt."
 
 // HistoryClientStream is the caller-visible stream name the SDK uses when it
@@ -99,6 +107,11 @@ func (h *HistoryStore) Head(ctx context.Context, ns, keyspace, sessionID string)
 
 // GetCheckpoint returns sessionID's checkpoint record. statestore.ErrNotFound
 // passes through unmapped when no checkpoint has been written yet.
+//
+// This drops the KV version the read carried (statestore.Value.Version) — a
+// caller that needs a version-bounded delete against a checkpoint it read
+// earlier (see the archive-time capture-then-CAS-delete in Sweeper) must use
+// GetCheckpointVersion instead, not re-derive the version from this call.
 func (h *HistoryStore) GetCheckpoint(ctx context.Context, ns, keyspace, sessionID string) (CheckpointRecord, error) {
 	v, err := h.kv.Get(ctx, stateScope(ns, keyspace), CheckpointKeyPrefix+sessionID)
 	if err != nil {
@@ -111,11 +124,36 @@ func (h *HistoryStore) GetCheckpoint(ctx context.Context, ns, keyspace, sessionI
 	return rec, nil
 }
 
+// GetCheckpointVersion returns sessionID's checkpoint record's KV version,
+// without decoding the payload. statestore.ErrNotFound passes through
+// unmapped when no checkpoint has been written yet. Pair with
+// DeleteCheckpointIfVersion: capture the version BEFORE an archive commits,
+// then CAS-delete at that captured version afterward, so a checkpoint
+// written by a re-created same-id session in between fails the CAS instead
+// of being silently erased.
+func (h *HistoryStore) GetCheckpointVersion(ctx context.Context, ns, keyspace, sessionID string) (int64, error) {
+	v, err := h.kv.Get(ctx, stateScope(ns, keyspace), CheckpointKeyPrefix+sessionID)
+	if err != nil {
+		return 0, err
+	}
+	return v.Version, nil
+}
+
 // DeleteCheckpoint removes sessionID's checkpoint record unconditionally
 // (ifVersion 0): idempotent whether or not a checkpoint currently exists, so a
 // caller never has to Get-then-Delete to avoid an error on an absent record.
 func (h *HistoryStore) DeleteCheckpoint(ctx context.Context, ns, keyspace, sessionID string) error {
 	return h.kv.Delete(ctx, stateScope(ns, keyspace), CheckpointKeyPrefix+sessionID, 0)
+}
+
+// DeleteCheckpointIfVersion CAS-deletes sessionID's checkpoint record only if
+// its current KV version equals version (version must be > 0 — the "a
+// checkpoint existed at capture time" case from GetCheckpointVersion).
+// statestore.ErrVersionConflict passes through unmapped when the checkpoint
+// changed since capture (a fresh write landed in the window) — the caller is
+// expected to treat that as "leave it", not retry.
+func (h *HistoryStore) DeleteCheckpointIfVersion(ctx context.Context, ns, keyspace, sessionID string, version int64) error {
+	return h.kv.Delete(ctx, stateScope(ns, keyspace), CheckpointKeyPrefix+sessionID, version)
 }
 
 // TrimBelow drops sessionID's history events with Seq < belowSeq (history GC,

@@ -600,7 +600,17 @@ async function openSessionDetail(rec) {
   var checkpoint = null;
   try {
     var histRes = await apiGet(base + "/history?limit=200");
-    if (histRes.ok) history = await histRes.json();
+    if (histRes.ok) {
+      history = await histRes.json();
+      // The first page reads from fromSeq=0, so a head beyond the 200-event
+      // page size lands the OLDEST 200 events, not the most recent -- refetch
+      // the tail (the last 200 events up to head) so the panel shows what
+      // just happened instead of ancient history.
+      if (history.head > 200) {
+        var tailRes = await apiGet(base + "/history?limit=200&fromSeq=" + (history.head - 200));
+        if (tailRes.ok) history = await tailRes.json();
+      }
+    }
   } catch (e) { /* history stays empty; the panel still opens */ }
   try {
     var ckptRes = await apiGet(base + "/checkpoint");
