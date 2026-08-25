@@ -220,3 +220,53 @@ func TestAgentRuntimeChartAuthGates(t *testing.T) {
 			"the failure must name the statestore gate, not some other refusal")
 	})
 }
+
+// TestAgentRuntimeChartExecutorURL checks Task 4's chart wiring: the executor
+// Deployment carries AGENT_RUNTIME_URL, pointing at the agentruntime
+// ClusterIP Service, when agentRuntime.enabled — and carries no such env var
+// when the feature is off, so an executor pod is never handed a URL for a
+// dispatcher that isn't deployed.
+func TestAgentRuntimeChartExecutorURL(t *testing.T) {
+	t.Run("present when agentRuntime.enabled", func(t *testing.T) {
+		docs := render(t,
+			"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+		env := containerEnv(t, deployment(t, docs, svcinfo.SvcExecutor))
+		assert.Equal(t, "http://agentruntime.fission:8894", env["AGENT_RUNTIME_URL"],
+			"executor must be handed the agentruntime dispatcher's ClusterIP Service URL")
+	})
+
+	t.Run("absent when agentRuntime disabled", func(t *testing.T) {
+		docs := render(t)
+		env := containerEnv(t, deployment(t, docs, svcinfo.SvcExecutor))
+		_, ok := env["AGENT_RUNTIME_URL"]
+		assert.False(t, ok, "AGENT_RUNTIME_URL must not render when agentRuntime.enabled is false")
+	})
+}
+
+// TestAgentRuntimeChartInternalAuthEnvs is a verify-only assertion (no chart
+// change needed): the agentruntime Deployment already carries
+// FISSION_INTERNAL_AUTH_SECRET under default values, wired via
+// internalAuth.envs (deployment.yaml:88) and gated on internalAuth.enabled
+// (default true), not on agentRuntime.enabled.
+func TestAgentRuntimeChartInternalAuthEnvs(t *testing.T) {
+	docs := render(t,
+		"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+	c := firstContainer(t, deployment(t, docs, svcinfo.SvcAgentRuntime))
+
+	var secretEnv *corev1.EnvVar
+	for i := range c.Env {
+		if c.Env[i].Name == "FISSION_INTERNAL_AUTH_SECRET" {
+			secretEnv = &c.Env[i]
+			break
+		}
+	}
+	// FISSION_INTERNAL_AUTH_SECRET is a valueFrom secretKeyRef, not a literal
+	// value — containerEnv deliberately skips valueFrom entries, so this
+	// walks Env directly rather than going through it.
+	require.NotNil(t, secretEnv, "FISSION_INTERNAL_AUTH_SECRET must be rendered under default values (internalAuth.enabled defaults true)")
+	require.NotNil(t, secretEnv.ValueFrom, "FISSION_INTERNAL_AUTH_SECRET must be sourced from a secret, not a literal value")
+	require.NotNil(t, secretEnv.ValueFrom.SecretKeyRef)
+	assert.Equal(t, "secret", secretEnv.ValueFrom.SecretKeyRef.Key)
+}
