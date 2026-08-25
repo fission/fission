@@ -434,12 +434,15 @@ func TestWorkspacePut_OverBudget429(t *testing.T) {
 }
 
 // TestWorkspacePut_OverwriteDeltaAccounting is finding M1's core pin:
-// rewriting the SAME path multiple times (with different sizes) must settle
+// rewriting the SAME path multiple times (each GROWING it) must settle
 // ArtifactBytes to the CURRENT stored size, not the cumulative sum of every
 // write, and ArtifactCount must stay at 1 — never re-incrementing for a path
 // that already existed. A budget sized to fit only ONE of the larger bodies
 // (not N of them) proves the settle is delta-based, not additive: a naive
-// additive implementation would 429 on the second or third rewrite.
+// additive implementation would 429 on the second or third rewrite. The
+// SHRINKING-overwrite case (which the delta clamp treats differently — see
+// handlePut's doc — and does NOT credit budget back) is covered separately
+// by TestWorkspacePut_ShrinkDoesNotCreditBudget.
 func TestWorkspacePut_OverwriteDeltaAccounting(t *testing.T) {
 	t.Parallel()
 	master := []byte("ws-delta-master")
@@ -454,7 +457,7 @@ func TestWorkspacePut_OverwriteDeltaAccounting(t *testing.T) {
 	require.NoError(t, store.Create(t.Context(), newActiveSessionRecord("ns-a", "agent-x", "sess-1", time.Now()), 0, time.Hour))
 	tok := identityToken(master, "ns-a", "agent-x")
 
-	sizes := []int{10, 40, 20, 40} // grows, shrinks, grows again — all under budget only if delta-settled
+	sizes := []int{10, 25, 40} // monotonically grows — only under budget if delta-settled, not additive
 	for i, sz := range sizes {
 		body := strings.Repeat("z", sz)
 		req := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/same.txt", "ns-a", "agent-x", tok, body)
@@ -480,6 +483,87 @@ func TestWorkspacePut_OverwriteDeltaAccounting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, rec.Stats.ArtifactBytes, "delete must restore the byte budget fully")
 	assert.Zero(t, rec.Stats.ArtifactCount)
+}
+
+// TestWorkspacePut_ShrinkDoesNotCreditBudget is the round-2 fix's core pin
+// (R2 from the fix-round review): a same-path SHRINK settles a CLAMPED delta
+// (max(0, new-old)) — ArtifactBytes must stay at the PRE-shrink value, never
+// drop to the smaller post-shrink size, because crediting a negative delta
+// back is exactly the shape a concurrent shrink race could exploit to
+// manufacture unbounded byte-budget headroom. A real DELETE only decrements
+// by the artifact's TRUE current size (its own probeExisting call, at
+// delete time) — NOT by the full pre-shrink phantom amount — so a
+// shrink-then-delete leaves permanent, accepted residue; what it DOES do is
+// reclaim enough headroom for a subsequent PUT that was blocked to now fit.
+func TestWorkspacePut_ShrinkDoesNotCreditBudget(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-shrink-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+	// Budget fits one 100-byte body plus a little slack, never 100+60.
+	wh, view, store := newTestWorkspaceHandler(t, master, upstream.URL, 1<<20, 150)
+	view.Upsert(headerEntry("ns-a", "agent-x", 0))
+	identity := NewIdentityVerifier(master, nil, view)
+
+	mux := http.NewServeMux()
+	mountWorkspaceRoutes(mux, wh, IdentityOrJWTOwnWorkspace(identity, NewAuthorizer(nil).Middleware))
+	require.NoError(t, store.Create(t.Context(), newActiveSessionRecord("ns-a", "agent-x", "sess-1", time.Now()), 0, time.Hour))
+	tok := identityToken(master, "ns-a", "agent-x")
+
+	// Establish the path at 100 bytes.
+	putReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/f.bin", "ns-a", "agent-x", tok, strings.Repeat("a", 100))
+	putRec := httptest.NewRecorder()
+	mux.ServeHTTP(putRec, putReq)
+	require.Equal(t, http.StatusOK, putRec.Code)
+
+	rec, _, err := store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	require.EqualValues(t, 100, rec.Stats.ArtifactBytes)
+
+	// Shrink the SAME path to 10 bytes.
+	shrinkReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/f.bin", "ns-a", "agent-x", tok, strings.Repeat("b", 10))
+	shrinkRec := httptest.NewRecorder()
+	mux.ServeHTTP(shrinkRec, shrinkReq)
+	require.Equal(t, http.StatusOK, shrinkRec.Code)
+
+	rec, _, err = store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	assert.EqualValues(t, 100, rec.Stats.ArtifactBytes, "a same-path shrink must NOT credit budget back — ArtifactBytes must stay at the pre-shrink value")
+	assert.EqualValues(t, 1, rec.Stats.ArtifactCount)
+	assert.True(t, fake.has("_workspace_/ns-a/agent-x/sess-1/f.bin"))
+
+	// A second, distinct path that would fit under the REAL 10-byte current
+	// usage but not under the phantom 100-byte tracked total is correctly
+	// rejected — proving the budget really is still holding the pre-shrink
+	// size, not silently reconciled to the smaller real size.
+	tightReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/other.bin", "ns-a", "agent-x", tok, strings.Repeat("c", 60))
+	tightRec := httptest.NewRecorder()
+	mux.ServeHTTP(tightRec, tightReq)
+	assert.Equal(t, http.StatusTooManyRequests, tightRec.Code, "the phantom pre-shrink bytes still count against the budget until an actual DELETE")
+
+	// DELETE-then-PUT reclaims: deleting the shrunk path decrements by its
+	// REAL current size (10, via probeExisting's own LIST at delete time) —
+	// tracked total goes from 100 to 90, NOT to 0. The 90 bytes of phantom
+	// residue from the earlier un-credited shrink (real usage dropped by 90
+	// when the file shrank from 100 to 10, but the clamp never credited
+	// that) is permanent, accepted drift — the same "residue accepted"
+	// stance this feature already takes elsewhere (probe-failure over-
+	// counts, DELETE decrements are best-effort). What DELETE DOES reclaim
+	// is enough for the previously-429'd PUT (90+60=150, exactly at budget)
+	// to now succeed.
+	delReq := identityWorkspaceRequest(http.MethodDelete, "/workspace/ns-a/agent-x/sess-1/f.bin", "ns-a", "agent-x", tok, "")
+	delRec := httptest.NewRecorder()
+	mux.ServeHTTP(delRec, delReq)
+	require.Equal(t, http.StatusOK, delRec.Code)
+
+	rec, _, err = store.Get(t.Context(), "ns-a", "agent-x", "sess-1")
+	require.NoError(t, err)
+	assert.EqualValues(t, 90, rec.Stats.ArtifactBytes, "DELETE decrements by the REAL current size (10), leaving the 90-byte phantom residue from the un-credited shrink — accepted drift, not a bug")
+	assert.Zero(t, rec.Stats.ArtifactCount)
+
+	reclaimedReq := identityWorkspaceRequest(http.MethodPut, "/workspace/ns-a/agent-x/sess-1/other.bin", "ns-a", "agent-x", tok, strings.Repeat("c", 60))
+	reclaimedRec := httptest.NewRecorder()
+	mux.ServeHTTP(reclaimedRec, reclaimedReq)
+	assert.Equal(t, http.StatusOK, reclaimedRec.Code, "after DELETE reclaims the budget, the previously-429'd PUT now succeeds")
 }
 
 // TestWorkspacePut_ProbeFailureTreatedAsCreate is M1's accepted-drift pin:

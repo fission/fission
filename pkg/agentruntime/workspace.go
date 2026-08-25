@@ -565,11 +565,22 @@ func (wh *WorkspaceHandler) requireSession(w http.ResponseWriter, r *http.Reques
 //
 // A LIST failure is logged at V(1) and treated as "does not exist"
 // (size 0, found false) — the accepted-drift fallback: handlePut then
-// settles as a plain create (the honest worst case being a slightly
-// over-counted budget, never an under-counted one that could bypass it) and
-// handleDelete simply skips its counter decrement (documented at its own
-// call site). Neither caller-visible outcome (the PUT/DELETE still
-// succeeds) depends on the probe succeeding — only the bookkeeping does.
+// settles as a plain create and handleDelete simply skips its counter
+// decrement (documented at its own call site). Neither caller-visible
+// outcome (the PUT/DELETE still succeeds) depends on the probe succeeding —
+// only the bookkeeping does.
+//
+// Every caller-visible fallback of a stale or failed probe — a LIST outage
+// read as "does not exist", or a raced probe whose oldSize is stale by
+// settle time — is engineered to be fail-CLOSED: it only ever OVER-counts
+// the tracked budget relative to true storage, never under-counts it. That
+// is enforced at the CALL sites, not by this function alone: handlePut
+// clamps its byte delta to a non-negative contribution (max(0, new-old)) so
+// a stale/negative delta from a same-path shrink race can never credit
+// budget back, and a spuriously "not found" probe only ever causes an
+// extra ArtifactCount++ (a permanent but bounded phantom), never a missed
+// decrement that would let real usage outrun the tracked total. See
+// handlePut's doc comment for the specific race shapes this closes.
 func (wh *WorkspaceHandler) probeExisting(ctx context.Context, ns, agent, session, id string) (size int64, found bool) {
 	items, err := wh.client.list(ctx, workspaceSessionPrefix(ns, agent, session))
 	if err != nil {
@@ -610,18 +621,48 @@ type workspacePutResp struct {
 // already exist. A rewrite of an unchanged-size file nets to a zero-byte
 // delta, exactly matching what actually changed on storagesvc.
 //
+// The delta is CLAMPED to a minimum of zero (max(0, newSize-oldSize)), both
+// in the pre-check and the settle — a shrinking overwrite of the SAME path
+// (newSize < oldSize) contributes NO byte-budget credit, ever, rather than
+// crediting the difference back. This is deliberately fail-CLOSED, not an
+// oversight: crediting a negative delta is exactly what let a fix-round
+// review (R2) turn a race into a genuine quota-bypass shape — two PUTs
+// racing the SAME shrinking path both probe the SAME stale oldSize and both
+// settle a negative delta against a fresh read, so the tracked total drops
+// by (N-1)x(oldSize-newSize) more than the real storage did; repeated
+// shrink/regrow cycles could otherwise manufacture unbounded byte-budget
+// headroom bounded only by maxSessionArtifacts*maxArtifactBytes rather than
+// maxSessionArtifactBytes. Clamping to zero makes every settle either exact
+// or an OVER-count relative to true storage, never an under-count — the
+// safe direction for a resource-exhaustion backstop, at the cost that a
+// same-path shrink alone never reclaims budget. A caller that needs the
+// budget back must actually DELETE the path (which decrements by the real
+// stored size, see handleDelete) rather than overwriting it smaller.
+//
 // Quota ordering (Global Constraints): pre-check the per-session budgets
 // (bytes AND count — see maxSessionArtifacts) -> write to storagesvc ->
 // CAS-settle the counters via casUpdateFresh. The settle closure is
 // func(*SessionRecord) with no error return, so the budget checks CANNOT
 // live inside it — they must happen before the write, as a pre-check. That
-// ordering leaves an accepted overshoot window, and it is NOT bounded to
-// "one artifact's worth": with N PUTs racing concurrently, every one of them
-// can read the pre-settle (not-yet-exceeded) budget and all N write before
-// any settle lands, so the real worst case is (N-1)*maxArtifactBytes — there
-// is no per-session in-flight-write semaphore bounding N itself. Mirrors the
-// G19 honesty notes on other best-effort session meters; a per-session
-// in-flight cap is a follow-up, not built here.
+// ordering leaves two accepted, fail-closed overshoot races, neither bounded
+// to "one artifact's worth":
+//   - N PUTs racing a NEW path can all read the pre-settle (not-yet-exceeded)
+//     budget and all write before any settle lands, overshooting BYTES by up
+//     to (N-1)*maxArtifactBytes — there is no per-session in-flight-write
+//     semaphore bounding N itself.
+//   - N PUTs racing to CREATE the SAME not-yet-existing path can all
+//     probeExisting before any of their writes land, all observe
+//     existed=false, and all settle ArtifactCount++ — the final COUNT is
+//     permanently inflated by (N-1) with no self-correction (one subsequent
+//     DELETE only decrements by 1). This is the same failure family the
+//     probe-failure fallback already accepts elsewhere (a LIST outage on an
+//     existing path also yields existed=false and an identical permanent,
+//     fail-closed phantom +1) — a stale "does not exist yet" read, whatever
+//     its cause, always over-counts, never under-counts.
+//
+// Both mirror the G19 honesty notes on other best-effort session meters; a
+// per-session in-flight cap or per-path settle serialization is a follow-up,
+// not built here.
 func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	if wh.client == nil {
 		writeErr(w, http.StatusServiceUnavailable, workspaceDisabledMsg)
@@ -669,7 +710,13 @@ func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 	id := workspaceID(ns, agent, session, path)
 	oldSize, existed := wh.probeExisting(r.Context(), ns, agent, session, id)
 
-	if wh.maxSessionArtifactBytes > 0 && rec.Stats.ArtifactBytes+(sp.size-oldSize) > wh.maxSessionArtifactBytes {
+	// Clamped to zero — see this function's doc comment: a shrinking
+	// overwrite must never be credited as freed budget, only an actual
+	// DELETE does that. The pre-check uses the SAME clamped estimate the
+	// settle below will apply, so a request that will not actually reduce
+	// the tracked total is never pre-approved on the assumption that it will.
+	estimatedDelta := max(0, sp.size-oldSize)
+	if wh.maxSessionArtifactBytes > 0 && rec.Stats.ArtifactBytes+estimatedDelta > wh.maxSessionArtifactBytes {
 		writeErr(w, http.StatusTooManyRequests, "session artifact byte budget exceeded")
 		return
 	}
@@ -693,11 +740,16 @@ func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		if !existed {
 			rec.Stats.ArtifactCount++
 		}
-		// Clamped at 0: a probe that raced a concurrent delete/rewrite of
-		// the SAME path (oldSize stale by the time this settles) must never
-		// drive the counter negative — the same defensive clamp DELETE's
-		// own settle applies.
-		rec.Stats.ArtifactBytes = max(0, rec.Stats.ArtifactBytes+(size-oldSize))
+		// max(0, size-oldSize), NOT size-oldSize: the delta itself is
+		// clamped to a non-negative contribution BEFORE it is added — see
+		// this function's doc comment for why a raw (possibly negative)
+		// delta here is a genuine quota-bypass shape under a same-path
+		// shrink race, not merely a cosmetic accounting choice. The
+		// outer max(0, ...) around the whole addition is a second,
+		// independent safety net against the total itself ever going
+		// negative (e.g. from otherwise-unanticipated drift) — both clamps
+		// are load-bearing, neither subsumes the other.
+		rec.Stats.ArtifactBytes = max(0, rec.Stats.ArtifactBytes+max(0, size-oldSize))
 	})
 
 	writeJSON(w, http.StatusOK, workspacePutResp{Path: path, Size: size})
