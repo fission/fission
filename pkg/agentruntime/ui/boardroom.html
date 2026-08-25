@@ -88,6 +88,100 @@
   .teleport { color: var(--accent); }
   .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
   #anchor-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; }
+  .card[data-key] { cursor: pointer; }
+  .card[data-key]:hover { border-color: var(--accent); }
+
+  /* Session transcript detail panel (Task 6): a right-hand overlay opened by
+     clicking a session card, closed on Escape or an outside click. Lives
+     OUTSIDE #sessions-list on purpose -- that list's innerHTML is replaced
+     wholesale on every SSE event / 5s poll tick, which would otherwise blow
+     away an open panel mid-view. */
+  #detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 11, 0.55);
+    z-index: 50;
+    display: flex;
+    justify-content: flex-end;
+  }
+  #detail-overlay[hidden] { display: none; }
+  #detail-panel {
+    width: min(480px, 92vw);
+    height: 100%;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+  }
+  #detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  #detail-title { font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; }
+  #detail-close {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    line-height: 1;
+    font-size: 16px;
+    cursor: pointer;
+    flex: none;
+  }
+  #detail-close:hover { border-color: var(--accent); color: var(--accent); }
+  #detail-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; }
+  .ckpt-marker {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--accent);
+    border-top: 1px dashed var(--accent);
+    border-bottom: 1px dashed var(--accent);
+    padding: 6px 0;
+    margin-bottom: 8px;
+  }
+  .ckpt-payload {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    margin: 0 0 16px;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .turn-group { margin-bottom: 14px; }
+  .turn-group h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .event-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+  }
+  .event-meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .event-type { color: var(--text); font-weight: 600; }
+  .event-payload {
+    margin: 0;
+    font-size: 11px;
+    font-family: ui-monospace, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .detail-head-line { color: var(--muted); font-size: 11px; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -113,6 +207,15 @@
       <div id="pool-note"></div>
       <div id="pool-list" class="card-list"></div>
     </section>
+  </div>
+</div>
+<div id="detail-overlay" hidden>
+  <div id="detail-panel" role="dialog" aria-modal="true" aria-label="Session transcript">
+    <div id="detail-header">
+      <div id="detail-title"></div>
+      <button id="detail-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div id="detail-body"></div>
   </div>
 </div>
 <script>
@@ -218,7 +321,9 @@ function sessionCardHTML(entry) {
   if (entry.teleports > 0) {
     meta += ' · <span class="teleport">teleports ' + entry.teleports + "</span>";
   }
-  return '<div class="card" id="' + cardId(r) + '" style="border-left-color:' + color + '">' +
+  // data-key carries the exact sessions Map key (not the sanitized DOM id,
+  // which is lossy) so the click handler below can look the record back up.
+  return '<div class="card" id="' + cardId(r) + '" data-key="' + esc(sessionKey(r)) + '" style="border-left-color:' + color + '">' +
     '<div class="card-top"><span class="dot" style="background:' + color + '"></span>' +
     '<span class="card-id">' + esc(shortId) + "</span>" +
     '<span class="badge status-' + esc(r.status) + '">' + esc(r.status) + "</span></div>" +
@@ -381,6 +486,160 @@ function connectSSE() {
     startPolling();
   };
 }
+
+// --- Session transcript detail panel (Task 6) -----------------------------
+//
+// Fetches Task 4's registry history/checkpoint endpoints for one session and
+// renders them: events grouped by turn (base64-decoded, pretty-printed JSON)
+// with the checkpoint shown as a leading "compacted through seq N" marker.
+// Uses the SAME apiGet()/authHeaders() plumbing as every other registry call
+// on this page -- no new auth path.
+
+function detailOverlay() { return qs("#detail-overlay"); }
+function detailBody() { return qs("#detail-body"); }
+function detailTitleEl() { return qs("#detail-title"); }
+
+// decodeEventPayload turns one history/checkpoint event's base64 `payload`
+// field back into {ok, value, text}: value is the parsed JSON object when
+// the bytes decode as JSON, text is always the raw decoded string (used as a
+// fallback rendering, and to survive a payload that isn't JSON at all).
+// atob() alone mangles non-ASCII payload bytes, so the base64 is expanded to
+// a Uint8Array and decoded as UTF-8 explicitly.
+function decodeEventPayload(b64) {
+  try {
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var text = new TextDecoder().decode(bytes);
+    try {
+      return { ok: true, value: JSON.parse(text), text: text };
+    } catch (e) {
+      return { ok: true, value: null, text: text };
+    }
+  } catch (e) {
+    return { ok: false, value: null, text: "" };
+  }
+}
+
+// eventTurnOf extracts the {turn} tag this fixture writes into every history
+// event payload (support-desk.js's {v,turn,step,kind,at} envelope). Events
+// this page cannot parse a numeric turn out of land in a single -1 "other"
+// bucket rather than being dropped, so a non-support-desk agent's history
+// still renders.
+function eventTurnOf(decoded) {
+  if (decoded.ok && decoded.value && typeof decoded.value.turn === "number") {
+    return decoded.value.turn;
+  }
+  return -1;
+}
+
+function prettyPayload(decoded) {
+  if (decoded.ok && decoded.value !== null) {
+    try { return JSON.stringify(decoded.value, null, 2); } catch (e) { /* fall through */ }
+  }
+  return decoded.text || "(unreadable payload)";
+}
+
+function eventRowHTML(ev) {
+  var decoded = decodeEventPayload(ev.payload);
+  return '<div class="event-row">' +
+    '<div class="event-meta">seq ' + esc(ev.seq) + ' · <span class="event-type">' + esc(ev.type) +
+    "</span> · " + esc(ev.at) + "</div>" +
+    '<pre class="event-payload">' + esc(prettyPayload(decoded)) + "</pre></div>";
+}
+
+function renderDetailBody(history, checkpoint) {
+  var events = (history && history.events) || [];
+  var groups = new Map(); // turn number (or -1) -> events[]
+  events.forEach(function (ev) {
+    var t = eventTurnOf(decodeEventPayload(ev.payload));
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(ev);
+  });
+  var turns = Array.from(groups.keys()).sort(function (a, b) { return a - b; });
+
+  var html = "";
+  if (checkpoint) {
+    html += '<div class="ckpt-marker">compacted through seq ' + esc(checkpoint.coveredThroughSeq) +
+      " · checkpoint turn " + esc(checkpoint.turn) +
+      " · " + esc(checkpoint.createdAt) + "</div>";
+    var payloadText = "(no payload)";
+    try { payloadText = JSON.stringify(checkpoint.payload, null, 2); } catch (e) { /* leave default */ }
+    html += '<pre class="ckpt-payload">' + esc(payloadText) + "</pre>";
+  }
+
+  if (turns.length === 0) {
+    html += emptyState("no history events for this session");
+  } else {
+    turns.forEach(function (t) {
+      html += '<div class="turn-group"><h3>' + (t >= 0 ? "turn " + esc(t) : "other events") + "</h3>";
+      html += groups.get(t).map(eventRowHTML).join("");
+      html += "</div>";
+    });
+  }
+
+  html += '<div class="detail-head-line">history head: seq ' + esc((history && history.head) || 0) + "</div>";
+  detailBody().innerHTML = html;
+}
+
+// detailEpoch guards against a slow fetch from a PREVIOUS card overwriting a
+// later click's content: clicking card A then quickly card B before A's
+// fetches land must not paint A's transcript under B's title.
+var detailEpoch = 0;
+
+async function openSessionDetail(rec) {
+  var myEpoch = ++detailEpoch;
+  detailTitleEl().textContent = rec.namespace + "/" + rec.agent + " · " + rec.id;
+  detailBody().innerHTML = emptyState("loading transcript…");
+  detailOverlay().hidden = false;
+
+  var base = "/registry/agents/" + encodeURIComponent(rec.namespace) + "/" +
+    encodeURIComponent(rec.agent) + "/sessions/" + encodeURIComponent(rec.id);
+
+  var history = { head: 0, events: [] };
+  var checkpoint = null;
+  try {
+    var histRes = await apiGet(base + "/history?limit=200");
+    if (histRes.ok) history = await histRes.json();
+  } catch (e) { /* history stays empty; the panel still opens */ }
+  try {
+    var ckptRes = await apiGet(base + "/checkpoint");
+    // 404 is the documented "no checkpoint yet" shape (also what a
+    // history-disabled agent's session answers) -- not an error, just no
+    // marker line.
+    if (ckptRes.ok) checkpoint = await ckptRes.json();
+  } catch (e) { /* checkpoint stays null */ }
+
+  // The overlay may have been closed (Escape/outside-click), or another
+  // card opened, while these two fetches were in flight; do not resurrect
+  // stale content or paint over a newer selection.
+  if (detailOverlay().hidden || myEpoch !== detailEpoch) return;
+  renderDetailBody(history, checkpoint);
+}
+
+function closeSessionDetail() {
+  detailOverlay().hidden = true;
+  detailBody().innerHTML = "";
+}
+
+// Delegated listener: #sessions-list's innerHTML is replaced wholesale on
+// every render(), so a per-card handler would be lost on the next tick.
+qs("#sessions-list").addEventListener("click", function (ev) {
+  var card = ev.target.closest(".card");
+  if (!card) return;
+  var key = card.getAttribute("data-key");
+  var entry = key && sessions.get(key);
+  if (!entry) return;
+  openSessionDetail(entry.record);
+});
+
+qs("#detail-close").addEventListener("click", closeSessionDetail);
+detailOverlay().addEventListener("click", function (ev) {
+  if (ev.target === detailOverlay()) closeSessionDetail(); // outside click
+});
+document.addEventListener("keydown", function (ev) {
+  if (ev.key === "Escape" && !detailOverlay().hidden) closeSessionDetail();
+});
 
 async function init() {
   await loadAgents();
