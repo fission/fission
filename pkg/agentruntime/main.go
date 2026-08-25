@@ -718,15 +718,20 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// to hide its span.
 	//
 	// Filtered: /registry/events (the SSE registry feed — a span living for
-	// the lifetime of an open stream is not useful) and /ui (the boardroom
+	// the lifetime of an open stream is not useful), /ui (the boardroom
 	// UI, both the bare GET /ui route and everything under GET /ui/ — the
 	// otelUtils.UrlsToIgnore filter is HasPrefix, so the single "/ui" entry
-	// covers both routes registered above). otelhttp v0.70.0's middleware
+	// covers both routes registered above), and /healthz + /readyz (kubelet
+	// liveness/readiness probes, registered above as the exact paths
+	// "/healthz" / "/readyz" with no trailing-slash variant — a span on
+	// every probe poll is pure noise, and the router's own public listener
+	// filters its healthz endpoint the same way, otelUtils.UrlsToIgnore
+	// ("/router-healthz"), router.go). otelhttp v0.70.0's middleware
 	// short-circuits to next.ServeHTTP BEFORE span creation AND before
 	// propagator extraction whenever a filter returns false (handler.go
 	// :90-98) — a filtered request is not merely un-spanned, it never even
 	// sees an extracted trace context, which is the behavior wanted here.
-	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui"))
+	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui", "/healthz", "/readyz"))
 
 	capsClosed = true
 	serveCtx, stopServe := context.WithCancel(ctx)
