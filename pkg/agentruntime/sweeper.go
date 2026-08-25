@@ -40,6 +40,7 @@ type Sweeper struct {
 	logger    logr.Logger
 	view      *AgentView
 	store     *SessionStore
+	hist      *HistoryStore
 	interval  time.Duration // AGENT_SWEEP_INTERVAL, default 30s (read in Start, injected here)
 	retention time.Duration // AGENT_ARCHIVE_RETENTION, default 168h (7d)
 	now       func() time.Time
@@ -53,12 +54,17 @@ type Sweeper struct {
 }
 
 // NewSweeper returns a Sweeper that ages sessions in store per the policy on
-// each entry in view, using now as its clock.
-func NewSweeper(logger logr.Logger, view *AgentView, store *SessionStore, interval, retention time.Duration, now func() time.Time) *Sweeper {
+// each entry in view, using now as its clock. hist is the sweeper's only path
+// to session history/checkpoint cleanup (archive-time trim + the
+// HistoryTrim-knob live-session trim); every call into it is guarded by
+// entry.StateKeyspace != "" (history is disabled for an agent with no state
+// keyspace), so hist is never dereferenced for such an agent.
+func NewSweeper(logger logr.Logger, view *AgentView, store *SessionStore, hist *HistoryStore, interval, retention time.Duration, now func() time.Time) *Sweeper {
 	return &Sweeper{
 		logger:    logger,
 		view:      view,
 		store:     store,
+		hist:      hist,
 		interval:  interval,
 		retention: retention,
 		now:       now,
@@ -127,17 +133,46 @@ func (s *Sweeper) sweepAgent(ctx context.Context, entry AgentEntry) {
 	}
 }
 
-// sweepRecord applies the one transition, if any, that rec's listed snapshot
-// is due for. The actual CAS re-reads the record immediately beforehand (the
-// re-Get discipline: use the version from that read, not the List page's
-// snapshot) so the write always targets the current data.
+// sweepRecord applies the one lifecycle transition, if any, that rec's
+// listed snapshot is due for, and separately (independent of any
+// transition) the HistoryTrim-knob live-session trim. The actual CAS
+// re-reads the record immediately beforehand (the re-Get discipline: use the
+// version from that read, not the List page's snapshot) so the write always
+// targets the current data.
 func (s *Sweeper) sweepRecord(ctx context.Context, entry AgentEntry, rec SessionRecord, liveTTL time.Duration) {
+	if entry.HistoryTrim && entry.StateKeyspace != "" {
+		s.trimToCheckpoint(ctx, entry, rec)
+	}
 	idleFor := s.now().Sub(rec.LastActiveAt)
 	switch {
 	case rec.Status == StatusActive && idleFor >= entry.IdleAfter:
 		s.idle(ctx, entry, rec, liveTTL)
 	case rec.Status == StatusIdle && idleFor >= entry.ArchiveAfter:
 		s.archive(ctx, entry, rec)
+	}
+}
+
+// trimToCheckpoint trims rec's history below its checkpoint's coverage
+// boundary, for a live session on an agent that opted into
+// HistoryTrimBelowCheckpoint (entry.HistoryTrim). It is called on every
+// sweep visit, unconditionally of any idle/archive transition: it carries no
+// memo state across passes, and TrimBelow is idempotent, so re-trimming to
+// the same (or an unchanged) boundary on a later pass is a no-op cost, never
+// a correctness issue. A session with no checkpoint yet
+// (statestore.ErrNotFound) is skipped silently — nothing to trim to.
+func (s *Sweeper) trimToCheckpoint(ctx context.Context, entry AgentEntry, rec SessionRecord) {
+	ckpt, err := s.hist.GetCheckpoint(ctx, entry.Namespace, entry.StateKeyspace, rec.ID)
+	if err != nil {
+		if !errors.Is(err, statestore.ErrNotFound) {
+			s.logSweepErr(err, "sweeper: get checkpoint for history trim failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		}
+		return
+	}
+	if ckpt.CoveredThroughSeq <= 0 {
+		return
+	}
+	if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, ckpt.CoveredThroughSeq+1); err != nil {
+		s.logSweepErr(err, "sweeper: knob history trim failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 	}
 }
 
@@ -193,11 +228,45 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 	if s.beforeCAS != nil {
 		s.beforeCAS()
 	}
+
+	// Head capture: after the fresh-Get re-validation above (so it never runs
+	// for a record the sweeper just skipped) and before store.Archive below.
+	// A Head error logs and proceeds with headAtDecision = 0, which disables
+	// the post-archive trim below but never blocks the archive itself.
+	var headAtDecision int64
+	if entry.StateKeyspace != "" {
+		var headErr error
+		headAtDecision, headErr = s.hist.Head(ctx, entry.Namespace, entry.StateKeyspace, rec.ID)
+		if headErr != nil {
+			s.logSweepErr(headErr, "sweeper: history head lookup before archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+			headAtDecision = 0
+		}
+	}
+
 	if err := s.store.Archive(ctx, fresh, version, s.retention); err != nil {
 		if errors.Is(err, statestore.ErrVersionConflict) {
 			s.logger.V(1).Info("sweeper: archive skipped, CAS conflict (revived)", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 			return
 		}
 		s.logSweepErr(err, "sweeper: archive failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		return
+	}
+
+	// History/checkpoint cleanup only after a committed archive (a
+	// CAS-conflicted or errored archive above already returned, leaving
+	// history and the checkpoint untouched). Bounded by headAtDecision, the
+	// PRE-archive head — never a re-read current head, so a same-id session
+	// re-created in the archive window keeps its first events. Trim/delete
+	// errors here are logged and NOT retried: orphan history/checkpoint
+	// residue is accepted, covered by RFC-0027's deferred orphan-stream age
+	// sweep.
+	if entry.StateKeyspace == "" || headAtDecision <= 0 {
+		return
+	}
+	if err := s.hist.TrimBelow(ctx, entry.Namespace, entry.StateKeyspace, rec.ID, headAtDecision+1); err != nil {
+		s.logSweepErr(err, "sweeper: trimming archived session history failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+	}
+	if err := s.hist.DeleteCheckpoint(ctx, entry.Namespace, entry.StateKeyspace, rec.ID); err != nil {
+		s.logSweepErr(err, "sweeper: deleting archived session checkpoint failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 	}
 }
