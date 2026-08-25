@@ -446,6 +446,15 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return fmt.Errorf("refusing to start agent runtime without authentication: set JWT_SIGNING_KEY to scope agent access, or %s=true to explicitly run the endpoint unauthenticated (dev only)", envAllowInsecure)
 	}
 
+	// The G16 agent-identity bearer (IdentityOrJWT, identity.go) is the
+	// dispatch route's second, exclusive auth path for a pod's own spawn/
+	// dispatch calls. Read RAW here (never hmacauth.DecodeKeyFromEnv, which
+	// is for already-derived keys) — see IdentityVerifier's doc comment.
+	// identityMaster/identityMasterOld are only ever consulted when authz is
+	// Enabled(): see identityVerifier below.
+	identityMaster := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
+	identityMasterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
+
 	// Invocations go to the router internal listener, signed exactly like the
 	// other publishers (timer/mqtrigger/workflow/mcp).
 	var rt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(dispatcherMaxIdleConnsPerHost))
@@ -618,11 +627,25 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	// identityVerifier is constructed only when authz.Enabled(): a nil
+	// IdentityVerifier is what makes IdentityOrJWT's allowInsecure row a
+	// bytewise no-op passthrough (see IdentityOrJWT's doc comment) —
+	// identity headers must never be consulted, let alone 401 a caller over
+	// a missing internal secret, when the whole endpoint is running
+	// unauthenticated.
+	var identityVerifier *IdentityVerifier
+	if authz.Enabled() {
+		identityVerifier = NewIdentityVerifier(identityMaster, identityMasterOld, view)
+	}
+
 	// The pattern here matches Dispatcher.Handler()'s own registration
 	// exactly: the outer mux performs the {namespace}/{name} match (and sets
-	// the path values authz.Middleware reads) before calling into the
-	// auth-wrapped dispatcher, which then matches the same pattern again.
-	mux.Handle("POST /agents/{namespace}/{name}", authz.Middleware(dispatcher.Handler()))
+	// the path values authz.Middleware / IdentityOrJWT's identity path read)
+	// before calling into the auth-wrapped dispatcher, which then matches the
+	// same pattern again. IdentityOrJWT is the dispatch route's ONLY mount —
+	// registry/SSE routes below stay on authz.Middleware/HTTPMiddleware
+	// directly, so the identity bearer never reaches them.
+	mux.Handle("POST /agents/{namespace}/{name}", IdentityOrJWT(identityVerifier, authz.Middleware)(dispatcher.Handler()))
 
 	// Registry read API: GET /registry/agents carries no
 	// {namespace} path value, so it is mounted behind authz.HTTPMiddleware
