@@ -129,6 +129,129 @@ func TestSessionsListJSONStaysParseableWithMorePages(t *testing.T) {
 	assert.Equal(t, "sess-1", decoded[0].ID)
 }
 
+// familyTreeFixture is a single page (no "next") carrying a 3-node spawn
+// family (root-1 -> child-1 -> grand-1) plus orphan-1, whose parent ref
+// ("missing-parent") is not among the fetched records — the case the
+// "(unknown: ...)" node exists to make visible instead of silently dropping.
+const familyTreeFixture = `{"sessions":[
+	{"id":"root-1","agent":"agentfn","namespace":"testns","status":"active",
+	 "createdAt":"2026-08-20T09:00:00Z","stats":{"turns":1}},
+	{"id":"child-1","agent":"agentfn","namespace":"testns","status":"active",
+	 "createdAt":"2026-08-20T09:05:00Z","stats":{"turns":2},
+	 "parent":{"namespace":"testns","agent":"agentfn","id":"root-1"},"depth":1},
+	{"id":"grand-1","agent":"agentfn","namespace":"testns","status":"active",
+	 "createdAt":"2026-08-20T09:10:00Z","stats":{"turns":3},
+	 "parent":{"namespace":"testns","agent":"agentfn","id":"child-1"},"depth":2},
+	{"id":"orphan-1","agent":"agentfn","namespace":"testns","status":"idle",
+	 "createdAt":"2026-08-20T09:15:00Z","stats":{"turns":0},
+	 "parent":{"namespace":"testns","agent":"agentfn","id":"missing-parent"},"depth":1}
+]}`
+
+// TestSessionsListTreeRendersFamily exercises `fission agent sessions list
+// --tree` against a fabricated 3-generation family plus one orphan, checking
+// the indentation nests children under their parent, in parent-before-child
+// order, and that the orphan renders under an explicit "(unknown: ...)" node
+// (naming the missing parent's full <ns>/<agent>/<id> triple) rather than
+// being silently dropped.
+func TestSessionsListTreeRendersFamily(t *testing.T) {
+	mockAgentRuntime(t, http.StatusOK, familyTreeFixture)
+
+	in := dummy.TestFlagSetWith(
+		dummy.String(flagkey.FnName, "agentfn"),
+		dummy.String(flagkey.Namespace, "testns"),
+	)
+	in.SetBool(flagkey.AgentSessionsTree, true)
+	out := captureStdout(t, func() error { return SessionsList(in) })
+
+	lines := splitNonEmptyLines(out)
+	require.Len(t, lines, 6, "header + root-1 + child-1 + grand-1 + (unknown: ...) + orphan-1:\n%s", out)
+
+	rootLine := findLine(t, lines, "root-1")
+	childLine := findLine(t, lines, "child-1")
+	grandLine := findLine(t, lines, "grand-1")
+	unknownLine := findLine(t, lines, "(unknown:")
+	orphanLine := findLine(t, lines, "orphan-1")
+
+	assert.True(t, strings.HasPrefix(rootLine, "root-1"), "root has no indent: %q", rootLine)
+	assert.True(t, strings.HasPrefix(childLine, "  child-1"), "child indented 2 spaces under its parent: %q", childLine)
+	assert.True(t, strings.HasPrefix(grandLine, "    grand-1"), "grandchild indented 4 spaces: %q", grandLine)
+	assert.Contains(t, unknownLine, "(unknown: testns/agentfn/missing-parent)")
+	assert.True(t, strings.HasPrefix(orphanLine, "  orphan-1"), "orphan rendered at its own depth under the unknown node: %q", orphanLine)
+
+	// Parent-before-child ordering, and the unknown group after the real
+	// family tree.
+	assert.Less(t, indexOf(lines, rootLine), indexOf(lines, childLine))
+	assert.Less(t, indexOf(lines, childLine), indexOf(lines, grandLine))
+	assert.Less(t, indexOf(lines, grandLine), indexOf(lines, unknownLine))
+	assert.Less(t, indexOf(lines, unknownLine), indexOf(lines, orphanLine))
+}
+
+// TestSessionsListTreePaginatesToExhaustion checks that --tree loops the
+// server's page cursor to exhaustion before building the tree: a fake server
+// answers the first request with one session and a "next" cursor, and the
+// second (carrying that cursor) with a final session and no cursor. Both
+// pages' sessions must appear in the rendered output, and the plain
+// (non-tree) single-page behavior this regresses against is covered by
+// TestSessionsListRendersColumns.
+func TestSessionsListTreePaginatesToExhaustion(t *testing.T) {
+	var reqs []recordedSessionReq
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqs = append(reqs, recordedSessionReq{
+			Method: r.Method,
+			Path:   r.URL.Path,
+			Query:  r.URL.RawQuery,
+			Auth:   r.Header.Get("Authorization"),
+		})
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "" {
+			_, _ = w.Write([]byte(`{"sessions":[{"id":"page1-a","agent":"agentfn","namespace":"testns","status":"active",
+				"createdAt":"2026-08-20T09:00:00Z","stats":{"turns":1}}],"next":"cursor-1"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"sessions":[{"id":"page2-a","agent":"agentfn","namespace":"testns","status":"active",
+			"createdAt":"2026-08-20T09:05:00Z","stats":{"turns":2}}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("FISSION_AGENTRUNTIME_URL", srv.URL)
+
+	in := dummy.TestFlagSetWith(
+		dummy.String(flagkey.FnName, "agentfn"),
+		dummy.String(flagkey.Namespace, "testns"),
+	)
+	in.SetBool(flagkey.AgentSessionsTree, true)
+	out := captureStdout(t, func() error { return SessionsList(in) })
+
+	require.Len(t, reqs, 2, "must loop the page cursor until the server reports no next page")
+	assert.Equal(t, "limit=500", reqs[0].Query)
+	assert.Equal(t, "limit=500&page=cursor-1", reqs[1].Query)
+
+	assert.Contains(t, out, "page1-a")
+	assert.Contains(t, out, "page2-a")
+}
+
+// findLine returns the first line in lines containing substr, failing the
+// test if none does.
+func findLine(t *testing.T, lines []string, substr string) string {
+	t.Helper()
+	for _, line := range lines {
+		if strings.Contains(line, substr) {
+			return line
+		}
+	}
+	t.Fatalf("no output line contains %q:\n%s", substr, strings.Join(lines, "\n"))
+	return ""
+}
+
+// indexOf returns s's index in lines (exact match).
+func indexOf(lines []string, s string) int {
+	for i, line := range lines {
+		if line == s {
+			return i
+		}
+	}
+	return -1
+}
+
 // TestSessionsGetRendersDetail exercises `fission agent sessions get`
 // against a single-record fixture and checks the request hits the
 // {namespace}/{name}/sessions/{id} route with every stat rendered.

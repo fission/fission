@@ -165,8 +165,9 @@ const (
 	FnAgentHistoryTrim   = "agent-history-trim"
 
 	// `fission agent sessions` introspection CLI (slice 4).
-	AgentSession = "session"
-	AgentToken   = "agent-token"
+	AgentSession      = "session"
+	AgentToken        = "agent-token"
+	AgentSessionsTree = "tree"
 
 	HtName              = resourceName
 	HtMethod            = "method"

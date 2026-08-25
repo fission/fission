@@ -401,6 +401,32 @@ func TestGetSessionFound(t *testing.T) {
 	got := decodeJSON[SessionRecord](t, w)
 	assert.Equal(t, "sess-1", got.ID)
 	assert.Equal(t, StatusActive, got.Status)
+
+	// Registry passthrough (Task 3): GetSession marshals the SessionRecord
+	// directly, so a child's Parent/Depth need no handler change to reach the
+	// wire — verify-only, on the raw wire keys the same way
+	// TestListSessionsPaginationWalksNextToken pins "sessions"/"next" (decoding
+	// through SessionRecord's own tags wouldn't prove the wire shape). Depth
+	// must be >0: it is tagged omitzero, so a depth-0 root would omit the
+	// field entirely and this assertion would prove nothing.
+	child := SessionRecord{
+		ID: "sess-2", Agent: "fn", Namespace: "ns", Status: StatusActive,
+		Parent: &ParentRef{Namespace: "ns", Agent: "fn", ID: "sess-1"},
+		Depth:  1,
+	}
+	require.NoError(t, store.Create(t.Context(), child, 0, time.Hour))
+
+	w2 := httptest.NewRecorder()
+	mux.ServeHTTP(w2, bearerRequest(http.MethodGet, "/registry/agents/ns/fn/sessions/sess-2", ""))
+	require.Equal(t, http.StatusOK, w2.Code)
+	rawChild := decodeJSON[map[string]jsontext.Value](t, w2)
+	require.Contains(t, rawChild, "parent")
+	require.Contains(t, rawChild, "depth")
+	var parent map[string]jsontext.Value
+	require.NoError(t, json.Unmarshal(rawChild["parent"], &parent))
+	assert.Contains(t, parent, "namespace")
+	assert.Contains(t, parent, "agent")
+	assert.Contains(t, parent, "id")
 }
 
 func TestGetSessionNotFound(t *testing.T) {
