@@ -120,6 +120,24 @@ func (w *headInjectingEventLog) Head(ctx context.Context, stream string) (int64,
 	return head, err
 }
 
+// kvGetInjectingKV wraps a statestore.KVStore so its Get call can, as a side
+// effect, run onGet after a successful read — used to simulate a fresh
+// checkpoint write landing in the exact window between the sweeper's
+// pre-archive version capture (GetCheckpointVersion) and its later
+// version-bound delete, without needing a production-only test seam.
+type kvGetInjectingKV struct {
+	statestore.KVStore
+	onGet func()
+}
+
+func (w *kvGetInjectingKV) Get(ctx context.Context, s statestore.Scope, key string) (statestore.Value, error) {
+	v, err := w.KVStore.Get(ctx, s, key)
+	if err == nil && w.onGet != nil {
+		w.onGet()
+	}
+	return v, err
+}
+
 func TestSweeperActiveToIdleAfterIdleAfter(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		kv := newTestKV(t)
@@ -441,6 +459,80 @@ func TestSweeperArchiveTrimsHistoryToPreArchiveHeadAndDeletesCheckpoint(t *testi
 	})
 }
 
+// TestSweeperArchiveDeletesCheckpointDespiteZeroHead pins M2(a): the
+// checkpoint delete is gated on whether a checkpoint existed at the
+// pre-archive capture, NOT on headAtDecision — a session with a checkpoint
+// but zero history events (head 0) must still have its checkpoint cleaned up
+// once the archive commits, not leak it forever.
+func TestSweeperArchiveDeletesCheckpointDespiteZeroHead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		// No history events at all: head stays 0. A checkpoint exists
+		// anyway (e.g. written once and history separately cleared).
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 0)
+		hist := NewHistoryStore(el, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		_, err := hist.GetCheckpoint(ctx, "ns", "ks1", "s1")
+		assert.ErrorIs(t, err, statestore.ErrNotFound, "checkpoint must be deleted even when the pre-archive head is 0")
+	})
+}
+
+// TestSweeperArchiveCheckpointDeleteSurvivesFreshCheckpointWrite pins M2(b):
+// a checkpoint written AFTER the sweeper captured its pre-archive version
+// (simulating a same-id session re-created, or a live checkpoint write, in
+// the archive window) must survive the post-archive delete — the CAS-delete
+// is bound to the captured version, so it conflicts and is skipped rather
+// than erasing the fresh write.
+func TestSweeperArchiveCheckpointDeleteSurvivesFreshCheckpointWrite(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 4)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 4)
+		wrapped := &kvGetInjectingKV{KVStore: hkv}
+		wrapped.onGet = func() {
+			// Fires right after the sweeper's version-capture read, before
+			// store.Archive: a fresh checkpoint write lands in the window.
+			setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 4)
+		}
+		hist := NewHistoryStore(el, wrapped)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		_, err := hist.GetCheckpoint(ctx, "ns", "ks1", "s1")
+		assert.NoError(t, err, "a checkpoint written after the pre-archive version capture must survive the CAS-delete")
+	})
+}
+
 // TestSweeperArchiveTrimSurvivesLateAppendedEvents pins constraint 3: the
 // trim bound is fixed at the PRE-archive head, never a re-read current head.
 // An event landing in the window between the sweeper's Head capture and its
@@ -566,6 +658,41 @@ func TestSweeperKnobTrimsLiveSessionToCheckpointBoundary(t *testing.T) {
 		got, _, err := store.Get(ctx, "ns", "agent1", "s1")
 		require.NoError(t, err)
 		assert.Equal(t, StatusActive, got.Status, "the knob trim must not itself change session status")
+	})
+}
+
+// TestSweeperKnobTrimClampsForgedCoveredThroughSeqToHead pins M3: the
+// checkpoint's CoveredThroughSeq is writable by anything holding the
+// keyspace's bearer token, so the knob trim must clamp it to the stream's own
+// head rather than trusting it unclamped — a forged huge value must never
+// trim past what actually exists.
+func TestSweeperKnobTrimClampsForgedCoveredThroughSeqToHead(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", true)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
+
+		el, hkv := newTestStores(t)
+		appendHistoryEvents(t, ctx, el, "ns", "ks1", "s1", 5)
+		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 1<<60) // forged
+		hist := NewHistoryStore(el, hkv)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper.sweepOnce(ctx)
+
+		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
+		require.NoError(t, err)
+		assert.Empty(t, events, "a forged CoveredThroughSeq must clamp to head, never trim past what exists")
+
+		head, err := hist.Head(ctx, "ns", "ks1", "s1")
+		require.NoError(t, err)
+		assert.EqualValues(t, 5, head, "the stream's own head must be unaffected by the forged coverage claim")
 	})
 }
 
