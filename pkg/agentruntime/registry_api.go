@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -39,14 +40,16 @@ type RegistryAPI struct {
 	logger logr.Logger
 	view   *AgentView
 	store  *SessionStore
+	hist   *HistoryStore
 	authz  *Authorizer
 }
 
-// NewRegistryAPI returns a RegistryAPI reading from view and store, filtering
-// GET /registry/agents by authz's verified scope (see ListAgents). logger
-// records the underlying error behind any 500 the sanitized client body hides.
-func NewRegistryAPI(logger logr.Logger, view *AgentView, store *SessionStore, authz *Authorizer) *RegistryAPI {
-	return &RegistryAPI{logger: logger, view: view, store: store, authz: authz}
+// NewRegistryAPI returns a RegistryAPI reading from view, store, and hist,
+// filtering GET /registry/agents by authz's verified scope (see ListAgents).
+// logger records the underlying error behind any 500 the sanitized client
+// body hides.
+func NewRegistryAPI(logger logr.Logger, view *AgentView, store *SessionStore, hist *HistoryStore, authz *Authorizer) *RegistryAPI {
+	return &RegistryAPI{logger: logger, view: view, store: store, hist: hist, authz: authz}
 }
 
 // agentSummary is the wire shape of one entry in ListAgents's response.
@@ -206,6 +209,162 @@ func (a *RegistryAPI) GetSession(w http.ResponseWriter, r *http.Request) {
 		}
 		a.logger.Error(err, "getting session failed", "namespace", ns, "agent", name, "session", id, "operation", "GetSession")
 		writeErr(w, http.StatusInternalServerError, "getting session")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, rec)
+}
+
+// historyEvent is the wire shape of one entry in historyResponse.Events.
+// statestore.Event carries no JSON struct tags of its own (its field names
+// are Go-capitalized: Seq/Type/Payload/At), so marshaling it directly would
+// not produce the seq/type/payload/at contract GetHistory promises — this
+// type exists purely to supply those tags. Payload marshals as base64, same
+// as marshaling a []byte field on statestore.Event itself would.
+type historyEvent struct {
+	Seq     int64     `json:"seq"`
+	Type    string    `json:"type"`
+	Payload []byte    `json:"payload"`
+	At      time.Time `json:"at"`
+}
+
+// toHistoryEvent copies e's fields into the wire DTO.
+func toHistoryEvent(e statestore.Event) historyEvent {
+	return historyEvent{Seq: e.Seq, Type: e.Type, Payload: e.Payload, At: e.At}
+}
+
+// historyResponse is the wire shape of GetHistory's response.
+type historyResponse struct {
+	Head   int64          `json:"head"`
+	Events []historyEvent `json:"events"`
+}
+
+// emptyHistoryResponse is what GetHistory answers for an agent with no state
+// keyspace: an empty history is a normal, expected shape for such an agent
+// (RFC-0027 G13 history is opt-in via Spec.State), never an error.
+var emptyHistoryResponse = historyResponse{Events: []historyEvent{}}
+
+// resolveFromSeq parses the history route's ?fromSeq= query value: "" falls
+// back to 0 (read from the start of the stream), and a value that fails to
+// parse as an int64 is reported via ok=false so the caller can answer 400.
+// Mirrors resolveSessionListLimit's parse-or-reject shape for the sibling
+// query parameter.
+func resolveFromSeq(raw string) (fromSeq int64, ok bool) {
+	if raw == "" {
+		return 0, true
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+// GetHistory serves
+// GET /registry/agents/{namespace}/{name}/sessions/{id}/history, reading the
+// session's turn-history EventLog through HistoryStore. Like GetSession, it
+// carries a {namespace} path value and is mounted behind authz.Middleware in
+// main.go.
+//
+// An agent with no state keyspace (Spec.State == nil, AgentEntry.
+// StateKeyspace == "") answers 200 with an empty history rather than an
+// error — checked and returned BEFORE any store call, so a history-disabled
+// agent's session can never 500 here.
+func (a *RegistryAPI) GetHistory(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+	id := r.PathValue("id")
+
+	entry, ok := a.view.Lookup(ns, name)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "not an agent function")
+		return
+	}
+
+	// Validated with the dispatcher's own sessionIDPattern, and BEFORE the
+	// store call: a caller-supplied id is a statestore key, so an
+	// out-of-pattern id is rejected here rather than handed to the store.
+	if !sessionIDPattern.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+
+	if entry.StateKeyspace == "" {
+		writeJSON(w, http.StatusOK, emptyHistoryResponse)
+		return
+	}
+
+	fromSeq, ok := resolveFromSeq(r.URL.Query().Get("fromSeq"))
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid fromSeq")
+		return
+	}
+	limit, ok := resolveSessionListLimit(r.URL.Query().Get("limit"))
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid limit")
+		return
+	}
+
+	head, err := a.hist.Head(r.Context(), ns, entry.StateKeyspace, id)
+	if err != nil {
+		a.logger.Error(err, "getting history head failed", "namespace", ns, "agent", name, "session", id, "operation", "GetHistory")
+		writeErr(w, http.StatusInternalServerError, "getting history")
+		return
+	}
+
+	events, err := a.hist.Read(r.Context(), ns, entry.StateKeyspace, id, fromSeq, limit)
+	if err != nil {
+		a.logger.Error(err, "reading history failed", "namespace", ns, "agent", name, "session", id, "operation", "GetHistory")
+		writeErr(w, http.StatusInternalServerError, "getting history")
+		return
+	}
+
+	out := make([]historyEvent, len(events))
+	for i, e := range events {
+		out[i] = toHistoryEvent(e)
+	}
+	writeJSON(w, http.StatusOK, historyResponse{Head: head, Events: out})
+}
+
+// GetCheckpoint serves
+// GET /registry/agents/{namespace}/{name}/sessions/{id}/checkpoint, reading
+// the session's checkpoint record through HistoryStore. Like GetSession, it
+// carries a {namespace} path value and is mounted behind authz.Middleware in
+// main.go.
+//
+// An agent with no state keyspace answers 404, the same status a keyspace'd
+// agent gets when it simply has no checkpoint yet — callers cannot
+// distinguish "no state configured" from "no checkpoint written yet" through
+// this route, which is deliberate: neither case has a checkpoint to return.
+func (a *RegistryAPI) GetCheckpoint(w http.ResponseWriter, r *http.Request) {
+	ns := r.PathValue("namespace")
+	name := r.PathValue("name")
+	id := r.PathValue("id")
+
+	entry, ok := a.view.Lookup(ns, name)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "not an agent function")
+		return
+	}
+
+	if !sessionIDPattern.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+
+	if entry.StateKeyspace == "" {
+		writeErr(w, http.StatusNotFound, "no checkpoint")
+		return
+	}
+
+	rec, err := a.hist.GetCheckpoint(r.Context(), ns, entry.StateKeyspace, id)
+	if err != nil {
+		if errors.Is(err, statestore.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "no checkpoint")
+			return
+		}
+		a.logger.Error(err, "getting checkpoint failed", "namespace", ns, "agent", name, "session", id, "operation", "GetCheckpoint")
+		writeErr(w, http.StatusInternalServerError, "getting checkpoint")
 		return
 	}
 
