@@ -148,8 +148,13 @@ What to watch on the `/ui/` board:
   on a `kind`/dev deployment (`AGENT_ALLOW_INSECURE=true`, the default per the Kind quickstart above)
   no token is needed for `architect` to spawn children.
   On an `authentication.enabled` install,
-  set `AGENT_RUNTIME_TOKEN` on the `architect` Function's pod env to a dispatch-scoped bearer token —
-  there is no automatic credential handoff from the architect's own inbound call today.
+  `architect` spawns children with its own injected identity —
+  the fetcher writes a per-agent credential to the pod at specialize time,
+  and `architect.js` sends it automatically on every spawn dispatch.
+  No manual token provisioning is needed;
+  `AGENT_RUNTIME_TOKEN` remains a fallback for the one non-default install shape
+  (`authentication.enabled` with `internalAuth.enabled=false`)
+  where the injected credential is a placeholder.
 
 ## Demo beats checklist
 
