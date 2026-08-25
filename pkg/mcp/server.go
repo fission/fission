@@ -12,6 +12,9 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/fission/fission/pkg/info"
 )
@@ -54,6 +57,12 @@ type Server struct {
 	proxy  *Proxy
 	authz  *Authorizer
 	logger logr.Logger
+
+	// tracerProvider is the execute_tool span's TracerProvider seam,
+	// injected AFTER construction via SetTracerProvider (tracing.go) --
+	// nil (production's default) falls back to the process-wide
+	// otel.GetTracerProvider() in tracer().
+	tracerProvider trace.TracerProvider
 }
 
 // NewServer constructs the MCP server over the given registry, proxy, and
@@ -182,6 +191,37 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 	if !found || !scope.Allows(entry.Namespace) {
 		return nil, errToolNotFound
 	}
+
+	// execute_tool span (GenAI semconv, pre-stable; see tracing.go). _meta's
+	// reserved traceparent/tracestate/baggage keys (MCP spec 2026-07-28,
+	// verified against the spec itself -- see traceContextFromMeta's doc
+	// comment), when present and well-formed, make this span a CHILD OF THE
+	// EXTRACTED CONTEXT -- the caller's own trace is the causally-correct
+	// parent for its own tool call, not this transport's per-request server
+	// span. Absent or malformed _meta leaves ctx unchanged, so the span
+	// parents on whatever ctx already carries: for an HTTP tools/call that is
+	// a child of the "fission-mcp" server span (main.go's
+	// otelUtils.GetHandlerWithOTEL wrap on the /mcp mount) -- VERIFIED (plan
+	// review Step 1b): the go-sdk's streamable transport passes req.Context()
+	// into connectStreamable "to allow middleware to add context values"
+	// (streamable.go:701-703) and jsonrpc2.NewConnection wraps it in notDone
+	// (internal/jsonrpc2/conn.go), whose Value() delegates unchanged to the
+	// wrapped context -- so every context VALUE, including a live server
+	// span, survives into the tool handler's ctx for BOTH legacy and
+	// >=2026-07-28 callers. Only cancellation semantics differ by protocol
+	// version (PropagateRequestCancellation / shouldPropagateCancellation);
+	// values are never dropped either way, so there is no root-span fallback
+	// to special-case here -- absent _meta simply means "parent on whatever
+	// is already there," same as any other child span.
+	tCtx := traceContextFromMeta(ctx, req.Params.Meta)
+	tCtx, span := s.tracer().Start(tCtx, "execute_tool "+entry.ToolName, trace.WithAttributes(
+		semconv.GenAIOperationNameExecuteTool,
+		semconv.GenAIToolName(entry.ToolName),
+		attribute.String("fission.agent.namespace", entry.Namespace),
+	))
+	defer span.End()
+	ctx = tCtx
+
 	// Streaming needs BOTH sides opted in: the function declares Streaming,
 	// and the caller sent a progress token (the MCP spec permits progress
 	// notifications only for requests that carried one). Everything else
@@ -212,9 +252,11 @@ func (s *Server) callTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.C
 			}
 			return err
 		}
-		return s.proxy.InvokeStreaming(ctx, entry, req.Params.Arguments, notify)
+		res, err := s.proxy.InvokeStreaming(ctx, entry, req.Params.Arguments, notify)
+		return endToolSpan(span, res, err)
 	}
-	return s.proxy.Invoke(ctx, entry, req.Params.Arguments)
+	res, err := s.proxy.Invoke(ctx, entry, req.Params.Arguments)
+	return endToolSpan(span, res, err)
 }
 
 // scopeFor derives the caller's namespace scope from the request's token info.

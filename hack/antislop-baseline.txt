@@ -6,6 +6,7 @@
 # The gate fails when a file/analyzer pair is missing from this list or its
 # count grows; a pair that shrinks passes. Every line is a claim that the
 # pattern is right for that file — justify new ones in review.
+1 pkg/mcp/tracing_test.go noanycontainers
 1 pkg/workflow/decide_test.go noanycontainers
 1 pkg/workflow/decide_test.go nountypedunmarshal
 3 pkg/workflow/engine_branch_test.go noanycontainers

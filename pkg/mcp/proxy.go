@@ -164,6 +164,17 @@ func (p *Proxy) Invoke(ctx context.Context, e ToolEntry, args []byte) (*mcp.Call
 // ":<alias>" suffix so the call is proxied through the alias's
 // currently-resolved version rather than straight to the live function --
 // resolution of what that routes to stays entirely router-side.
+//
+// No explicit propagation.Inject here: VERIFIED (TestCallTool_
+// OutboundProxyRequestCarriesExtractedTraceparent, tracing_test.go) that
+// http.NewRequestWithContext(ctx, ...) below is sufficient by itself -- the
+// client's transport (NewProxy) is otelhttp.NewTransport(...), which reads
+// the span off ctx and injects via the process-wide otel.GetTextMapPropagator()
+// on every RoundTrip automatically. callTool (server.go) starts the
+// execute_tool span (parented on the _meta-extracted context, when present)
+// BEFORE calling Invoke/InvokeStreaming, so by the time ctx reaches here it
+// already carries that span -- an explicit Inject would be redundant with
+// what the transport already does.
 func (p *Proxy) buildRequest(ctx context.Context, e ToolEntry, args []byte) (*http.Request, error) {
 	url := p.baseURL + utils.UrlForFunctionRef(e.FnName, e.Namespace, e.Alias)
 	if len(args) == 0 {

@@ -34,6 +34,7 @@ import (
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // envAllowInsecure, when "true", permits the MCP server to start without a
@@ -172,7 +173,18 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 	})
-	mux.Handle("/mcp", server.HTTPHandler())
+	// Server spans on the /mcp mount only -- NOT the whole mux (/healthz and
+	// /readyz stay unspanned, kubelet-probe-noise-free, by simply never being
+	// wrapped, no filter list needed). otel wraps OUTSIDE authz.HTTPMiddleware
+	// (already inside server.HTTPHandler()), matching the router-public /
+	// agentruntime precedent (otelUtils.GetHandlerWithOTEL wraps outside the
+	// per-route auth wrapper so an unauthenticated 401/403 still gets a
+	// span). No filter is needed here: the MCP transport has no
+	// infinite-lifetime SSE route -- streaming tool calls ride the POST
+	// request's own SSE response (progress notifications), which completes
+	// when the buffered CallToolResult returns, so its server span has the
+	// same bounded lifetime as any other POST /mcp request.
+	mux.Handle("/mcp", otelUtils.GetHandlerWithOTEL(server.HTTPHandler(), "fission-mcp"))
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "mcp", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
