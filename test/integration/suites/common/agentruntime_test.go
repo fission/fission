@@ -9,6 +9,8 @@ package common_test
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -20,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/fission/fission/pkg/agentruntime"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 	"github.com/fission/fission/test/integration/framework"
 )
 
@@ -744,7 +747,7 @@ func postAgentTurn(ctx context.Context, f *framework.Framework, turnURL, session
 // ITSELF for stepKey "expert-1", using a byte-identical JS twin of
 // SpawnSessionID.
 //
-// Four things are asserted, in order:
+// Five things are asserted, in order:
 //
 //  1. Cross-language id agreement (the load-bearing assertion): this test
 //     computes expected := agentruntime.SpawnSessionID(parentRef, "expert-1")
@@ -753,6 +756,21 @@ func postAgentTurn(ctx context.Context, f *framework.Framework, turnURL, session
 //     against the fixture's own reported "spawned" id, so a derivation drift
 //     on either side (hash, prefix, truncation length) fails with a message
 //     naming which side disagreed, not just a registry 404.
+//  1b. Token injection (Task 6 of the parent-graph plan, G16), checked
+//     INSIDE the spawn-turn retry loop (a pod specialized off a stale
+//     pre-`--agent` view of the Function never gets a credential file at
+//     all, so this needs the same retry runway as 1's cross-language
+//     check): the fixture's pod carries a per-agent identity credential the
+//     fetcher wrote at specialize time (pkg/fetcher/agenttoken.go). The
+//     fixture echoes the credential file's claimed (namespace, agent) and
+//     the SHA-256 hex of its token — never the raw token — and this test
+//     asserts the claims equal the function's own (namespace, name) and
+//     independently re-derives the expected token via
+//     hmacauth.DeriveAgentIdentityKey/EncodeKeyForEnv from
+//     Framework.InternalAuthSecret(), comparing by hash. This is the
+//     injection-chain half of the identity proof (derivation agreement
+//     without a secured install); the verify half lives in
+//     pkg/agentruntime/identity_test.go's truth table.
 //  2. Idempotent spawn: re-dispatching the parent's spawn turn a second time
 //     must not mint a second child — ListSessions must still show exactly one
 //     session whose parent.id is the parent session.
@@ -833,6 +851,45 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	expectedChildID := agentruntime.SpawnSessionID(parentRef, "expert-1")
 	childURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + expectedChildID
 
+	// expectedTokenSha256 is the Task 6 injection-chain proof's expected
+	// value, computed once (deterministic — it depends only on the master
+	// secret and this function's own (namespace, name), not on anything the
+	// fixture reports). Checked INSIDE the spawn-turn loop below, not after
+	// it: WaitForFunction only confirms the Function CR is visible, and the
+	// CLI's `fn update --agent` a few lines above returns before every
+	// watcher has necessarily observed Spec.Agent — a pod specialized off a
+	// stale pre-agent view never gets a credential file at all (the fetcher
+	// gates writeAgentTokenFile on the specialize request carrying an agent
+	// name) and the fixture reports "absent" forever for that pod's
+	// lifetime. Asserting outside the loop would capture whatever a single
+	// (possibly stale) success left behind with no further retries; asserting
+	// on `c` inside it gives the same generation-bump retry runway the
+	// cross-language check below already relies on.
+	master := f.InternalAuthSecret()
+	var expectedToken string
+	if len(master) == 0 {
+		// Pass-through install (internalAuth disabled): the fetcher had no
+		// FISSION_INTERNAL_AUTH_SECRET either (the chart wires the SAME
+		// secret to both the framework's signing client and the fetcher),
+		// so it wrote the placeholder token instead of a derived one. Assert
+		// against that placeholder explicitly (stronger than skipping the
+		// sha check outright) — it still pins the placeholder path, it only
+		// changes what "expected" means. Caveat: this equates "the test
+		// runner's own env has no FISSION_INTERNAL_AUTH_SECRET" with "the
+		// fetcher had none" — true whenever the chart wires both from the
+		// same secret (CI's case), but if a secured cluster's test runner
+		// simply didn't export the var, the fixture would report a REAL
+		// derived sha and this assertion would fail on an environment
+		// mismatch, not a code bug.
+		t.Log("FISSION_INTERNAL_AUTH_SECRET is empty on the framework (pass-through install); " +
+			"asserting the fetcher's dev-unauthenticated placeholder token instead of a derived one")
+		expectedToken = "dev-unauthenticated"
+	} else {
+		expectedToken = hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, fnName))
+	}
+	expectedTokenSha256Sum := sha256.Sum256([]byte(expectedToken))
+	expectedTokenSha256 := hex.EncodeToString(expectedTokenSha256Sum[:])
+
 	// Turn 2 on the parent session: {"spawn":true} asks the fixture to spawn
 	// its one child. The fixture's inner dispatch to the child is a separate,
 	// best-effort network hop from inside the pod (spawn.js's spawnChild doc
@@ -862,11 +919,43 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 			Spawned     string `json:"spawned"`
 			SpawnStatus int    `json:"spawnStatus"`
 			SpawnBody   string `json:"spawnBody"`
+			// AgentTokenSha256/AgentTokenNamespace/AgentTokenAgent are the
+			// Task 6 injection-chain proof: spawn.js reads its own
+			// fetcher-written credential file
+			// (pkg/fetcher/agenttoken.go) once at module load and echoes
+			// its sha256 hex plus claimed namespace/agent on every turn --
+			// never the raw token itself (see the in-loop assertions below
+			// for why they're checked here and not after the loop).
+			AgentTokenSha256    string `json:"agentTokenSha256"`
+			AgentTokenNamespace string `json:"agentTokenNamespace"`
+			AgentTokenAgent     string `json:"agentTokenAgent"`
 		}
 		if !assert.NoErrorf(c, json.Unmarshal(turnBody, &payload), "decoding spawn turn response body %q", turnBody) {
 			return
 		}
 		reportedSpawnID = payload.Spawned
+
+		// TOKEN INJECTION, checked HERE (not after the loop): a pod
+		// specialized off a stale pre-`--agent` view of the Function never
+		// gets a credential file at all (see expectedTokenSha256's doc
+		// comment above), so asserting only after the loop exits would
+		// capture a possibly-stale single success with no further retries.
+		// Asserting on `c` here lets a generation bump (which routes a
+		// fresh specialize once the update propagates) actually resolve
+		// the staleness within this loop's normal retry budget.
+		if !assert.Equalf(c, ns.Name, payload.AgentTokenNamespace,
+			"credential file claimed namespace %q, want %q", payload.AgentTokenNamespace, ns.Name) {
+			return
+		}
+		if !assert.Equalf(c, fnName, payload.AgentTokenAgent,
+			"credential file claimed agent %q, want %q", payload.AgentTokenAgent, fnName) {
+			return
+		}
+		if !assert.Equalf(c, expectedTokenSha256, payload.AgentTokenSha256,
+			"derived-token sha256 mismatch for agent %s/%s: the fetcher's injected credential does not match "+
+				"hmacauth.DeriveAgentIdentityKey(master, ns, agent) computed by this test", ns.Name, fnName) {
+			return
+		}
 
 		// CROSS-LANGUAGE AGREEMENT, checked HERE (not just after the loop):
 		// if the JS twin ever derived a DIFFERENT id than Go's
@@ -920,6 +1009,16 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		assert.Equalf(t, parentRef, *childRec.Parent, "child session %s parent mismatch", expectedChildID)
 	}
 	assert.Equalf(t, 1, childRec.Depth, "child session %s must be depth 1, got %d", expectedChildID, childRec.Depth)
+
+	// 1b. TOKEN INJECTION: already asserted INSIDE the spawn-turn loop above
+	// (checked on `c` before the cross-language id check, for the staleness
+	// reason documented at expectedTokenSha256's declaration). By this
+	// point the fixture's credential file is known to claim exactly this
+	// function's (namespace, name), and its sha256 is known to equal what
+	// this test independently re-derives via
+	// hmacauth.DeriveAgentIdentityKey/EncodeKeyForEnv from
+	// Framework.InternalAuthSecret() — the injection-chain proof, without a
+	// secured install and without a raw token ever touching test output.
 
 	// 2. IDEMPOTENT SPAWN: re-dispatch the parent's spawn turn. The fixture
 	// derives the SAME childID (same parent session, same stepKey) and
