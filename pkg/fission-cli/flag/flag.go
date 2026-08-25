@@ -270,6 +270,7 @@ var (
 	FnAgentIdleAfter     = Flag{Type: Duration, Name: flagkey.FnAgentIdleAfter, Usage: "How long after its last turn a session stays active before it is marked idle (0 = platform default 5m)"}
 	FnAgentArchiveAfter  = Flag{Type: Duration, Name: flagkey.FnAgentArchiveAfter, Usage: "How long an idle session stays listed before it is archived (0 = platform default 24h)"}
 	FnAgentMaxSessions   = Flag{Type: Int, Name: flagkey.FnAgentMaxSessions, Usage: "Max live sessions for this agent, enforced atomically on session creation (0 = unlimited)"}
+	FnAgentHistoryTrim   = Flag{Type: Bool, Name: flagkey.FnAgentHistoryTrim, Usage: "Let the agent runtime's sweeper trim this agent's session fact logs below each session's committed checkpoint (requires --state)"}
 
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}

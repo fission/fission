@@ -20,7 +20,10 @@ type AgentSessionConfigApplyConfiguration struct {
 	// Source is where to look for the session id.
 	Source *corev1.SessionSource `json:"source,omitempty"`
 	// Name is the header or query-parameter name holding the session id,
-	// e.g. "X-Fission-Session".
+	// e.g. "X-Session-Id". It must not be a reserved runtime header name
+	// ("Authorization" or the "X-Fission-" prefix, which the runtime owns):
+	// to use the platform default header (X-Fission-Session), leave the
+	// enclosing Session nil rather than naming it here.
 	Name *string `json:"name,omitempty"`
 }
 

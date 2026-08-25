@@ -438,6 +438,13 @@ func (spec FunctionSpec) validateForAdmission() error {
 	}
 	if spec.Agent != nil {
 		errs = errors.Join(errs, spec.Agent.Validate())
+		// Cross-field rule (Agent + State): HistoryTrimBelowCheckpoint trims
+		// session fact logs living in the function's state keyspace, so it
+		// requires State. A knob that can never act (no state keyspace, no
+		// history) is rejected here rather than silently doing nothing.
+		if spec.Agent.HistoryTrimBelowCheckpoint && spec.State == nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent.HistoryTrimBelowCheckpoint", spec.Agent.HistoryTrimBelowCheckpoint, "requires FunctionSpec.State (no state keyspace means no session history to trim)"))
+		}
 	}
 	if spec.ProvisionedConcurrency != nil {
 		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())

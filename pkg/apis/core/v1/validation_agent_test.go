@@ -89,3 +89,49 @@ func TestFunctionSpecValidateAgent(t *testing.T) {
 		}
 	})
 }
+
+// TestFunctionSpecValidateAgentHistoryTrimRequiresState pins the G13
+// cross-field rule: HistoryTrimBelowCheckpoint is a knob on the agent's
+// session fact logs, which live in the function's state keyspace — a knob
+// that can never act (no State means no state keyspace, means no history)
+// must be rejected at admission rather than silently doing nothing. The rule
+// is cross-field (Agent + State), so it lives in FunctionSpec.
+// validateForAdmission, not AgentConfig.Validate (which sees only Agent).
+func TestFunctionSpecValidateAgentHistoryTrimRequiresState(t *testing.T) {
+	t.Parallel()
+
+	base := func() FunctionSpec {
+		return FunctionSpec{
+			Environment: EnvironmentReference{Name: "env", Namespace: "default"},
+		}
+	}
+
+	t.Run("HistoryTrimBelowCheckpoint without State rejected", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Agent = &AgentConfig{HistoryTrimBelowCheckpoint: true}
+		err := spec.Validate()
+		if err == nil {
+			t.Fatalf("expected error: HistoryTrimBelowCheckpoint requires State")
+		}
+	})
+
+	t.Run("HistoryTrimBelowCheckpoint with State accepted", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Agent = &AgentConfig{HistoryTrimBelowCheckpoint: true}
+		spec.State = &StateConfig{}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("HistoryTrimBelowCheckpoint false without State is fine", func(t *testing.T) {
+		t.Parallel()
+		spec := base()
+		spec.Agent = &AgentConfig{}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
