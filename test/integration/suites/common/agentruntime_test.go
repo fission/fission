@@ -9,6 +9,7 @@ package common_test
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/fission/fission/pkg/agentruntime"
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -1148,6 +1151,175 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		assert.Equalf(c, http.StatusBadRequest, resp.StatusCode,
 			"depth-4 spawn (session %s, parent %s) must be rejected — AGENT_MAX_SPAWN_DEPTH defaults to 3 in CI", depth4ChildID, depth4ParentHeader)
 	}, 60*time.Second, 2*time.Second)
+}
+
+// syntheticTraceparent mints a fresh, valid, REMOTE W3C trace-context
+// SpanContext (random trace-id and span-id, sampled flag set — the flag is
+// irrelevant to what this test asserts, see TestAgentRuntimeTraceContextPropagation's
+// doc comment) and returns its wire-encoded `traceparent` header value
+// alongside the trace-id/span-id strings the test sent, so the caller can
+// compare them against what the fixture echoes back. It goes through
+// go.opentelemetry.io/otel/propagation's own TraceContext.Inject rather than
+// hand-formatting the "00-<trace-id>-<span-id>-<flags>" string, so the
+// header this test sends is guaranteed well-formed by the same code the
+// production propagator uses.
+func syntheticTraceparent(t *testing.T) (header, traceID, spanID string) {
+	t.Helper()
+	var tid trace.TraceID
+	_, err := rand.Read(tid[:])
+	require.NoError(t, err, "generating synthetic trace-id")
+	var sid trace.SpanID
+	_, err = rand.Read(sid[:])
+	require.NoError(t, err, "generating synthetic span-id")
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    tid,
+		SpanID:     sid,
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	})
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(trace.ContextWithRemoteSpanContext(context.Background(), sc), carrier)
+	return carrier.Get("traceparent"), tid.String(), sid.String()
+}
+
+// parseTraceparent decodes v as a W3C traceparent header value using
+// go.opentelemetry.io/otel/propagation's own extraction path — the same
+// parser the production TracerProvider uses on the inbound side — and
+// returns its trace-id/span-id as lowercase hex, plus whether v parsed as a
+// valid (non-zero) SpanContext at all.
+func parseTraceparent(v string) (traceID, spanID string, ok bool) {
+	carrier := propagation.MapCarrier{"traceparent": v}
+	sc := trace.SpanContextFromContext(propagation.TraceContext{}.Extract(context.Background(), carrier))
+	if !sc.IsValid() {
+		return "", "", false
+	}
+	return sc.TraceID().String(), sc.SpanID().String(), true
+}
+
+// TestAgentRuntimeTraceContextPropagation is Task 3 of the agent-runtime
+// observability plan
+// (docs/superpowers/plans/2026-08-25-agent-runtime-observability.md, in the
+// sibling `fission` checkout): the collectorless end-to-end propagation
+// proof for the invoke_agent spans + wake-envelope trace carriage Task 1
+// added to pkg/agentruntime/dispatcher.go.
+//
+// It reuses the agentspawn fixture (test/integration/testdata/nodejs/agentspawn/spawn.js),
+// which now echoes the raw `traceparent` request header it saw as
+// "traceparentSeen" on every turn's JSON response (or the literal "absent"
+// when none arrived — see that fixture's header comment). This test sends
+// ONE turn carrying a SYNTHETIC, valid traceparent header
+// (00-<random 32 hex>-<random 16 hex>-01, minted via syntheticTraceparent
+// above) and asserts:
+//
+//  1. traceparentSeen parses as a well-formed W3C traceparent at all (proves
+//     SOME traceparent — not just any header — reached the pod).
+//  2. Its trace-id EQUALS the one this test sent. This is the load-bearing
+//     assertion: it proves the header survived POST /agents/<ns>/<fn> -> the
+//     dispatcher's invoke_agent span (started from the inbound request ctx,
+//     dispatcher.go) -> the outbound otelhttp-instrumented client -> the
+//     router-internal hop -> this specialized pod, all with ZERO OTLP
+//     collector anywhere in the loop.
+//  3. Its span-id DIFFERS from the one this test sent — children re-span at
+//     every hop; an EQUAL span-id would mean the header passed through
+//     verbatim with no span ever created, which is not what this proves.
+//
+// It deliberately does NOT assert the sampled (01) flag on the echoed
+// value. With no collector configured, the installed TracerProvider samples
+// with an always-off sampler: trace-id is preserved and fresh span-ids are
+// minted at each hop, but the 01 flag is stripped on the way out (see
+// go.opentelemetry.io/otel/sdk/trace's Tracer.newSpan SpanContext
+// construction, roughly tracer.go:103-106 and :126 in the SDK version this
+// module pins — cited in the observability plan's Task 3, not re-verified
+// line-for-line here since the module is vendor-external and line numbers
+// drift across patch releases). Asserting the flag would fail in every CI
+// run, since CI runs this suite with no collector deployed either.
+//
+// If a future run of this test finds the trace-id does NOT survive the hop,
+// that is a REAL finding about the router-internal leg of the dispatch
+// chain (dispatcher -> router-internal -> pod) — the right response is to
+// investigate that leg, not to loosen or delete this assertion.
+func TestAgentRuntimeTraceContextPropagation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-trace-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-trace-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		Code: framework.WriteTestData(t, "nodejs/agentspawn/spawn.js"),
+		// spawn.js requires these even for a plain (non-spawning) turn: it
+		// builds parentRef from them unconditionally before deciding
+		// whether to spawn.
+		EnvVars: []string{
+			"SELF_NAMESPACE=" + ns.Name,
+			"SELF_AGENT_NAME=" + fnName,
+		},
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// Same CLI-update workaround as the other tests in this file
+	// (FunctionOptions has no Agent field yet).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	sentTraceparent, sentTraceID, sentSpanID := syntheticTraceparent(t)
+
+	var payload struct {
+		TraceparentSeen string `json:"traceparentSeen"`
+	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, turnURL, strings.NewReader(`{}`))
+		if !assert.NoErrorf(c, err, "building trace-context turn request") {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("traceparent", sentTraceparent)
+		resp, err := f.HTTPClient().Do(req)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "trace-context turn to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading trace-context turn response body") {
+			return
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding trace-context turn response body %q", body) {
+			return
+		}
+	}, turnAttemptTimeout*3, 2*time.Second)
+
+	require.NotEqualf(t, "absent", payload.TraceparentSeen,
+		"fixture pod saw no traceparent header at all (sent %s on %s)", sentTraceparent, turnURL)
+
+	seenTraceID, seenSpanID, ok := parseTraceparent(payload.TraceparentSeen)
+	require.Truef(t, ok, "echoed traceparentSeen %q does not parse as a well-formed W3C traceparent", payload.TraceparentSeen)
+
+	assert.Equalf(t, sentTraceID, seenTraceID,
+		"trace-id did not survive the dispatch chain (sent %s, pod saw %s on echoed value %q) — "+
+			"this is a real finding about the router-internal hop, not a flaky assertion",
+		sentTraceID, seenTraceID, payload.TraceparentSeen)
+	assert.NotEqualf(t, sentSpanID, seenSpanID,
+		"span-id must differ from what this test sent (both %s) — an equal span-id would mean the "+
+			"request passed through with no invoke_agent span ever created, not that propagation works",
+		sentSpanID)
 }
 
 // nextSSEFrame reads one SSE message from r: comment lines (starting with

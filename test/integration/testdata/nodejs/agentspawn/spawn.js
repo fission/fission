@@ -6,7 +6,8 @@
 // namespace, same function) with X-Fission-Session set to the derived id and
 // X-Fission-Agent-Parent set to this session's own ParentRef. Every turn
 // (spawn or not) replies 200 with {"session","parent","spawned","spawnStatus",
-// "spawnBody","agentTokenSha256","agentTokenNamespace","agentTokenAgent"},
+// "spawnBody","agentTokenSha256","agentTokenNamespace","agentTokenAgent",
+// "traceparentSeen"},
 // where "spawned" is the derived child id (or null when this turn did not
 // spawn) and spawnStatus/spawnBody are the inner dispatch's own
 // last-observed HTTP status and response body (0/"" when no spawn was
@@ -207,6 +208,20 @@ module.exports = async function (context) {
   // "<namespace>/<agent>/<id>".
   const parentRef = `${SELF_NAMESPACE}/${SELF_AGENT_NAME}/${sessionID}`;
 
+  // traceparentSeen is Task 3 of the agent-runtime observability plan's
+  // end-to-end propagation proof: the raw `traceparent` request header this
+  // pod saw (or the literal "absent" when none arrived), echoed on EVERY
+  // turn's response. traceparent is NOT a secret (it is a public W3C
+  // trace-context header, not a credential), so unlike agentTokenSha256
+  // above this is safe to echo verbatim rather than hash -- a caller-side
+  // test parses it and compares its trace-id against one it sent, proving
+  // the header survived POST /agents/... -> the dispatcher's invoke_agent
+  // span -> the otelhttp-instrumented outbound call -> the router-internal
+  // hop -> this pod, with no collector anywhere in the loop. Express lowers
+  // header names (see SESSION_HEADER above), so the plain lowercase key is
+  // enough.
+  const traceparentSeen = req.headers['traceparent'] || 'absent';
+
   // req.body arrives pre-parsed as an object for a JSON content type in the
   // common case, but support-desk.js (demo/agent-boardroom/fixtures/, not
   // this testdata family) defends against a raw-string body too -- mirror
@@ -250,6 +265,7 @@ module.exports = async function (context) {
       agentTokenSha256: agentTokenSha256,
       agentTokenNamespace: agentTokenNamespace,
       agentTokenAgent: agentTokenAgent,
+      traceparentSeen: traceparentSeen,
     }),
     headers: { 'Content-Type': 'application/json' },
   };
