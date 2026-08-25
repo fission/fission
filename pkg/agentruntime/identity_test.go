@@ -115,6 +115,22 @@ func TestIdentityOrJWT_HeadersAbsentDelegatesToJWT(t *testing.T) {
 		handler.ServeHTTP(w, newIdentityRequest("ns-a", "fn", "", "", ""))
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+
+	// Row 5 also covers the masters-empty case: the headers-absent branch
+	// must short-circuit to the JWT path before it ever looks at the master
+	// secret(s), so a misconfigured (mastersless) install still serves plain
+	// JWT-authenticated traffic that never presents identity headers — only
+	// a request that DOES present identity headers hits the row-4 misconfig
+	// 401 (TestIdentityOrJWT_MasterUnsetMisconfig).
+	t.Run("both masters unset, no identity headers, valid JWT still passes", func(t *testing.T) {
+		t.Parallel()
+		identityNoMasters := NewIdentityVerifier(nil, nil, view) // both masters unset
+		handlerNoMasters := IdentityOrJWT(identityNoMasters, authz.Middleware)(okHandler())
+
+		w := httptest.NewRecorder()
+		handlerNoMasters.ServeHTTP(w, newIdentityRequest("ns-a", "fn", "", "", validTok))
+		assert.Equal(t, http.StatusOK, w.Code, "the headers-absent branch must never consult the masters")
+	})
 }
 
 // TestIdentityOrJWT_MissingOrMalformedBearerRejected covers the identity

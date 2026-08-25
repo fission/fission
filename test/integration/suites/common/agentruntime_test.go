@@ -953,7 +953,11 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 		}
 		if !assert.Equalf(c, expectedTokenSha256, payload.AgentTokenSha256,
 			"derived-token sha256 mismatch for agent %s/%s: the fetcher's injected credential does not match "+
-				"hmacauth.DeriveAgentIdentityKey(master, ns, agent) computed by this test", ns.Name, fnName) {
+				"hmacauth.DeriveAgentIdentityKey(master, ns, agent) computed by this test -- either a real "+
+				"derivation drift between the fetcher and this test, OR (on a secured cluster) this test "+
+				"runner's own env is missing FISSION_INTERNAL_AUTH_SECRET while the fetcher's is set, so the "+
+				"two sides compared a derived token against the wrong expectation (env mismatch, not a code "+
+				"bug -- see the expectedToken comment above)", ns.Name, fnName) {
 			return
 		}
 
