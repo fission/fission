@@ -81,6 +81,7 @@ import (
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/httpx"
+	otelUtils "github.com/fission/fission/pkg/utils/otel"
 )
 
 // agentruntimeScheme is the agent runtime Manager's scheme: the Fission CRD
@@ -707,13 +708,33 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// so without stopServe() below, <-serveDone would block forever on that
 	// error path and wedge this whole function (and caps.Close with it) even
 	// though the process is still live and should report the error.
+	// Server spans on the whole mux, mirroring the router's public-listener
+	// precedent (router.go's otelUtils.GetHandlerWithOTEL(publicMR, "fission-
+	// router", ...) wrap): otel wraps OUTSIDE every per-route auth wrapper
+	// (IdentityOrJWT above, authz.Middleware/HTTPMiddleware below) so an
+	// unauthenticated 401/403 still gets a span — deliberately inverting the
+	// router-INTERNAL listener's verifier-outside ordering, which exists
+	// there to keep an unsigned request from reaching the proxy at all, not
+	// to hide its span.
+	//
+	// Filtered: /registry/events (the SSE registry feed — a span living for
+	// the lifetime of an open stream is not useful) and /ui (the boardroom
+	// UI, both the bare GET /ui route and everything under GET /ui/ — the
+	// otelUtils.UrlsToIgnore filter is HasPrefix, so the single "/ui" entry
+	// covers both routes registered above). otelhttp v0.70.0's middleware
+	// short-circuits to next.ServeHTTP BEFORE span creation AND before
+	// propagator extraction whenever a filter returns false (handler.go
+	// :90-98) — a filtered request is not merely un-spanned, it never even
+	// sees an extracted trace context, which is the behavior wanted here.
+	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui"))
+
 	capsClosed = true
 	serveCtx, stopServe := context.WithCancel(ctx)
 	serveDone := make(chan struct{})
 	mgr.Go(func() error {
 		defer close(serveDone)
 		httpserver.Serve(serveCtx, logger, mgr, httpserver.ServerOptions{
-			Name: "agentruntime", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: mux,
+			Name: "agentruntime", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: handler,
 		})
 		return nil
 	})
