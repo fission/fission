@@ -1007,3 +1007,26 @@ func TestSessionIDPatternBoundary(t *testing.T) {
 	assert.True(t, sessionIDPattern.MatchString(strings.Repeat("a", 128)), "128 bytes must be accepted")
 	assert.False(t, sessionIDPattern.MatchString(strings.Repeat("a", 129)), "129 bytes must be rejected")
 }
+
+// TestResolveSessionIDRejectsCheckpointPrefix pins M4: CheckpointKeyPrefix
+// ("agentckpt.") is a reserved keyspace within function-state (history.go),
+// and sessionIDPattern's charset otherwise permits a dot — so without this
+// check a caller-supplied session id like "agentckpt.s2" would be accepted
+// and could collide with session "s2"'s checkpoint KV key.
+func TestResolveSessionIDRejectsCheckpointPrefix(t *testing.T) {
+	t.Parallel()
+	entry := AgentEntry{SessionSource: fv1.SessionSourceHeader, SessionName: HeaderSession}
+
+	req := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", nil)
+	req.Header.Set(HeaderSession, CheckpointKeyPrefix+"s2")
+	_, ok := resolveSessionID(req, entry)
+	assert.False(t, ok, "a session id starting with the reserved checkpoint prefix must be rejected")
+
+	// Sanity: an otherwise-identical id without the prefix is accepted, so
+	// the rejection above is specifically about the prefix, not the charset.
+	req2 := httptest.NewRequest(http.MethodPost, "/agents/ns/fn", nil)
+	req2.Header.Set(HeaderSession, "s2")
+	got, ok2 := resolveSessionID(req2, entry)
+	assert.True(t, ok2)
+	assert.Equal(t, "s2", got)
+}

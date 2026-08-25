@@ -465,10 +465,11 @@ func TestGetSessionMiddlewareWrongNamespaceForbidden(t *testing.T) {
 func TestGetHistoryRoundtrip(t *testing.T) {
 	t.Parallel()
 	authz := NewAuthorizer(nil)
-	mux, view, _, _, el := newTestRegistryMux(t, authz)
+	mux, view, store, _, el := newTestRegistryMux(t, authz)
 	entry := registryTestEntry("ns", "fn", 0)
 	entry.StateKeyspace = "myks"
 	view.Upsert(entry)
+	require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "sess-1", Agent: "fn", Namespace: "ns", Status: StatusActive}, 0, time.Hour))
 
 	stream := stateapi.StreamName("ns", "myks", HistoryClientStream("sess-1"))
 	_, err := el.Append(t.Context(), stream, statestore.AppendAny, []statestore.Event{
@@ -509,10 +510,11 @@ func TestGetHistoryRoundtrip(t *testing.T) {
 func TestGetHistoryFromSeqExcludesSeen(t *testing.T) {
 	t.Parallel()
 	authz := NewAuthorizer(nil)
-	mux, view, _, _, el := newTestRegistryMux(t, authz)
+	mux, view, store, _, el := newTestRegistryMux(t, authz)
 	entry := registryTestEntry("ns", "fn", 0)
 	entry.StateKeyspace = "myks"
 	view.Upsert(entry)
+	require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "sess-1", Agent: "fn", Namespace: "ns", Status: StatusActive}, 0, time.Hour))
 
 	stream := stateapi.StreamName("ns", "myks", HistoryClientStream("sess-1"))
 	_, err := el.Append(t.Context(), stream, statestore.AppendAny, []statestore.Event{
@@ -531,16 +533,19 @@ func TestGetHistoryFromSeqExcludesSeen(t *testing.T) {
 
 // TestGetHistoryEmptyKeyspaceIsGracefulEmpty pins the contract's hard
 // requirement: an agent with no state keyspace answers 200 with an empty
-// history, never an error, and never touches the store (Head/Read are not
-// called at all — there is nothing seeded here for them to find, so a bug
-// that skipped the early-return and called through to the store with an
-// empty keyspace would show up as a 500 or a store-level panic, not a wrong
-// count).
+// history for a session that EXISTS, never an error, and never touches the
+// HistoryStore (its Head/Read are not called at all — there is nothing
+// seeded here for them to find, so a bug that skipped the early-return and
+// called through to HistoryStore with an empty keyspace would show up as a
+// 500 or a store-level panic, not a wrong count). The SessionStore existence
+// check (M5) still runs first — the session must exist for this graceful
+// shape to apply at all.
 func TestGetHistoryEmptyKeyspaceIsGracefulEmpty(t *testing.T) {
 	t.Parallel()
 	authz := NewAuthorizer(nil)
-	mux, view, _, _, _ := newTestRegistryMux(t, authz)
+	mux, view, store, _, _ := newTestRegistryMux(t, authz)
 	view.Upsert(registryTestEntry("ns", "fn", 0)) // StateKeyspace left empty.
+	require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "sess-1", Agent: "fn", Namespace: "ns", Status: StatusActive}, 0, time.Hour))
 
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns/fn/sessions/sess-1/history", ""))
@@ -558,10 +563,11 @@ func TestGetHistoryEmptyKeyspaceIsGracefulEmpty(t *testing.T) {
 func TestGetHistoryLimitClamped(t *testing.T) {
 	t.Parallel()
 	authz := NewAuthorizer(nil)
-	mux, view, _, _, el := newTestRegistryMux(t, authz)
+	mux, view, store, _, el := newTestRegistryMux(t, authz)
 	entry := registryTestEntry("ns", "fn", 0)
 	entry.StateKeyspace = "myks"
 	view.Upsert(entry)
+	require.NoError(t, store.Create(t.Context(), SessionRecord{ID: "sess-1", Agent: "fn", Namespace: "ns", Status: StatusActive}, 0, time.Hour))
 
 	stream := stateapi.StreamName("ns", "myks", HistoryClientStream("sess-1"))
 	_, err := el.Append(t.Context(), stream, statestore.AppendAny, []statestore.Event{
@@ -592,6 +598,24 @@ func TestGetHistoryLimitClamped(t *testing.T) {
 		body := decodeJSON[historyResponse](t, w)
 		assert.Len(t, body.Events, 3)
 	})
+}
+
+// TestGetHistoryNoSessionRecordIs404 pins M5: a pattern-valid session id with
+// no live session record answers 404, the same GetSession-parity existence
+// check as GetSession itself — a nonexistent-session probe must not be
+// indistinguishable from "an existing session with empty history".
+func TestGetHistoryNoSessionRecordIs404(t *testing.T) {
+	t.Parallel()
+	authz := NewAuthorizer(nil)
+	mux, view, _, _, _ := newTestRegistryMux(t, authz)
+	entry := registryTestEntry("ns", "fn", 0)
+	entry.StateKeyspace = "myks"
+	view.Upsert(entry)
+	// No store.Create: "sess-1" is a valid id, but no session record exists.
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, bearerRequest(http.MethodGet, "/registry/agents/ns/fn/sessions/sess-1/history", ""))
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestGetHistoryInvalidIDIs400(t *testing.T) {

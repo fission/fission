@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -579,7 +580,11 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 
 // resolveSessionID extracts the session id from r per entry's configured
 // source, minting one when absent. It reports false when a caller-supplied
-// id fails sessionIDPattern.
+// id fails sessionIDPattern, or starts with CheckpointKeyPrefix — that
+// prefix is reserved for the checkpoint KV key within the same function-state
+// keyspace (history.go), and sessionIDPattern's charset otherwise permits it
+// (dots are legal), so a caller-chosen id could collide with and clobber a
+// checkpoint key without this check.
 func resolveSessionID(r *http.Request, entry AgentEntry) (string, bool) {
 	var raw string
 	if entry.SessionSource == fv1.SessionSourceQueryParam {
@@ -590,7 +595,7 @@ func resolveSessionID(r *http.Request, entry AgentEntry) (string, bool) {
 	if raw == "" {
 		return uuid.NewString(), true
 	}
-	if !sessionIDPattern.MatchString(raw) {
+	if !sessionIDPattern.MatchString(raw) || strings.HasPrefix(raw, CheckpointKeyPrefix) {
 		return "", false
 	}
 	return raw, true

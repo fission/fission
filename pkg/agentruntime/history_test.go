@@ -104,6 +104,14 @@ func TestHistoryStoreScopeIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, eventsA, 1)
 	assert.Equal(t, "a", eventsA[0].Type)
+
+	// The isolation claim is symmetric: ks-b's own read must see only its
+	// own event too, not ks-a's — reading back only one side would leave a
+	// same-name-but-swapped-scope bug undetected.
+	eventsB, err := hist.Read(ctx, "ns1", "ks-b", "sess-1", 0, 100)
+	require.NoError(t, err)
+	require.Len(t, eventsB, 1)
+	assert.Equal(t, "b", eventsB[0].Type)
 }
 
 func TestHistoryStoreGetCheckpointRoundtrip(t *testing.T) {

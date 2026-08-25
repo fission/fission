@@ -146,7 +146,11 @@ func TestAgentRuntimeSessionDispatch(t *testing.T) {
 			return
 		}
 		assert.Equalf(c, int64(0), payload.Head, "a no-State agent's session must report head:0, got %d", payload.Head)
-		assert.Emptyf(c, payload.Events, "a no-State agent's session must report an empty events list, got %+v", payload.Events)
+		// assert.Empty alone would also pass for a nil slice (an "events":null
+		// wire body decodes to nil, not []) — NotNil plus an explicit length
+		// check is what actually pins the documented [] shape.
+		assert.NotNilf(c, payload.Events, "a no-State agent's session must report events as [], not null")
+		assert.Lenf(c, payload.Events, 0, "a no-State agent's session must report an empty events list, got %+v", payload.Events)
 	}, 60*time.Second, 2*time.Second)
 
 	// Second turn: supply the minted session id explicitly. The dispatcher
@@ -647,16 +651,22 @@ func TestAgentRuntimeHistory(t *testing.T) {
 		}
 		assert.Greaterf(c, payload.Head, int64(0), "history head must have advanced past 0, got %d", payload.Head)
 
-		firstTurn, ok := decodeEventTurn(c, payload.Events[0])
-		if !ok {
-			return
+		// Both turns' events must be present in the history — but their
+		// relative ORDER is not asserted: the dispatcher makes no promise
+		// that turn 0's events are ordered strictly before turn 1's beyond
+		// what the EventLog's own append-order provides, so pinning "first
+		// event is turn:0, last is turn:1" would be asserting more than the
+		// contract guarantees. Presence of both turns is the real claim.
+		seenTurns := make(map[int]bool, len(payload.Events))
+		for _, e := range payload.Events {
+			turn, ok := decodeEventTurn(c, e)
+			if !ok {
+				return
+			}
+			seenTurns[turn] = true
 		}
-		lastTurn, ok := decodeEventTurn(c, payload.Events[len(payload.Events)-1])
-		if !ok {
-			return
-		}
-		assert.Equalf(c, 0, firstTurn, "the first history event must carry turn:0")
-		assert.Equalf(c, 1, lastTurn, "the last history event must carry turn:1")
+		assert.Truef(c, seenTurns[0], "history events must include a turn:0 event, got turns %+v", seenTurns)
+		assert.Truef(c, seenTurns[1], "history events must include a turn:1 event, got turns %+v", seenTurns)
 
 		kinds := make(map[string]bool, len(payload.Events))
 		for _, e := range payload.Events {

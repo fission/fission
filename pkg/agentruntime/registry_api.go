@@ -266,10 +266,13 @@ func resolveFromSeq(raw string) (fromSeq int64, ok bool) {
 // carries a {namespace} path value and is mounted behind authz.Middleware in
 // main.go.
 //
-// An agent with no state keyspace (Spec.State == nil, AgentEntry.
-// StateKeyspace == "") answers 200 with an empty history rather than an
-// error — checked and returned BEFORE any store call, so a history-disabled
-// agent's session can never 500 here.
+// Like GetSession, a session id with no live record 404s (the same
+// a.store.Get existence check GetSession makes) — a nonexistent-session probe
+// must not be indistinguishable from "an existing session with empty
+// history" (M5). This runs BEFORE the state-keyspace branch below, so it
+// applies uniformly: an agent with no state keyspace (Spec.State == nil,
+// AgentEntry.StateKeyspace == "") still answers 200 with an empty history for
+// a session that EXISTS, but 404s for one that does not.
 func (a *RegistryAPI) GetHistory(w http.ResponseWriter, r *http.Request) {
 	ns := r.PathValue("namespace")
 	name := r.PathValue("name")
@@ -286,6 +289,16 @@ func (a *RegistryAPI) GetHistory(w http.ResponseWriter, r *http.Request) {
 	// out-of-pattern id is rejected here rather than handed to the store.
 	if !sessionIDPattern.MatchString(id) {
 		writeErr(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+
+	if _, _, err := a.store.Get(r.Context(), ns, name, id); err != nil {
+		if errors.Is(err, statestore.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "session not found")
+			return
+		}
+		a.logger.Error(err, "getting session failed", "namespace", ns, "agent", name, "session", id, "operation", "GetHistory")
+		writeErr(w, http.StatusInternalServerError, "getting history")
 		return
 	}
 

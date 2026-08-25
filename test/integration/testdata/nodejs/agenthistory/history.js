@@ -40,7 +40,6 @@ const fs = require('fs');
 
 const SESSION_HEADER = 'x-fission-session'; // express lower-cases header names
 const TURNS_HEADER = 'x-fission-agent-turns';
-const YIELD_HEADER = 'X-Fission-Agent-Yield';
 
 // HISTORY_STREAM_PREFIX / CHECKPOINT_KEY_PREFIX mirror
 // pkg/agentruntime/history.go's HistoryStreamPrefix / CheckpointKeyPrefix.
