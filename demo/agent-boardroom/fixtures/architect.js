@@ -144,7 +144,11 @@ function readAgentCredentials(path) {
   try {
     return JSON.parse(fs.readFileSync(path, 'utf8'));
   } catch (err) {
-    console.error(`architect: could not read agent identity token file ${path}: ${err}`);
+    // Log err.code/err.name only: a mid-token corrupt-file parse failure
+    // embeds a source snippet in err.message (V8 JSON.parse SyntaxError),
+    // and the token is the last field of this JSON -- stringifying err
+    // could leak token bytes into pod logs.
+    console.error(`architect: could not read agent identity token file ${path}: ${err.code || err.name}`);
     return null;
   }
 }

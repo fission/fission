@@ -65,18 +65,12 @@ func TestNewSpecializeRequestStateKeyspace(t *testing.T) {
 	})
 }
 
-// TestSpecializePayloadCarriesNoToken pins the security property the
-// pre-implementation review demanded: the -specialize-request CLI arg is
-// visible to anyone who can read pods, so it must carry only the NON-SECRET
-// keyspace name — never a token or the master secret.
-func TestSpecializePayloadCarriesNoToken(t *testing.T) {
-	t.Parallel()
-	cfg, err := MakeFetcherConfig("/userfunc")
-	require.NoError(t, err)
-
+// specializePayload builds fn's specialize pod spec and returns the raw
+// -specialize-request JSON arg the fetcher sidecar's command line carries.
+func specializePayload(t *testing.T, cfg *Config, fn *fv1.Function, env *fv1.Environment) string {
+	t.Helper()
 	podSpec := apiv1.PodSpec{Containers: []apiv1.Container{{Name: "node"}}}
-	require.NoError(t, cfg.AddSpecializingFetcherToPodSpec(&podSpec, "node", "user-ns",
-		stateTestFn(&fv1.StateConfig{Keyspace: "carts"}), stateTestEnv()))
+	require.NoError(t, cfg.AddSpecializingFetcherToPodSpec(&podSpec, "node", "user-ns", fn, env))
 
 	var fetcherContainer *apiv1.Container
 	for i := range podSpec.Containers {
@@ -93,12 +87,49 @@ func TestSpecializePayloadCarriesNoToken(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, payload, "specialize request rides the command line")
-	assert.Contains(t, payload, `"stateKeyspace":"carts"`)
-	assert.NotContains(t, strings.ToLower(payload), "token")
-	assert.NotContains(t, strings.ToLower(payload), "secret\":")
+	return payload
+}
 
-	// The payload must be a well-formed JSON object; json.Valid plus the
-	// object check is the whole assertion, no fields are read back.
-	require.True(t, json.Valid([]byte(payload)), "payload must be valid JSON")
-	assert.True(t, strings.HasPrefix(strings.TrimSpace(payload), "{"), "payload must be a JSON object")
+// TestSpecializePayloadCarriesNoToken pins the security property the
+// pre-implementation review demanded: the -specialize-request CLI arg is
+// visible to anyone who can read pods, so it must carry only NON-SECRET
+// fields (state keyspace, agent name) — never a token or the master secret.
+func TestSpecializePayloadCarriesNoToken(t *testing.T) {
+	t.Parallel()
+	cfg, err := MakeFetcherConfig("/userfunc")
+	require.NoError(t, err)
+
+	t.Run("state keyspace", func(t *testing.T) {
+		t.Parallel()
+		payload := specializePayload(t, cfg, stateTestFn(&fv1.StateConfig{Keyspace: "carts"}), stateTestEnv())
+
+		assert.Contains(t, payload, `"stateKeyspace":"carts"`)
+		assert.NotContains(t, strings.ToLower(payload), "token")
+		assert.NotContains(t, strings.ToLower(payload), "secret\":")
+
+		// The payload must be a well-formed JSON object; json.Valid plus the
+		// object check is the whole assertion, no fields are read back.
+		require.True(t, json.Valid([]byte(payload)), "payload must be valid JSON")
+		assert.True(t, strings.HasPrefix(strings.TrimSpace(payload), "{"), "payload must be a JSON object")
+	})
+
+	// Agent identity (G16): an agent-enabled function's specialize payload
+	// carries the non-secret AgentName, and still no token-like field — the
+	// scoped identity token derives pod-locally from the fetcher's own
+	// master secret and never rides this pod-visible command-line arg.
+	t.Run("agent name", func(t *testing.T) {
+		t.Parallel()
+		fn := stateTestFn(nil)
+		fn.Spec.Agent = &fv1.AgentConfig{}
+		payload := specializePayload(t, cfg, fn, stateTestEnv())
+
+		assert.Contains(t, payload, `"agentName":"counter"`)
+		assert.NotContains(t, strings.ToLower(payload), "token")
+		assert.NotContains(t, strings.ToLower(payload), "secret\":")
+
+		// The payload must be a well-formed JSON object; json.Valid plus the
+		// object check is the whole assertion, no fields are read back.
+		require.True(t, json.Valid([]byte(payload)), "payload must be valid JSON")
+		assert.True(t, strings.HasPrefix(strings.TrimSpace(payload), "{"), "payload must be a JSON object")
+	})
 }
