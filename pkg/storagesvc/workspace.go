@@ -53,6 +53,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -189,6 +190,42 @@ func normalizeWorkspaceID(nativeID string) (id string, ok bool) {
 	return "", false
 }
 
+// workspaceBackendKey translates a wire-shape workspace id/prefix (already
+// validated by validateWorkspaceID/validateWorkspacePrefix) into the actual
+// objectStore key: the same STORAGE_S3_SUB_DIR the archive path folds in via
+// Storage.getUploadFileName (s3storage.go: path.Join(ss.subDir, ...)) — the
+// mechanism an operator uses to let several Fission installs (or several
+// environments) share one S3 bucket without colliding. Every workspace
+// backend call (put/open/size/remove/list/prefix-delete) MUST go through this
+// — skipping it writes/reads at the bucket root, outside the operator's
+// install-isolation prefix, so two installs sharing a bucket could collide on
+// an identical namespace/agent/session name.
+//
+// The local backend's getSubDir() always returns "" (mirroring
+// localStorage.getUploadFileName, which never joins a subDir either), so
+// path.Join is then a no-op and every existing local-backend id/behavior —
+// including every test in this package — is unchanged.
+//
+// This is purely a storage-layout detail: the wire id/prefix shape callers
+// see (PUT/GET/DELETE query params, list response ids via normalizeWorkspaceID,
+// which is already prefix-agnostic and needs no change) never carries the
+// subDir. isWorkspaceID/normalizeWorkspaceID already tolerate an arbitrary
+// prefix in front of the marker, so this introduces no new sealing/pruner gap.
+func (ss *StorageService) workspaceBackendKey(wireID string) string {
+	key := path.Join(ss.storageClient.config.storage.getSubDir(), wireID)
+	// path.Join runs path.Clean, which strips a trailing "/" — load-bearing
+	// for a canonicalWorkspacePrefix'd prefix (list/prefix-delete): losing it
+	// here would reopen the exact sess1-vs-sess12 string-prefix bleed
+	// canonicalWorkspacePrefix exists to close, only now via the subDir join
+	// instead of a missing trailing slash. Restore it whenever the input had
+	// one; plain object ids (put/get/delete) never end in "/", so this is a
+	// no-op for them.
+	if strings.HasSuffix(wireID, "/") && !strings.HasSuffix(key, "/") {
+		key += "/"
+	}
+	return key
+}
+
 // rejectNamespaceScoped writes 403 and returns true if the request's
 // authenticated principal is namespace-scoped (a tenant-derived storagesvc
 // key). Every workspace route calls this first: agentruntime (holding the
@@ -280,7 +317,7 @@ func (ss *StorageService) workspacePutHandler(w http.ResponseWriter, r *http.Req
 	// it through to minio's PutObject, which accepts -1 for an unknown-length
 	// streamed upload (chunked transfer, no Content-Length header) — so
 	// r.ContentLength (0, a real length, or -1) is always a valid hint here.
-	if _, err := ss.storageClient.backend.put(id, cr, r.ContentLength); err != nil {
+	if _, err := ss.storageClient.backend.put(ss.workspaceBackendKey(id), cr, r.ContentLength); err != nil {
 		logger.Error(err, "error writing workspace object", "id", id)
 		http.Error(w, "error writing workspace object", http.StatusInternalServerError)
 		return
@@ -317,7 +354,7 @@ func (ss *StorageService) workspaceGetHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	size, err := ss.storageClient.backend.size(id)
+	size, err := ss.storageClient.backend.size(ss.workspaceBackendKey(id))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -328,7 +365,7 @@ func (ss *StorageService) workspaceGetHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	f, err := ss.storageClient.backend.open(id)
+	f, err := ss.storageClient.backend.open(ss.workspaceBackendKey(id))
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -366,7 +403,7 @@ func (ss *StorageService) workspaceDeleteHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := ss.storageClient.backend.remove(id); err != nil && !errors.Is(err, ErrNotFound) {
+	if err := ss.storageClient.backend.remove(ss.workspaceBackendKey(id)); err != nil && !errors.Is(err, ErrNotFound) {
 		logger.Error(err, "error deleting workspace object", "id", id)
 		http.Error(w, "error deleting workspace object", http.StatusInternalServerError)
 		return
@@ -394,7 +431,7 @@ func (ss *StorageService) workspaceListHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	infos, err := ss.storageClient.backend.list(canonicalWorkspacePrefix(prefix))
+	infos, err := ss.storageClient.backend.list(ss.workspaceBackendKey(canonicalWorkspacePrefix(prefix)))
 	if err != nil {
 		logger.Error(err, "error listing workspace objects", "prefix", prefix)
 		http.Error(w, "error listing workspace objects", http.StatusInternalServerError)
@@ -430,7 +467,10 @@ func (ss *StorageService) workspaceListHandler(w http.ResponseWriter, r *http.Re
 // idempotent bulk delete of every object under prefix — the session-archive
 // purge's primitive (a later slice of this feature). A per-item removal error
 // is logged and the item is not counted as deleted; it does not abort the
-// rest of the sweep (log-don't-retry, matching the purge's own stance).
+// rest of the sweep (log-don't-retry, matching the purge's own stance). This
+// means `deleted == N` is NOT a guarantee that every matched object was
+// removed — a caller that needs "fully cleared" must not infer it from the
+// count; log-don't-retry accepts silently-undercounted residue by design.
 func (ss *StorageService) workspaceDeletePrefixHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
 
@@ -448,7 +488,7 @@ func (ss *StorageService) workspaceDeletePrefixHandler(w http.ResponseWriter, r 
 		return
 	}
 
-	infos, err := ss.storageClient.backend.list(canonicalWorkspacePrefix(prefix))
+	infos, err := ss.storageClient.backend.list(ss.workspaceBackendKey(canonicalWorkspacePrefix(prefix)))
 	if err != nil {
 		logger.Error(err, "error listing workspace objects for prefix delete", "prefix", prefix)
 		http.Error(w, "error deleting workspace objects", http.StatusInternalServerError)

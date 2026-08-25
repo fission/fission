@@ -570,3 +570,95 @@ func TestArchivePrunerExcludesWorkspaceRoot(t *testing.T) {
 	}
 	assert.Contains(t, collected, orphanNativeID, "a plain orphan archive in the same cycle must still be pruned")
 }
+
+// fakeSubDirStorage is a minimal Storage stand-in that reports a configured
+// STORAGE_S3_SUB_DIR-shaped subDir, for pinning workspaceBackendKey's
+// subDir-join without needing a real S3/dockertest backend.
+type fakeSubDirStorage struct{ subDir string }
+
+func (f fakeSubDirStorage) getStorageType() StorageType                { return StorageTypeS3 }
+func (f fakeSubDirStorage) dial() (objectStore, error)                 { return nil, nil }
+func (f fakeSubDirStorage) getSubDir() string                          { return f.subDir }
+func (f fakeSubDirStorage) getContainerName() string                   { return "bucket" }
+func (f fakeSubDirStorage) getUploadFileName(_ string) (string, error) { return "", nil }
+
+// recordingObjectStore is a minimal objectStore stand-in that records the
+// keys/prefixes it is called with, so a test can assert on exactly what key
+// shape reaches the "backend" without a real S3 endpoint.
+type recordingObjectStore struct {
+	putKeys      []string
+	listPrefixes []string
+	items        []objectInfo
+}
+
+func (r *recordingObjectStore) put(name string, rd io.Reader, _ int64) (string, error) {
+	r.putKeys = append(r.putKeys, name)
+	if _, err := io.Copy(io.Discard, rd); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+func (r *recordingObjectStore) open(string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+func (r *recordingObjectStore) size(string) (int64, error) { return 0, nil }
+func (r *recordingObjectStore) remove(string) error        { return nil }
+func (r *recordingObjectStore) list(prefix string) ([]objectInfo, error) {
+	r.listPrefixes = append(r.listPrefixes, prefix)
+	return r.items, nil
+}
+func (r *recordingObjectStore) exists(string) (bool, error) { return true, nil }
+
+// TestWorkspaceBackendKeyJoinsStorageSubDir pins the fix for the S3 subDir
+// bypass finding: on a backend configured with STORAGE_S3_SUB_DIR, workspace
+// put/list must fold that subDir into the actual backend key/prefix exactly
+// as the archive path does via Storage.getUploadFileName — while the WIRE id
+// (the PUT/GET/DELETE query param and every list response id) stays exactly
+// the caller-chosen "_workspace_/..." shape, unaware that a subDir exists at
+// all. No real S3/dockertest is needed: a fake objectStore records the keys
+// it was actually called with.
+func TestWorkspaceBackendKeyJoinsStorageSubDir(t *testing.T) {
+	fakeBackend := &recordingObjectStore{}
+	sc := &StorageClient{
+		logger:  logr.Discard(),
+		config:  &storageConfig{storage: fakeSubDirStorage{subDir: "some/prefix"}},
+		backend: fakeBackend,
+	}
+	ss := MakeStorageService(logr.Discard(), sc, nil, nil, 0)
+
+	wireID := "_workspace_/team-a/agentX/sess1/artifact.txt"
+	putTarget := "/v1/workspace?id=" + url.QueryEscape(wireID)
+	putReq := httptest.NewRequest(http.MethodPut, putTarget, strings.NewReader("hello"))
+	rrPut := httptest.NewRecorder()
+	ss.workspacePutHandler(rrPut, putReq)
+	require.Equal(t, http.StatusOK, rrPut.Code, rrPut.Body.String())
+	require.Len(t, fakeBackend.putKeys, 1)
+	assert.Equal(t, "some/prefix/"+wireID, fakeBackend.putKeys[0],
+		"backend key must fold in STORAGE_S3_SUB_DIR the same way the archive path's getUploadFileName does")
+
+	// The PUT response reports only the byte size — the wire id never
+	// appears in it, so there is nothing there for subDir to leak into.
+	var putResp workspacePutResponse
+	require.NoError(t, json.Unmarshal(rrPut.Body.Bytes(), &putResp))
+	assert.Equal(t, int64(len("hello")), putResp.Size)
+
+	// list: the prefix reaching backend.list must ALSO be subDir-joined (with
+	// the trailing "/" preserved — see workspaceBackendKey), but results must
+	// normalize back to the caller's un-joined wire id.
+	wirePrefix := "_workspace_/team-a/agentX/sess1/"
+	fakeBackend.items = []objectInfo{{id: "some/prefix/" + wireID, size: 5}}
+	listTarget := "/v1/workspace/list?prefix=" + url.QueryEscape(wirePrefix)
+	listReq := httptest.NewRequest(http.MethodGet, listTarget, nil)
+	rrList := httptest.NewRecorder()
+	ss.workspaceListHandler(rrList, listReq)
+	require.Equal(t, http.StatusOK, rrList.Code, rrList.Body.String())
+	require.Len(t, fakeBackend.listPrefixes, 1)
+	assert.Equal(t, "some/prefix/"+wirePrefix, fakeBackend.listPrefixes[0],
+		"list prefix must be subDir-joined with the trailing slash preserved")
+
+	var listResp workspaceListResponse
+	require.NoError(t, json.Unmarshal(rrList.Body.Bytes(), &listResp))
+	require.Len(t, listResp.Items, 1)
+	assert.Equal(t, wireID, listResp.Items[0].ID,
+		"the wire id in the list response must be unchanged — subDir is a storage-layout detail invisible to callers")
+}
