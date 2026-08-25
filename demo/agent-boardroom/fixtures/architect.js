@@ -28,16 +28,18 @@
 //   parent = {namespace:"ns", agent:"a", id:"sess-1"}, stepKey = "step-1"
 //   => "c-27304abfe9308ae9849ace27841bc098"
 //
-// Auth (G16 gate): the dispatch route this fixture calls is the SAME
+// Auth (G16 gate LIFTED): the dispatch route this fixture calls is the SAME
 // full-privilege POST /agents/{ns}/{name} route any external caller uses,
 // gated by JWT_SIGNING_KEY / AGENT_ALLOW_INSECURE (pkg/agentruntime/main.go).
-// A running function pod holds no per-agent identity of its own today (that
-// is the still-open G16 gap the RFC tracks) -- it can only spawn children if
-// EITHER the cluster runs the agent runtime with AGENT_ALLOW_INSECURE=true
-// (the kind/demo default, see ../README.md's Kind quickstart) OR the
-// deployer threads a real dispatch-scoped bearer token into this pod via
-// AGENT_RUNTIME_TOKEN. There is no automatic credential handoff from the
-// architect's OWN inbound call to its outbound spawn calls.
+// This pod now carries its OWN per-agent identity: the fetcher writes a
+// {namespace, agent, token} credential to the file FISSION_AGENT_TOKEN_PATH
+// points at (pkg/fetcher/agenttoken.go) at specialize time, and this fixture
+// sends it on every spawn dispatch as Authorization: Bearer <token> plus the
+// X-Fission-Agent-Auth-Namespace / X-Fission-Agent-Auth-Name claims headers
+// (pkg/agentruntime/identity.go) -- an automatic credential handoff from the
+// architect's OWN inbound specialization to its outbound spawn calls, no
+// manual provisioning required. See readAgentCredentials()/authHeaders()
+// below for the fallback order and the dev-placeholder edge case.
 //
 // Spawn failures are best-effort and never fail the architect's own turn: a
 // child dispatch returning 4xx/5xx (or a network error) is logged to
@@ -70,16 +72,29 @@ const K_EXPERTS = 3;
 // "agentruntime" in the fission namespace, port from
 // `fission.agentRuntimePort`, 8894 by default) -- reachable from this pod
 // because the agentruntime NetworkPolicy is deliberately permissive on that
-// port for any in-cluster caller (see that chart's networkpolicy.yaml).
+// port for any in-cluster caller (see that chart's networkpolicy.yaml). It
+// is correct only for install-namespace "fission", which is why the executor
+// now injects the real URL as FISSION_AGENT_RUNTIME_URL
+// (pkg/executor/util/agentenv.go) -- prefer that; the legacy AGENT_RUNTIME_URL
+// manual override and this hardcoded default remain as fallbacks.
 const DEFAULT_AGENT_RUNTIME_URL = 'http://agentruntime.fission:8894';
-const AGENT_RUNTIME_URL = process.env.AGENT_RUNTIME_URL || DEFAULT_AGENT_RUNTIME_URL;
-// AGENT_RUNTIME_TOKEN is optional (see the G16 auth note above): absent
-// means this fixture relies on the cluster's AGENT_ALLOW_INSECURE dev-mode
-// pass-through rather than sending an Authorization header at all.
+const AGENT_RUNTIME_URL =
+  process.env.FISSION_AGENT_RUNTIME_URL || process.env.AGENT_RUNTIME_URL || DEFAULT_AGENT_RUNTIME_URL;
+// AGENT_RUNTIME_TOKEN is the pre-G16 manual-provisioning fallback (see
+// authHeaders() below): a plain bearer with no claims headers, used only
+// when the fetcher-written identity file is absent or carries the dev
+// placeholder.
 const AGENT_RUNTIME_TOKEN = process.env.AGENT_RUNTIME_TOKEN || '';
 
 const STATE_URL = process.env.FISSION_STATE_URL || '';
 const TOKEN_PATH = process.env.FISSION_STATE_TOKEN_PATH || '';
+
+// AGENT_TOKEN_PATH is the G16 identity file the executor points at via
+// FISSION_AGENT_TOKEN_PATH (pkg/executor/util/agentenv.go), written by the
+// fetcher at specialize time (pkg/fetcher/agenttoken.go). Deliberately a
+// SEPARATE env var and file from the state-token pair above: agent identity
+// must not require State to be enabled.
+const AGENT_TOKEN_PATH = process.env.FISSION_AGENT_TOKEN_PATH || '';
 
 // stateCreds is read the same way support-desk.js reads it (RFC-0023's
 // fetcher-written token file at specialize time), used ONLY to learn this
@@ -99,8 +114,42 @@ if (STATE_URL && TOKEN_PATH) {
 }
 
 function ownNamespace() {
-  return (stateCreds && stateCreds.namespace) || 'default';
+  // agentCreds.namespace is a valid fallback here even when its token is the
+  // dev placeholder (authHeaders() skips the placeholder for AUTH purposes
+  // only) -- the namespace claim itself is always the real one the fetcher
+  // wrote, and identity.go's verify() requires the spawn URL's {namespace}
+  // to equal the claims header, so falling back to 'default' here on a
+  // non-default-namespace secured install would 403 every spawn even with a
+  // perfectly valid token.
+  return (stateCreds && stateCreds.namespace) || (agentCreds && agentCreds.namespace) || 'default';
 }
+
+// DEV_PLACEHOLDER_TOKEN is the fetcher's un-derived stand-in
+// (pkg/fetcher/agenttoken.go writeAgentTokenFile): written when the fetcher
+// itself has no FISSION_INTERNAL_AUTH_SECRET, so it never verifies as a real
+// identity token. Preferring it anyway would matter on one non-default
+// install shape: authentication.enabled but internalAuth.enabled=false, where
+// the file carries the placeholder and file-first-always would 401 where a
+// manually-provisioned AGENT_RUNTIME_TOKEN JWT would have worked -- so
+// authHeaders() below falls through to the env token in that case instead.
+const DEV_PLACEHOLDER_TOKEN = 'dev-unauthenticated';
+
+// readAgentCredentials mirrors the stateCreds read above (a fetcher-written
+// JSON file at specialize time), read once at module load -- not per spawn
+// call -- and cached in agentCreds below.
+function readAgentCredentials(path) {
+  if (!path) {
+    return null;
+  }
+  try {
+    return JSON.parse(fs.readFileSync(path, 'utf8'));
+  } catch (err) {
+    console.error(`architect: could not read agent identity token file ${path}: ${err}`);
+    return null;
+  }
+}
+
+const agentCreds = readAgentCredentials(AGENT_TOKEN_PATH);
 
 // spawnSessionID is the JS twin of pkg/agentruntime/session.go's
 // SpawnSessionID: 'c-' + the first 32 lowercase hex characters of
@@ -111,7 +160,22 @@ function spawnSessionID(parentRef, stepKey) {
   return 'c-' + digest.slice(0, 32);
 }
 
+// authHeaders picks the spawn-call credential in preference order:
+//  1. The fetcher-written identity file (agentCreds), sent as
+//     Authorization: Bearer <token> plus the two claims headers -- but ONLY
+//     when its token is not DEV_PLACEHOLDER_TOKEN (see that constant's
+//     comment for the install shape this guards).
+//  2. AGENT_RUNTIME_TOKEN, sent as a plain bearer with no claims headers
+//     (the pre-G16 manual-provisioning fallback).
+//  3. No auth -- relies on the cluster's AGENT_ALLOW_INSECURE pass-through.
 function authHeaders() {
+  if (agentCreds && agentCreds.token && agentCreds.token !== DEV_PLACEHOLDER_TOKEN) {
+    return {
+      Authorization: `Bearer ${agentCreds.token}`,
+      'X-Fission-Agent-Auth-Namespace': agentCreds.namespace,
+      'X-Fission-Agent-Auth-Name': agentCreds.agent,
+    };
+  }
   return AGENT_RUNTIME_TOKEN ? { Authorization: `Bearer ${AGENT_RUNTIME_TOKEN}` } : {};
 }
 
