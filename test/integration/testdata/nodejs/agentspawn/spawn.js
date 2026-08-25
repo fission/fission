@@ -6,12 +6,19 @@
 // namespace, same function) with X-Fission-Session set to the derived id and
 // X-Fission-Agent-Parent set to this session's own ParentRef. Every turn
 // (spawn or not) replies 200 with {"session","parent","spawned","spawnStatus",
-// "spawnBody"}, where "spawned" is the derived child id (or null when this
-// turn did not spawn) and spawnStatus/spawnBody are the inner dispatch's own
+// "spawnBody","agentTokenSha256","agentTokenNamespace","agentTokenAgent"},
+// where "spawned" is the derived child id (or null when this turn did not
+// spawn) and spawnStatus/spawnBody are the inner dispatch's own
 // last-observed HTTP status and response body (0/"" when no spawn was
 // attempted, or on a network error before any response arrived) -- present
 // specifically so a caller-side test can name what the inner dispatch
-// actually saw instead of just timing out on a registry 404.
+// actually saw instead of just timing out on a registry 404. The
+// agentToken* fields are the Task 6 injection-chain proof (see the "Auth"
+// paragraph below): they NEVER carry the raw token, only its sha256 hex (or
+// the literal "absent") plus the file's claimed namespace/agent, so a
+// caller-side test can independently re-derive the expected token and
+// compare hashes without a live bearer credential ever touching test
+// output/logs.
 //
 // spawnSessionID below is the same byte-identical JS twin of
 // pkg/agentruntime/session.go's SpawnSessionID that architect.js carries
@@ -99,6 +106,25 @@ function readAgentCredentials(path) {
 }
 
 const agentCreds = readAgentCredentials(AGENT_TOKEN_PATH);
+
+// agentTokenSha256/agentTokenNamespace/agentTokenAgent are computed once at
+// module load (agentCreds is read once, not per turn) and echoed on EVERY
+// turn's response so TestAgentRuntimeSpawnParentage
+// (agentruntime_test.go, Task 6 of the parent-graph plan) can prove the
+// injection chain end-to-end: the fetcher wrote this pod a credential file
+// (pkg/fetcher/agenttoken.go) whose token the Go test independently
+// re-derives via hmacauth.DeriveAgentIdentityKey and compares by sha256 --
+// NEVER by echoing the raw token itself, which would leak a live bearer
+// credential into test output/logs. agentTokenSha256 is the literal string
+// "absent" when the credentials file is missing or unreadable (see
+// readAgentCredentials's catch above); the namespace/agent claims are empty
+// strings in that same case.
+const agentTokenSha256 =
+  agentCreds && agentCreds.token
+    ? crypto.createHash('sha256').update(agentCreds.token).digest('hex')
+    : 'absent';
+const agentTokenNamespace = agentCreds ? agentCreds.namespace || '' : '';
+const agentTokenAgent = agentCreds ? agentCreds.agent || '' : '';
 
 // spawnSessionID is the JS twin of pkg/agentruntime/session.go's
 // SpawnSessionID: 'c-' + the first 32 lowercase hex characters of
@@ -217,6 +243,9 @@ module.exports = async function (context) {
       spawned: spawned,
       spawnStatus: spawnStatus,
       spawnBody: spawnBody,
+      agentTokenSha256: agentTokenSha256,
+      agentTokenNamespace: agentTokenNamespace,
+      agentTokenAgent: agentTokenAgent,
     }),
     headers: { 'Content-Type': 'application/json' },
   };
