@@ -49,6 +49,8 @@ import (
 	_ "embed"
 	"fmt"
 	"text/template"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 //go:embed agent.js.tmpl
@@ -81,10 +83,31 @@ var languages = map[string]langTemplate{
 // Render renders the embedded handler template for lang ("node" or
 // "python") with name substituted in, and returns the rendered bytes plus
 // the file extension (no leading dot) the caller should write them under.
+//
+// name is validated against Fission's own Kubernetes-name charset
+// (fv1.ValidateKubeName, the same DNS-1123-label check `fn create` et al.
+// run against a resource name) BEFORE it is interpolated into either
+// template. This is defense-in-depth, not the only gate: Task 2's `agent
+// create` handler validates the name too, but it writes the rendered
+// handler file to disk BEFORE any k8s-side validation runs (the k8s API
+// only rejects an invalid name once the Package/Function object is
+// created, several steps later) -- so Render must be safe to call with an
+// adversarial name on its own. Both templates interpolate {{.Name}} inside
+// JS backtick template literals and Python %-format single-quoted strings
+// (log-line prefixes); an unvalidated name containing a backtick or a
+// single quote breaks out of those literals and lands arbitrary text in
+// LIVE, non-comment code in the scaffolded file -- confirmed exploitable in
+// review, not theoretical. A DNS-1123 label (lowercase alphanumeric/'-',
+// alphanumeric start/end, <=63 chars) cannot contain a backtick, quote,
+// `{{`, or a newline, so validating here closes the injection regardless of
+// what any caller does or forgets to do upstream.
 func Render(lang, name string) ([]byte, string, error) {
 	lt, ok := languages[lang]
 	if !ok {
 		return nil, "", fmt.Errorf("unsupported agent handler language %q (want \"node\" or \"python\")", lang)
+	}
+	if err := fv1.ValidateKubeName("name", name); err != nil {
+		return nil, "", fmt.Errorf("invalid agent name %q: %w", name, err)
 	}
 	tmpl, err := template.New(lang).Parse(lt.src)
 	if err != nil {
