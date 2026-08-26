@@ -310,6 +310,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
 	}
 
+	// Fill-if-nil: applies env.Spec.RuntimeClassName only when the merge
+	// above (or the base spec) left RuntimeClassName unset, so a
+	// Runtime.PodSpec override always wins. Unconditional — an env can set
+	// RuntimeClassName with no Runtime.PodSpec at all.
+	util.ApplyEnvRuntimeClass(&deployment.Spec.Template.Spec, env)
+
 	// RFC-0030 per-function env. This must run AFTER the
 	// env.Spec.Runtime.PodSpec merge (and after the container merge above):
 	// MergePodSpec appends the environment podspec container's Env/EnvFrom,

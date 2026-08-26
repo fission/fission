@@ -379,6 +379,7 @@ var (
 	EnvForce                  = Flag{Type: Bool, Name: flagkey.EnvForce, Short: "f", Usage: "Force delete env even if one or more functions exist", DefaultBool: false}
 	EnvBuilder                = Flag{Type: StringSlice, Name: flagkey.EnvBuilder, Usage: "Environment variable to be set in the builder container"}
 	EnvRuntime                = Flag{Type: StringSlice, Name: flagkey.EnvRuntime, Usage: "Environment variable to be set in the runtime container"}
+	EnvRuntimeClass           = Flag{Type: String, Name: flagkey.EnvRuntimeClass, Aliases: []string{"runtime-class"}, Usage: "RuntimeClass (e.g. gvisor, kata) for this environment's runtime and builder pods; does not apply to container-image functions"}
 
 	KwName      = Flag{Type: String, Name: flagkey.KwName, Usage: "Watch name"}
 	KwFnName    = Flag{Type: String, Name: flagkey.KwFnName, Usage: "Function name"}

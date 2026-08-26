@@ -748,6 +748,13 @@ func (ac *AgentConfig) Validate() error {
 // separator) and '#' (the platform-reserved "<keyspace>#meta" quota sibling).
 var stateKeyspaceRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 
+// runtimeClassNameRegexp mirrors the EnvironmentSpec.RuntimeClassName
+// struct-level CEL marker. It is deliberately NOT validation.IsDNS1123Label
+// (max 63 chars) — the CEL rule accepts up to 253 chars with a DNS1123-label
+// charset, and this must agree with the apiserver so the CLI's pre-flight
+// Validate() never rejects a value the API server would admit.
+var runtimeClassNameRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
 // Validate checks the keyed-state config (only reached when FunctionSpec.State
 // is non-nil): keyspace charset/length, non-negative quotas and TTL, and a
 // well-formed sticky declaration. Re-checked in Go so the CLI validates
@@ -989,6 +996,14 @@ func (spec EnvironmentSpec) Validate() error {
 
 	if spec.TerminationGracePeriod != nil && *spec.TerminationGracePeriod < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", *spec.TerminationGracePeriod, "must be greater than or equal to 0"))
+	}
+
+	if spec.RuntimeClassName != nil {
+		val := *spec.RuntimeClassName
+		if len(val) > 253 || !runtimeClassNameRegexp.MatchString(val) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.RuntimeClassName", val,
+				"must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 253 chars)"))
+		}
 	}
 
 	return errs

@@ -143,6 +143,15 @@ func updateExistingEnvironmentWithCmd(env *fv1.Environment, input cli.Input) (*f
 		env.Spec.ImagePullSecret = input.String(flagkey.EnvImagePullSecret)
 	}
 
+	if input.IsSet(flagkey.EnvRuntimeClass) {
+		rc := input.String(flagkey.EnvRuntimeClass)
+		if rc == "" {
+			env.Spec.RuntimeClassName = nil
+		} else {
+			env.Spec.RuntimeClassName = &rc
+		}
+	}
+
 	env.Spec.Resources.Requests = make(v1.ResourceList)
 	env.Spec.Resources.Limits = make(v1.ResourceList)
 

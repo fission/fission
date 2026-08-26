@@ -585,6 +585,15 @@ func (r *EnvironmentReconciler) genBuilderDeployment(env *fv1.Environment, ns st
 		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
 	}
 
+	// Fill-if-nil: applies env.Spec.RuntimeClassName only when the merge
+	// above (or the base spec) left RuntimeClassName unset, so a
+	// Builder.PodSpec override always wins. Unconditional — an env can set
+	// RuntimeClassName with no Builder.PodSpec at all. Builder pods get the
+	// same RuntimeClass as runtime pods: an author opting into isolation
+	// means "this env's workloads," and builder pods run user build
+	// commands.
+	util.ApplyEnvRuntimeClass(&deployment.Spec.Template.Spec, env)
+
 	// Re-mount the fission-builder SA token at the canonical Kubernetes
 	// path on the fetcher container only. The pod-level
 	// AutomountServiceAccountToken=false flag set above suppresses the

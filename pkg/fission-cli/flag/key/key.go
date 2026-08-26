@@ -245,6 +245,7 @@ const (
 	EnvForce           = force
 	EnvBuilder         = "builder-env"
 	EnvRuntime         = "runtime-env"
+	EnvRuntimeClass    = "runtimeclass"
 
 	KwName      = resourceName
 	KwFnName    = "function"

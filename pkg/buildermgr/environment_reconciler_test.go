@@ -220,6 +220,56 @@ func TestBuilderEnvBuilderPodSpecCannotIntroduceDuplicateSATokenMount(t *testing
 		"the sole mount at the SA-token path must be the projected volume, not the user-supplied one")
 }
 
+// TestBuilderDeploymentRuntimeClassFieldOnly asserts that
+// env.Spec.RuntimeClassName reaches the builder pod template's
+// RuntimeClassName when NO env.Spec.Builder.PodSpec is set at all — the
+// common case, and the one that would silently pass if ApplyEnvRuntimeClass
+// were wired inside the "if env.Spec.Builder.PodSpec != nil" block instead of
+// unconditionally.
+func TestBuilderDeploymentRuntimeClassFieldOnly(t *testing.T) {
+	envw := newTestEnvironmentWatcher(t)
+	env := newTestBuilderEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	require.Nil(t, env.Spec.Builder.PodSpec, "this test must exercise the no-PodSpec path")
+
+	deployment, err := envw.createBuilderDeployment(context.Background(), env, "default")
+	require.NoError(t, err)
+
+	require.NotNil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "gvisor", *deployment.Spec.Template.Spec.RuntimeClassName)
+}
+
+// TestBuilderDeploymentRuntimeClassNilWhenUnset asserts that an env with no
+// RuntimeClassName leaves the builder pod template's RuntimeClassName nil.
+func TestBuilderDeploymentRuntimeClassNilWhenUnset(t *testing.T) {
+	envw := newTestEnvironmentWatcher(t)
+	env := newTestBuilderEnv()
+
+	deployment, err := envw.createBuilderDeployment(context.Background(), env, "default")
+	require.NoError(t, err)
+
+	assert.Nil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+}
+
+// TestBuilderDeploymentRuntimeClassPodSpecOverridesField pins the precedence
+// rule: when both env.Spec.RuntimeClassName and env.Spec.Builder.PodSpec.
+// RuntimeClassName are set to different values, the PodSpec's value wins.
+func TestBuilderDeploymentRuntimeClassPodSpecOverridesField(t *testing.T) {
+	envw := newTestEnvironmentWatcher(t)
+	env := newTestBuilderEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	env.Spec.Builder.PodSpec = &apiv1.PodSpec{
+		RuntimeClassName: new("kata"),
+	}
+
+	deployment, err := envw.createBuilderDeployment(context.Background(), env, "default")
+	require.NoError(t, err)
+
+	require.NotNil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "kata", *deployment.Spec.Template.Spec.RuntimeClassName,
+		"env.Spec.Builder.PodSpec.RuntimeClassName must win over env.Spec.RuntimeClassName")
+}
+
 // newTestEnvironmentReconciler wires an EnvironmentReconciler with a
 // controller-runtime fake client seeded with crObjs (for the primary
 // Environment Get) and a fake Kubernetes client seeded with k8sObjs (the
