@@ -444,6 +444,51 @@ func (c *workspaceClient) del(ctx context.Context, id string) error {
 	return nil
 }
 
+// workspaceDeletePrefixStoragesvcResp mirrors storagesvc's
+// workspaceDeletePrefixResponse wire shape ({"deleted": N}).
+type workspaceDeletePrefixStoragesvcResp struct {
+	Deleted int `json:"deleted"`
+}
+
+// deletePrefix issues DELETE /v1/workspace/prefix?prefix=<prefix> — the
+// idempotent bulk-delete primitive the sweeper's archive-time workspace
+// purge (sweeper.go, via the workspacePurger interface) is built on. Same
+// signer/transport as every other workspaceClient method (constructed once in
+// newWorkspaceClient); nothing route-specific here. The returned count is
+// storagesvc's own report of how many objects it actually removed — logged by
+// the caller at V(1), not used for any correctness decision: storagesvc's own
+// per-item delete failures are already log-don't-retry on its side (see
+// pkg/storagesvc/workspace.go's workspaceDeletePrefixHandler doc), so
+// `deleted == N` here is informational, never a completeness guarantee.
+func (c *workspaceClient) deletePrefix(ctx context.Context, prefix string) (int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/v1/workspace/prefix?prefix="+url.QueryEscape(prefix), nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("storagesvc DELETE prefix %s: status %d: %s", prefix, resp.StatusCode, readLimitedBody(resp.Body))
+	}
+	// Same over-read-detection shape as workspaceClient.list: a response past
+	// the cap is treated as an error, not silently truncated-and-parsed.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, workspaceListMaxResponseBytes+1))
+	if err != nil {
+		return 0, err
+	}
+	if int64(len(body)) > workspaceListMaxResponseBytes {
+		return 0, fmt.Errorf("storagesvc DELETE prefix %s: response exceeds the %d byte cap", prefix, workspaceListMaxResponseBytes)
+	}
+	var out workspaceDeletePrefixStoragesvcResp
+	if err := json.Unmarshal(body, &out); err != nil {
+		return 0, fmt.Errorf("decoding storagesvc DELETE prefix response: %w", err)
+	}
+	return out.Deleted, nil
+}
+
 // workspaceListStoragesvcItem/Resp mirror storagesvc's workspaceItem/
 // workspaceListResponse wire shapes.
 type workspaceListStoragesvcItem struct {

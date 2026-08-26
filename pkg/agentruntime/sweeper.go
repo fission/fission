@@ -34,6 +34,17 @@ import (
 // sweepPageLimit is the per-agent List page size.
 const sweepPageLimit = 500
 
+// workspacePurger is the sweeper's dependency for purging a session's
+// workspace at archive time (deletePrefix on pkg/agentruntime's own
+// workspaceClient in production; a counting fake in tests). A nil
+// workspacePurger means the workspace feature is disabled (STORAGESVC_URL
+// unset — main.go passes a nil interface, never a typed-nil *workspaceClient,
+// so this comparison is safe) and the sweeper skips the purge silently,
+// exactly like every other workspace route's 503-vs-disabled stance.
+type workspacePurger interface {
+	deletePrefix(ctx context.Context, prefix string) (int, error)
+}
+
 // Sweeper ages active sessions to idle and idle sessions to archived, per
 // the IdleAfter/ArchiveAfter policy resolved on each AgentEntry.
 type Sweeper struct {
@@ -41,8 +52,9 @@ type Sweeper struct {
 	view      *AgentView
 	store     *SessionStore
 	hist      *HistoryStore
-	interval  time.Duration // AGENT_SWEEP_INTERVAL, default 30s (read in Start, injected here)
-	retention time.Duration // AGENT_ARCHIVE_RETENTION, default 168h (7d)
+	wsPurger  workspacePurger // nil when the workspace feature is disabled; see workspacePurger's doc.
+	interval  time.Duration   // AGENT_SWEEP_INTERVAL, default 30s (read in Start, injected here)
+	retention time.Duration   // AGENT_ARCHIVE_RETENTION, default 168h (7d)
 	now       func() time.Time
 
 	// beforeCAS, when non-nil, runs immediately after the sweeper re-reads a
@@ -58,13 +70,18 @@ type Sweeper struct {
 // to session history/checkpoint cleanup (archive-time trim + the
 // HistoryTrim-knob live-session trim); every call into it is guarded by
 // entry.StateKeyspace != "" (history is disabled for an agent with no state
-// keyspace), so hist is never dereferenced for such an agent.
-func NewSweeper(logger logr.Logger, view *AgentView, store *SessionStore, hist *HistoryStore, interval, retention time.Duration, now func() time.Time) *Sweeper {
+// keyspace), so hist is never dereferenced for such an agent. wsPurger is the
+// sweeper's path to the archive-time workspace purge (see workspacePurger's
+// doc for the nil-disables contract); unlike hist it is called unconditionally
+// of StateKeyspace — a workspace artifact has nothing to do with whether the
+// agent opted into history.
+func NewSweeper(logger logr.Logger, view *AgentView, store *SessionStore, hist *HistoryStore, wsPurger workspacePurger, interval, retention time.Duration, now func() time.Time) *Sweeper {
 	return &Sweeper{
 		logger:    logger,
 		view:      view,
 		store:     store,
 		hist:      hist,
+		wsPurger:  wsPurger,
 		interval:  interval,
 		retention: retention,
 		now:       now,
@@ -282,6 +299,15 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 		return
 	}
 
+	// Workspace purge: fires on every successful archive CAS, BEFORE the
+	// entry.StateKeyspace=="" early return below — deliberately, not merely
+	// placed early. A workspace artifact is independent of whether the agent
+	// opted into history/state (StateKeyspace); putting this purge beside the
+	// history/checkpoint cleanup further down would nest it inside that early
+	// return and it would never run for a state-less agent (plan-review
+	// finding on this slice).
+	s.purgeWorkspace(ctx, entry, rec)
+
 	if entry.StateKeyspace == "" {
 		return
 	}
@@ -313,4 +339,46 @@ func (s *Sweeper) archive(ctx context.Context, entry AgentEntry, rec SessionReco
 			s.logSweepErr(err, "sweeper: deleting archived session checkpoint failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
 		}
 	}
+}
+
+// purgeWorkspace deletes every workspace artifact under rec's session prefix,
+// called once per successful archive CAS (see the call site in archive above
+// for why this must run BEFORE the StateKeyspace=="" early return). A nil
+// wsPurger means the workspace feature is disabled (STORAGESVC_URL unset) —
+// skipped silently, not an error: an install that never turned workspace on
+// has nothing to purge.
+//
+// Discipline mirrors this sweeper's own stated stance exactly (package doc):
+// idempotent (storagesvc's prefix-delete is itself an idempotent bulk delete,
+// so two replicas racing the same purge, or a retry on a later sweep pass
+// that never happens because this is fire-once, both land safely), log-don't-
+// retry on error, and orphan residue accepted. Two residue classes are
+// therefore accepted here, not just one:
+//   - a per-item delete failure inside storagesvc's own prefix-delete (its
+//     own log-don't-retry stance, see pkg/storagesvc/workspace.go); and
+//   - the GC-anchor residual class named in this feature's Global
+//     Constraints: a session record that TTLs out unswept (its agent
+//     Function deleted before the sweeper ever archived it) never reaches
+//     this call at all, and the archive pruner excludes the workspace root
+//     entirely, so that record's workspace objects are orphaned permanently.
+//     That class joins the already-named orphan-sweep follow-up (RFC-0027's
+//     deferred orphan-stream age sweep, referenced above for history/
+//     checkpoint residue) — not solved here.
+//
+// The purge-vs-recreated-session race (a new session minted under the same
+// id in the window between this archive and the purge landing) is also
+// accepted: workspace is scratch, not truth, and unlike a checkpoint/history
+// delete there is no version to CAS a prefix-delete against, so no head-
+// capture analog is possible here.
+func (s *Sweeper) purgeWorkspace(ctx context.Context, entry AgentEntry, rec SessionRecord) {
+	if s.wsPurger == nil {
+		return
+	}
+	prefix := workspaceSessionPrefix(entry.Namespace, entry.Name, rec.ID)
+	deleted, err := s.wsPurger.deletePrefix(ctx, prefix)
+	if err != nil {
+		s.logSweepErr(err, "sweeper: workspace purge failed", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID)
+		return
+	}
+	s.logger.V(1).Info("sweeper: workspace purged", "namespace", entry.Namespace, "agent", entry.Name, "session", rec.ID, "deleted", deleted)
 }

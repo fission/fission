@@ -125,6 +125,21 @@ func newFakeStoragesvc(t *testing.T, master []byte) (*httptest.Server, *fakeStor
 		resp, _ := json.Marshal(out)
 		_, _ = w.Write(resp)
 	})
+	mux.HandleFunc("DELETE /v1/workspace/prefix", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		f.calls++
+		prefix := r.URL.Query().Get("prefix")
+		deleted := 0
+		for id := range f.objs {
+			if strings.HasPrefix(id, prefix) {
+				delete(f.objs, id)
+				deleted++
+			}
+		}
+		f.mu.Unlock()
+		resp, _ := json.Marshal(map[string]int{"deleted": deleted})
+		_, _ = w.Write(resp)
+	})
 
 	verified := hmacauth.ServiceVerifier(master, nil, hmacauth.ServiceStoragesvc, hmacauth.VerifierOpts{})(mux)
 	srv := httptest.NewServer(verified)
@@ -730,6 +745,46 @@ func TestWorkspaceClientList_BoundedRead(t *testing.T) {
 	_, err := client.list(t.Context(), "_workspace_/ns-a/agent-x/sess-1/")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exceeds")
+}
+
+// TestWorkspaceClientDeletePrefix is workspaceClient.deletePrefix's own
+// wire-level test (the sweeper's archive-time purge primitive): it issues a
+// signed DELETE /v1/workspace/prefix, removes exactly the objects under the
+// given prefix (leaving a sibling session's object untouched), and reports
+// the storagesvc-side deleted count. Same signer/transport construction as
+// every other workspaceClient method — this test exercises it through the
+// REAL hmacauth.ServiceVerifier on the fake upstream, not a hand-signed
+// request.
+func TestWorkspaceClientDeletePrefix(t *testing.T) {
+	t.Parallel()
+	master := []byte("ws-delprefix-master")
+	upstream, fake := newFakeStoragesvc(t, master)
+
+	rt := hmacauth.ServiceSigner(master, hmacauth.ServiceStoragesvc, http.DefaultTransport, time.Now)
+	client := newWorkspaceClient(upstream.URL, rt)
+
+	const target = "_workspace_/ns-a/agent-x/sess-1/"
+	sibling := "_workspace_/ns-a/agent-x/sess-2/b.txt"
+	putSp, err := spoolWorkspaceBody(strings.NewReader("a"), workspaceSpoolThresholdBytes)
+	require.NoError(t, err)
+	_, err = client.put(t.Context(), target+"a.txt", putSp)
+	require.NoError(t, err)
+	putSp2, err := spoolWorkspaceBody(strings.NewReader("b"), workspaceSpoolThresholdBytes)
+	require.NoError(t, err)
+	_, err = client.put(t.Context(), sibling, putSp2)
+	require.NoError(t, err)
+
+	deleted, err := client.deletePrefix(t.Context(), target)
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+	assert.False(t, fake.has(target+"a.txt"), "the target session's object must be gone")
+	assert.True(t, fake.has(sibling), "a sibling session's object must survive an unrelated prefix delete")
+
+	// Idempotent: a second delete of the now-empty prefix is still a
+	// successful 200 with deleted == 0, not an error.
+	deleted, err = client.deletePrefix(t.Context(), target)
+	require.NoError(t, err)
+	assert.Zero(t, deleted)
 }
 
 // TestWorkspaceMeters_BumpAndDecrement is the settle-ordering pin: a
