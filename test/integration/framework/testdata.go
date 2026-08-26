@@ -37,6 +37,30 @@ func WriteTestData(t *testing.T, embedPath string) string {
 	return dst
 }
 
+// WriteTestDataReplacing is WriteTestData plus literal string substitution on
+// the file contents before it is written. It exists so a fixture can carry
+// per-test values (a function's own namespace/name) as source constants
+// instead of function env vars: env/envFrom is rejected by the vfunction
+// webhook on the poolmgr executor (RFC-0030 phase 2), so a poolmgr agent
+// fixture that needs to know its own identity must have it templated in.
+// Replacement keys are unique placeholder tokens (e.g. "__SELF_AGENT_NAME__");
+// each must occur in the fixture or the caller is silently wrong, so a missing
+// placeholder fails the test.
+func WriteTestDataReplacing(t *testing.T, embedPath string, replacements map[string]string) string {
+	t.Helper()
+	b, err := testdata.FS.ReadFile(embedPath)
+	require.NoErrorf(t, err, "WriteTestDataReplacing: read embedded %q", embedPath)
+	s := string(b)
+	for placeholder, value := range replacements {
+		require.Containsf(t, s, placeholder, "WriteTestDataReplacing: %q has no placeholder %q to replace", embedPath, placeholder)
+		s = strings.ReplaceAll(s, placeholder, value)
+	}
+	dir := t.TempDir()
+	dst := filepath.Join(dir, filepath.Base(embedPath))
+	require.NoErrorf(t, os.WriteFile(dst, []byte(s), 0o644), "WriteTestDataReplacing: write %q", dst)
+	return dst
+}
+
 // ZipTestDataDir packs an embedded testdata directory into a flat zip archive
 // (no subdirectory entries — matches the bash idiom `zip -jr out.zip dir/`)
 // under t.TempDir() and returns the archive path. Use this for source-package

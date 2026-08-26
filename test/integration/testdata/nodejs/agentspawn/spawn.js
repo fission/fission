@@ -31,10 +31,14 @@
 // value).
 //
 // Unlike architect.js, this fixture never reads a state-token file to learn
-// its own namespace: TestAgentRuntimeSpawnParentage already knows its own
-// namespace and function name before creating the function, so it passes
-// both as plain function env vars (--env-var SELF_NAMESPACE=... --env-var
-// SELF_AGENT_NAME=...) instead.
+// its own namespace: the test already knows its own namespace and function
+// name before creating the function, so it TEMPLATES both into this source
+// (the __SELF_NAMESPACE__ / __SELF_AGENT_NAME__ placeholders below) via
+// framework.WriteTestDataReplacing. They are deliberately NOT passed as
+// function env vars: env/envFrom is rejected by the vfunction webhook on the
+// poolmgr executor (RFC-0030 phase 2), and these agent fixtures run on
+// poolmgr. process.env still wins when set, so a non-poolmgr / non-templated
+// run can override.
 //
 // Spawn failures are best-effort and never fail this turn's own reply — see
 // architect.js's header comment for the same auth/G16 writeup, which applies
@@ -71,8 +75,11 @@ const SESSION_HEADER = 'x-fission-session'; // express lower-cases header names
 const PARENT_HEADER = 'X-Fission-Agent-Parent';
 const STEP_KEY = 'expert-1';
 
-const SELF_NAMESPACE = process.env.SELF_NAMESPACE || 'default';
-const SELF_AGENT_NAME = process.env.SELF_AGENT_NAME || '';
+// __SELF_NAMESPACE__ / __SELF_AGENT_NAME__ are replaced with real values by
+// framework.WriteTestDataReplacing at function-create time (see the header
+// comment): they cannot be function env vars on poolmgr.
+const SELF_NAMESPACE = process.env.SELF_NAMESPACE || '__SELF_NAMESPACE__';
+const SELF_AGENT_NAME = process.env.SELF_AGENT_NAME || '__SELF_AGENT_NAME__';
 
 // DEFAULT_AGENT_RUNTIME_URL mirrors architect.js's constant of the same
 // name: the agentruntime Service's in-cluster DNS name, correct only for
