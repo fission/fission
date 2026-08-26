@@ -186,6 +186,11 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 		},
 	}
 
+	if input.IsSet(flagkey.EnvRuntimeClass) {
+		rc := input.String(flagkey.EnvRuntimeClass)
+		env.Spec.RuntimeClassName = &rc
+	}
+
 	err = util.ApplyLabelsAndAnnotations(input, &env.ObjectMeta)
 	if err != nil {
 		return nil, err
