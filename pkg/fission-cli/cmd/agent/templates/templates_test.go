@@ -27,6 +27,7 @@ import (
 	// literals, so a header rename there breaks this test, not a silent
 	// scaffold that talks past the real dispatcher.
 	"github.com/fission/fission/pkg/agentruntime"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
 
 // commentPrefix returns the line-comment marker for a rendered language, so
@@ -51,6 +52,45 @@ func TestRender_UnsupportedLanguage(t *testing.T) {
 	t.Parallel()
 	_, _, err := Render("ruby", "widget")
 	require.Error(t, err)
+}
+
+// TestRender_RejectsUnsafeNames is the regression test for the
+// code-injection finding from Task 1 review: {{.Name}} is interpolated
+// inside JS backtick template literals and Python %-format single-quoted
+// strings in both templates, so an unvalidated name containing a backtick
+// or a single quote can break out of the string literal and land arbitrary
+// text in LIVE, non-comment code (confirmed exploitable against the
+// pre-fix build: a name of the shape
+// "x`); require('child_process').execSync('touch /tmp/PWNED'); console.log(`"
+// rendered with the injected call sitting outside any comment). Render must
+// reject every name below with an error and MUST NOT emit any of the
+// injected payload text into the rendered bytes -- Task 2 also validates
+// the name, but it writes the scaffolded file to disk before any k8s-side
+// validation runs, so Render has to be safe standing alone.
+func TestRender_RejectsUnsafeNames(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		payload string
+	}{
+		{name: "backtick breakout (JS)", payload: "x`); require('child_process').execSync('touch /tmp/PWNED'); console.log(`"},
+		{name: "single-quote breakout (Python)", payload: "x'); __import__('os').system('touch /tmp/PWNED'); print('"},
+		{name: "go-template metachars", payload: "widget{{.Name}}"},
+		{name: "embedded newline", payload: "widget\ninjected := 1"},
+		{name: "uppercase (not DNS-1123, but worth covering)", payload: "Widget"},
+		{name: "empty", payload: ""},
+	}
+	for _, lang := range []string{"node", "python"} {
+		for _, tc := range cases {
+			t.Run(lang+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				out, _, err := Render(lang, tc.payload)
+				require.Error(t, err, "Render must reject unsafe name %q", tc.payload)
+				assert.Empty(t, out, "Render must not return partial output on a rejected name")
+			})
+		}
+	}
 }
 
 func TestRender_Extensions(t *testing.T) {
@@ -109,6 +149,22 @@ func TestRender_HeaderNames(t *testing.T) {
 			// HeaderYield is set verbatim (not folded) in both templates.
 			assert.Contains(t, string(out), agentruntime.HeaderYield, "%s: yield header const not found", tc.lang)
 		})
+	}
+}
+
+// TestRender_StateHeaderNames pins the templates' state-scope claim headers
+// against pkg/statesvc/stateapi's exported consts (stateapi.go:25-26) rather
+// than the re-typed "X-Fission-State-Namespace" / "X-Fission-State-Keyspace"
+// literals both templates used to carry unpinned -- same drift class as
+// TestRender_HeaderNames, just against statesvc's wire contract instead of
+// the dispatcher's.
+func TestRender_StateHeaderNames(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, lang)
+		text := string(out)
+		assert.Contains(t, text, stateapi.HeaderNamespace, "%s: missing state namespace header", lang)
+		assert.Contains(t, text, stateapi.HeaderKeyspace, "%s: missing state keyspace header", lang)
 	}
 }
 
