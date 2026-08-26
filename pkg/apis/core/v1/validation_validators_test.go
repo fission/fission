@@ -277,6 +277,7 @@ func TestEnvironmentSpecValidateRuntimeClassName(t *testing.T) {
 	t.Parallel()
 
 	longButValid := strings.Repeat("a", 100)
+	overLimit := strings.Repeat("a", 254)
 
 	tests := []struct {
 		name    string
@@ -286,6 +287,7 @@ func TestEnvironmentSpecValidateRuntimeClassName(t *testing.T) {
 		{"nil is valid (unset)", nil, false},
 		{"short lowercase name is valid", new("gvisor"), false},
 		{"100-char lowercase name is valid (over IsDNS1123Label's 63-char cap, under the CEL's 253)", &longButValid, false},
+		{"254-char name is rejected (over the CEL's 253 length bound)", &overLimit, true},
 		{"invalid charset is rejected", new("Bad_Name!"), true},
 		{"empty string is rejected", new(""), true},
 	}
