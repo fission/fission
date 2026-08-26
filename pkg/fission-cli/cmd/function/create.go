@@ -164,11 +164,11 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 	}
 }
 
-// getStateConfig builds the RFC-0023 StateConfig from the --state* flags,
+// GetStateConfig builds the RFC-0023 StateConfig from the --state* flags,
 // merging onto existing (the function's current config, or nil on create) so
 // an `fn update --state` that sets only one field keeps the rest. nil when
 // --state is not set. Bounds/charset are validated server-side.
-func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig {
+func GetStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig {
 	if !input.Bool(flagkey.FnState) {
 		return nil
 	}
@@ -200,6 +200,47 @@ func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig
 		}
 	}
 	return sc
+}
+
+// GetAgentConfig maps the --agent* flags onto fv1.AgentConfig, merging onto
+// existing so an update only overwrites explicitly-set flags. --agent=false
+// clears the config (mirrors GetStateConfig / --state=false); an update that
+// omits --agent entirely never calls this function (see the input.IsSet
+// guard in update.go), so existing is left untouched in that case. Field
+// bounds are validated server-side by the Function admission webhook (CLI
+// stays thin).
+func GetAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig {
+	if !input.Bool(flagkey.FnAgent) {
+		return nil
+	}
+	ac := &fv1.AgentConfig{}
+	if existing != nil {
+		ac = existing.DeepCopy()
+	}
+	if input.IsSet(flagkey.FnAgentSessionSource) || input.IsSet(flagkey.FnAgentSessionName) {
+		if ac.Session == nil {
+			ac.Session = &fv1.AgentSessionConfig{Source: fv1.SessionSourceHeader, Name: fv1.DefaultAgentSessionHeader}
+		}
+		if input.IsSet(flagkey.FnAgentSessionSource) {
+			ac.Session.Source = fv1.SessionSource(input.String(flagkey.FnAgentSessionSource))
+		}
+		if input.IsSet(flagkey.FnAgentSessionName) {
+			ac.Session.Name = input.String(flagkey.FnAgentSessionName)
+		}
+	}
+	if input.IsSet(flagkey.FnAgentIdleAfter) {
+		ac.IdleAfter = &metav1.Duration{Duration: input.Duration(flagkey.FnAgentIdleAfter)}
+	}
+	if input.IsSet(flagkey.FnAgentArchiveAfter) {
+		ac.ArchiveAfter = &metav1.Duration{Duration: input.Duration(flagkey.FnAgentArchiveAfter)}
+	}
+	if input.IsSet(flagkey.FnAgentMaxSessions) {
+		ac.MaxSessions = int64(input.Int(flagkey.FnAgentMaxSessions))
+	}
+	if input.IsSet(flagkey.FnAgentHistoryTrim) {
+		ac.HistoryTrimBelowCheckpoint = input.Bool(flagkey.FnAgentHistoryTrim)
+	}
+	return ac
 }
 
 // getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
@@ -580,7 +621,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:            &fnIdleTimeout,
 			Streaming:              getStreamingConfig(input),
 			Tool:                   toolConfig,
-			State:                  getStateConfig(input, nil),
+			State:                  GetStateConfig(input, nil),
+			Agent:                  GetAgentConfig(input, nil),
 			Invocation:             invocation,
 			Versioning:             versioningConfig,
 			ProvisionedConcurrency: provisionedConcurrency,

@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -435,6 +436,16 @@ func (spec FunctionSpec) validateForAdmission() error {
 	if spec.Invocation != nil {
 		errs = errors.Join(errs, spec.Invocation.Validate())
 	}
+	if spec.Agent != nil {
+		errs = errors.Join(errs, spec.Agent.Validate())
+		// Cross-field rule (Agent + State): HistoryTrimBelowCheckpoint trims
+		// session fact logs living in the function's state keyspace, so it
+		// requires State. A knob that can never act (no state keyspace, no
+		// history) is rejected here rather than silently doing nothing.
+		if spec.Agent.HistoryTrimBelowCheckpoint && spec.State == nil {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent.HistoryTrimBelowCheckpoint", spec.Agent.HistoryTrimBelowCheckpoint, "requires FunctionSpec.State (no state keyspace means no session history to trim)"))
+		}
+	}
 	if spec.ProvisionedConcurrency != nil {
 		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
 	}
@@ -688,6 +699,47 @@ func (tc *ToolConfig) Validate() error {
 		errs = errors.Join(errs, ValidateKubeName("FunctionSpec.Tool.Alias", tc.Alias))
 	}
 
+	return errs
+}
+
+// agentSessionNameRegexp pins the session source name to the HTTP token
+// charset — a CR/LF or ':' in a header name would corrupt the forwarded
+// request line; an '=' in a query-param name would split it.
+var agentSessionNameRegexp = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]{1,128}$`)
+
+func (ac *AgentConfig) Validate() error {
+	var errs error
+	if ac.Session != nil {
+		switch ac.Session.Source {
+		case SessionSourceHeader, SessionSourceQueryParam:
+		default:
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.Session.Source", string(ac.Session.Source), `must be "header" or "queryparam"`))
+		}
+		if !agentSessionNameRegexp.MatchString(ac.Session.Name) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.Session.Name", ac.Session.Name, "must be a non-empty HTTP token (letters, digits, !#$%&'*+.^_`|~-), max 128 chars"))
+		}
+		// The session source name becomes a forwarded header/query-param name.
+		// Reject the reserved runtime credentials and control headers (case-
+		// insensitive): a session source named "Authorization" or in the
+		// "X-Fission-*" family would collide with the runtime's own auth and
+		// wake/turn replay headers on the forwarded request.
+		if strings.EqualFold(ac.Session.Name, "Authorization") ||
+			strings.HasPrefix(strings.ToLower(ac.Session.Name), "x-fission-") {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.Session.Name", ac.Session.Name, `must not be a reserved header name ("Authorization" or the "X-Fission-" prefix, case-insensitive)`))
+		}
+	}
+	if ac.IdleAfter != nil && ac.IdleAfter.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.IdleAfter", ac.IdleAfter.Duration.String(), "must be >= 0"))
+	}
+	if ac.ArchiveAfter != nil && ac.ArchiveAfter.Duration < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.ArchiveAfter", ac.ArchiveAfter.Duration.String(), "must be >= 0"))
+	}
+	if ac.IdleAfter != nil && ac.ArchiveAfter != nil && ac.ArchiveAfter.Duration < ac.IdleAfter.Duration {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.ArchiveAfter", ac.ArchiveAfter.Duration.String(), "must be >= IdleAfter (a session cannot be archived while still active)"))
+	}
+	if ac.MaxSessions < 0 {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.Agent.MaxSessions", strconv.FormatInt(ac.MaxSessions, 10), "must be >= 0 (0 = unlimited)"))
+	}
 	return errs
 }
 

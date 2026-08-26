@@ -773,6 +773,73 @@ spec:
                           Now it only supports 'execution'.
                         type: string
                     type: object
+                  agent:
+                    description: |-
+                      Agent, when non-nil, declares this function as an agent: its
+                      invocations are session-scoped, dispatched and lifecycle-tracked by
+                      the fission-bundle --agentPort subsystem, with session records kept
+                      in the statestore (never CRDs). Presence is the on switch (like
+                      Streaming, Tool and State): nil (the default) means exactly today's
+                      behavior. Additive and backward compatible.
+                    properties:
+                      archiveAfter:
+                        description: |-
+                          ArchiveAfter is how long an idle session is kept listed, measured from
+                          its LastActiveAt, before it is archived (delisted; record retained on
+                          a retention TTL). Must be >= IdleAfter when both are set; zero (or
+                          nil) means the platform default (24h). The resolved value is always
+                          clamped up to at least the resolved IdleAfter, so no combination of
+                          defaults can archive a session while it is still within its idle
+                          window.
+                        type: string
+                      historyTrimBelowCheckpoint:
+                        description: |-
+                          HistoryTrimBelowCheckpoint, when true, lets the agent runtime's sweeper
+                          trim this agent's session fact logs below each session's committed
+                          checkpoint coverage boundary (G13). Requires State: a knob that can
+                          never act (no state keyspace means no history) is rejected at admission.
+                        type: boolean
+                      idleAfter:
+                        description: |-
+                          IdleAfter is how long a session stays "active" after its last turn
+                          before the sweeper marks it idle (a status transition, not a pod
+                          operation — pods are released after every turn regardless). Must be
+                          >= 0; zero (or nil) means the platform default (5m).
+                        type: string
+                      maxSessions:
+                        description: |-
+                          MaxSessions caps live (active or idle) sessions for this agent,
+                          enforced atomically on session creation with the statestore's
+                          counted-write (the same quota mechanism as StateConfig.MaxKeys).
+                          Archived sessions live in a sibling keyspace and never count
+                          against this cap. 0 means unlimited.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      session:
+                        description: |-
+                          Session, when non-nil, overrides where the session id comes from.
+                          nil (the default) means the X-Fission-Session request header.
+                        properties:
+                          name:
+                            description: |-
+                              Name is the header or query-parameter name holding the session id,
+                              e.g. "X-Session-Id". It must not be a reserved runtime header name
+                              ("Authorization" or the "X-Fission-" prefix, which the runtime owns):
+                              to use the platform default header (X-Fission-Session), leave the
+                              enclosing Session nil rather than naming it here.
+                            type: string
+                          source:
+                            description: Source is where to look for the session id.
+                            enum:
+                            - header
+                            - queryparam
+                            type: string
+                        required:
+                        - name
+                        - source
+                        type: object
+                    type: object
                   concurrency:
                     description: |-
                       Maximum number of pods to be specialized which will serve requests

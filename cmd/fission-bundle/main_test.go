@@ -32,6 +32,7 @@ func TestBundleDispatchTable(t *testing.T) {
 		{"mqt", CommandLineArgs{mqt: true}, "Fission-MessageQueueTrigger"},
 		{"mqt_keda", CommandLineArgs{mqt_keda: true}, "Fission-Keda-MQTrigger"},
 		{"mcp", CommandLineArgs{mcpPort: 8890}, "Fission-MCP"},
+		{"agentruntime", CommandLineArgs{agentPort: 8894}, "Fission-AgentRuntime"},
 		{"tenantController", CommandLineArgs{tenantController: true}, "Fission-TenantController"},
 		{"builderMgr", CommandLineArgs{builderMgr: true}, "Fission-BuilderMgr"},
 		{"storagesvc", CommandLineArgs{storageServicePort: 8000}, "Fission-StorageSvc"},
@@ -63,5 +64,5 @@ func TestBundleDispatchTableComplete(t *testing.T) {
 		assert.Falsef(t, seen[svc.name], "duplicate service name %s", svc.name)
 		seen[svc.name] = true
 	}
-	assert.Len(t, seen, 16)
+	assert.Len(t, seen, 17)
 }

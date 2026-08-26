@@ -1,0 +1,172 @@
+'use strict';
+
+// {{.Name}} -- a Fission agent handler, scaffolded by `fission agent create`.
+//
+// WHAT THIS FILE IS
+// ------------------
+// An agent function is an ordinary Fission function (module.exports takes
+// one `context` argument and returns {status, body, headers}, exactly like
+// any other Node handler) that the agent runtime (pkg/agentruntime) calls
+// once per "turn" of a session. The runtime adds a session id to every
+// call and expects the function to say, via a response header, whether the
+// session should go idle after this turn or be re-invoked immediately.
+//
+// Read this top to bottom once -- every section explains the piece of the
+// contract it implements -- then replace the TODO in the middle with real
+// agent logic (call an LLM, run a tool, whatever your agent does).
+
+const fs = require('fs');
+
+// The dispatcher stamps two request headers on every forwarded call (see
+// pkg/agentruntime/dispatcher.go), and reads one response header back:
+//   X-Fission-Session      the session id this turn belongs to (minted on
+//                          the session's first turn, stable after that)
+//   X-Fission-Agent-Turns  how many turns this session had BEFORE this one
+//   X-Fission-Agent-Yield  set in the RESPONSE: 'waiting' ends this turn and
+//                          idles the session (the default below); 'continue'
+//                          re-invokes it again immediately -- see the
+//                          commented-out block at the bottom before using it.
+// Node lower-cases incoming header names; the response header keeps its
+// natural case since we are the one setting it.
+const SESSION_HEADER = 'x-fission-session';
+const TURNS_HEADER = 'x-fission-agent-turns';
+const YIELD_HEADER = 'X-Fission-Agent-Yield';
+
+// --- Load/save session state --------------------------------------------
+//
+// RFC-0023's state API gives every function-as-agent its own namespaced KV
+// keyspace. The executor injects two env vars ONLY when functionState is
+// enabled cluster-wide (pkg/executor/util/stateenv.go):
+//   FISSION_STATE_URL          statesvc base URL, e.g. http://statesvc.fission:8892
+//   FISSION_STATE_TOKEN_PATH   path to a JSON credentials file the fetcher
+//                              writes at specialize time
+// The credentials file is {"namespace":"...","keyspace":"...","token":"..."}
+// (pkg/fetcher/statetoken.go's StateCredentials) -- namespace/keyspace are
+// claims, token is the bearer that proves them.
+const STATE_URL = process.env.FISSION_STATE_URL || '';
+const TOKEN_PATH = process.env.FISSION_STATE_TOKEN_PATH || '';
+
+let stateCreds = null;
+if (STATE_URL && TOKEN_PATH) {
+  try {
+    stateCreds = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf8'));
+  } catch (err) {
+    console.error(`{{.Name}}: could not read state token file ${TOKEN_PATH}: ${err.code || err.name}`);
+  }
+}
+
+// memoryFallback keeps this scaffold WORKING before functionState is turned
+// on (or on a dev cluster with no statestore): it is pod-local and lost on
+// every recycle/scale event, so replace it with the real state API before
+// relying on session memory in production.
+const memoryFallback = new Map();
+
+function stateHeaders(extra) {
+  return Object.assign(
+    {
+      Authorization: `Bearer ${stateCreds.token}`,
+      'X-Fission-State-Namespace': stateCreds.namespace,
+      'X-Fission-State-Keyspace': stateCreds.keyspace,
+    },
+    extra,
+  );
+}
+
+async function loadState(sessionID) {
+  if (!stateCreds) {
+    // Copy out, don't return the stored reference -- a caller that mutates
+    // the returned object without ever reaching saveState (an early return
+    // added later, say) must not silently mutate memoryFallback's stored
+    // copy too.
+    return Object.assign({}, memoryFallback.get(sessionID));
+  }
+  const res = await fetch(`${STATE_URL}/v1/state/${encodeURIComponent(sessionID)}`, {
+    headers: stateHeaders(),
+  });
+  if (res.status === 404) {
+    return {};
+  }
+  if (!res.ok) {
+    throw new Error(`state GET ${sessionID} failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function saveState(sessionID, state) {
+  if (!stateCreds) {
+    memoryFallback.set(sessionID, state);
+    return;
+  }
+  const res = await fetch(`${STATE_URL}/v1/state/${encodeURIComponent(sessionID)}`, {
+    method: 'PUT',
+    headers: stateHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(state),
+  });
+  if (!res.ok) {
+    throw new Error(`state PUT ${sessionID} failed: ${res.status}`);
+  }
+}
+
+// --- The turn --------------------------------------------------------------
+module.exports = async function (context) {
+  const req = context.request;
+  const sessionID = req.headers[SESSION_HEADER] || 'unknown';
+  // turn is the session's turn count BEFORE this call -- stable across any
+  // at-least-once redelivery of the SAME turn, unlike a locally-incremented
+  // counter would be.
+  const turn = parseInt(req.headers[TURNS_HEADER], 10) || 0;
+
+  let state;
+  try {
+    state = await loadState(sessionID);
+  } catch (err) {
+    console.error(`{{.Name}}: loading state for session ${sessionID} failed: ${err}`);
+    state = {};
+  }
+
+  // TODO: replace this with your agent's actual turn logic. For now the
+  // scaffold just records the turn count so you have something to curl and
+  // see change.
+  state.turns = turn + 1;
+
+  try {
+    await saveState(sessionID, state);
+  } catch (err) {
+    console.error(`{{.Name}}: saving state for session ${sessionID} failed: ${err}`);
+  }
+
+  const reply = { session: sessionID, turn: state.turns, state: state };
+
+  return {
+    status: 200,
+    body: JSON.stringify(reply),
+    headers: {
+      'Content-Type': 'application/json',
+      // Default: end this turn, go idle. Read the block below before ever
+      // changing this to 'continue'.
+      [YIELD_HEADER]: 'waiting',
+    },
+  };
+
+  // --- Chaining turns without waiting for a new request -------------------
+  //
+  // 'continue' instead of 'waiting' re-invokes THIS session again almost
+  // immediately (via the runtime's wake queue), with no external caller
+  // sending a new request -- for a multi-step "thinking" loop where one
+  // external message should produce several internal turns. Two things
+  // first: (1) it self-perpetuates -- a handler that ALWAYS yields
+  // 'continue' never stops on its own, so guard it with real termination
+  // logic (a step counter, a tool result, an LLM "done" signal); (2) the
+  // platform caps you anyway via AGENT_MAX_CONTINUATIONS
+  // (pkg/agentruntime/main.go, default 1000, cluster-wide) -- but 1000
+  // turns of wasted compute is still not something you want to hit.
+  //
+  // return {
+  //   status: 200,
+  //   body: JSON.stringify(reply),
+  //   headers: {
+  //     'Content-Type': 'application/json',
+  //     [YIELD_HEADER]: state.turns < 3 ? 'continue' : 'waiting',
+  //   },
+  // };
+};

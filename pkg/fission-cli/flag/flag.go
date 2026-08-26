@@ -263,6 +263,24 @@ var (
 	FnStateStickySource  = Flag{Type: String, Name: flagkey.FnStateStickySource, Usage: "Sticky routing key source: header or queryparam"}
 	FnStateStickyName    = Flag{Type: String, Name: flagkey.FnStateStickyName, Usage: "Header or query-parameter name holding the sticky routing key"}
 
+	// Agent runtime config (fn create/update).
+	FnAgent              = Flag{Type: Bool, Name: flagkey.FnAgent, Usage: "Declare the function as an agent (session-scoped invocations, lifecycle-tracked by the agent runtime)"}
+	FnAgentSessionSource = Flag{Type: String, Name: flagkey.FnAgentSessionSource, Usage: "Session id source: header or queryparam (default: header)"}
+	FnAgentSessionName   = Flag{Type: String, Name: flagkey.FnAgentSessionName, Usage: "Header or query-parameter name holding the session id (default: X-Fission-Session)"}
+	FnAgentIdleAfter     = Flag{Type: Duration, Name: flagkey.FnAgentIdleAfter, Usage: "How long after its last turn a session stays active before it is marked idle (0 = platform default 5m)"}
+	FnAgentArchiveAfter  = Flag{Type: Duration, Name: flagkey.FnAgentArchiveAfter, Usage: "How long an idle session stays listed before it is archived (0 = platform default 24h)"}
+	FnAgentMaxSessions   = Flag{Type: Int, Name: flagkey.FnAgentMaxSessions, Usage: "Max live sessions for this agent, enforced atomically on session creation (0 = unlimited)"}
+	FnAgentHistoryTrim   = Flag{Type: Bool, Name: flagkey.FnAgentHistoryTrim, Usage: "Let the agent runtime's sweeper trim this agent's session fact logs below each session's committed checkpoint (requires --state)"}
+
+	// `fission agent create` scaffold (Task 2, G17 DX). --code reuses PkgCode
+	// below (same "code" flag key, same meaning: a single handler file path).
+	FnAgentLang = Flag{Type: String, Name: flagkey.FnAgentLang, Usage: "Scaffolded handler language: node or python", DefaultString: "node"}
+
+	// `fission agent sessions` introspection CLI (slice 4).
+	AgentSession      = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}
+	AgentToken        = Flag{Type: String, Name: flagkey.AgentToken, Usage: "Bearer token for the agent runtime (defaults to FISSION_AGENT_TOKEN; unset works only when agentRuntime.allowInsecure is set)"}
+	AgentSessionsTree = Flag{Type: Bool, Name: flagkey.AgentSessionsTree, Usage: "Render sessions as a parent/child spawn tree, paging through every session first (ignores the single-page truncation the plain list applies); with -o json/yaml the output stays a flat, fully-paginated array rather than a nested tree"}
+
 	// RFC-0023 `fission fn state` admin flags.
 	StateKey       = Flag{Type: String, Name: flagkey.StateKey, Usage: "State key to operate on"}
 	StateValue     = Flag{Type: String, Name: flagkey.StateValue, Usage: "Value to store"}

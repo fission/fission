@@ -130,7 +130,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// retains the keyspace data — see statesvc's reconciler). The other
 	// --state-* flags merge onto the existing config (only set fields change).
 	if input.IsSet(flagkey.FnState) {
-		function.Spec.State = getStateConfig(input, function.Spec.State)
+		function.Spec.State = GetStateConfig(input, function.Spec.State)
+	}
+
+	// --agent toggles the agent config; the other --agent-* flags merge onto
+	// the existing config (only set fields change).
+	if input.IsSet(flagkey.FnAgent) {
+		function.Spec.Agent = GetAgentConfig(input, function.Spec.Agent)
 	}
 
 	// The --async-* flags merge onto the existing InvocationConfig (only set fields
