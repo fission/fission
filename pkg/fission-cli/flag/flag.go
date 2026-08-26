@@ -272,6 +272,10 @@ var (
 	FnAgentMaxSessions   = Flag{Type: Int, Name: flagkey.FnAgentMaxSessions, Usage: "Max live sessions for this agent, enforced atomically on session creation (0 = unlimited)"}
 	FnAgentHistoryTrim   = Flag{Type: Bool, Name: flagkey.FnAgentHistoryTrim, Usage: "Let the agent runtime's sweeper trim this agent's session fact logs below each session's committed checkpoint (requires --state)"}
 
+	// `fission agent create` scaffold (Task 2, G17 DX). --code reuses PkgCode
+	// below (same "code" flag key, same meaning: a single handler file path).
+	FnAgentLang = Flag{Type: String, Name: flagkey.FnAgentLang, Usage: "Scaffolded handler language: node or python", DefaultString: "node"}
+
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession      = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}
 	AgentToken        = Flag{Type: String, Name: flagkey.AgentToken, Usage: "Bearer token for the agent runtime (defaults to FISSION_AGENT_TOKEN; unset works only when agentRuntime.allowInsecure is set)"}
