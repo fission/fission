@@ -267,6 +267,42 @@ func TestEnvironmentSpecValidate(t *testing.T) {
 	require.Error(t, EnvironmentSpec{Version: 2, AllowedFunctionsPerContainer: "many"}.Validate())
 }
 
+// TestEnvironmentSpecValidateRuntimeClassName pins the Go-side mirror of the
+// struct-level CEL rule on EnvironmentSpec.RuntimeClassName. It deliberately
+// does NOT reuse validation.IsDNS1123Label (max 63 chars): the CEL rule
+// allows up to 253, and a CLI-side check stricter than the apiserver's would
+// reject a value the API server would admit. The 100-char case below is the
+// one that would wrongly fail if a future edit swapped in IsDNS1123Label.
+func TestEnvironmentSpecValidateRuntimeClassName(t *testing.T) {
+	t.Parallel()
+
+	longButValid := strings.Repeat("a", 100)
+
+	tests := []struct {
+		name    string
+		rcName  *string
+		wantErr bool
+	}{
+		{"nil is valid (unset)", nil, false},
+		{"short lowercase name is valid", new("gvisor"), false},
+		{"100-char lowercase name is valid (over IsDNS1123Label's 63-char cap, under the CEL's 253)", &longButValid, false},
+		{"invalid charset is rejected", new("Bad_Name!"), true},
+		{"empty string is rejected", new(""), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := EnvironmentSpec{Version: 2, RuntimeClassName: tt.rcName}
+			err := spec.Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestHTTPTriggerSpecValidate(t *testing.T) {
 	t.Parallel()
 	valid := HTTPTriggerSpec{

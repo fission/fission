@@ -74,6 +74,27 @@ type EnvironmentSpecApplyConfiguration struct {
 	// ImagePullSecret is the secret for Kubernetes to pull an image from a
 	// private registry.
 	ImagePullSecret *string `json:"imagepullsecret,omitempty"`
+	// (Optional) RuntimeClassName opts this environment's pods into a
+	// syscall-isolating RuntimeClass — for example gVisor's "gvisor" or
+	// Kata Containers' "kata" — instead of the node's default
+	// (typically runc) container runtime. It applies to BOTH this
+	// environment's runtime (warm pool / specialized) pods AND its
+	// builder pods: an author opting into isolation means "this env's
+	// workloads," and builder pods run user build commands, arguably
+	// more arbitrary-code-shaped than the runtime pods.
+	//
+	// This is fill-if-nil only: a RuntimeClassName set directly on
+	// Runtime.PodSpec (or Builder.PodSpec) is the documented full
+	// override escape hatch and always takes precedence over this
+	// field when both are set.
+	//
+	// NOT applied to container-executor functions (Tier C) — there is
+	// no Environment in scope on that path today, consistent with how
+	// Runtime.PodSpec/Builder.PodSpec are already handled.
+	//
+	// The referenced RuntimeClass object is not required to exist at
+	// admission time; an absent one fails at pod scheduling, not here.
+	RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 }
 
 // EnvironmentSpecApplyConfiguration constructs a declarative configuration of the EnvironmentSpec type for use with
@@ -159,5 +180,13 @@ func (b *EnvironmentSpecApplyConfiguration) WithKeepArchive(value bool) *Environ
 // If called multiple times, the ImagePullSecret field is set to the value of the last call.
 func (b *EnvironmentSpecApplyConfiguration) WithImagePullSecret(value string) *EnvironmentSpecApplyConfiguration {
 	b.ImagePullSecret = &value
+	return b
+}
+
+// WithRuntimeClassName sets the RuntimeClassName field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the RuntimeClassName field is set to the value of the last call.
+func (b *EnvironmentSpecApplyConfiguration) WithRuntimeClassName(value string) *EnvironmentSpecApplyConfiguration {
+	b.RuntimeClassName = &value
 	return b
 }
