@@ -440,6 +440,82 @@ func TestNewDeployPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t *t
 		"the surviving mount must be backed by the projected SA token volume, not the user-supplied one")
 }
 
+// TestGetDeploymentSpecRuntimeClassFieldOnly asserts that
+// env.Spec.RuntimeClassName reaches the pod template's RuntimeClassName when
+// NO env.Spec.Runtime.PodSpec is set at all — the common case, and the one
+// that would silently pass if ApplyEnvRuntimeClass were wired inside the
+// "if env.Spec.Runtime.PodSpec != nil" block instead of unconditionally.
+func TestGetDeploymentSpecRuntimeClassFieldOnly(t *testing.T) {
+	deploy := newTestNewDeploy(t)
+	env := newTestNewDeployEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	require.Nil(t, env.Spec.Runtime.PodSpec, "this test must exercise the no-PodSpec path")
+	fn := newTestNewDeployFunction()
+	ctx := t.Context()
+
+	replicas := int32(1)
+	deployment, err := deploy.getDeploymentSpec(
+		ctx, fn, env, &replicas,
+		"newdeploy-test-fn",
+		"default",
+		map[string]string{"app": "newdeploy-test"},
+		map[string]string{},
+	)
+	require.NoError(t, err)
+
+	require.NotNil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "gvisor", *deployment.Spec.Template.Spec.RuntimeClassName)
+}
+
+// TestGetDeploymentSpecRuntimeClassNilWhenUnset asserts that an env with no
+// RuntimeClassName leaves the pod template's RuntimeClassName nil.
+func TestGetDeploymentSpecRuntimeClassNilWhenUnset(t *testing.T) {
+	deploy := newTestNewDeploy(t)
+	env := newTestNewDeployEnv()
+	fn := newTestNewDeployFunction()
+	ctx := t.Context()
+
+	replicas := int32(1)
+	deployment, err := deploy.getDeploymentSpec(
+		ctx, fn, env, &replicas,
+		"newdeploy-test-fn",
+		"default",
+		map[string]string{"app": "newdeploy-test"},
+		map[string]string{},
+	)
+	require.NoError(t, err)
+
+	assert.Nil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+}
+
+// TestGetDeploymentSpecRuntimeClassPodSpecOverridesField pins the precedence
+// rule: when both env.Spec.RuntimeClassName and env.Spec.Runtime.PodSpec.
+// RuntimeClassName are set to different values, the PodSpec's value wins.
+func TestGetDeploymentSpecRuntimeClassPodSpecOverridesField(t *testing.T) {
+	deploy := newTestNewDeploy(t)
+	env := newTestNewDeployEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+		RuntimeClassName: new("kata"),
+	}
+	fn := newTestNewDeployFunction()
+	ctx := t.Context()
+
+	replicas := int32(1)
+	deployment, err := deploy.getDeploymentSpec(
+		ctx, fn, env, &replicas,
+		"newdeploy-test-fn",
+		"default",
+		map[string]string{"app": "newdeploy-test"},
+		map[string]string{},
+	)
+	require.NoError(t, err)
+
+	require.NotNil(t, deployment.Spec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "kata", *deployment.Spec.Template.Spec.RuntimeClassName,
+		"env.Spec.Runtime.PodSpec.RuntimeClassName must win over env.Spec.RuntimeClassName")
+}
+
 func ociTestPackage(deployment fv1.Archive) *fv1.Package {
 	return &fv1.Package{
 		Name: "pkg-1", Namespace: "default",
