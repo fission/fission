@@ -1,0 +1,156 @@
+# {{.Name}} -- a Fission agent handler, scaffolded by `fission agent create`.
+#
+# WHAT THIS FILE IS
+# ------------------
+# An agent function is an ordinary Fission Python function: the environment
+# loads this module and calls main() with no arguments for every request
+# (github.com/fission/environments python/server.py, FuncApp._load_v2 /
+# userfunc_call -- confirmed there, since no in-repo fixture shows this).
+# What makes it an AGENT is the agent runtime (pkg/agentruntime) calling it
+# once per "turn" of a session: it adds a session id to the request and
+# expects the handler to say, via a response header, whether the session
+# should go idle after this turn or be re-invoked immediately.
+#
+# Read this top to bottom once -- every section explains the piece of the
+# contract it implements -- then replace the TODO in main() with real agent
+# logic (call an LLM, run a tool, whatever your agent does).
+
+import json
+import os
+
+from flask import request
+import requests
+
+# The dispatcher stamps two request headers on every forwarded call (see
+# pkg/agentruntime/dispatcher.go), and reads one response header back:
+#   X-Fission-Session      the session id this turn belongs to (minted on
+#                          the session's first turn, stable after that)
+#   X-Fission-Agent-Turns  how many turns this session had BEFORE this one
+#   X-Fission-Agent-Yield  set in the RESPONSE: 'waiting' ends this turn and
+#                          idles the session (the default below); 'continue'
+#                          re-invokes it again immediately -- see the
+#                          commented-out block at the bottom before using it.
+# flask.request.headers is a case-insensitive mapping (Werkzeug
+# EnvironHeaders), so these are spelled exactly like the dispatcher's
+# constants.
+SESSION_HEADER = 'X-Fission-Session'
+TURNS_HEADER = 'X-Fission-Agent-Turns'
+YIELD_HEADER = 'X-Fission-Agent-Yield'
+
+# --- Load/save session state -----------------------------------------
+#
+# RFC-0023's state API gives every function-as-agent its own namespaced KV
+# keyspace. The executor injects two env vars ONLY when functionState is
+# enabled cluster-wide (pkg/executor/util/stateenv.go):
+#   FISSION_STATE_URL          statesvc base URL, e.g. http://statesvc.fission:8892
+#   FISSION_STATE_TOKEN_PATH   path to a JSON credentials file the fetcher
+#                              writes at specialize time
+# The credentials file is {"namespace": "...", "keyspace": "...", "token": "..."}
+# (pkg/fetcher/statetoken.go's StateCredentials) -- namespace/keyspace are
+# claims, token is the bearer that proves them.
+STATE_URL = os.environ.get('FISSION_STATE_URL', '')
+TOKEN_PATH = os.environ.get('FISSION_STATE_TOKEN_PATH', '')
+
+_state_creds = None
+if STATE_URL and TOKEN_PATH:
+    try:
+        with open(TOKEN_PATH) as f:
+            _state_creds = json.load(f)
+    except (OSError, ValueError) as err:
+        print('{{.Name}}: could not read state token file %s: %s' % (TOKEN_PATH, err))
+
+# _memory_fallback keeps this scaffold WORKING before functionState is
+# turned on (or on a dev cluster with no statestore): it is pod-local and
+# lost on every recycle/scale event, so replace it with the real state API
+# before relying on session memory in production.
+_memory_fallback = {}
+
+
+def _state_headers(extra=None):
+    headers = {
+        'Authorization': 'Bearer %s' % _state_creds['token'],
+        'X-Fission-State-Namespace': _state_creds['namespace'],
+        'X-Fission-State-Keyspace': _state_creds['keyspace'],
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _load_state(session_id):
+    if not _state_creds:
+        return dict(_memory_fallback.get(session_id, {}))
+    res = requests.get('%s/v1/state/%s' % (STATE_URL, session_id), headers=_state_headers())
+    if res.status_code == 404:
+        return {}
+    res.raise_for_status()
+    return res.json()
+
+
+def _save_state(session_id, state):
+    if not _state_creds:
+        _memory_fallback[session_id] = state
+        return
+    res = requests.put(
+        '%s/v1/state/%s' % (STATE_URL, session_id),
+        headers=_state_headers({'Content-Type': 'application/json'}),
+        data=json.dumps(state),
+    )
+    res.raise_for_status()
+
+
+# --- The turn --------------------------------------------------------------
+#
+# Flask's documented view-return-value contract
+# (https://flask.palletsprojects.com/en/stable/quickstart/#about-responses)
+# accepts (body, status), (body, headers), or (body, status, headers) tuples
+# -- returning the third form below is what sets YIELD_HEADER on the
+# response.
+def main():
+    session_id = request.headers.get(SESSION_HEADER, 'unknown')
+    # turn is the session's turn count BEFORE this call -- stable across any
+    # at-least-once redelivery of the SAME turn, unlike a locally-
+    # incremented counter would be.
+    try:
+        turn = int(request.headers.get(TURNS_HEADER, '0'))
+    except ValueError:
+        turn = 0
+
+    try:
+        state = _load_state(session_id)
+    except requests.RequestException as err:
+        print('{{.Name}}: loading state for session %s failed: %s' % (session_id, err))
+        state = {}
+
+    # TODO: replace this with your agent's actual turn logic. For now the
+    # scaffold just records the turn count so you have something to curl
+    # and see change.
+    state['turns'] = turn + 1
+
+    try:
+        _save_state(session_id, state)
+    except requests.RequestException as err:
+        print('{{.Name}}: saving state for session %s failed: %s' % (session_id, err))
+
+    reply = {'session': session_id, 'turn': state['turns'], 'state': state}
+
+    # Default: end this turn, go idle. Read the block below before ever
+    # changing this to 'continue'.
+    headers = {'Content-Type': 'application/json', YIELD_HEADER: 'waiting'}
+    return json.dumps(reply), 200, headers
+
+    # --- Chaining turns without waiting for a new request ------------------
+    #
+    # 'continue' instead of 'waiting' re-invokes THIS session again almost
+    # immediately (via the runtime's wake queue), with no external caller
+    # sending a new request -- for a multi-step "thinking" loop where one
+    # external message should produce several internal turns. Two things
+    # first: (1) it self-perpetuates -- a handler that ALWAYS yields
+    # 'continue' never stops on its own, so guard it with real termination
+    # logic (a step counter, a tool result, an LLM "done" signal); (2) the
+    # platform caps you anyway via AGENT_MAX_CONTINUATIONS
+    # (pkg/agentruntime/main.go, default 1000, cluster-wide) -- but 1000
+    # turns of wasted compute is still not something you want to hit.
+    #
+    # headers[YIELD_HEADER] = 'continue' if state['turns'] < 3 else 'waiting'
+    # return json.dumps(reply), 200, headers
