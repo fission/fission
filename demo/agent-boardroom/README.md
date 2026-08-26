@@ -20,6 +20,8 @@ sub-second resume, live UI.**
   Session-scoped (dispatched by `fission-bundle --agentPort`, see `pkg/agentruntime/dispatcher.go`);
   keeps a per-session turn count and running summary via the RFC-0023 keyed-state API (`FISSION_STATE_URL` + the fetcher-written state token file);
   sets `X-Fission-Agent-Yield: waiting` after every reply so the session flips back to idle immediately.
+  On a turn carrying `{"artifact":true}` it also round-trips a generated artifact through its own G12 session workspace
+  (see "Session workspace" below).
 - `fixtures/order-lookup.js` —
   a trivial MCP tool function (static order data by id).
   Independent of `support-desk` on purpose:
@@ -156,6 +158,67 @@ What to watch on the `/ui/` board:
   (`authentication.enabled` with `internalAuth.enabled=false`)
   where the injected credential is a placeholder.
 
+## Session workspace
+
+`support-desk` (`fixtures/support-desk.js`) also demonstrates the G12 session workspace API on request:
+send `{"artifact":true}` in a turn's body and it PUTs a generated few-KiB text artifact to its own session workspace at `notes/summary.txt`,
+GETs it straight back,
+and lists the session,
+reporting both sha256 digests plus the list response in its reply.
+This is manual, like the swarm beat above — not part of `loadgen`.
+
+```sh
+# Port-forward as in the Kind quickstart's step 3, then run one turn with
+# the artifact flag set:
+curl -s -X POST http://127.0.0.1:8894/agents/default/support-desk \
+  -H 'Content-Type: application/json' \
+  -H 'X-Fission-Session: workspace-demo-1' \
+  -d '{"artifact":true}' | jq .
+```
+
+The reply's `artifactSha256Put` and `artifactSha256Got` should match,
+and `artifactList` should carry one entry for `notes/summary.txt`.
+`fixtures/support-desk.js` authenticates these calls the same way `architect.js` authenticates its spawn dispatches
+(the fetcher-written per-agent identity credential) —
+see the "Swarm beat" auth note above, which applies identically here.
+
+### SDK-visible surface
+
+Four routes on the agent runtime mux (`pkg/agentruntime/workspace.go`), all scoped to `<namespace>/<agent>/<session>`:
+
+- `PUT /workspace/{ns}/{agent}/{session}/{path...}` — write (or overwrite) an artifact.
+- `GET /workspace/{ns}/{agent}/{session}/{path...}` — read an artifact back; 404 if it does not exist.
+- `DELETE /workspace/{ns}/{agent}/{session}/{path...}` — remove an artifact; idempotent (a missing artifact still answers 200).
+- `GET /workspace/{ns}/{agent}/{session}` — list every artifact currently stored under the session, with sizes.
+
+Every route requires a **live session record** at `{ns}/{agent}/{session}` before it does anything else — the workspace is scoped to a session dispatch actually minted, never a caller-chosen id with no session behind it,
+and every route 404s otherwise.
+Authorization depends on which credential the caller sends:
+the per-agent identity bearer (the normal pod-to-workspace path) is **own-workspace only** —
+the claimed namespace AND agent must both match the path,
+so a pod can read/write/list/delete only its own session's artifacts, never another agent's, even one in the same namespace.
+A namespace-scoped JWT (the debugging-parity path) is checked on namespace alone,
+same as every other JWT-authenticated route on this mux —
+it can reach any agent's workspace within its scoped namespace.
+
+### Caps (code defaults)
+
+- **32MiB per artifact** (`AGENT_MAX_ARTIFACT_BYTES`) — a PUT over the cap is rejected with 413 before anything is stored.
+- **256MiB per session** (`AGENT_MAX_SESSION_ARTIFACT_BYTES`) and **1000 artifacts per session** (`AGENT_MAX_SESSION_ARTIFACTS`) —
+  a PUT past either budget is rejected with 429.
+  The count budget closes the byte budget's zero-byte-artifact bypass and structurally bounds how large a single LIST response can ever get.
+
+### Lifecycle
+
+- **Purged at archive.** The sweeper deletes every object under a session's workspace prefix when its record archives (`pkg/agentruntime/sweeper.go`) —
+  best-effort and log-don't-retry, the same posture as the rest of the sweeper.
+- **Scratch, not truth.** The workspace has no head-capture analog and no recovery story of its own:
+  treat it as a working area for the current session, not a system of record.
+  A purge racing a session recreated at the same id is accepted, documented residue, not a bug.
+- **Shrink-reclaim is delete+PUT, not overwrite.** Overwriting a path with a SMALLER file never credits the freed bytes back to the session's byte budget
+  (a same-path shrink is deliberately fail-closed against a quota-bypass race) —
+  to actually reclaim budget, DELETE the path first, then PUT the smaller replacement.
+
 ## Demo beats checklist
 
 Mapped from the boardroom demo script; check these off live against the
@@ -186,6 +249,10 @@ Mapped from the boardroom demo script; check these off live against the
 - [ ] **Swarm** — start an `architect` session (see "Swarm beat" below) and
       watch its 3 expert children appear indented underneath it in the
       SESSIONS panel, with a `d1` depth badge.
+- [ ] **Session workspace** — send one turn with `{"artifact":true}` (see
+      "Session workspace" below) and confirm the reply's
+      `artifactSha256Put`/`artifactSha256Got` match and `artifactList`
+      carries `notes/summary.txt`.
 - [ ] **Burst counter** — `loadgen`'s final report line
       (`density (sessions:pods): NNx`) climbs as `--sessions` grows for a
       fixed pool size.
