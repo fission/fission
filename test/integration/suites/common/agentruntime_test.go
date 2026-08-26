@@ -1367,33 +1367,59 @@ type workspaceTurnDTO struct {
 // IdentityOrJWTOwnWorkspace consumes the identical claims headers a spawn
 // dispatch does.
 //
-// Four things are asserted, in order:
+// Auth-posture gate (checked FIRST, before any turn is ever dispatched): this
+// test framework has no way to mint or sign a JWT (JWT_SIGNING_KEY is not
+// exposed to the test env at all, and the identity-bearer HMAC token derived
+// via hmacauth.DeriveAgentIdentityKey below is a DIFFERENT credential the JWT
+// verifier does not accept), and identityOrJWT (identity.go) delegates
+// unconditionally to the JWT middleware whenever a request carries NEITHER
+// identity claim header — so on a cluster where authz IS enabled
+// (authentication.enabled, JWT_SIGNING_KEY set), EVERY route on this mux,
+// including the very first turn dispatch below, 401s outright and this test
+// cannot run at all. Rather than fail confusingly deep into the test the
+// moment that becomes true, the probe below detects it up front and skips
+// the whole test: secured-mode agent-runtime end-to-end coverage is the same
+// named follow-up docs/superpowers/plans/2026-08-25-agent-runtime-identity.md
+// already deferred ("no secured-mode e2e (serial-suite env-flip is a named
+// follow-up)"), not built here.
+//
+// On the (CI-default) pass-through posture this actually runs under, three
+// things are asserted, in order:
 //
 //  1. PUT/GET round-trip: the fixture's reported artifactSha256Put and
 //     artifactSha256Got are equal, non-empty, and neither is the fixture's
 //     "error:<code>" failure sentinel — proving the bytes this test's turn
 //     wrote actually came back unchanged through storagesvc.
 //  2. LIST reflects the write: the session's artifact list contains
-//     "notes/summary.txt" with a positive size.
-//  3. Cross-agent 403: a DIFFERENT agent's own (real, derived) identity
-//     token must not read this agent's workspace — see the
-//     "posture probe" comment below for why this branch is conditional on
-//     the cluster's auth posture, and TestWorkspaceRoutes_CrossAgentForbidden/
-//     TestWorkspaceRoutes_CrossNamespaceForbidden (pkg/agentruntime/
-//     workspace_test.go) for the unconditional coverage of the same
-//     authorization rule against the production mountWorkspaceRoutes wiring.
-//  4. Nonexistent session -> 404: a workspace list on a session id that was
+//     "notes/summary.txt" with size >= artifactMinBytes.
+//  3. Nonexistent session -> 404: a workspace list on a session id that was
 //     never dispatched must 404 (the GC-anchor existence check,
-//     requireSession in workspace.go) — reachable regardless of auth
-//     posture, since it runs after auth succeeds in every configuration.
+//     requireSession in workspace.go).
+//
+// Cross-agent 403 (a DIFFERENT agent's own identity must not read this
+// agent's workspace) is NOT live-asserted here: the auth-posture gate above
+// means this test only ever runs on a cluster where authz is disabled, and on
+// that posture no request — with any headers, valid or forged — can ever be
+// rejected 403 by this deployment (asserting 403 there would flake; asserting
+// 200 there would wrongly pin "authorization is a no-op" as expected
+// behavior). The rule itself is proven unconditionally at the unit level by
+// pkg/agentruntime/workspace_test.go's TestWorkspaceRoutes_CrossAgentForbidden
+// and TestWorkspaceRoutes_CrossNamespaceForbidden, which exercise the
+// production mountWorkspaceRoutes wiring and a real IdentityVerifier against
+// a real *http.ServeMux; a live secured-cluster check is the same
+// "secured-mode serial e2e" follow-up named above.
 //
 // Archive-purge (the sweeper deleting a session's workspace objects at
-// record archive) is NOT asserted here: this suite has no short-ArchiveAfter
-// agent fixture to converge on within a reasonable poll budget, and the
-// purge is already exercised end-to-end at the unit level
+// record archive) is also NOT asserted here. A short-ArchiveAfter window can
+// be set on this test's own function (flag.FnAgentArchiveAfter, wired into
+// `fn update --agent`), so a live convergence path does technically exist —
+// but no test in this suite exercises that flag today, so there is no
+// established precedent here for how long that convergence actually takes
+// (and thus no basis for calling it "cheap" within this test's polling
+// budget). Given the plan explicitly grants discretion on this point, this
+// test relies on unit coverage instead
 // (pkg/agentruntime/sweeper_test.go's TestSweeperArchivePurgesWorkspace and
-// its siblings) — see this plan's Task 4 brief, which explicitly allows
-// "unit coverage suffices" for this specific assertion.
+// its siblings) rather than being the one to establish that precedent.
 func TestAgentRuntimeWorkspace(t *testing.T) {
 	t.Parallel()
 
@@ -1429,6 +1455,45 @@ func TestAgentRuntimeWorkspace(t *testing.T) {
 
 	base := f.AgentRuntimeBaseURL()
 	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// EARLY auth-posture probe — BEFORE any turn is dispatched (see this
+	// test's doc comment for why). A plain, header-free GET against the
+	// workspace list route for a session id that has never been dispatched
+	// distinguishes exactly three outcomes:
+	//   - 401: authz is enabled (JWT required) and this framework cannot
+	//     authenticate — skip the whole test now.
+	//   - 503: STORAGESVC_URL is unset on this deployment (workspace routes
+	//     answer workspaceDisabledMsg, workspace.go) — skip the whole test;
+	//     this is not the chart's default (STORAGESVC_URL is always set,
+	//     storagesvc.go's deployment template has no enable/disable gate) but
+	//     is possible on a hand-managed install.
+	//   - 404: pass-through — auth was a no-op, and requireSession correctly
+	//     reports the probe's session id as never having existed. This is
+	//     the only outcome the rest of this test proceeds under.
+	// Any other status is a genuine, unexpected failure worth failing loudly
+	// on rather than silently skipping or silently proceeding.
+	probeSessionID := "workspace-posture-probe-" + ns.ID
+	probeURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + probeSessionID
+	probeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	require.NoErrorf(t, err, "building auth-posture probe request")
+	probeResp, err := f.HTTPClient().Do(probeReq)
+	require.NoErrorf(t, err, "GET %s (auth-posture probe)", probeURL)
+	_ = probeResp.Body.Close()
+	switch probeResp.StatusCode {
+	case http.StatusUnauthorized:
+		t.Skipf("agent runtime on this cluster requires a JWT (authz enabled) and this test framework has no "+
+			"way to mint or sign one, so it cannot dispatch even the first turn here (GET %s got 401); "+
+			"secured-mode agent-runtime end-to-end coverage is the named 'secured-mode serial e2e' follow-up "+
+			"(docs/superpowers/plans/2026-08-25-agent-runtime-identity.md), not built here", probeURL)
+	case http.StatusServiceUnavailable:
+		t.Skipf("agent runtime's session workspace routes are disabled on this cluster (STORAGESVC_URL unset, "+
+			"GET %s got 503); skipping", probeURL)
+	case http.StatusNotFound:
+		// Pass-through posture: proceed.
+	default:
+		t.Fatalf("auth-posture probe GET %s: want 401 (authz enabled), 404 (pass-through), or 503 "+
+			"(workspace disabled), got %d", probeURL, probeResp.StatusCode)
+	}
 
 	// Turn 1: no session header, no artifact flag. Mints the session this
 	// whole test hangs off of (mirrors TestAgentRuntimeSpawnParentage's own
@@ -1511,126 +1576,20 @@ func TestAgentRuntimeWorkspace(t *testing.T) {
 	}, 180*time.Second, 2*time.Second)
 	require.NotEmptyf(t, payload.ArtifactSha256Put, "artifact turn on session %s never completed the PUT/GET/LIST beat", sessionID)
 
+	// Cross-agent 403 is NOT live-asserted here — see this test's doc
+	// comment: the auth-posture probe above already proved this cluster is
+	// running without authz enabled, so no request can ever be rejected 403
+	// by this deployment. The rule itself is covered unconditionally by
+	// pkg/agentruntime/workspace_test.go's TestWorkspaceRoutes_CrossAgentForbidden
+	// and TestWorkspaceRoutes_CrossNamespaceForbidden.
+
+	// Nonexistent session -> 404. master is used only to ALSO send agent A's
+	// own (real, valid) identity headers when available — harmless and a
+	// slightly more realistic caller shape on pass-through, but not required
+	// for this assertion: requireSession (workspace.go) runs after auth
+	// succeeds either way, and the session id below was never dispatched, so
+	// the GC-anchor existence check must 404 it regardless.
 	master := f.InternalAuthSecret()
-	listURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + sessionID
-
-	// Posture probe: identityOrJWT (identity.go) delegates unconditionally
-	// to the JWT middleware whenever a request carries NEITHER identity
-	// claim header, regardless of whether the server-side IdentityVerifier
-	// itself is nil — so a plain, header-free GET's 401-vs-200 split is
-	// exactly authz.Enabled() (main.go only builds the IdentityVerifier when
-	// authz IS enabled). In this suite's default install
-	// (agentRuntime.allowInsecure=true, authentication.enabled=false — see
-	// requireAgentRuntimeReachable's doc comment) authz is disabled and this
-	// probe returns 200: the workspace routes run fully unauthenticated, so
-	// no request — with any headers, valid or forged — can be rejected with
-	// 403 by this cluster today. Sending a mismatched identity in that
-	// posture would get 200, not 403; asserting 403 there would flake, and
-	// asserting 200 there would wrongly pin "authorization is a no-op" as
-	// expected behavior. Skip the live-cluster check in that posture instead
-	// — the authorization rule itself is fully covered at the unit level
-	// (see this test's doc comment).
-	var authEnforced bool
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
-		defer cancel()
-		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, listURL, nil)
-		if !assert.NoErrorf(c, err, "building posture probe request") {
-			return
-		}
-		resp, err := f.HTTPClient().Do(req)
-		if !assert.NoErrorf(c, err, "GET %s (posture probe)", listURL) {
-			return
-		}
-		defer resp.Body.Close()
-		if !assert.Truef(c, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized,
-			"posture probe GET %s returned unexpected status %d (want 200 pass-through or 401 authz-enabled)", listURL, resp.StatusCode) {
-			return
-		}
-		authEnforced = resp.StatusCode == http.StatusUnauthorized
-	}, 60*time.Second, 2*time.Second)
-
-	if authEnforced && len(master) > 0 {
-		// A second, distinct agent-enabled Function: verifyClaims' revocation
-		// check (identity.go) requires the CLAIMED agent to be live in the
-		// AgentView, so a cross-agent 403 needs a real, independently derived
-		// identity — not just an arbitrary claimed name. It never needs to
-		// handle a turn (it only has to be reconciled into the view), so no
-		// WaitForFunction-then-dispatch round trip is needed for it, just a
-		// poll on the registry's agent list.
-		otherAgent := "agent-workspace-other-" + ns.ID
-		ns.CreateFunction(t, ctx, framework.FunctionOptions{
-			Name: otherAgent,
-			Env:  envName,
-			Code: framework.WriteTestData(t, "nodejs/hello/hello.js"),
-		})
-		ns.WaitForFunction(t, ctx, otherAgent)
-		ns.CLI(t, ctx, "fn", "update", "--name", otherAgent, "--agent")
-
-		agentsURL := base + "/registry/agents"
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
-			defer cancel()
-			body, status, err := getRegistry(attemptCtx, f, agentsURL)
-			if !assert.NoErrorf(c, err, "GET %s", agentsURL) {
-				return
-			}
-			if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", agentsURL, body) {
-				return
-			}
-			var listPayload struct {
-				Agents []struct {
-					Namespace string `json:"namespace"`
-					Name      string `json:"name"`
-				} `json:"agents"`
-			}
-			if !assert.NoErrorf(c, json.Unmarshal(body, &listPayload), "decoding %s body %q", agentsURL, body) {
-				return
-			}
-			live := false
-			for _, a := range listPayload.Agents {
-				if a.Namespace == ns.Name && a.Name == otherAgent {
-					live = true
-				}
-			}
-			assert.Truef(c, live, "agent %s/%s not yet live in the registry", ns.Name, otherAgent)
-		}, 60*time.Second, 2*time.Second)
-
-		otherToken := hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, otherAgent))
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
-			defer cancel()
-			req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, listURL, nil)
-			if !assert.NoErrorf(c, err, "building cross-agent request") {
-				return
-			}
-			req.Header.Set("Authorization", "Bearer "+otherToken)
-			req.Header.Set(agentruntime.HeaderIdentityNamespace, ns.Name)
-			req.Header.Set(agentruntime.HeaderIdentityName, otherAgent)
-			resp, err := f.HTTPClient().Do(req)
-			if !assert.NoErrorf(c, err, "GET %s with agent %s's own identity", listURL, otherAgent) {
-				return
-			}
-			defer resp.Body.Close()
-			assert.Equalf(c, http.StatusForbidden, resp.StatusCode,
-				"agent %s must not read agent %s's workspace with its own (valid, live) identity token, got %d",
-				otherAgent, fnName, resp.StatusCode)
-		}, 60*time.Second, 2*time.Second)
-	} else {
-		t.Logf("agent runtime is running without authz enabled on this cluster (pass-through/AGENT_ALLOW_INSECURE) — "+
-			"skipping the live cross-agent 403 check; the authorization rule itself is proven at the unit level by "+
-			"pkg/agentruntime/workspace_test.go's TestWorkspaceRoutes_CrossAgentForbidden and "+
-			"TestWorkspaceRoutes_CrossNamespaceForbidden, which exercise the production mountWorkspaceRoutes wiring "+
-			"and a real IdentityVerifier against a real *http.ServeMux (authEnforced=%v, internalAuthSecretSet=%v)",
-			authEnforced, len(master) > 0)
-	}
-
-	// Nonexistent session -> 404: reachable regardless of auth posture, since
-	// requireSession (workspace.go) runs AFTER auth succeeds either way — a
-	// pass-through cluster admits the request with no headers at all, a
-	// secured one admits it because these are agent A's own valid claims for
-	// its own path. Either way the session id below was never dispatched, so
-	// the GC-anchor existence check must 404 it.
 	missingSessionID := "workspace-missing-" + ns.ID
 	missingURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + missingSessionID
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
