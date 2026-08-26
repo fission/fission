@@ -22,7 +22,7 @@ func Commands() *cobra.Command {
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvVersion, flag.EnvImagePullSecret, flag.EnvKeepArchive,
 			flag.EnvExternalNetwork, flag.Labels, flag.Annotation,
-			flag.SpecSave, flag.SpecDry, flag.EnvBuilder, flag.EnvRuntime},
+			flag.SpecSave, flag.SpecDry, flag.EnvBuilder, flag.EnvRuntime, flag.EnvRuntimeClass},
 	})
 
 	getCmd := wrapper.SubCommand(&cobra.Command{
@@ -42,7 +42,7 @@ func Commands() *cobra.Command {
 			flag.EnvBuilderImage, flag.EnvBuildCmd, flag.EnvImagePullSecret,
 			flag.RunTimeMinCPU, flag.RunTimeMaxCPU, flag.RunTimeMinMemory, flag.RunTimeMaxMemory,
 			flag.EnvTerminationGracePeriod, flag.EnvKeepArchive, flag.EnvRuntime,
-			flag.EnvExternalNetwork,
+			flag.EnvExternalNetwork, flag.EnvRuntimeClass,
 			flag.Labels, flag.Annotation},
 	})
 
