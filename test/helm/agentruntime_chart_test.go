@@ -95,6 +95,24 @@ func TestAgentRuntimeChartNetworkPolicy(t *testing.T) {
 		assert.Contains(t, ports, int32(8894), "ingress must admit the agent runtime dispatch port 8894")
 		assert.Empty(t, np.Spec.Ingress[0].From, "the policy is deliberately permissive: no from-allowlist")
 	})
+
+	// storagesvc netpol coverage: the workspace proxy (every PUT/GET/DELETE/
+	// LIST) and the sweeper's archive-time prefix purge both call storagesvc
+	// on port 8000 from the agentruntime pod. Missing this row is the
+	// BLOCKER final-review.md finding 1 — every workspace call is silently
+	// dropped under networkPolicy.enabled=true (the kind-ci profile forces
+	// this on), which is exactly the "silent i/o timeout in CI" shape
+	// TestWorkflowChart pins for the workflow engine's own two allowlists.
+	t.Run("storagesvc networkpolicy admits svc:agentruntime", func(t *testing.T) {
+		docs := render(t,
+			"--set", "networkPolicy.enabled=true",
+			"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+		ssNP := networkPolicy(t, docs, "storagesvc-allow-internal")
+		assert.True(t, npAllowsFromSvc(ssNP, svcinfo.SvcAgentRuntime),
+			"the workspace proxy and the sweeper's prefix purge both call storagesvc on port 8000; "+
+				"a missing row is a silent i/o timeout in CI (networkPolicy.enabled under kind-ci)")
+	})
 }
 
 // TestAgentRuntimeChartPoolRBAC guards Task 19's RBAC lockstep: pool

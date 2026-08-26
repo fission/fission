@@ -85,12 +85,22 @@ const (
 	// maxWorkspaceSegmentBytes / maxWorkspacePathBytes bound a single
 	// {path...} segment and the full path, mirroring
 	// pkg/storagesvc/workspace.go's maxWorkspaceSegmentBytes/
-	// maxWorkspaceIDBytes (that bound is on the FULL id, marker+ns+agent+
-	// session+path; this bound is on the path portion alone, so it is
-	// intentionally smaller — well within storagesvc's own ceiling once the
-	// marker/ns/agent/session prefix is added back).
+	// maxWorkspaceIDBytes (that bound is on the FULL id,
+	// marker+ns+agent+session+path; this bound is on the path portion
+	// alone, so it must be smaller by at least the worst-case prefix, not
+	// merely smaller).
+	//
+	// The full id is `_workspace_` (11 bytes) + "/" + ns (<=63, DNS-1123) +
+	// "/" + agent (<=63, DNS-1123) + "/" + session (<=128,
+	// sessionIDPattern) + "/" + path. At the worst case (ns/agent/session
+	// all maxed) the fixed prefix alone is 11+1+63+1+63+1+128+1 = 269
+	// bytes, leaving at most 1024-269 = 755 bytes of storagesvc's
+	// maxWorkspaceIDBytes budget for path. 1024 here would let a valid
+	// path pass this layer and still be 400'd by storagesvc (surfaced to
+	// the caller as an opaque 502) — so this bound must be <=755. 700 is
+	// used for a safety margin against future prefix growth.
 	maxWorkspaceSegmentBytes = 128
-	maxWorkspacePathBytes    = 1024
+	maxWorkspacePathBytes    = 700
 
 	// workspaceSpoolThresholdBytes bounds how much of a PUT body this
 	// handler keeps in memory before spilling to a temp file, mirroring
@@ -545,6 +555,14 @@ type WorkspaceHandler struct {
 	client    *workspaceClient // nil when STORAGESVC_URL is unset: every route answers 503.
 	retention time.Duration
 
+	// maxArtifactBytes bounds a single PUT (413 over the cap, handlePut).
+	// This is agentruntime's OWN cap, checked before the write; it does not
+	// widen storagesvc's own upload ceiling. An operator who lowers
+	// storagesvc's STORAGE_MAX_ARCHIVE_SIZE_MIB below this value makes a
+	// PUT that agentruntime accepted at this layer fail at storagesvc
+	// instead (surfaced here as a 502 "writing workspace object", not the
+	// 413 a caller would expect) — the two caps are independent knobs an
+	// operator must keep coherent, not one deriving from the other.
 	maxArtifactBytes        int64
 	maxSessionArtifactBytes int64 // 0 means unlimited.
 	maxSessionArtifacts     int64 // 0 means unlimited.
@@ -615,17 +633,31 @@ func (wh *WorkspaceHandler) requireSession(w http.ResponseWriter, r *http.Reques
 // outcome (the PUT/DELETE still succeeds) depends on the probe succeeding —
 // only the bookkeeping does.
 //
-// Every caller-visible fallback of a stale or failed probe — a LIST outage
-// read as "does not exist", or a raced probe whose oldSize is stale by
-// settle time — is engineered to be fail-CLOSED: it only ever OVER-counts
-// the tracked budget relative to true storage, never under-counts it. That
-// is enforced at the CALL sites, not by this function alone: handlePut
-// clamps its byte delta to a non-negative contribution (max(0, new-old)) so
-// a stale/negative delta from a same-path shrink race can never credit
-// budget back, and a spuriously "not found" probe only ever causes an
-// extra ArtifactCount++ (a permanent but bounded phantom), never a missed
-// decrement that would let real usage outrun the tracked total. See
-// handlePut's doc comment for the specific race shapes this closes.
+// On the PUT side, every caller-visible fallback of a stale or failed probe
+// — a LIST outage read as "does not exist", or a raced probe whose oldSize
+// is stale by settle time — is engineered to be fail-CLOSED: it only ever
+// OVER-counts the tracked budget relative to true storage, never
+// under-counts it. That is enforced at the CALL sites, not by this function
+// alone: handlePut clamps its byte delta to a non-negative contribution
+// (max(0, new-old)) so a stale/negative delta from a same-path shrink race
+// can never credit budget back, and a spuriously "not found" probe only
+// ever causes an extra ArtifactCount++ (a permanent but bounded phantom),
+// never a missed decrement that would let real usage outrun the tracked
+// total. See handlePut's doc comment for the specific race shapes this
+// closes.
+//
+// The DELETE side is the one ACCEPTED exception to that fail-closed
+// guarantee: two concurrent DELETEs of the same path both probe and both
+// observe found=true, size=S (storagesvc's own DELETE is idempotent-200, so
+// neither request sees "already gone"), so both settle
+// ArtifactCount/ArtifactBytes down by 1/S even though real storage only
+// shrank once — a fail-OPEN, self-inflicted double-decrement. This is a
+// ruled residue, not an oversight: exact settle would need per-path
+// serialization, which is disproportionate for a race only the session's
+// own credential holder can trigger against itself, and
+// the resulting headroom is bounded — at defaults, at most
+// maxSessionArtifacts * maxArtifactBytes (~31GiB) of daylight between
+// tracked and true usage, not unbounded. See handleDelete's doc comment.
 func (wh *WorkspaceHandler) probeExisting(ctx context.Context, ns, agent, session, id string) (size int64, found bool) {
 	items, err := wh.client.list(ctx, workspaceSessionPrefix(ns, agent, session))
 	if err != nil {
@@ -781,6 +813,15 @@ func (wh *WorkspaceHandler) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The persisted bool casUpdateFresh returns is deliberately discarded
+	// here: a false means the settle never landed (the fresh Get or the
+	// retried Update failed, already logged inside casUpdate) after the
+	// storagesvc write already succeeded — an ACCEPTED, fail-OPEN
+	// under-count of the same "drift from failed puts is accepted residue"
+	// family as the DELETE-side double-decrement (handleDelete's doc
+	// comment), not a new failure mode: the write itself is not rolled
+	// back, and retrying the settle from here would need its own
+	// idempotency story this handler does not have.
 	casUpdateFresh(r.Context(), wh.logger, wh.store, ns, agent, session, wh.liveTTL(ns, agent), func(rec *SessionRecord) {
 		if !existed {
 			rec.Stats.ArtifactCount++
@@ -872,6 +913,19 @@ type workspaceDeleteResp struct {
 // the contract), it only means the counter settle below is skipped —
 // accepted drift, the same "residue accepted" stance the purge/prefix-delete
 // paths take elsewhere in this feature.
+//
+// ACCEPTED RESIDUE, fail-OPEN: two concurrent DELETEs of the same path both
+// probe before either's del() lands, both observe found=true with the SAME
+// size, and both settle the decrement below — real storage shrinks once,
+// the tracked meters shrink twice. This is the one place in the workspace
+// quota system that is not fail-closed;
+// it is accepted rather than fixed because storagesvc's DELETE is
+// idempotent-200 (a "removed" and an "already gone" response are
+// indistinguishable to this handler), and closing it exactly would need
+// per-path settle serialization — disproportionate for a race a session can
+// only mount against its own budget. The resulting headroom is bounded, not
+// unbounded: at defaults, at most maxSessionArtifacts * maxArtifactBytes
+// (~31GiB) of daylight between tracked and true usage.
 func (wh *WorkspaceHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if wh.client == nil {
 		writeErr(w, http.StatusServiceUnavailable, workspaceDisabledMsg)
@@ -902,7 +956,11 @@ func (wh *WorkspaceHandler) handleDelete(w http.ResponseWriter, r *http.Request)
 	if found {
 		// Clamped at 0: a settle racing a concurrent delete of the same
 		// path, or drift from a prior failed-list skip, must never drive
-		// the counters negative.
+		// the counters negative. The clamp bounds the double-decrement
+		// race documented on handleDelete's doc comment (ACCEPTED RESIDUE)
+		// at 0 per counter — it does not prevent the race itself, which
+		// still under-counts relative to true storage when the session
+		// holds other artifacts.
 		casUpdateFresh(r.Context(), wh.logger, wh.store, ns, agent, session, wh.liveTTL(ns, agent), func(rec *SessionRecord) {
 			rec.Stats.ArtifactCount = max(0, rec.Stats.ArtifactCount-1)
 			rec.Stats.ArtifactBytes = max(0, rec.Stats.ArtifactBytes-size)

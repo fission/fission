@@ -207,6 +207,11 @@ it can reach any agent's workspace within its scoped namespace.
 - **256MiB per session** (`AGENT_MAX_SESSION_ARTIFACT_BYTES`) and **1000 artifacts per session** (`AGENT_MAX_SESSION_ARTIFACTS`) —
   a PUT past either budget is rejected with 429.
   The count budget closes the byte budget's zero-byte-artifact bypass and structurally bounds how large a single LIST response can ever get.
+- **DELETE-side settle is the one accepted fail-open exception.** Two concurrent DELETEs of the same path can both decrement the tracked meters
+  for a single real shrink (storagesvc's DELETE is idempotent-200, so the race is self-inflicted, not exploitable cross-session) —
+  bounded at defaults by `maxSessionArtifacts * maxArtifactBytes` (~31GiB), not the 256MiB byte budget. See `probeExisting`'s doc comment in `pkg/agentruntime/workspace.go`.
+- **Operators: `STORAGE_MAX_ARCHIVE_SIZE_MIB` interacts with `AGENT_MAX_ARTIFACT_BYTES`.** storagesvc's own upload cap applies to workspace PUTs too;
+  lowering it below the artifact cap makes an agentruntime-accepted PUT fail at storagesvc (a 502 here, not the expected 413).
 
 ### Lifecycle
 

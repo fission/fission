@@ -339,7 +339,11 @@ const (
 	// is unset. 0 for either session budget means unlimited (see
 	// WorkspaceHandler.maxSessionArtifactBytes/maxSessionArtifacts); the
 	// per-artifact cap has no such "0 means unlimited" escape hatch — it
-	// always bounds a single PUT.
+	// always bounds a single PUT. This cap is agentruntime's own, independent
+	// of storagesvc's STORAGE_MAX_ARCHIVE_SIZE_MIB — an operator who lowers
+	// that below AGENT_MAX_ARTIFACT_BYTES makes a PUT agentruntime accepted
+	// here fail at storagesvc instead (see WorkspaceHandler.maxArtifactBytes
+	// in workspace.go for the full interplay note).
 	defaultMaxArtifactBytes        int64 = 32 << 20
 	defaultMaxSessionArtifactBytes int64 = 256 << 20
 	defaultMaxSessionArtifacts     int64 = 1000
