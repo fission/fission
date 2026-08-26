@@ -7,6 +7,7 @@ package agentruntime
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -150,7 +151,7 @@ func TestSweeperActiveToIdleAfterIdleAfter(t *testing.T) {
 		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusActive, LastActiveAt: time.Now()}
 		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, 7*24*time.Hour, time.Now)
 
 		// Not yet due: less than IdleAfter has elapsed.
 		time.Sleep(entry.IdleAfter - time.Second)
@@ -182,7 +183,7 @@ func TestSweeperIdleToArchivedAfterArchiveAfter(t *testing.T) {
 		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
 		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, retention, time.Now)
 
 		// Not yet due.
 		time.Sleep(entry.ArchiveAfter - time.Second)
@@ -229,7 +230,7 @@ func TestSweeperIdleTransitionSkipsOnCASConflict(t *testing.T) {
 		require.NoError(t, store.Create(ctx, rec, 0, time.Hour))
 		time.Sleep(entry.IdleAfter + time.Second)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, 7*24*time.Hour, time.Now)
 		sweeper.beforeCAS = func() {
 			// Simulate a second replica winning the race: it idles the
 			// record first, landing between this sweeper's Get and Update.
@@ -270,7 +271,7 @@ func TestSweeperArchiveSkipsOnReviveRace(t *testing.T) {
 		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
 		time.Sleep(entry.ArchiveAfter + time.Second)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, retention, time.Now)
 		var revivedAt time.Time
 		sweeper.beforeCAS = func() {
 			// A live turn revives the session, landing between this
@@ -333,7 +334,7 @@ func TestSweeperArchiveSkipsOnListToGetStalenessWindow(t *testing.T) {
 		revived.Stats.Turns = 1
 		require.NoError(t, store.Update(ctx, revived, version, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, retention, time.Now)
 		// staleSnapshot is what the sweeper's List call would have returned
 		// before the revive landed; sweepRecord must re-validate against a
 		// fresh Get rather than trusting it.
@@ -382,7 +383,7 @@ func TestSweeperIdleSkipsOnListToGetStalenessWindow(t *testing.T) {
 		touched.Stats.Turns = 1
 		require.NoError(t, store.Update(ctx, touched, version, time.Hour))
 
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, 7*24*time.Hour, time.Now)
 		// staleSnapshot is what the sweeper's List call would have returned
 		// before the turn landed; sweepRecord must re-validate against a
 		// fresh Get rather than trusting it.
@@ -401,7 +402,7 @@ func TestSweeperRunRespectsContextCancel(t *testing.T) {
 		kv := newTestKV(t)
 		store := NewSessionStore(kv, time.Now)
 		view := NewAgentView()
-		sweeper := NewSweeper(logr.Discard(), view, store, nil, 10*time.Millisecond, time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, 10*time.Millisecond, time.Hour, time.Now)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
@@ -446,7 +447,7 @@ func TestSweeperArchiveTrimsHistoryToPreArchiveHeadAndDeletesCheckpoint(t *testi
 		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 4)
 		hist := NewHistoryStore(el, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		time.Sleep(entry.ArchiveAfter + time.Second)
 		sweeper.sweepOnce(ctx)
 
@@ -484,7 +485,7 @@ func TestSweeperArchiveDeletesCheckpointDespiteZeroHead(t *testing.T) {
 		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 0)
 		hist := NewHistoryStore(el, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		time.Sleep(entry.ArchiveAfter + time.Second)
 		sweeper.sweepOnce(ctx)
 
@@ -524,7 +525,7 @@ func TestSweeperArchiveCheckpointDeleteSurvivesFreshCheckpointWrite(t *testing.T
 		}
 		hist := NewHistoryStore(el, wrapped)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		time.Sleep(entry.ArchiveAfter + time.Second)
 		sweeper.sweepOnce(ctx)
 
@@ -564,7 +565,7 @@ func TestSweeperArchiveTrimSurvivesLateAppendedEvents(t *testing.T) {
 		}
 		hist := NewHistoryStore(wrapped, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		time.Sleep(entry.ArchiveAfter + time.Second)
 		sweeper.sweepOnce(ctx)
 
@@ -599,7 +600,7 @@ func TestSweeperArchiveCASConflictLeavesHistoryUntouched(t *testing.T) {
 
 		time.Sleep(entry.ArchiveAfter + time.Second)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		sweeper.beforeCAS = func() {
 			// A live turn revives the session, landing between the
 			// sweeper's Get and its Archive CAS.
@@ -646,7 +647,7 @@ func TestSweeperKnobTrimsLiveSessionToCheckpointBoundary(t *testing.T) {
 		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 3)
 		hist := NewHistoryStore(el, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, 7*24*time.Hour, time.Now)
 		sweeper.sweepOnce(ctx)
 
 		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
@@ -683,7 +684,7 @@ func TestSweeperKnobTrimClampsForgedCoveredThroughSeqToHead(t *testing.T) {
 		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 1<<60) // forged
 		hist := NewHistoryStore(el, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, 7*24*time.Hour, time.Now)
 		sweeper.sweepOnce(ctx)
 
 		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
@@ -716,7 +717,7 @@ func TestSweeperKnobFalseLeavesLiveSessionHistoryUntouched(t *testing.T) {
 		setTestCheckpoint(t, ctx, hkv, "ns", "ks1", "s1", 3)
 		hist := NewHistoryStore(el, hkv)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, 7*24*time.Hour, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, 7*24*time.Hour, time.Now)
 		sweeper.sweepOnce(ctx)
 
 		events, err := hist.Read(ctx, "ns", "ks1", "s1", 0, 100)
@@ -748,7 +749,7 @@ func TestSweeperNoKeyspaceAgentNeverTouchesHistoryStore(t *testing.T) {
 		countedKV := &countingKV{KVStore: hkv}
 		hist := NewHistoryStore(countedEl, countedKV)
 
-		sweeper := NewSweeper(logr.Discard(), view, store, hist, time.Second, retention, time.Now)
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, nil, time.Second, retention, time.Now)
 		// Drive it past archive due, so the only reason history stays
 		// untouched is the StateKeyspace=="" guard, not "never reached the
 		// archive path".
@@ -763,5 +764,177 @@ func TestSweeperNoKeyspaceAgentNeverTouchesHistoryStore(t *testing.T) {
 		list, _, err := store.List(ctx, "ns", "agent1", "", 10)
 		require.NoError(t, err)
 		assert.Empty(t, list, "the archive transition itself must still have happened")
+	})
+}
+
+// countingWorkspacePurger is a counting fake workspacePurger (sweeper.go)
+// for testing the sweeper's archive-time workspace purge without a real
+// storagesvc. err, when non-nil, is returned by every call (after still
+// recording it in calls) — used to pin the log-don't-retry stance.
+type countingWorkspacePurger struct {
+	calls []string // prefixes passed to deletePrefix, in call order.
+	err   error
+}
+
+func (p *countingWorkspacePurger) deletePrefix(_ context.Context, prefix string) (int, error) {
+	p.calls = append(p.calls, prefix)
+	if p.err != nil {
+		return 0, p.err
+	}
+	return 1, nil
+}
+
+// TestSweeperArchivePurgesWorkspace pins the happy path: a successful archive
+// CAS purges the session's workspace prefix exactly once, with the canonical
+// trailing-slash "_workspace_/<ns>/<agent>/<session>/" prefix.
+func TestSweeperArchivePurgesWorkspace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		el, hkv := newTestStores(t)
+		hist := NewHistoryStore(el, hkv)
+		entry := sweeperTestEntryWithHistory("ns", "agent1", "ks1", false)
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		purger := &countingWorkspacePurger{}
+		sweeper := NewSweeper(logr.Discard(), view, store, hist, purger, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		require.Len(t, purger.calls, 1)
+		assert.Equal(t, "_workspace_/ns/agent1/s1/", purger.calls[0])
+	})
+}
+
+// TestSweeperArchivePurgesWorkspaceNoStateKeyspace pins the early-return
+// trap named in this feature's plan review: the workspace purge must fire
+// for a STATE-LESS agent (StateKeyspace == "") too, because it is inserted
+// BEFORE the entry.StateKeyspace=="" early return in archive, not beside the
+// history/checkpoint cleanup that return guards.
+func TestSweeperArchivePurgesWorkspaceNoStateKeyspace(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1") // StateKeyspace == ""
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+
+		purger := &countingWorkspacePurger{}
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, purger, time.Second, retention, time.Now)
+		time.Sleep(entry.ArchiveAfter + time.Second)
+		sweeper.sweepOnce(ctx)
+
+		require.Len(t, purger.calls, 1, "a no-StateKeyspace agent must still get its workspace purged")
+		assert.Equal(t, "_workspace_/ns/agent1/s1/", purger.calls[0])
+	})
+}
+
+// TestSweeperArchiveCASConflictSkipsWorkspacePurge covers the CAS-conflict/
+// revive race: when store.Archive's CAS fails (a live turn revived the
+// session between the sweeper's Get and its Archive call), the workspace
+// purge must never fire — the session is still live.
+func TestSweeperArchiveCASConflictSkipsWorkspacePurge(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1")
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+		time.Sleep(entry.ArchiveAfter + time.Second)
+
+		purger := &countingWorkspacePurger{}
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, purger, time.Second, retention, time.Now)
+		sweeper.beforeCAS = func() {
+			// A live turn revives the session, landing between this
+			// sweeper's Get and Archive — see TestSweeperArchiveSkipsOnReviveRace.
+			live, version, err := store.Get(ctx, "ns", "agent1", "s1")
+			require.NoError(t, err)
+			live.Status = StatusActive
+			live.LastActiveAt = time.Now()
+			require.NoError(t, store.Update(ctx, live, version, liveTTL))
+		}
+
+		sweeper.sweepOnce(ctx)
+
+		assert.Empty(t, purger.calls, "a revived session must never have its workspace purged")
+	})
+}
+
+// TestSweeperArchivePurgeErrorLoggedNotRetried pins the log-don't-retry
+// stance: a workspace-purge failure must not abort the sweep, must not be
+// retried within the same pass, and must not block any other record in the
+// same sweep from being processed.
+func TestSweeperArchivePurgeErrorLoggedNotRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1")
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec1 := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		rec2 := SessionRecord{ID: "s2", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec1, 0, liveTTL))
+		require.NoError(t, store.Create(ctx, rec2, 0, liveTTL))
+		time.Sleep(entry.ArchiveAfter + time.Second)
+
+		purger := &countingWorkspacePurger{err: errors.New("storagesvc unreachable")}
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, purger, time.Second, retention, time.Now)
+		sweeper.sweepOnce(ctx)
+
+		assert.Len(t, purger.calls, 2, "a purge error must not be retried within the sweep, and must not block the other record's archive")
+		list, _, err := store.List(ctx, "ns", "agent1", "", 10)
+		require.NoError(t, err)
+		assert.Empty(t, list, "both records must still have archived despite the purge failure")
+	})
+}
+
+// TestSweeperNilWorkspacePurgerSkipsSilently pins the "workspace disabled"
+// contract: with a nil workspacePurger (STORAGESVC_URL unset in production —
+// see main.go's wsPurger construction) the archive transition must still
+// succeed, with no error and nothing purged.
+func TestSweeperNilWorkspacePurgerSkipsSilently(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		kv := newTestKV(t)
+		store := NewSessionStore(kv, time.Now)
+		view := NewAgentView()
+		entry := sweeperTestEntry("ns", "agent1")
+		view.Upsert(entry)
+
+		ctx := t.Context()
+		retention := 7 * 24 * time.Hour
+		liveTTL := entry.IdleAfter + entry.ArchiveAfter + retention
+		rec := SessionRecord{ID: "s1", Agent: "agent1", Namespace: "ns", Status: StatusIdle, LastActiveAt: time.Now()}
+		require.NoError(t, store.Create(ctx, rec, 0, liveTTL))
+		time.Sleep(entry.ArchiveAfter + time.Second)
+
+		sweeper := NewSweeper(logr.Discard(), view, store, nil, nil, time.Second, retention, time.Now)
+		sweeper.sweepOnce(ctx)
+
+		list, _, err := store.List(ctx, "ns", "agent1", "", 10)
+		require.NoError(t, err)
+		assert.Empty(t, list, "archive must succeed even with no workspace purger configured")
 	})
 }

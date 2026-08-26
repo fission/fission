@@ -244,6 +244,22 @@ func TestAgentRuntimeChartExecutorURL(t *testing.T) {
 	})
 }
 
+// TestAgentRuntimeChartStoragesvcURL checks the workspace-purge slice's chart
+// wiring: the agentruntime Deployment always carries STORAGESVC_URL, mirroring
+// buildermgr's own --storageSvcUrl VALUE
+// (charts/fission-all/templates/buildermgr/deployment.yaml) as an ENV rather
+// than a container arg. Unlike AGENT_RUNTIME_URL on the executor (which is
+// gated on agentRuntime.enabled), storagesvc is a core, always-deployed
+// component with no enabled gate to condition on, so this env is unconditional.
+func TestAgentRuntimeChartStoragesvcURL(t *testing.T) {
+	docs := render(t,
+		"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
+	env := containerEnv(t, deployment(t, docs, svcinfo.SvcAgentRuntime))
+	assert.Equal(t, "http://storagesvc.fission", env["STORAGESVC_URL"],
+		"agentruntime's workspace routes must be handed storagesvc's ClusterIP Service URL, mirroring buildermgr's --storageSvcUrl value")
+}
+
 // TestAgentRuntimeChartInternalAuthEnvs is a verify-only assertion (no chart
 // change needed): the agentruntime Deployment already carries
 // FISSION_INTERNAL_AUTH_SECRET under default values, wired via

@@ -512,7 +512,6 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// dispatcher dependency.
 	hist := NewHistoryStore(eventLog, kv)
 	dispatcher := NewDispatcher(logger.WithName("dispatcher"), view, store, &http.Client{Transport: rt}, opts.RouterInternalURL, retention, time.Now, maxContinuations, maxSpawnDepth)
-	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, hist, sweepInterval, retention, time.Now)
 
 	// Session workspace routes (workspace.go): a SMALL internal client to
 	// storagesvc's /v1/workspace surface, built the same way the dispatcher's
@@ -521,7 +520,9 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// (whose ClientInterface targets the archive upload/download contract).
 	// wsClient stays nil when STORAGESVC_URL is unset — see envStoragesvcURL's
 	// doc comment — which is what makes every workspace route answer 503
-	// "workspace disabled" instead of agentruntime guessing a URL.
+	// "workspace disabled" instead of agentruntime guessing a URL. Constructed
+	// BEFORE the sweeper below so the same client doubles as the sweeper's
+	// archive-time workspace-purge dependency (sweeper.go's workspacePurger).
 	var wsClient *workspaceClient
 	if storagesvcURL := os.Getenv(envStoragesvcURL); storagesvcURL != "" {
 		var wsrt http.RoundTripper = otelhttp.NewTransport(httpx.PooledTransport(workspaceIdleConnsPerHost))
@@ -531,6 +532,19 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		wsClient = newWorkspaceClient(storagesvcURL, wsrt)
 	}
 	wsHandler := NewWorkspaceHandler(logger.WithName("workspace"), view, store, wsClient, retention, maxArtifactBytes, maxSessionArtifactBytes, maxSessionArtifacts)
+
+	// wsPurger is a workspacePurger interface value, NOT the *workspaceClient
+	// pointer directly: passing a typed-nil *workspaceClient through the
+	// interface parameter would make the sweeper's `s.wsPurger == nil` check
+	// (sweeper.go) false even when wsClient is nil, since a non-nil interface
+	// type wrapping a nil pointer is itself a non-nil interface value. This
+	// explicit nil-to-nil-interface conversion is what actually disables the
+	// sweeper's purge when STORAGESVC_URL is unset.
+	var wsPurger workspacePurger
+	if wsClient != nil {
+		wsPurger = wsClient
+	}
+	sweeper := NewSweeper(logger.WithName("sweeper"), view, store, hist, wsPurger, sweepInterval, retention, time.Now)
 
 	// SSE registry feed: a single background Poller diffs
 	// SessionStore.List across view.List() agents and publishes changes to a
