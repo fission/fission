@@ -38,7 +38,13 @@ func TestEnvRuntimeClassCELRoundTrip(t *testing.T) {
 	defer cancel()
 
 	f := framework.Connect(t)
-	image := f.Images().RequireNode(t)
+	// This test creates and reads Environment CRs only (it never materializes a
+	// pod), so it must NOT gate on NODE_RUNTIME_IMAGE via RequireNode: this is
+	// the load-bearing backstop that the served CRD carries the CEL rule (there
+	// is no CRD-drift CI gate), and it must run even when the image env var is
+	// unset. Runtime.Image just needs to be a non-empty valid ref to satisfy
+	// EnvironmentSpec admission; a placeholder that never gets pulled is fine.
+	image := "example.com/placeholder:latest"
 	ns := f.NewTestNamespace(t)
 
 	// A valid DNS1123-label value is admitted and round-trips.
