@@ -74,7 +74,11 @@ function stateHeaders(extra) {
 
 async function loadState(sessionID) {
   if (!stateCreds) {
-    return memoryFallback.get(sessionID) || {};
+    // Copy out, don't return the stored reference -- a caller that mutates
+    // the returned object without ever reaching saveState (an early return
+    // added later, say) must not silently mutate memoryFallback's stored
+    // copy too.
+    return Object.assign({}, memoryFallback.get(sessionID));
   }
   const res = await fetch(`${STATE_URL}/v1/state/${encodeURIComponent(sessionID)}`, {
     headers: stateHeaders(),
