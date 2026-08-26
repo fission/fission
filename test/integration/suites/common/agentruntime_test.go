@@ -807,18 +807,17 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
 		Name: fnName,
 		Env:  envName,
-		Code: framework.WriteTestData(t, "nodejs/agentspawn/spawn.js"),
 		// The fixture spawns children on ITSELF: it needs to know its own
 		// namespace and function name to build both the outbound dispatch
 		// URL and the ParentRef header it stamps on the child. This test
-		// already knows both before creating the function, so it passes
-		// them as plain env vars rather than making the fixture depend on
-		// the (unrelated) RFC-0023 state-token file the way architect.js
-		// does.
-		EnvVars: []string{
-			"SELF_NAMESPACE=" + ns.Name,
-			"SELF_AGENT_NAME=" + fnName,
-		},
+		// already knows both before creating the function, so it TEMPLATES
+		// them into the fixture source — they can't be function env vars,
+		// which the vfunction webhook rejects on the poolmgr executor
+		// (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 	// Same CLI-update workaround as the other tests in this file
@@ -1264,14 +1263,14 @@ func TestAgentRuntimeTraceContextPropagation(t *testing.T) {
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
 		Name: fnName,
 		Env:  envName,
-		Code: framework.WriteTestData(t, "nodejs/agentspawn/spawn.js"),
-		// spawn.js requires these even for a plain (non-spawning) turn: it
-		// builds parentRef from them unconditionally before deciding
-		// whether to spawn.
-		EnvVars: []string{
-			"SELF_NAMESPACE=" + ns.Name,
-			"SELF_AGENT_NAME=" + fnName,
-		},
+		// spawn.js needs its own namespace+name even for a plain
+		// (non-spawning) turn (it builds parentRef unconditionally);
+		// templated into the source because env vars are rejected on
+		// poolmgr by the vfunction webhook (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 	// Same CLI-update workaround as the other tests in this file
@@ -1439,14 +1438,14 @@ func TestAgentRuntimeWorkspace(t *testing.T) {
 	ns.CreateFunction(t, ctx, framework.FunctionOptions{
 		Name: fnName,
 		Env:  envName,
-		Code: framework.WriteTestData(t, "nodejs/agentspawn/spawn.js"),
-		// spawn.js needs these even for a turn that never spawns (it builds
-		// parentRef from them unconditionally) — same as
-		// TestAgentRuntimeTraceContextPropagation's setup.
-		EnvVars: []string{
-			"SELF_NAMESPACE=" + ns.Name,
-			"SELF_AGENT_NAME=" + fnName,
-		},
+		// spawn.js needs its own namespace+name even for a turn that never
+		// spawns (it builds parentRef unconditionally) — same as
+		// TestAgentRuntimeTraceContextPropagation's setup; templated in
+		// because env vars are rejected on poolmgr (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
 	})
 	ns.WaitForFunction(t, ctx, fnName)
 	// Same CLI-update workaround as the other tests in this file
