@@ -164,11 +164,11 @@ func getStreamingConfig(input cli.Input) *fv1.StreamingConfig {
 	}
 }
 
-// getStateConfig builds the RFC-0023 StateConfig from the --state* flags,
+// GetStateConfig builds the RFC-0023 StateConfig from the --state* flags,
 // merging onto existing (the function's current config, or nil on create) so
 // an `fn update --state` that sets only one field keeps the rest. nil when
 // --state is not set. Bounds/charset are validated server-side.
-func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig {
+func GetStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig {
 	if !input.Bool(flagkey.FnState) {
 		return nil
 	}
@@ -202,14 +202,14 @@ func getStateConfig(input cli.Input, existing *fv1.StateConfig) *fv1.StateConfig
 	return sc
 }
 
-// getAgentConfig maps the --agent* flags onto fv1.AgentConfig, merging onto
+// GetAgentConfig maps the --agent* flags onto fv1.AgentConfig, merging onto
 // existing so an update only overwrites explicitly-set flags. --agent=false
-// clears the config (mirrors getStateConfig / --state=false); an update that
+// clears the config (mirrors GetStateConfig / --state=false); an update that
 // omits --agent entirely never calls this function (see the input.IsSet
 // guard in update.go), so existing is left untouched in that case. Field
 // bounds are validated server-side by the Function admission webhook (CLI
 // stays thin).
-func getAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig {
+func GetAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig {
 	if !input.Bool(flagkey.FnAgent) {
 		return nil
 	}
@@ -621,8 +621,8 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 			IdleTimeout:            &fnIdleTimeout,
 			Streaming:              getStreamingConfig(input),
 			Tool:                   toolConfig,
-			State:                  getStateConfig(input, nil),
-			Agent:                  getAgentConfig(input, nil),
+			State:                  GetStateConfig(input, nil),
+			Agent:                  GetAgentConfig(input, nil),
 			Invocation:             invocation,
 			Versioning:             versioningConfig,
 			ProvisionedConcurrency: provisionedConcurrency,

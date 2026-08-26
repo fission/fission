@@ -164,6 +164,11 @@ const (
 	FnAgentMaxSessions   = "agent-max-sessions"
 	FnAgentHistoryTrim   = "agent-history-trim"
 
+	// `fission agent create` scaffold (Task 2, G17 DX). --code reuses
+	// PkgCode's "code" key below (same meaning: the single handler file's
+	// path), so only --lang is genuinely new here.
+	FnAgentLang = "lang"
+
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession      = "session"
 	AgentToken        = "agent-token"
