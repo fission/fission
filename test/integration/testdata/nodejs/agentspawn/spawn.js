@@ -49,6 +49,18 @@
 // X-Fission-Agent-Auth-Namespace / X-Fission-Agent-Auth-Name claims headers
 // (pkg/agentruntime/identity.go) -- see readAgentCredentials()/authHeaders()
 // below for the fallback order and the dev-placeholder edge case.
+//
+// Session workspace beat (G12, Task 4 of the workspace plan): on a turn
+// whose body carries {"artifact":true} this fixture PUTs a generated few-KiB
+// text artifact to its OWN session workspace at "notes/summary.txt"
+// (pkg/agentruntime/workspace.go), GETs it straight back, and lists the
+// session — the SAME identity credential/authHeaders() plumbing above
+// authenticates these calls, since workspace.go's own-workspace check
+// requires the IDENTICAL claims a spawn dispatch already carries (namespace
+// AND agent, not just namespace). Best-effort like spawnChild above: a
+// failed PUT/GET/LIST never fails this turn's own 200, it only reports
+// "error:<code>" in the corresponding response field(s) — see
+// artifactBeat's doc comment.
 
 'use strict';
 
@@ -201,6 +213,120 @@ async function spawnChild(parentRef, stepKey) {
   }
 }
 
+// ARTIFACT_PATH is the fixed within-session path this beat round-trips,
+// matching the demo fixture's own choice (demo/agent-boardroom/fixtures/
+// support-desk.js) and the integration test's assertion
+// (agentruntime_test.go).
+const ARTIFACT_PATH = 'notes/summary.txt';
+// ARTIFACT_MIN_BYTES bounds the generated content to "a few KiB" (Task 4's
+// brief) -- well under AGENT_MAX_ARTIFACT_BYTES' 32MiB default, so this beat
+// never needs to reason about the quota-rejection paths (workspace_test.go's
+// TestWorkspacePut_OverCap413_NothingStored etc. already cover those at the
+// unit level).
+const ARTIFACT_MIN_BYTES = 3072;
+
+// workspaceURL builds the wire URL for one of the four session workspace
+// routes (workspace.go's mountWorkspaceRoutes): the three path-scoped verbs
+// when path is given, the list route when it is omitted.
+function workspaceURL(ns, agent, sessionID, path) {
+  const base = `${AGENT_RUNTIME_URL}/workspace/${encodeURIComponent(ns)}/${encodeURIComponent(agent)}/${encodeURIComponent(sessionID)}`;
+  return path ? `${base}/${path}` : base;
+}
+
+// buildArtifactContent deterministically generates a few-KiB text artifact
+// from the session id and turn number -- no randomness, so a re-run against
+// the SAME session/turn produces byte-identical content (harmless either
+// way, since the PUT/GET sha256 comparison this beat reports only ever
+// compares against ITS OWN write within the same turn).
+function buildArtifactContent(sessionID, turn) {
+  const line = `session ${sessionID} turn ${turn}: session workspace (G12) artifact demo beat -- PUT/GET/LIST round-trip through pkg/agentruntime/workspace.go.\n`;
+  let out = '';
+  while (out.length < ARTIFACT_MIN_BYTES) {
+    out += line;
+  }
+  return out;
+}
+
+// errTag extracts a short, loggable/reportable tag from an artifact-beat
+// error: the HTTP status code when putArtifact/getArtifact/listArtifacts
+// threw a "status:<code>" Error (see those functions below), otherwise the
+// error's own code/name -- never its full message, mirroring
+// readAgentCredentials' token-leak guard (irrelevant here, but keeping the
+// same shape avoids a second convention for "how do we stringify an error"
+// in this file).
+function errTag(err) {
+  const m = /^status:(\d+)$/.exec(err && err.message);
+  return m ? m[1] : (err && (err.code || err.name)) || 'network';
+}
+
+async function putArtifact(ns, agent, sessionID, content) {
+  const res = await fetch(workspaceURL(ns, agent, sessionID, ARTIFACT_PATH), {
+    method: 'PUT',
+    headers: Object.assign({ 'Content-Type': 'text/plain' }, authHeaders()),
+    body: content,
+  });
+  if (!res.ok) {
+    throw new Error(`status:${res.status}`);
+  }
+  await res.json(); // drain/validate the {path,size} body; size is not needed here.
+  return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+async function getArtifact(ns, agent, sessionID) {
+  const res = await fetch(workspaceURL(ns, agent, sessionID, ARTIFACT_PATH), { headers: authHeaders() });
+  if (!res.ok) {
+    throw new Error(`status:${res.status}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+async function listArtifacts(ns, agent, sessionID) {
+  const res = await fetch(workspaceURL(ns, agent, sessionID, ''), { headers: authHeaders() });
+  if (!res.ok) {
+    throw new Error(`status:${res.status}`);
+  }
+  const data = await res.json();
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+// artifactBeat runs the PUT -> GET -> LIST sequence and returns the wire
+// shape this turn's response echoes: artifactSha256Put/artifactSha256Got are
+// the literal string "error:<code>" on failure (never thrown -- see this
+// file's header comment), and artifactList is always an array; a LIST
+// failure reports as a single sentinel item {path:"error:<code>",size:0}
+// rather than changing the field's type, so a caller-side JSON decoder never
+// has to handle two different shapes for the same field.
+async function artifactBeat(ns, agent, sessionID, turn) {
+  const content = buildArtifactContent(sessionID, turn);
+
+  let put = 'error:unknown';
+  try {
+    put = await putArtifact(ns, agent, sessionID, content);
+  } catch (err) {
+    console.error(`agentspawn: artifact PUT (session ${sessionID}) failed: ${err}`);
+    put = `error:${errTag(err)}`;
+  }
+
+  let got = 'error:unknown';
+  try {
+    got = await getArtifact(ns, agent, sessionID);
+  } catch (err) {
+    console.error(`agentspawn: artifact GET (session ${sessionID}) failed: ${err}`);
+    got = `error:${errTag(err)}`;
+  }
+
+  let list = [{ path: 'error:unknown', size: 0 }];
+  try {
+    list = await listArtifacts(ns, agent, sessionID);
+  } catch (err) {
+    console.error(`agentspawn: artifact LIST (session ${sessionID}) failed: ${err}`);
+    list = [{ path: `error:${errTag(err)}`, size: 0 }];
+  }
+
+  return { artifactSha256Put: put, artifactSha256Got: got, artifactList: list };
+}
+
 module.exports = async function (context) {
   const req = context.request;
   const sessionID = req.headers[SESSION_HEADER] || 'unknown';
@@ -236,6 +362,7 @@ module.exports = async function (context) {
     }
   }
   const shouldSpawn = !!(body && typeof body === 'object' && body.spawn === true);
+  const shouldArtifact = !!(body && typeof body === 'object' && body.artifact === true);
 
   // spawned is reported whenever this turn spawned, REGARDLESS of whether
   // the inner dispatch call itself succeeded -- the derivation never fails,
@@ -254,6 +381,17 @@ module.exports = async function (context) {
     spawnBody = result.error ? `<network error: ${result.error}>` : result.body;
   }
 
+  // artifact* fields are only populated when this turn actually ran the
+  // beat (shouldArtifact) -- null on every other turn, rather than running
+  // the beat unconditionally on every turn this fixture ever handles. This
+  // fixture (unlike support-desk.js) tracks no per-session turn count, so
+  // buildArtifactContent's turn argument is a fixed 0 -- it only needs to be
+  // SOME string, not an accurate counter.
+  let artifact = { artifactSha256Put: null, artifactSha256Got: null, artifactList: null };
+  if (shouldArtifact) {
+    artifact = await artifactBeat(SELF_NAMESPACE, SELF_AGENT_NAME, sessionID, 0);
+  }
+
   return {
     status: 200,
     body: JSON.stringify({
@@ -266,6 +404,9 @@ module.exports = async function (context) {
       agentTokenNamespace: agentTokenNamespace,
       agentTokenAgent: agentTokenAgent,
       traceparentSeen: traceparentSeen,
+      artifactSha256Put: artifact.artifactSha256Put,
+      artifactSha256Got: artifact.artifactSha256Got,
+      artifactList: artifact.artifactList,
     }),
     headers: { 'Content-Type': 'application/json' },
   };
