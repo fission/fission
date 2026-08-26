@@ -110,6 +110,11 @@ It stays here for now so the whole stack (fixtures, specs, load driver) is self-
    list (`--agents-url`, `--namespace`, `--agent`, `--environment`,
    `--concurrency`, `--timeout`).
 
+**Scaffold your own agent:** `fission agent create --name my-agent --env node` generates a working handler + Package + Function in one command
+(add `--spec` to write it under `specs/` instead of applying directly).
+Run `fission agent create --help` for the full flag reference —
+a fission.io quickstart page lands at release cut.
+
 ## Swarm beat
 
 `architect` (`fixtures/architect.js` / `specs/architect.yaml`) is a second agent function:
