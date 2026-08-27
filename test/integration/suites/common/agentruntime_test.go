@@ -800,12 +800,13 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	requireAgentRuntimeReachable(t, ctx, f)
 
 	ns := f.NewTestNamespace(t)
-	// This test asserts the fetcher-DERIVED agent-identity token below, so the
-	// env's pool pods must be created only AFTER the internal-auth master has
-	// been copied into this fresh namespace; otherwise a pod born in the
-	// cluster-tenancy cold window gets the "dev-unauthenticated" placeholder
-	// and poolmgr pins the function to it (see WaitForInternalAuthMaster).
-	ns.WaitForInternalAuthMaster(t, ctx)
+	// This test asserts the fetcher's injected agent-identity token below. That
+	// token is DERIVED from the internal-auth master only when the master is
+	// present in this function's namespace; under multi-namespace tenancy the
+	// master stays in the control-plane namespace and the fetcher writes the
+	// "dev-unauthenticated" placeholder instead. Probe once up front (the answer
+	// is fixed at install time) and pick the expected value accordingly below.
+	masterReachable := ns.InternalAuthMasterReachable(t, ctx)
 	envName := "nodejs-agent-spawn-" + ns.ID
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
 
@@ -875,24 +876,36 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	// cross-language check below already relies on.
 	master := f.InternalAuthSecret()
 	var expectedToken string
-	if len(master) == 0 {
+	switch {
+	case len(master) == 0:
 		// Pass-through install (internalAuth disabled): the fetcher had no
-		// FISSION_INTERNAL_AUTH_SECRET either (the chart wires the SAME
-		// secret to both the framework's signing client and the fetcher),
-		// so it wrote the placeholder token instead of a derived one. Assert
-		// against that placeholder explicitly (stronger than skipping the
-		// sha check outright) — it still pins the placeholder path, it only
-		// changes what "expected" means. Caveat: this equates "the test
-		// runner's own env has no FISSION_INTERNAL_AUTH_SECRET" with "the
-		// fetcher had none" — true whenever the chart wires both from the
-		// same secret (CI's case), but if a secured cluster's test runner
-		// simply didn't export the var, the fixture would report a REAL
-		// derived sha and this assertion would fail on an environment
-		// mismatch, not a code bug.
+		// FISSION_INTERNAL_AUTH_SECRET either (the chart wires the SAME secret to
+		// both the framework's signing client and the fetcher), so it wrote the
+		// placeholder token instead of a derived one. Assert against that
+		// placeholder explicitly (stronger than skipping the sha check outright)
+		// — it still pins the placeholder path, it only changes what "expected"
+		// means.
 		t.Log("FISSION_INTERNAL_AUTH_SECRET is empty on the framework (pass-through install); " +
 			"asserting the fetcher's dev-unauthenticated placeholder token instead of a derived one")
 		expectedToken = "dev-unauthenticated"
-	} else {
+	case !masterReachable:
+		// The runner HAS the master but it is NOT present in this function's
+		// namespace: under multi-namespace tenancy (tenancy.mode dynamic OR
+		// cluster) the chart keeps the master in the control-plane namespace only
+		// and hands tenant namespaces a derived-key Secret instead, so the fetcher
+		// scheduled here has no FISSION_INTERNAL_AUTH_SECRET and writes the
+		// placeholder. Master-derived agent-identity is therefore STATIC-TENANCY-
+		// ONLY for now. This branch PINS that limitation: when identity moves to a
+		// per-namespace derived key (fission-internal-auth-keys via
+		// hmac.DeriveServiceKeyNS, mirroring the fetcher/builder/storage channels),
+		// the fetcher will inject a real token here and this assertion will fail
+		// loudly — forcing this expectation to become the ns-key-derived token
+		// rather than the placeholder.
+		t.Logf("internal-auth master is not replicated into namespace %s (multi-namespace tenancy); "+
+			"asserting the fetcher's dev-unauthenticated placeholder token -- master-derived "+
+			"agent-identity is static-tenancy-only", ns.Name)
+		expectedToken = "dev-unauthenticated"
+	default:
 		expectedToken = hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, fnName))
 	}
 	expectedTokenSha256Sum := sha256.Sum256([]byte(expectedToken))
