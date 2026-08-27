@@ -91,7 +91,21 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}
 
-	// 1. Render the handler and write it to disk, refusing to clobber an
+	// 1. Direct mode only: refuse a duplicate function name BEFORE writing
+	// anything to disk, so a refused create never strands a scaffolded handler
+	// file (same duplicate check `fn create` runs,
+	// cmd/function/create.go:414-422). In --spec mode there is no live cluster
+	// object to collide with at this point.
+	if !toSpec {
+		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), name, metav1.GetOptions{})
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return err
+		} else if fn.Name != "" && fn.Namespace != "" {
+			return errors.New("a function with the same name already exists")
+		}
+	}
+
+	// 2. Render the handler and write it to disk, refusing to clobber an
 	// existing file (an idempotent re-run must point at a different --code,
 	// never silently overwrite someone's edited handler).
 	rendered, ext, err := templates.Render(lang, name)
@@ -112,7 +126,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	}
 	console.Info(fmt.Sprintf("Scaffolded %s handler: %s", lang, codePath))
 
-	// 2. --spec mode: auto-init a fresh spec directory when none exists yet
+	// 3. --spec mode: auto-init a fresh spec directory when none exists yet
 	// (spec.go's save() precondition, spec.go:140-142, is what every write
 	// below hits otherwise: "couldn't find specs, run `fission spec init`
 	// first"). A directory that already has fission-deployment-config.yaml
@@ -124,22 +138,11 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	// 3. Environment existence: warn, don't create (fn-create precedent,
+	// 4. Environment existence: warn, don't create (fn-create precedent,
 	// cmd/function/create.go:507-542).
 	envExists, err := opts.checkEnvironment(input, name, envName, fnNamespace, userProvidedNS, toSpec, specDir, specIgnore)
 	if err != nil {
 		return err
-	}
-
-	// 4. Direct mode only: refuse a duplicate function name up front, same
-	// check `fn create` runs (cmd/function/create.go:414-422).
-	if !toSpec {
-		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), name, metav1.GetOptions{})
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		} else if fn.Name != "" && fn.Namespace != "" {
-			return errors.New("a function with the same name already exists")
-		}
 	}
 
 	// 5. Compose the shipped pipeline: build (and, in direct mode, upload)

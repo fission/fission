@@ -29,9 +29,17 @@ import (
 // different DefaultBool -- the shared vars themselves must keep their
 // default-off behavior for `fn create`.
 var (
-	agentCreateStateFlag = func() flag.Flag { f := flag.FnState; f.DefaultBool = true; return f }()
-	agentCreateAgentFlag = func() flag.Flag { f := flag.FnAgent; f.DefaultBool = true; return f }()
+	agentCreateStateFlag = withDefaultBool(flag.FnState, true)
+	agentCreateAgentFlag = withDefaultBool(flag.FnAgent, true)
 )
+
+// withDefaultBool returns a copy of f with DefaultBool overridden. flag.Flag is
+// a value type, so the shared descriptor (and its default-off behavior for
+// `fn create`) is left untouched.
+func withDefaultBool(f flag.Flag, v bool) flag.Flag {
+	f.DefaultBool = v
+	return f
+}
 
 // Commands returns the `fission agent` command group.
 func Commands() *cobra.Command {
