@@ -133,8 +133,7 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		// the fetcher writes the token files at specialize time
 		// (FISSION_STATE_TOKEN_PATH / FISSION_AGENT_TOKEN_PATH point the SDK
 		// at them).
-		Env: append(util.StateAPIEnvVars(gp.fetcherConfig.SharedMountPath()),
-			util.AgentAPIEnvVars(gp.fetcherConfig.SharedMountPath())...),
+		Env: util.SidecarAPIEnvVars(gp.fetcherConfig.SharedMountPath()),
 		// Connection-draining preStop hook; see utils.DrainLifecycle.
 		Lifecycle: utils.DrainLifecycle(gracePeriodSeconds),
 		// https://istio.io/docs/setup/kubernetes/additional-setup/requirements/

@@ -6,10 +6,8 @@ package fetcher
 
 import (
 	jsonv1 "encoding/json"
-	"encoding/json/v2"
 	"errors"
 	"os"
-	"path/filepath"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
 )
@@ -56,16 +54,5 @@ func (fetcher *Fetcher) writeAgentTokenFile(loadReq FunctionLoadRequest) error {
 		creds.Token = hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master,
 			creds.Namespace, creds.Agent))
 	}
-	// cross-language SDK file contract: exact v1 emission
-	blob, err := json.Marshal(creds, agenttokenWireOpts)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(fetcher.sharedVolumePath, AgentTokenFileName)
-	// The file is read-only, so a re-specialize (infinite-functions pools,
-	// retried specialization) cannot overwrite in place — replace it.
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return os.WriteFile(path, blob, 0444)
+	return writeCredentialFile(fetcher, AgentTokenFileName, creds, agenttokenWireOpts)
 }
