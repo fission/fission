@@ -36,6 +36,11 @@ import (
 // `fission workflow history` talks to the workflow head — there is no CRD
 // for a session.
 func SessionCommands() *cobra.Command {
+	// list/get declare flag.Namespace locally as Optional (rather than relying on
+	// app.go's persistent global, as `agent create`/`agent list` do). This is the
+	// same local-redeclare `fission function dlq`/`state`/`topic` use; pflag's
+	// AddFlagSet skips an already-present name, so it neither panics nor changes
+	// behavior — it just keeps each session subcommand's flags self-described.
 	listCmd := wrapper.SubCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List an agent function's sessions",

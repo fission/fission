@@ -164,6 +164,25 @@ func TestAgentCreate_RefusesExistingHandlerFile(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(dir, "specs"), "the refusal happens before any spec/package/function side effect")
 }
 
+// TestAgentCreate_DirectMode_DuplicateFunctionLeavesNoOrphanFile pins the W6 fix:
+// the direct-mode duplicate-name check runs BEFORE the handler file is written,
+// so a refused create does not strand a scaffolded handler on disk.
+func TestAgentCreate_DirectMode_DuplicateFunctionLeavesNoOrphanFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	existing := &fv1.Function{ObjectMeta: metav1.ObjectMeta{Name: "myagent", Namespace: ns}}
+	setAgentCreateClient(t, ns, env, existing)
+
+	in := baseCreateInput("myagent")
+	err := Create(in)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a function with the same name already exists")
+
+	assert.NoFileExists(t, filepath.Join(dir, "myagent.js"), "the duplicate check must run before the handler write, leaving no orphan file")
+}
+
 func TestAgentCreate_DirectMode(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
