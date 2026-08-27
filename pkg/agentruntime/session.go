@@ -171,10 +171,11 @@ func archivedScope(ns, agent string) statestore.Scope {
 	return statestore.Scope{Namespace: ns, Owner: "agent/" + agent, Keyspace: "sessions-archived"}
 }
 
-// Get returns the live record for id and its KV version, for CAS-back via
-// Update or Archive.
-func (s *SessionStore) Get(ctx context.Context, ns, agent, id string) (SessionRecord, int64, error) {
-	v, err := s.kv.Get(ctx, sessionScope(ns, agent), id)
+// getFrom decodes id's record and KV version from the given scope. It is the
+// shared body of Get (live) and GetArchived; the KV's ErrNotFound passes
+// through unchanged.
+func (s *SessionStore) getFrom(ctx context.Context, scope statestore.Scope, id string) (SessionRecord, int64, error) {
+	v, err := s.kv.Get(ctx, scope, id)
 	if err != nil {
 		return SessionRecord{}, 0, err
 	}
@@ -185,20 +186,18 @@ func (s *SessionStore) Get(ctx context.Context, ns, agent, id string) (SessionRe
 	return rec, v.Version, nil
 }
 
+// Get returns the live record for id and its KV version, for CAS-back via
+// Update or Archive.
+func (s *SessionStore) Get(ctx context.Context, ns, agent, id string) (SessionRecord, int64, error) {
+	return s.getFrom(ctx, sessionScope(ns, agent), id)
+}
+
 // GetArchived returns the archived record for id and its KV version, reading
 // from archivedScope. Same decode and ErrNotFound-passthrough contract as
 // Get; used as depth resolution's second look when a parent has already left
 // the live keyspace.
 func (s *SessionStore) GetArchived(ctx context.Context, ns, agent, id string) (SessionRecord, int64, error) {
-	v, err := s.kv.Get(ctx, archivedScope(ns, agent), id)
-	if err != nil {
-		return SessionRecord{}, 0, err
-	}
-	var rec SessionRecord
-	if err := json.Unmarshal(v.Data, &rec); err != nil {
-		return SessionRecord{}, 0, err
-	}
-	return rec, v.Version, nil
+	return s.getFrom(ctx, archivedScope(ns, agent), id)
 }
 
 // Create writes a new active record create-only (IfVersion=0) with liveTTL

@@ -184,7 +184,7 @@ func TestWakeService_RunHappyPath(t *testing.T) {
 // independent of the shared path.
 //
 // newTestWakeService leaves maxContinuations at 0 (unlimited), so the
-// shared path's OWN cap decision (TurnResult.WakeEnqueueAttempted, which
+// shared path's OWN cap decision (TurnResult.ContinuationAllowed, which
 // process now gates revival on) is trivially true here regardless of
 // d.wake being nil -- this test is about the shared path's ENQUEUE being
 // disabled, not its cap decision. See
@@ -220,7 +220,7 @@ func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testi
 
 // TestWakeService_RevivalRespectsMaxContinuationsCap pins the regression fix
 // from the Part C re-review: reviveChain must gate on
-// TurnResult.WakeEnqueueAttempted (the shared path's OWN maxContinuations
+// TurnResult.ContinuationAllowed (the shared path's OWN maxContinuations
 // cap decision), not on Yield alone. An always-continue upstream keeps
 // returning Yield="continue" forever regardless of the cap -- gating on
 // Yield alone (the pre-fix code) revives the chain indefinitely, bypassing
@@ -234,7 +234,7 @@ func TestWakeService_AckedContinueRevivesChainWithoutSharedPathEnqueuer(t *testi
 // persisted Stats.Turns the shared path used (reviveChain re-Gets it) -- dedups
 // onto it, one live child, as normal. Hop 2 crosses the cap (Continuations
 // 1->2 == maxContinuations+1): the shared path's own doEnqueue is false, so
-// WakeEnqueueAttempted is false, and process must NOT revive -- the chain stops
+// ContinuationAllowed is false, and process must NOT revive -- the chain stops
 // with no live successor.
 func TestWakeService_RevivalRespectsMaxContinuationsCap(t *testing.T) {
 	t.Parallel()

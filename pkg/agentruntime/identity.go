@@ -155,12 +155,20 @@ func (v *IdentityVerifier) verify(w http.ResponseWriter, r *http.Request) bool {
 // on top of verifyClaims — the G16 surface amendment (see this file's
 // package doc): STRICTER than dispatch's verify, requiring BOTH the claimed
 // namespace AND the claimed agent to equal the workspace path's
-// {namespace}/{name}. Own-workspace only in v1: a pod may read/write/list/
-// delete only its own session's artifacts, never another agent's — even one
+// {namespace}/{name}. Own-AGENT-workspace only in v1: a pod may read/write/
+// list/delete only its own AGENT's artifacts, never another agent's — even one
 // in the same namespace, which verify's dispatch-side check would allow.
-// Cross-agent workspace sharing (parallel to dispatch's cross-agent spawn
-// allowance) is a later relaxation, deliberately not built here. Mismatch on
-// either claim -> 403.
+//
+// The enforced boundary is the (namespace, agent) pair, NOT the session: the
+// identity token is DeriveAgentIdentityKey(master, ns, agent), so every session
+// of one agent shares it, and requireSession only checks the {session} exists
+// under (ns, agent). Session-level isolation is therefore NOT cryptographically
+// enforceable with the current agent-scoped token — one session of an agent can
+// reach another session's artifacts of the SAME agent. That is acceptable in v1
+// (all sessions of an agent run the same Function code and identity); binding
+// the token to the session is a later hardening, tracked with the cross-agent
+// workspace-sharing relaxation (parallel to dispatch's cross-agent spawn
+// allowance), deliberately not built here. Mismatch on either claim -> 403.
 func (v *IdentityVerifier) verifyOwnWorkspace(w http.ResponseWriter, r *http.Request) bool {
 	claimedNS, claimedAgent, ok := v.verifyClaims(w, r)
 	if !ok {

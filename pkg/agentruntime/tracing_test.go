@@ -268,7 +268,7 @@ func TestWakeStitching_ContinuationSharesEnqueuingTrace(t *testing.T) {
 	res, err := w.d.DispatchTurn(t.Context(), tr, &wakeSink{})
 	require.NoError(t, err)
 	require.Equal(t, YieldContinue, res.Yield)
-	require.True(t, res.WakeEnqueueAttempted)
+	require.True(t, res.ContinuationAllowed)
 
 	enqueuing, ok := findSpan(rec.Ended(), "invoke_agent ")
 	require.True(t, ok)

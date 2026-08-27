@@ -124,29 +124,29 @@ type TurnRequest struct {
 type TurnResult struct {
 	StatusCode int
 	Yield      string
-	// WakeEnqueueAttempted reports whether the shared post-response
-	// bookkeeping (step 5 below) decided this turn's continuation was
-	// WITHIN the maxContinuations cap — i.e. doEnqueue was true — REGARDLESS
-	// of whether an enqueuer was wired (d.wake nil) or its EnqueueWake call
-	// itself errored or deduped. It exists so a caller performing its own
-	// out-of-band revival enqueue (the wake consumer's reviveChain,
-	// wake.go) can tell "the cap allowed a continuation here" from "the cap
-	// was already spent" without re-deriving maxContinuations/Continuations
-	// bookkeeping itself — Yield alone is NOT enough, since a function past
-	// the cap keeps yielding "continue" forever; only this flag reflects the
-	// cap decision.
-	WakeEnqueueAttempted bool
+	// ContinuationAllowed reports whether the shared post-response bookkeeping
+	// (step 5 below) decided this turn's continuation was WITHIN the
+	// maxContinuations cap — i.e. doEnqueue was true — REGARDLESS of whether an
+	// enqueuer was wired (d.wake nil) or its EnqueueWake call itself errored or
+	// deduped. (It is NOT "an enqueue was attempted"; it is purely the cap
+	// decision.) It exists so a caller performing its own out-of-band revival
+	// enqueue (the wake consumer's reviveChain, wake.go) can tell "the cap
+	// allowed a continuation here" from "the cap was already spent" without
+	// re-deriving maxContinuations/Continuations bookkeeping itself — Yield alone
+	// is NOT enough, since a function past the cap keeps yielding "continue"
+	// forever; only this flag reflects the cap decision.
+	ContinuationAllowed bool
 }
 
 // ShouldReviveChain reports whether this turn's outcome warrants the wake
 // consumer's out-of-band chain revival (wake.go's reviveChain): the shared
 // path's own maxContinuations cap allowed the continuation
-// (WakeEnqueueAttempted) AND the function asked to continue. Gating on
-// WakeEnqueueAttempted rather than Yield alone is load-bearing — a function
+// (ContinuationAllowed) AND the function asked to continue. Gating on
+// ContinuationAllowed rather than Yield alone is load-bearing — a function
 // past the cap keeps yielding "continue" forever, so a Yield-only gate would
 // revive a capped-out chain indefinitely (see reviveChain's doc comment).
 func (r TurnResult) ShouldReviveChain() bool {
-	return r.WakeEnqueueAttempted && r.Yield == YieldContinue
+	return r.ContinuationAllowed && r.Yield == YieldContinue
 }
 
 // ErrNotAgent is returned by DispatchTurn when (namespace, agent) is not in
@@ -730,7 +730,7 @@ func (d *Dispatcher) DispatchTurn(ctx context.Context, tr TurnRequest, sink Turn
 
 	span.SetAttributes(attribute.String("fission.yield", yield))
 	span.SetStatus(codes.Ok, "")
-	return TurnResult{StatusCode: resp.StatusCode, Yield: yield, WakeEnqueueAttempted: doEnqueue}, nil
+	return TurnResult{StatusCode: resp.StatusCode, Yield: yield, ContinuationAllowed: doEnqueue}, nil
 }
 
 // resolveParentage resolves the Parent/Depth to mint for a session-CREATING
