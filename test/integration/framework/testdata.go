@@ -29,12 +29,10 @@ import (
 //	ns.CreateFunction(t, ctx, framework.FunctionOptions{Code: codePath, ...})
 func WriteTestData(t *testing.T, embedPath string) string {
 	t.Helper()
-	b, err := testdata.FS.ReadFile(embedPath)
-	require.NoErrorf(t, err, "WriteTestData: read embedded %q", embedPath)
-	dir := t.TempDir()
-	dst := filepath.Join(dir, filepath.Base(embedPath))
-	require.NoErrorf(t, os.WriteFile(dst, b, 0o644), "WriteTestData: write %q", dst)
-	return dst
+	// A nil replacement set makes WriteTestDataReplacing's substitution loop a
+	// no-op, so this is byte-for-byte the same read-tempdir-write, without a
+	// second copy of that scaffolding.
+	return WriteTestDataReplacing(t, embedPath, nil)
 }
 
 // WriteTestDataReplacing is WriteTestData plus literal string substitution on

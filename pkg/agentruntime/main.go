@@ -79,6 +79,7 @@ import (
 	storagesvcClient "github.com/fission/fission/pkg/storagesvc/client"
 	"github.com/fission/fission/pkg/utils"
 	"github.com/fission/fission/pkg/utils/crmanager"
+	"github.com/fission/fission/pkg/utils/httpsecurity"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/httpx"
 	otelUtils "github.com/fission/fission/pkg/utils/otel"
@@ -819,7 +820,11 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// propagator extraction whenever a filter returns false (handler.go
 	// :90-98) — a filtered request is not merely un-spanned, it never even
 	// sees an extracted trace context, which is the behavior wanted here.
-	handler := otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui", "/healthz", "/readyz"))
+	// SecurityHeaders (X-Content-Type-Options: nosniff, streaming-safe) wraps
+	// the whole mux the same way router/fetcher/executor wrap theirs, so every
+	// response — the dispatch relay AND the workspace relay AND any future one —
+	// is covered in one place instead of per-sink.
+	handler := httpsecurity.SecurityHeaders(otelUtils.GetHandlerWithOTEL(mux, "fission-agentruntime", otelUtils.UrlsToIgnore("/registry/events", "/ui", "/healthz", "/readyz")))
 
 	capsClosed = true
 	serveCtx, stopServe := context.WithCancel(ctx)
