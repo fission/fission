@@ -445,6 +445,14 @@ func (spec FunctionSpec) validateForAdmission() error {
 		if spec.Agent.HistoryTrimBelowCheckpoint && spec.State == nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent.HistoryTrimBelowCheckpoint", spec.Agent.HistoryTrimBelowCheckpoint, "requires FunctionSpec.State (no state keyspace means no session history to trim)"))
 		}
+		// Same fetcher-sidecar dependency as State (above): agent identity is
+		// derived and delivered by the fetcher (pkg/fetcher/agenttoken.go), which
+		// the container executor has no sidecar to run. Reject here rather than
+		// admit a dead knob that injects no FISSION_AGENT_* env and writes no
+		// identity token.
+		if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent", "", "the agent runtime requires the poolmgr or newdeploy executor (the container executor has no fetcher sidecar to deliver a scoped identity token)"))
+		}
 	}
 	if spec.ProvisionedConcurrency != nil {
 		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())

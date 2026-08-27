@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -130,6 +131,42 @@ func TestFunctionSpecValidateAgentHistoryTrimRequiresState(t *testing.T) {
 		t.Parallel()
 		spec := base()
 		spec.Agent = &AgentConfig{}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+// TestFunctionSpecValidateAgentRejectsContainerExecutor mirrors State's own
+// container-executor rejection: agent identity is delivered by the fetcher
+// sidecar, which the container executor does not run, so an Agent on that
+// executor is admitted-but-dead without this gate.
+func TestFunctionSpecValidateAgentRejectsContainerExecutor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Agent on container executor rejected", func(t *testing.T) {
+		t.Parallel()
+		spec := FunctionSpec{
+			Environment: EnvironmentReference{Name: "env", Namespace: "default"},
+			Agent:       &AgentConfig{},
+			PodSpec:     &apiv1.PodSpec{Containers: []apiv1.Container{{Name: "c", Image: "img"}}},
+			InvokeStrategy: InvokeStrategy{
+				ExecutionStrategy: ExecutionStrategy{ExecutorType: ExecutorTypeContainer, MaxScale: 1},
+				StrategyType:      StrategyTypeExecution,
+			},
+		}
+		err := spec.Validate()
+		if err == nil || !strings.Contains(err.Error(), "agent runtime requires the poolmgr or newdeploy executor") {
+			t.Fatalf("expected agent-with-container-executor error, got: %v", err)
+		}
+	})
+
+	t.Run("Agent on poolmgr executor accepted", func(t *testing.T) {
+		t.Parallel()
+		spec := FunctionSpec{
+			Environment: EnvironmentReference{Name: "env", Namespace: "default"},
+			Agent:       &AgentConfig{},
+		}
 		if err := spec.Validate(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
