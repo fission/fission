@@ -776,8 +776,8 @@ func (sc *StateConfig) Validate() error {
 	if sc.Keyspace != "" && (len(sc.Keyspace) > 63 || !stateKeyspaceRegexp.MatchString(sc.Keyspace)) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Keyspace", sc.Keyspace, "must be 1-63 characters matching ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"))
 	}
-	if sc.MaxValueBytes < 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxValueBytes", sc.MaxValueBytes, "must be >= 0"))
+	if sc.MaxValueBytes < 0 || sc.MaxValueBytes > MaxStateMaxValueBytes {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxValueBytes", sc.MaxValueBytes, fmt.Sprintf("must be between 0 and %d (0 = platform default)", MaxStateMaxValueBytes)))
 	}
 	if sc.MaxKeys < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxKeys", sc.MaxKeys, "must be >= 0"))

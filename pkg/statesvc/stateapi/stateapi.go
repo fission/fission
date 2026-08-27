@@ -91,18 +91,19 @@ var streamPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)*$`)
 // ValidStream reports whether s is a well-formed caller-visible stream name:
 // 1-200 chars of [a-zA-Z0-9._/-], no leading/trailing '/' (streamPattern
 // alone enforces both — a leading or trailing '/' cannot start or end a
-// segment), and no ".." segment. The ".." check is explicit and separate from
-// streamPattern: that pattern's character class permits consecutive dots
-// within a segment (so ".." itself is charset-valid), and StreamName later
-// concatenates the stream into a '/'-delimited internal path — a ".."
-// segment would be a path-traversal escape out of the scope-qualified
-// namespace/keyspace prefix, so it is rejected here regardless of charset.
+// segment), and no "." or ".." segment. The dot-segment check is explicit and
+// separate from streamPattern: that pattern's character class permits a bare
+// "." or ".." within a segment (both are charset-valid), and StreamName later
+// concatenates the stream into a '/'-delimited internal path — a ".." segment
+// would be a path-traversal escape out of the scope-qualified namespace/keyspace
+// prefix, and a "." segment would alias two caller-visible names to one internal
+// stream ("a/./b" vs "a/b"), so both are rejected here regardless of charset.
 func ValidStream(s string) bool {
 	if s == "" || len(s) > 200 || !streamPattern.MatchString(s) {
 		return false
 	}
 	for seg := range strings.SplitSeq(s, "/") {
-		if seg == ".." {
+		if seg == "." || seg == ".." {
 			return false
 		}
 	}

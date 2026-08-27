@@ -31,6 +31,8 @@ func TestStateConfigValidate(t *testing.T) {
 		{"keyspace too long", StateConfig{Keyspace: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, true},
 		{"negative maxKeys rejected", StateConfig{MaxKeys: -1}, true},
 		{"negative maxValueBytes rejected", StateConfig{MaxValueBytes: -5}, true},
+		{"maxValueBytes at ceiling ok", StateConfig{MaxValueBytes: MaxStateMaxValueBytes}, false},
+		{"maxValueBytes over ceiling rejected", StateConfig{MaxValueBytes: MaxStateMaxValueBytes + 1}, true},
 		{"positive quotas ok", StateConfig{MaxKeys: 100, MaxValueBytes: 1024}, false},
 		{"negative defaultTTL rejected", StateConfig{DefaultTTL: &metav1.Duration{Duration: -time.Second}}, true},
 		{"positive defaultTTL ok", StateConfig{DefaultTTL: &metav1.Duration{Duration: time.Minute}}, false},
