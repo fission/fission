@@ -106,6 +106,39 @@ rules:
   - list
   - watch
 {{- end }}
+{{- define "agentruntime-kuberules" }}
+rules:
+# Pool introspection (GET /registry/pool, pkg/agentruntime/pool.go): the
+# EndpointSlice index (router/endpointcache, same read the router's own
+# data-plane cache uses) plus the executor's warm/specialized Pods, so a
+# warm-unspecialized pool pod (in no EndpointSlice — no function Service selects
+# it yet) is still visible. Read-only; a missing grant here degrades GET
+# /registry/pool to a 503 (checkPoolRBAC's startup preflight) rather than
+# blocking agent turn dispatch, which needs none of this. No "services" grant:
+# the informer watches EndpointSlices directly and PoolAPI lists Pods.
+#
+# NAMESPACED on purpose: poolCacheOptions (main.go) scopes the informer to
+# FunctionNamespaces() in every non-cluster tenancy mode, so a per-namespace Role
+# is exactly the grant it uses. Cluster tenancy watches cluster-wide and gets a
+# separate ClusterRole in tenant-controller/cluster-mode-bindings.yaml.
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
+
 {{- define "executor-kuberules" }}
 rules:
 {{- include "leases-kuberules" . }}

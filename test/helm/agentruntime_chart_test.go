@@ -115,66 +115,87 @@ func TestAgentRuntimeChartNetworkPolicy(t *testing.T) {
 	})
 }
 
-// TestAgentRuntimeChartPoolRBAC guards Task 19's RBAC lockstep: pool
-// introspection (GET /registry/pool) needs get/list/watch on
-// endpointslices (discovery.k8s.io) + pods, granted through the single
-// shared "agentruntime-rules" define — a missing grant here would silently
-// degrade every replica's pool panel to a permanent 503 in any cluster
-// whose RBAC came from this chart, with nothing else to catch it
-// (pkg/agentruntime's own tests use a fake clientset, which enforces no
-// RBAC at all). No "services" grant is expected: the informer watches
-// EndpointSlices directly, PoolAPI lists Pods, and checkPoolRBAC's
-// preflight names only endpointslices and pods.
-//
-// Static tenancy renders only the namespaced Role; dynamic/cluster tenancy
-// additionally renders the cluster-wide ClusterRole (tenant-controller/
-// dynamic-cluster-roles.yaml) — both must carry the same grant, since both
-// share the one "agentruntime-rules" define.
+// TestAgentRuntimeChartPoolRBAC guards the SCOPE of the pool-introspection RBAC
+// (GET /registry/pool needs get/list/watch on endpointslices + pods), not just
+// its presence. poolCacheOptions (pkg/agentruntime/main.go) scopes the informer
+// to FunctionNamespaces() in every non-cluster tenancy mode, so those kube reads
+// belong in a per-namespace Role — NOT in the fission.io cluster-role generator,
+// whose invariant is "fission.io types only". A regression that puts pods/
+// endpointslices back into "agentruntime-rules" would grant them cluster-wide
+// under DYNAMIC tenancy (the mode meant to preserve per-namespace isolation),
+// letting a compromised agentruntime SA read every namespace's pods — and nothing
+// else would catch it (pkg/agentruntime's own tests use a fake clientset, which
+// enforces no RBAC). This test is that catch. The cluster-wide variant that
+// cluster tenancy legitimately needs is granted separately and explicitly in
+// tenant-controller/cluster-mode-bindings.yaml.
 func TestAgentRuntimeChartPoolRBAC(t *testing.T) {
-	wantChecks := []struct{ group, resource string }{
+	kubeChecks := []struct{ group, resource string }{
 		{"discovery.k8s.io", "endpointslices"},
 		{"", "pods"},
 	}
-
-	t.Run("Role (static tenancy)", func(t *testing.T) {
-		docs := render(t,
-			"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
-			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded")
-		found := false
+	baseArgs := []string{
+		"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
+		"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
+	}
+	renderMode := func(t *testing.T, mode string) manifests {
+		return render(t, append(append([]string{}, baseArgs...), "--set", "tenancy.mode="+mode)...)
+	}
+	// grantsKube reports whether an agentruntime role (Kind + name substring)
+	// exists and grants get/list/watch on BOTH pods and endpointslices.
+	grantsKube := func(t *testing.T, docs manifests, kind, nameSubstr string) (found, grantsAll bool) {
 		for _, role := range roles(t, docs) {
-			if role.Kind != "Role" || !strings.Contains(role.Name, "agentruntime") {
+			if role.Kind != kind || !strings.Contains(role.Name, nameSubstr) {
 				continue
 			}
 			found = true
-			for _, chk := range wantChecks {
+			ok := true
+			for _, chk := range kubeChecks {
 				verbs := verbsFor(role.Rules, chk.group, chk.resource)
 				for _, want := range []string{"get", "list", "watch"} {
-					assert.Truef(t, verbs[want], "Role %q must grant %q on %s/%s (have %v)", role.Name, want, chk.group, chk.resource, verbs)
+					if !verbs[want] {
+						ok = false
+					}
 				}
 			}
+			grantsAll = grantsAll || ok
 		}
-		require.True(t, found, "no agentruntime Role was rendered")
-	})
+		return found, grantsAll
+	}
 
-	t.Run("ClusterRole (dynamic tenancy)", func(t *testing.T) {
-		docs := render(t,
-			"--set", "agentRuntime.enabled=true", "--set", "agentRuntime.allowInsecure=true",
-			"--set", "statestore.enabled=true", "--set", "statestore.mode=embedded",
-			"--set", "tenancy.mode=dynamic")
-		found := false
-		for _, role := range roles(t, docs) {
-			if role.Kind != "ClusterRole" || !strings.Contains(role.Name, "agentruntime") {
-				continue
-			}
-			found = true
-			for _, chk := range wantChecks {
-				verbs := verbsFor(role.Rules, chk.group, chk.resource)
-				for _, want := range []string{"get", "list", "watch"} {
-					assert.Truef(t, verbs[want], "ClusterRole %q must grant %q on %s/%s (have %v)", role.Name, want, chk.group, chk.resource, verbs)
+	// The namespaced kube-Role carries pods+endpointslices in EVERY tenancy mode.
+	for _, mode := range []string{"static", "dynamic", "cluster"} {
+		t.Run("namespaced Role grants pods+endpointslices ("+mode+")", func(t *testing.T) {
+			found, grants := grantsKube(t, renderMode(t, mode), "Role", "agentruntime")
+			require.Truef(t, found, "no agentruntime namespaced Role rendered under tenancy.mode=%s", mode)
+			assert.Truef(t, grants, "the agentruntime namespaced Role must grant get/list/watch on pods+endpointslices under tenancy.mode=%s", mode)
+		})
+	}
+
+	// The fission.io CRD ClusterRole (dynamic/cluster) must NOT carry any kube
+	// reads — this is the scope assertion the earlier presence-only test lacked.
+	for _, mode := range []string{"dynamic", "cluster"} {
+		t.Run("fission.io ClusterRole has NO kube reads ("+mode+")", func(t *testing.T) {
+			for _, role := range roles(t, renderMode(t, mode)) {
+				if role.Kind != "ClusterRole" || !strings.Contains(role.Name, "agentruntime-fission-cr") {
+					continue
+				}
+				for _, chk := range kubeChecks {
+					verbs := verbsFor(role.Rules, chk.group, chk.resource)
+					assert.Emptyf(t, verbs, "fission.io ClusterRole %q must NOT grant %s/%s — that read belongs in the namespaced kube-Role", role.Name, chk.group, chk.resource)
 				}
 			}
+		})
+	}
+
+	// The cluster-wide dataplane ClusterRole renders under cluster tenancy ONLY.
+	t.Run("dataplane ClusterRole is cluster-tenancy-only", func(t *testing.T) {
+		for _, mode := range []string{"static", "dynamic"} {
+			found, _ := grantsKube(t, renderMode(t, mode), "ClusterRole", "agentruntime-dataplane-cluster")
+			assert.Falsef(t, found, "the cluster-wide agentruntime dataplane ClusterRole must NOT render under tenancy.mode=%s", mode)
 		}
-		require.True(t, found, "no agentruntime ClusterRole was rendered under tenancy.mode=dynamic")
+		found, grants := grantsKube(t, renderMode(t, "cluster"), "ClusterRole", "agentruntime-dataplane-cluster")
+		require.True(t, found, "the cluster-wide agentruntime dataplane ClusterRole must render under tenancy.mode=cluster")
+		assert.True(t, grants, "the dataplane ClusterRole must grant get/list/watch on pods+endpointslices")
 	})
 }
 

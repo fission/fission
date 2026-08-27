@@ -180,36 +180,20 @@ rules:
 # The agent runtime is read-only against Functions (it watches Spec.Agent to
 # build its per-replica AgentView and resolve dispatch targets). Unlike mcp it
 # writes no status condition in v1 (see pkg/agentruntime/reconciler.go).
+#
+# fission.io-ONLY on purpose: this define feeds BOTH the namespaced Role
+# (agentruntime/role-fission-cr.yaml) AND the shared cluster-role generator
+# (tenant-controller/dynamic-cluster-roles.yaml), and that generator's invariant
+# is "fission.io types only" (see _fission-role-generator.tpl). The pool
+# introspection core-resource reads (pods, endpointslices) therefore live in
+# "agentruntime-kuberules" (namespaced kube-role generator, static + dynamic
+# tenancy), and the cluster-tenancy cluster-wide variant is granted separately
+# and explicitly in tenant-controller/cluster-mode-bindings.yaml — mirroring how
+# the router keeps its own EndpointSlice/Service reads out of "router-rules".
 - apiGroups:
   - fission.io
   resources:
   - functions
-  verbs:
-  - get
-  - list
-  - watch
-# Pool introspection (GET /registry/pool, pkg/agentruntime/pool.go): the
-# EndpointSlice index (router/endpointcache, same read the router's own
-# data-plane cache uses) plus the executor's warm/specialized Pods, so a
-# warm-unspecialized pool pod (in no EndpointSlice — no function Service
-# selects it yet) is still visible. Read-only; a missing grant here degrades
-# GET /registry/pool to a 503 (checkPoolRBAC's startup preflight) rather than
-# blocking agent turn dispatch, which needs none of this. No "services" grant
-# here: the informer watches EndpointSlices directly, PoolAPI lists Pods, and
-# checkPoolRBAC's preflight names only endpointslices and pods — nothing in
-# this subsystem reads/lists/watches core Services.
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods
   verbs:
   - get
   - list
