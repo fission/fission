@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -49,9 +50,23 @@ func WriteTestDataReplacing(t *testing.T, embedPath string, replacements map[str
 	b, err := testdata.FS.ReadFile(embedPath)
 	require.NoErrorf(t, err, "WriteTestDataReplacing: read embedded %q", embedPath)
 	s := string(b)
-	for placeholder, value := range replacements {
+	// Apply placeholders longest-key-first: this makes the result independent of
+	// Go's random map iteration order, and keeps a placeholder that is a
+	// substring of another (e.g. "__SELF_NAME__" vs "__SELF_NAMESPACE__") from
+	// being partially consumed by the shorter one.
+	keys := make([]string, 0, len(replacements))
+	for k := range replacements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) != len(keys[j]) {
+			return len(keys[i]) > len(keys[j])
+		}
+		return keys[i] < keys[j]
+	})
+	for _, placeholder := range keys {
 		require.Containsf(t, s, placeholder, "WriteTestDataReplacing: %q has no placeholder %q to replace", embedPath, placeholder)
-		s = strings.ReplaceAll(s, placeholder, value)
+		s = strings.ReplaceAll(s, placeholder, replacements[placeholder])
 	}
 	dir := t.TempDir()
 	dst := filepath.Join(dir, filepath.Base(embedPath))
