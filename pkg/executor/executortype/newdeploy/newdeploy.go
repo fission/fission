@@ -184,8 +184,7 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		// themselves arrive via the specialize-on-startup fetcher, which
 		// writes them to the shared mount (see fetcher.StateTokenFileName,
 		// fetcher.AgentTokenFileName).
-	}, append(util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath()),
-		util.AgentAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)...)
+	}, util.SidecarAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,
