@@ -55,6 +55,20 @@ func isWorkspaceID(id string) bool {
 	return false
 }
 
+// rejectWorkspaceID is the archive routes' seal against workspace ids (see
+// isWorkspaceID). Every archive handler (download/delete/info) MUST call it
+// BEFORE ss.authorizedFor, whose legacy-id grandfather would otherwise wave a
+// _workspace_-marked id through as an unscoped legacy archive. It writes a 404
+// (never a 403 — a workspace object simply is not an archive) with the caller's
+// route-specific message and returns true when the id was rejected.
+func rejectWorkspaceID(w http.ResponseWriter, fileID, notFoundMsg string) bool {
+	if isWorkspaceID(fileID) {
+		http.Error(w, notFoundMsg, http.StatusNotFound)
+		return true
+	}
+	return false
+}
+
 // archiveNamespace returns the namespace that owns the archive id, or "" for a
 // legacy/unscoped id (one with no marker). It locates the marker segment and
 // returns the following segment when it is a valid namespace label and is itself

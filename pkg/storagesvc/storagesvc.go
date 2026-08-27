@@ -234,12 +234,7 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// A workspace object is never an archive, for ANY principal including
-	// master — see isWorkspaceID. Checked before authorizedFor because the
-	// legacy-id grandfather in authorizedFor would otherwise wave a
-	// _workspace_-marked id through as an unscoped legacy archive.
-	if isWorkspaceID(fileId) {
-		http.Error(w, "Error deleting item: not found", http.StatusNotFound)
+	if rejectWorkspaceID(w, fileId, "Error deleting item: not found") {
 		return
 	}
 
@@ -278,12 +273,7 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// A workspace object is never an archive, for ANY principal including
-	// master — see isWorkspaceID. Checked before authorizedFor because the
-	// legacy-id grandfather in authorizedFor would otherwise wave a
-	// _workspace_-marked id through as an unscoped legacy archive.
-	if isWorkspaceID(fileId) {
-		http.Error(w, "Error retrieving item: not found", http.StatusNotFound)
+	if rejectWorkspaceID(w, fileId, "Error retrieving item: not found") {
 		return
 	}
 
@@ -318,12 +308,7 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A workspace object is never an archive, for ANY principal including
-	// master — see isWorkspaceID. Checked before authorizedFor because the
-	// legacy-id grandfather in authorizedFor would otherwise wave a
-	// _workspace_-marked id through as an unscoped legacy archive.
-	if isWorkspaceID(fileID) {
-		http.Error(w, "not found", http.StatusNotFound)
+	if rejectWorkspaceID(w, fileID, "not found") {
 		return
 	}
 
