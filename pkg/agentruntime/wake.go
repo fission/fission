@@ -376,7 +376,7 @@ func (w *WakeService) pollOnce(ctx context.Context) int {
 // returning Yield=="continue" forever (it is the function's own response,
 // unaffected by the cap — only the shared path's enqueue is suppressed), so
 // gating on Yield alone would revive an already-capped chain indefinitely,
-// silently bypassing maxContinuations. WakeEnqueueAttempted (which
+// silently bypassing maxContinuations. ContinuationAllowed (which
 // ShouldReviveChain checks) is exactly the shared path's cap decision,
 // independent of whether an enqueuer was wired or its own enqueue call
 // errored or deduped — which is what lets this gate still revive the
