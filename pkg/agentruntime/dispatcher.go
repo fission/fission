@@ -207,6 +207,14 @@ type httpSink struct {
 }
 
 func (s *httpSink) Begin(statusCode int, contentType, yield string) {
+	// Defense-in-depth for a byte-relay sink: Write below streams the upstream
+	// function's response verbatim, so its bytes can carry request-influenced
+	// content. nosniff stops a browser from MIME-sniffing a non-HTML relayed
+	// body into executable HTML (CodeQL reflected-XSS #348). This endpoint is an
+	// authenticated internal API (agent pods, not browsers) and HTML-escaping a
+	// streamed body would corrupt legitimate JSON/binary responses, so the
+	// header — not escaping — is the correct mitigation.
+	s.w.Header().Set("X-Content-Type-Options", "nosniff")
 	if yield != "" {
 		s.w.Header().Set(HeaderYield, yield)
 	}
