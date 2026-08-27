@@ -1935,7 +1935,7 @@ type (
 	}
 
 	// EnvironmentSpec contains with builder, runtime and some other related environment settings.
-	// +kubebuilder:validation:XValidation:rule="!has(self.runtimeClassName) || (size(self.runtimeClassName) <= 253 && self.runtimeClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="spec.runtimeClassName must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 253 chars)"
+	// +kubebuilder:validation:XValidation:rule="!has(self.runtimeClassName) || (size(self.runtimeClassName) <= 253 && self.runtimeClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="spec.runtimeClassName must be lowercase alphanumeric or '-', start and end alphanumeric, at most 253 characters"
 	EnvironmentSpec struct {
 		// Version is the Environment API version
 		//

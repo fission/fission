@@ -445,6 +445,14 @@ func (spec FunctionSpec) validateForAdmission() error {
 		if spec.Agent.HistoryTrimBelowCheckpoint && spec.State == nil {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent.HistoryTrimBelowCheckpoint", spec.Agent.HistoryTrimBelowCheckpoint, "requires FunctionSpec.State (no state keyspace means no session history to trim)"))
 		}
+		// Same fetcher-sidecar dependency as State (above): agent identity is
+		// derived and delivered by the fetcher (pkg/fetcher/agenttoken.go), which
+		// the container executor has no sidecar to run. Reject here rather than
+		// admit a dead knob that injects no FISSION_AGENT_* env and writes no
+		// identity token.
+		if spec.InvokeStrategy.ExecutionStrategy.ExecutorType == ExecutorTypeContainer {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidObject, "FunctionSpec.Agent", "", "the agent runtime requires the poolmgr or newdeploy executor (the container executor has no fetcher sidecar to deliver a scoped identity token)"))
+		}
 	}
 	if spec.ProvisionedConcurrency != nil {
 		errs = errors.Join(errs, spec.ProvisionedConcurrency.Validate())
@@ -749,10 +757,13 @@ func (ac *AgentConfig) Validate() error {
 var stateKeyspaceRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 
 // runtimeClassNameRegexp mirrors the EnvironmentSpec.RuntimeClassName
-// struct-level CEL marker. It is deliberately NOT validation.IsDNS1123Label
-// (max 63 chars) — the CEL rule accepts up to 253 chars with a DNS1123-label
-// charset, and this must agree with the apiserver so the CLI's pre-flight
-// Validate() never rejects a value the API server would admit.
+// struct-level CEL marker. It is deliberately a DNS1123-label CHARSET but with
+// the subdomain LENGTH bound (253, not a label's 63): the RuntimeClasses Fission
+// targets (gvisor, kata, runc) are labels, so dots are intentionally excluded,
+// while the generous length keeps this from ever being the tighter of the two
+// bounds. It must agree with the apiserver CEL rule so the CLI's pre-flight
+// Validate() never rejects a value the API server would admit — hence not
+// validation.IsDNS1123Label (which would cap at 63) nor IsDNS1123Subdomain.
 var runtimeClassNameRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 // Validate checks the keyed-state config (only reached when FunctionSpec.State
@@ -1002,7 +1013,7 @@ func (spec EnvironmentSpec) Validate() error {
 		val := *spec.RuntimeClassName
 		if len(val) > 253 || !runtimeClassNameRegexp.MatchString(val) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.RuntimeClassName", val,
-				"must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 253 chars)"))
+				"must be lowercase alphanumeric or '-', start and end alphanumeric, at most 253 characters"))
 		}
 	}
 
