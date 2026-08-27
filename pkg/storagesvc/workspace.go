@@ -56,7 +56,6 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	hmacauth "github.com/fission/fission/pkg/auth/hmac"
@@ -251,6 +250,46 @@ func (ss *StorageService) getPrefixFromRequest(r *http.Request) (string, error) 
 	return prefixes[0], nil
 }
 
+// workspaceIDFromRequest runs the id-route security anchor every id-scoped
+// handler (put/get/delete) MUST perform before any backend call: reject a
+// namespace-scoped caller (403), then parse and server-side-validate the id
+// (400). It returns the validated id and ok=false — with the response already
+// written — when any step failed, so a handler that added a backend call before
+// this could not silently skip the anchor.
+func (ss *StorageService) workspaceIDFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if rejectNamespaceScoped(w, r) {
+		return "", false
+	}
+	id, err := ss.getIdFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return "", false
+	}
+	if err := validateWorkspaceID(id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return "", false
+	}
+	return id, true
+}
+
+// workspacePrefixFromRequest is workspaceIDFromRequest's list/prefix-delete
+// twin: same namespace-scope rejection, then parse+validate the prefix.
+func (ss *StorageService) workspacePrefixFromRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if rejectNamespaceScoped(w, r) {
+		return "", false
+	}
+	prefix, err := ss.getPrefixFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return "", false
+	}
+	if err := validateWorkspacePrefix(prefix); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return "", false
+	}
+	return prefix, true
+}
+
 type workspacePutResponse struct {
 	Size int64 `json:"size"`
 }
@@ -291,18 +330,8 @@ func (c *countingReader) Read(p []byte) (int, error) {
 // caller's (validated) id.
 func (ss *StorageService) workspacePutHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
-
-	if rejectNamespaceScoped(w, r) {
-		return
-	}
-
-	id, err := ss.getIdFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateWorkspaceID(id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := ss.workspaceIDFromRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -334,34 +363,19 @@ func (ss *StorageService) workspacePutHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
-// workspaceGetHandler handles GET /v1/workspace?id=<id>: an io.Copy
-// passthrough stream with Content-Length set from a size() stat — no
-// multipart, no buffering.
+// workspaceGetHandler handles GET /v1/workspace?id=<id>: an io.Copy passthrough
+// stream. It does NOT pre-stat the object for a Content-Length header — workspace
+// artifacts are session-scoped and an agent may legitimately overwrite one while
+// another read is in flight, so a length taken by a separate size() call before
+// open() could disagree with the bytes actually streamed (a declared
+// Content-Length that overshoots truncates the response; one that undershoots
+// errors on the over-length write). Streaming with chunked transfer encoding (no
+// Content-Length) is always self-consistent, and matches the archive
+// downloadHandler.
 func (ss *StorageService) workspaceGetHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
-
-	if rejectNamespaceScoped(w, r) {
-		return
-	}
-
-	id, err := ss.getIdFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateWorkspaceID(id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	size, err := ss.storageClient.backend.size(ss.workspaceBackendKey(id))
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		logger.Error(err, "error stat-ing workspace object", "id", id)
-		http.Error(w, "error retrieving workspace object", http.StatusInternalServerError)
+	id, ok := ss.workspaceIDFromRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -377,7 +391,6 @@ func (ss *StorageService) workspaceGetHandler(w http.ResponseWriter, r *http.Req
 	}
 	defer f.Close()
 
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	if _, err := io.Copy(w, f); err != nil {
 		logger.Error(err, "error streaming workspace object", "id", id)
 	}
@@ -388,18 +401,8 @@ func (ss *StorageService) workspaceGetHandler(w http.ResponseWriter, r *http.Req
 // session-archive purge behind it) may retry or race a concurrent delete.
 func (ss *StorageService) workspaceDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
-
-	if rejectNamespaceScoped(w, r) {
-		return
-	}
-
-	id, err := ss.getIdFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateWorkspaceID(id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	id, ok := ss.workspaceIDFromRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -416,18 +419,8 @@ func (ss *StorageService) workspaceDeleteHandler(w http.ResponseWriter, r *http.
 // request-style form (see normalizeWorkspaceID).
 func (ss *StorageService) workspaceListHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
-
-	if rejectNamespaceScoped(w, r) {
-		return
-	}
-
-	prefix, err := ss.getPrefixFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateWorkspacePrefix(prefix); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	prefix, ok := ss.workspacePrefixFromRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -473,18 +466,8 @@ func (ss *StorageService) workspaceListHandler(w http.ResponseWriter, r *http.Re
 // count; log-don't-retry accepts silently-undercounted residue by design.
 func (ss *StorageService) workspaceDeletePrefixHandler(w http.ResponseWriter, r *http.Request) {
 	logger := otelUtils.LoggerWithTraceID(r.Context(), ss.logger)
-
-	if rejectNamespaceScoped(w, r) {
-		return
-	}
-
-	prefix, err := ss.getPrefixFromRequest(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := validateWorkspacePrefix(prefix); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	prefix, ok := ss.workspacePrefixFromRequest(w, r)
+	if !ok {
 		return
 	}
 

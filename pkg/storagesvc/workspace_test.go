@@ -200,7 +200,10 @@ func TestWorkspacePutGetRoundTrip(t *testing.T) {
 			r.ServeHTTP(rr2, getReq)
 			require.Equal(t, http.StatusOK, rr2.Code)
 			assert.Equal(t, tc.payload, rr2.Body.Bytes())
-			assert.Equal(t, strconv.Itoa(len(tc.payload)), rr2.Header().Get("Content-Length"))
+			// GET streams chunked (no pre-stat, no Content-Length) so a
+			// concurrent overwrite can never make a declared length disagree
+			// with the bytes actually streamed — see workspaceGetHandler.
+			assert.Empty(t, rr2.Header().Get("Content-Length"))
 		})
 	}
 }
