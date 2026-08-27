@@ -280,7 +280,7 @@ async function artifactBeat(sessionID, turn) {
   const ns = ownNamespace();
   const content = buildArtifactContent(sessionID, turn);
 
-  let put = 'error:unknown';
+  let put;
   try {
     put = await putArtifact(ns, OWN_AGENT_NAME, sessionID, content);
   } catch (err) {
@@ -288,7 +288,7 @@ async function artifactBeat(sessionID, turn) {
     put = `error:${errTag(err)}`;
   }
 
-  let got = 'error:unknown';
+  let got;
   try {
     got = await getArtifact(ns, OWN_AGENT_NAME, sessionID);
   } catch (err) {
@@ -296,7 +296,7 @@ async function artifactBeat(sessionID, turn) {
     got = `error:${errTag(err)}`;
   }
 
-  let list = [{ path: 'error:unknown', size: 0 }];
+  let list;
   try {
     list = await listArtifacts(ns, OWN_AGENT_NAME, sessionID);
   } catch (err) {
