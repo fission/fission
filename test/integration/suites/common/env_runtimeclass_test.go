@@ -84,7 +84,7 @@ func TestEnvRuntimeClassCELRoundTrip(t *testing.T) {
 	}
 	_, err = ns.Framework().FissionClient().CoreV1().Environments(ns.Name).Create(ctx, invalidEnv, metav1.CreateOptions{})
 	require.Error(t, err, "expected apiserver CEL rejection of an invalid runtimeClassName")
-	assert.Contains(t, err.Error(), "spec.runtimeClassName must be a valid DNS1123 label",
+	assert.Contains(t, err.Error(), "spec.runtimeClassName must be lowercase alphanumeric",
 		"error should carry the CEL rule's message (proves the CEL rule, not just Go-side validation, rejected it)")
 }
 
