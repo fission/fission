@@ -10,7 +10,6 @@ import (
 	"context"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -73,47 +72,38 @@ func (ns *TestNamespace) CreateEnvObject(t *testing.T, ctx context.Context, env 
 	})
 }
 
-// WaitForInternalAuthMaster blocks until the internal-auth master Secret is
-// present in this namespace, or the context / a bounded deadline elapses. It
-// closes a cluster/dynamic-tenancy cold-window race for tests that assert a
-// fetcher-DERIVED agent-identity token (RFC agent-identity, Task 6): in those
-// tenancy modes the chart's master-bearing Secret is replicated into a fresh
-// function namespace ASYNCHRONOUSLY, so a pool pod created before the copy
-// lands sees an empty FISSION_INTERNAL_AUTH_SECRET and its fetcher writes the
-// "dev-unauthenticated" placeholder token for that pod's whole life -- and
-// poolmgr then pins the function to that placeholder pod, so every retry keeps
-// hitting it. Calling this before CreateEnv guarantees every pool pod for the
-// environment post-dates the copy and therefore derives a real token.
+// InternalAuthMasterReachable reports whether the internal-auth master Secret
+// exists in THIS namespace — i.e. whether a fetcher/builder pod scheduled here
+// resolves FISSION_INTERNAL_AUTH_SECRET to the real master (and so derives a
+// real per-object token) or gets an empty value (and writes the
+// "dev-unauthenticated" placeholder instead). It answers the question a test
+// that asserts a fetcher-DERIVED agent-identity token must ask before choosing
+// its expected value.
 //
-// Best-effort by design, so it can never turn the race into a hard failure:
-//   - On a pass-through install (the framework itself holds no master) there is
-//     nothing to copy, so it returns immediately.
-//   - On timeout it returns WITHOUT failing the test -- the caller's own
-//     derived-token assertion still stands, so a genuine derivation bug is not
-//     masked, only the benign copy race is removed.
-func (ns *TestNamespace) WaitForInternalAuthMaster(t *testing.T, ctx context.Context) {
+// The answer is fixed by tenancy posture, not by timing:
+//   - static tenancy replicates the master into .Values.defaultNamespace, so a
+//     `default`-namespace pod sees it -> TRUE.
+//   - dynamic/cluster tenancy keeps the master in the control-plane namespace
+//     ONLY and hands tenant namespaces a derived-key Secret instead
+//     (fission-internal-auth-keys) -> FALSE
+//     (see charts/fission-all/templates/internal-auth-secret.yaml).
+//
+// Presence is decided at Helm-install time and a pool pod captures its env at
+// creation, so a single Get is deterministic — there is nothing to wait for. A
+// NotFound is the reachable=FALSE answer; any OTHER error fails the test rather
+// than being silently read as "not reachable" (which would mask a broken probe
+// as tenancy mode on the static leg).
+func (ns *TestNamespace) InternalAuthMasterReachable(t *testing.T, ctx context.Context) bool {
 	t.Helper()
 	if len(ns.f.InternalAuthSecret()) == 0 {
-		return // pass-through install: no master is ever copied in
+		return false // pass-through install: no master anywhere
 	}
-	name := fv1.InternalAuthSecretName()
-	const (
-		timeout = 90 * time.Second
-		tick    = 2 * time.Second
-	)
-	deadline := time.Now().Add(timeout)
-	for {
-		s, err := ns.f.kubeClient.CoreV1().Secrets(ns.Name).Get(ctx, name, metav1.GetOptions{})
-		if err == nil && len(s.Data["secret"]) > 0 {
-			return
-		}
-		if ctx.Err() != nil || time.Now().After(deadline) {
-			t.Logf("WaitForInternalAuthMaster: master secret %s/%s not observed within %s; "+
-				"proceeding (the caller's derived-token assertion still applies)", ns.Name, name, timeout)
-			return
-		}
-		time.Sleep(tick)
+	s, err := ns.f.kubeClient.CoreV1().Secrets(ns.Name).Get(ctx, fv1.InternalAuthSecretName(), metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false
 	}
+	require.NoErrorf(t, err, "probing internal-auth master secret in %s", ns.Name)
+	return len(s.Data["secret"]) > 0
 }
 
 // CreateEnv creates a Fission Environment via the CLI and registers its
