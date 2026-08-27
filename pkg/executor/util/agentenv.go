@@ -39,3 +39,12 @@ func AgentAPIEnvVars(sharedMountPath string) []apiv1.EnvVar {
 		{Name: "FISSION_AGENT_TOKEN_PATH", Value: filepath.Join(sharedMountPath, fetcher.AgentTokenFileName)},
 	}
 }
+
+// SidecarAPIEnvVars aggregates the env-var groups a function's user container
+// needs for every fetcher-sidecar-delivered API (state, then agent identity),
+// each nil when its feature is off. It is the single aggregation seam for these
+// groups: a future sidecar-delivered API is added here once, rather than
+// deepening an append(append(...)) nest at every executor call site.
+func SidecarAPIEnvVars(sharedMountPath string) []apiv1.EnvVar {
+	return append(StateAPIEnvVars(sharedMountPath), AgentAPIEnvVars(sharedMountPath)...)
+}
