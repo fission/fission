@@ -800,6 +800,12 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	requireAgentRuntimeReachable(t, ctx, f)
 
 	ns := f.NewTestNamespace(t)
+	// This test asserts the fetcher-DERIVED agent-identity token below, so the
+	// env's pool pods must be created only AFTER the internal-auth master has
+	// been copied into this fresh namespace; otherwise a pod born in the
+	// cluster-tenancy cold window gets the "dev-unauthenticated" placeholder
+	// and poolmgr pins the function to it (see WaitForInternalAuthMaster).
+	ns.WaitForInternalAuthMaster(t, ctx)
 	envName := "nodejs-agent-spawn-" + ns.ID
 	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
 
