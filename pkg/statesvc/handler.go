@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statesvc/stateapi"
 	"github.com/fission/fission/pkg/utils/httpx"
@@ -286,10 +287,19 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
 	maxValueBytes := h.index.Resolve(sc.scope).MaxValueBytes
-	// Envelope cap: MaxAppendEvents payloads at the keyspace's MaxValueBytes
-	// cap, base64-inflated (4/3), plus field/envelope overhead. Deliberately
-	// NOT the KV route's maxBytes*2+4096 formula (handler.go's cas), which
-	// sizes for a single value and would truncate a legitimate full batch.
+	// Clamp the resolved per-value cap to the admission ceiling before deriving
+	// the body cap: MaxValueBytes is a tenant-owned field, and although admission
+	// now bounds it (fv1.MaxStateMaxValueBytes), a keyspace stored before that
+	// bound existed could still carry a larger value. Clamping here keeps the
+	// body cap bounded and overflow-safe for the shared statesvc regardless of
+	// what a stored config claims.
+	if maxValueBytes > fv1.MaxStateMaxValueBytes {
+		maxValueBytes = fv1.MaxStateMaxValueBytes
+	}
+	// Envelope cap: MaxAppendEvents payloads at the (clamped) MaxValueBytes cap,
+	// base64-inflated (4/3), plus field/envelope overhead. Deliberately NOT the
+	// KV route's maxBytes*2+4096 formula (handler.go's cas), which sizes for a
+	// single value and would truncate a legitimate full batch.
 	bodyCap := int64(stateapi.MaxAppendEvents)*maxValueBytes*4/3 + 64<<10
 	body := io.LimitReader(r.Body, bodyCap)
 	var req stateapi.EventAppendRequest
