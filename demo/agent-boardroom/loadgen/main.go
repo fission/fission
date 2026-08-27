@@ -299,12 +299,13 @@ func fetchSessions(ctx context.Context, cfg config, client *http.Client) ([]sess
 			return nil, err
 		}
 
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("GET /registry/agents/%s/%s/sessions: unexpected status %d", cfg.namespace, cfg.agent, resp.StatusCode)
+		}
 		var out sessionsResponse
 		decodeErr := json.UnmarshalRead(resp.Body, &out)
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("GET /registry/agents/%s/%s/sessions: unexpected status %d", cfg.namespace, cfg.agent, resp.StatusCode)
-		}
 		if decodeErr != nil {
 			return nil, fmt.Errorf("decoding sessions response: %w", decodeErr)
 		}

@@ -657,7 +657,14 @@ function startPolling() {
   pollSessionsTick();
   pollTimer = setInterval(pollSessionsTick, 5000);
 }
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
 
+var sseReconnectDelay = 1000; // grows to a 30s cap on repeated failures
+var sseReconnectTimer = null;
 function connectSSE() {
   var es = new EventSource(sseURL());
   es.addEventListener("session", function (ev) {
@@ -668,11 +675,26 @@ function connectSSE() {
     } catch (e) { /* malformed frame: next diff or poll heals it */ }
   });
   es.addEventListener("agents", function () { loadAgents(); });
-  es.onopen = function () { setConnStatus("live (SSE)"); };
+  es.onopen = function () {
+    // SSE is live again: drop the polling stopgap and reset the backoff.
+    setConnStatus("live (SSE)");
+    stopPolling();
+    sseReconnectDelay = 1000;
+  };
   es.onerror = function () {
+    // Any stream end — the intentional ~1h lifetime ceiling, a token expiry, a
+    // transient network blip — polls as a STOPGAP but keeps retrying SSE with a
+    // capped backoff, so live push resumes instead of downgrading forever.
     es.close();
-    setConnStatus("polling (SSE unavailable)");
+    setConnStatus("polling (reconnecting SSE)");
     startPolling();
+    if (!sseReconnectTimer) {
+      sseReconnectTimer = setTimeout(function () {
+        sseReconnectTimer = null;
+        sseReconnectDelay = Math.min(sseReconnectDelay * 2, 30000);
+        connectSSE();
+      }, sseReconnectDelay);
+    }
   };
 }
 
