@@ -876,36 +876,37 @@ func TestAgentRuntimeSpawnParentage(t *testing.T) {
 	// cross-language check below already relies on.
 	master := f.InternalAuthSecret()
 	var expectedToken string
-	switch {
-	case len(master) == 0:
-		// Pass-through install (internalAuth disabled): the fetcher had no
-		// FISSION_INTERNAL_AUTH_SECRET either (the chart wires the SAME secret to
-		// both the framework's signing client and the fetcher), so it wrote the
-		// placeholder token instead of a derived one. Assert against that
-		// placeholder explicitly (stronger than skipping the sha check outright)
-		// — it still pins the placeholder path, it only changes what "expected"
-		// means.
-		t.Log("FISSION_INTERNAL_AUTH_SECRET is empty on the framework (pass-through install); " +
-			"asserting the fetcher's dev-unauthenticated placeholder token instead of a derived one")
+	if !masterReachable {
+		// The fetcher had no FISSION_INTERNAL_AUTH_SECRET, so it wrote the
+		// placeholder token instead of a derived one — assert that placeholder
+		// explicitly (stronger than skipping the sha check, and it still pins the
+		// placeholder path). Two disjoint reasons the master is unreachable, kept
+		// apart only for the diagnostic log (InternalAuthMasterReachable already
+		// folds len(master)==0 into false):
+		if len(master) == 0 {
+			// Pass-through install (internalAuth disabled): the chart wires the
+			// SAME secret to both the framework's signing client and the fetcher,
+			// so neither has one.
+			t.Log("FISSION_INTERNAL_AUTH_SECRET is empty on the framework (pass-through install); " +
+				"asserting the fetcher's dev-unauthenticated placeholder token instead of a derived one")
+		} else {
+			// The runner HAS the master but it is NOT replicated into this
+			// function's namespace: under multi-namespace tenancy (tenancy.mode
+			// dynamic OR cluster) the chart keeps the master in the control-plane
+			// namespace only and hands tenant namespaces a derived-key Secret
+			// instead. Master-derived agent-identity is therefore STATIC-TENANCY-
+			// ONLY for now, and this branch PINS that: when identity moves to a
+			// per-namespace derived key (fission-internal-auth-keys via
+			// hmac.DeriveServiceKeyNS, mirroring the fetcher/builder/storage
+			// channels), the fetcher will inject a real token here and this
+			// assertion will fail loudly — forcing the expectation to become the
+			// ns-key-derived token rather than the placeholder.
+			t.Logf("internal-auth master is not replicated into namespace %s (multi-namespace tenancy); "+
+				"asserting the fetcher's dev-unauthenticated placeholder token -- master-derived "+
+				"agent-identity is static-tenancy-only", ns.Name)
+		}
 		expectedToken = "dev-unauthenticated"
-	case !masterReachable:
-		// The runner HAS the master but it is NOT present in this function's
-		// namespace: under multi-namespace tenancy (tenancy.mode dynamic OR
-		// cluster) the chart keeps the master in the control-plane namespace only
-		// and hands tenant namespaces a derived-key Secret instead, so the fetcher
-		// scheduled here has no FISSION_INTERNAL_AUTH_SECRET and writes the
-		// placeholder. Master-derived agent-identity is therefore STATIC-TENANCY-
-		// ONLY for now. This branch PINS that limitation: when identity moves to a
-		// per-namespace derived key (fission-internal-auth-keys via
-		// hmac.DeriveServiceKeyNS, mirroring the fetcher/builder/storage channels),
-		// the fetcher will inject a real token here and this assertion will fail
-		// loudly — forcing this expectation to become the ns-key-derived token
-		// rather than the placeholder.
-		t.Logf("internal-auth master is not replicated into namespace %s (multi-namespace tenancy); "+
-			"asserting the fetcher's dev-unauthenticated placeholder token -- master-derived "+
-			"agent-identity is static-tenancy-only", ns.Name)
-		expectedToken = "dev-unauthenticated"
-	default:
+	} else {
 		expectedToken = hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, fnName))
 	}
 	expectedTokenSha256Sum := sha256.Sum256([]byte(expectedToken))

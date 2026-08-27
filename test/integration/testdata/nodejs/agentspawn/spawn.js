@@ -77,7 +77,11 @@ const STEP_KEY = 'expert-1';
 
 // __SELF_NAMESPACE__ / __SELF_AGENT_NAME__ are replaced with real values by
 // framework.WriteTestDataReplacing at function-create time (see the header
-// comment): they cannot be function env vars on poolmgr.
+// comment): they cannot be function env vars on poolmgr. They are NOT read from
+// the agentCreds file this fixture parses below either — that file is written
+// only once the pod specializes AFTER `fn update --agent`, so it is absent in
+// the create-then-update window, whereas these two must be correct
+// deterministically from turn 1 (they build the dispatch URL and ParentRef).
 const SELF_NAMESPACE = process.env.SELF_NAMESPACE || '__SELF_NAMESPACE__';
 const SELF_AGENT_NAME = process.env.SELF_AGENT_NAME || '__SELF_AGENT_NAME__';
 
