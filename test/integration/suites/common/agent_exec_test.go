@@ -9,8 +9,6 @@ package common_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,15 +41,6 @@ type execTurnReply struct {
 	DurationMs        int64    `json:"durationMs"`
 	Truncated         bool     `json:"truncated"`
 	WorkspaceWarnings []string `json:"workspaceWarnings"`
-}
-
-// sha256Hex is the "hashes equal" check the hydration acceptance
-// criterion asks for (the mcp-server-sandbox persistence demo pattern:
-// write -> suspend-equivalent -> read back, hashes equal, running on
-// Fission").
-func sha256Hex(s string) string {
-	sum := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(sum[:])
 }
 
 // postExecTurn POSTs one turn carrying an arbitrary JSON payload (the exec
@@ -417,13 +406,4 @@ console.log(JSON.stringify({ hostname: os.hostname(), content: data }));
 		after = info
 	}, 3*time.Minute, 2*time.Second)
 	require.NotEmpty(t, after.Hostname, "turn 2 never succeeded on a different pod")
-
-	// The acceptance criterion, verbatim: "hashes equal". This is
-	// documentation, not an independent check -- the Equalf on fileContent
-	// vs info.Content inside the EventuallyWithT loop above already requires
-	// byte-for-byte equality, so these hashes can never differ once this
-	// line is reached; it exists to make the assertion read the same way
-	// the spec states it.
-	assert.Equal(t, sha256Hex(fileContent), sha256Hex(after.Content),
-		"hydrated content's sha256 must match what turn 1 wrote")
 }
