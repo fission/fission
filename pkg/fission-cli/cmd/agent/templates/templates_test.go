@@ -252,17 +252,22 @@ func TestRender_StateCredentialsFieldNames(t *testing.T) {
 // comments -- a scaffold that defaulted to "continue" would self-re-invoke
 // forever on a fresh install (constraints.md's "Yield story" ruling).
 //
-// The check below looks for the QUOTED form ('continue', single-quoted --
+// The check below looks for the QUOTED forms ('continue' and "continue" --
 // how both languages spell the yield VALUE everywhere it appears in these
 // templates, live or commented) rather than the bare word: PR-2's
 // hydrate/sync helper legitimately uses `continue` as Python's and JS's own
 // loop-control keyword throughout its walk/list loops, in ACTIVE code, and a
 // bare-word search would misidentify every one of those as this yield value
-// leaking into the active path.
+// leaking into the active path. Both quote forms are checked so a future
+// active-code yield spelled with double quotes doesn't slip past this the
+// way the bare-word check would have missed the loop keyword.
 func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 	t.Parallel()
 
-	quotedContinue := "'" + agentruntime.YieldContinue + "'"
+	quotedContinueForms := []string{
+		"'" + agentruntime.YieldContinue + "'",
+		"\"" + agentruntime.YieldContinue + "\"",
+	}
 	for _, kind := range []string{"agent", "interpreter"} {
 		for _, lang := range []string{"node", "python"} {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
@@ -276,13 +281,15 @@ func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 					trimmed := strings.TrimSpace(line)
 					isCode := trimmed != "" && !strings.HasPrefix(trimmed, prefix)
 
-					if strings.Contains(line, quotedContinue) {
-						// The quoted yield VALUE must never appear in the
-						// ACTIVE code path (a scaffold that yielded it by
-						// default would self-re-invoke forever on a fresh
-						// install).
-						assert.False(t, isCode,
-							"%s/%s: %q value found outside a comment: %q", kind, lang, agentruntime.YieldContinue, line)
+					for _, quotedContinue := range quotedContinueForms {
+						if strings.Contains(line, quotedContinue) {
+							// The quoted yield VALUE must never appear in the
+							// ACTIVE code path (a scaffold that yielded it by
+							// default would self-re-invoke forever on a fresh
+							// install).
+							assert.False(t, isCode,
+								"%s/%s: %q value found outside a comment: %q", kind, lang, agentruntime.YieldContinue, line)
+						}
 					}
 					if isCode && strings.Contains(line, agentruntime.YieldWaiting) {
 						activeWaiting = true
@@ -759,20 +766,30 @@ func TestRender_Workspace_AdditiveOnly(t *testing.T) {
 	}
 }
 
-// TestRender_Workspace_SkipsSymlinks pins the review-motivated symlink guard
-// in the sync walk: a symlink written into the scratch dir must be SKIPPED,
-// not followed and uploaded -- see the trust-boundary comment at the top of
-// interpreter.{js,py}.tmpl for why (a link at a pod credential file would
-// otherwise get its target's bytes synced to a workspace this agent's
-// sibling sessions can read).
+// TestRender_Workspace_SkipsSymlinks pins the review-motivated symlink guards
+// on BOTH sides of the helper: the sync walk must SKIP a symlink written into
+// the scratch dir rather than follow and upload it, and hydrate must SKIP
+// writing through a local path that is already a symlink rather than follow
+// it and overwrite its TARGET with hydrated workspace bytes -- see the
+// trust-boundary comment at the top of interpreter.{js,py}.tmpl for why (a
+// link at a pod credential file would otherwise get its target's bytes
+// synced to, or overwritten from, a workspace this agent's sibling sessions
+// can read). The two sites use distinct mechanisms in each language, so each
+// gets its own assertion rather than one shared substring that either site
+// alone could satisfy.
 func TestRender_Workspace_SkipsSymlinks(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"agent", "interpreter"} {
 		out, _ := render(t, kind, "python")
-		assert.Contains(t, string(out), "os.path.islink(local_path)", "%s/python: sync walk must skip symlinks", kind)
+		text := string(out)
+		assert.Contains(t, text, "if os.path.islink(local_path):", "%s/python: sync walk must skip symlinks", kind)
+		assert.Contains(t, text, "os.path.islink(local_path) or (", "%s/python: hydrate must skip writing through a local symlink", kind)
 
 		out, _ = render(t, kind, "node")
-		assert.Contains(t, string(out), "entry.isSymbolicLink()", "%s/node: sync walk must skip symlinks", kind)
+		text = string(out)
+		assert.Contains(t, text, "entry.isSymbolicLink()", "%s/node: sync walk must skip symlinks", kind)
+		assert.Contains(t, text, "fs.lstatSync(localPath)", "%s/node: hydrate must lstat before writing to detect a local symlink", kind)
+		assert.Contains(t, text, "lst.isSymbolicLink()", "%s/node: hydrate must skip writing through a local symlink", kind)
 	}
 }
 
