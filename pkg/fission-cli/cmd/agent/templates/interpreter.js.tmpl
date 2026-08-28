@@ -407,6 +407,7 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
   }
   return warnings;
 }
+// --- End workspace hydration/sync helper ------------------------------------
 
 // outputBuffer accumulates chunks up to MAX_OUTPUT_BYTES; further bytes are
 // dropped at push time (not merely trimmed once collection ends), so a

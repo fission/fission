@@ -367,6 +367,7 @@ def _sync_workspace(scratch_dir, session_id, manifest):
         if rel not in seen:
             del manifest[rel]
     return warnings
+# --- End workspace hydration/sync helper ------------------------------------
 
 
 class _OutputBuffer:
