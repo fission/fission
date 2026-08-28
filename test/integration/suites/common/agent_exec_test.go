@@ -31,7 +31,7 @@ import (
 
 // execTurnReply is the exec verb's response contract:
 // {"stdout": "...", "stderr": "...", "exitCode": 0, "durationMs": 12,
-// "truncated": false}, extended by doc 14's PR-2 section with
+// "truncated": false}, extended by the hydration helper with
 // workspaceWarnings (the hydrate/sync helper's failure-reporting field).
 // This has no shared Go struct on either side ("zero new platform Go" is the
 // point of a template-only exec verb) -- it exists only to decode the wire
@@ -45,9 +45,9 @@ type execTurnReply struct {
 	WorkspaceWarnings []string `json:"workspaceWarnings"`
 }
 
-// sha256Hex is the "hashes equal" check doc 14's PR-2 acceptance criterion
-// asks for verbatim ("the doc-13 mcp-server-sandbox persistence demo pattern
-// (write -> suspend-equivalent -> read back, hashes equal) passes on
+// sha256Hex is the "hashes equal" check the hydration acceptance
+// criterion asks for (the mcp-server-sandbox persistence demo pattern:
+// write -> suspend-equivalent -> read back, hashes equal, running on
 // Fission").
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -234,9 +234,8 @@ type hostnameContent struct {
 // scratch dir must survive the specialized pod being killed and a
 // respecialize onto a DIFFERENT pod, because it was synced to the session's
 // G12 workspace at turn 1's end and hydrated back down at turn 2's start --
-// doc 14's PR-2 acceptance criterion (the doc-13 mcp-server-sandbox
-// persistence demo pattern: write -> suspend-equivalent -> read back, hashes
-// equal).
+// the hydration acceptance criterion (the mcp-server-sandbox persistence
+// demo pattern: write -> suspend-equivalent -> read back, hashes equal).
 //
 // The discriminating assertion is NOT merely "turn 2 reads the file" --
 // os.hostname() must differ between the two turns, proving turn 2 actually
@@ -419,7 +418,7 @@ console.log(JSON.stringify({ hostname: os.hostname(), content: data }));
 	}, 3*time.Minute, 2*time.Second)
 	require.NotEmpty(t, after.Hostname, "turn 2 never succeeded on a different pod")
 
-	// doc 14's PR-2 acceptance criterion, verbatim: "hashes equal". This is
+	// The acceptance criterion, verbatim: "hashes equal". This is
 	// documentation, not an independent check -- the Equalf on fileContent
 	// vs info.Content inside the EventuallyWithT loop above already requires
 	// byte-for-byte equality, so these hashes can never differ once this

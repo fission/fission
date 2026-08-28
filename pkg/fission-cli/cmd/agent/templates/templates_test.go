@@ -573,8 +573,8 @@ func TestRender_Interpreter_PythonHandlesSpawnFailure(t *testing.T) {
 // exec verb is interpreter-only), every test below loops over BOTH kinds:
 // interpreter.{js,py}.tmpl wire the hydrate/sync helper into the exec turn
 // automatically, and agent.{js,py}.tmpl carry the SAME helper block as an
-// opt-in call (doc 14's "workspaceSync in interpreter.*.tmpl + exported into
-// agent.*.tmpl" placement) -- a drift in either copy is a real regression.
+// opt-in call (the "workspaceSync in interpreter.*.tmpl, exported into
+// agent.*.tmpl as an opt-in call" placement rule) -- a drift in either copy is a real regression.
 
 // workspaceHelperBlock extracts the text between this template's
 // BEGIN/END marker comments (see interpreter.{js,py}.tmpl and
@@ -596,8 +596,8 @@ func workspaceHelperBlock(t *testing.T, text, lang string) string {
 	return text[start:stop]
 }
 
-// TestRender_Workspace_HelperBlockIdenticalAcrossKinds pins doc 14's PR-2
-// "Placement" requirement directly: agent.*.tmpl's opt-in copy of the
+// TestRender_Workspace_HelperBlockIdenticalAcrossKinds pins the helper's placement
+// rule directly: agent.*.tmpl's opt-in copy of the
 // hydrate/sync helper must be BYTE-IDENTICAL to interpreter.*.tmpl's wired-in
 // copy, per language -- the strongest guard against the two silently
 // drifting apart (a fix applied to one kind's copy and forgotten in the
@@ -700,7 +700,7 @@ func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
 // the shipped route 400s a trailing-slash request by design) and
 // "/workspace/{namespace}/{name}/{session}/{path...}" for GET/PUT. This
 // contract has no shared Go struct on the template side ("the SDK for
-// scaffolded agents is the template" -- doc 14's PR-2 Placement note), so
+// scaffolded agents IS the template"), so
 // the rendered text is the only place these literals live.
 func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 	t.Parallel()
@@ -727,7 +727,7 @@ func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 }
 
 // TestRender_Workspace_WarningsKey pins the interpreter template's turn
-// reply wire key doc 14's PR-2 section calls for ("a failed sync is
+// reply wire key the hydration contract calls for ("a failed sync is
 // reported in the turn result ... surfaces as a structured warning field")
 // -- unlike PR-1's exec-contract keys this has no shared struct either, so
 // the rendered text is the drift guard. agent.*.tmpl is NOT checked here:
@@ -740,7 +740,7 @@ func TestRender_Workspace_WarningsKey(t *testing.T) {
 	}
 }
 
-// TestRender_Workspace_AdditiveOnly pins doc 14's "delete-on-absence off by
+// TestRender_Workspace_AdditiveOnly pins the "delete-on-absence off by
 // default (workspace is additive; explicit DELETE stays an app call)" rule:
 // neither kind's helper block may issue an HTTP DELETE against the workspace
 // routes. Scoped to the helper block (not the whole file) so a comment that
@@ -868,7 +868,7 @@ func TestRender_Interpreter_Workspace_WiredIntoTurn(t *testing.T) {
 	assert.Contains(t, jsText, jsSyncCall, "node: module.exports must call syncWorkspace at turn end")
 
 	// And the agent.*.tmpl copy must NOT be wired into anything -- it is
-	// opt-in only (doc 14's PR-2 Placement note): the helper function
+	// opt-in only (the placement rule above): the helper function
 	// DEFINITIONS are present (asserted identical above), but no CALL site
 	// invoking them from module-level code should be.
 	agentPyOut, _ := render(t, "agent", "python")
