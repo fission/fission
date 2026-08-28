@@ -381,7 +381,7 @@ func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string,
 func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tmplKind string, toSpec, envExists bool) {
 	fmt.Fprintf(w, "\nScaffolded %s\n\n", codePath)
 
-	// Trust statement (doc 14 PR-1 section): env-scrubbing keeps ACCIDENTAL
+	// Trust statement: env-scrubbing keeps ACCIDENTAL
 	// credential leakage out of exec'd code, but it is not a sandbox -- a
 	// process in the same container can still read the pod's own token
 	// files, so exec'd code runs at the agent's own trust level. Printed

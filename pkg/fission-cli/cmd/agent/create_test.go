@@ -460,8 +460,8 @@ func TestAgentCreate_TemplateUnsupported(t *testing.T) {
 }
 
 // TestAgentCreate_TemplateInterpreter_NextStepsGolden pins the interpreter
-// template's next-steps output: the trust-boundary block (doc 14 PR-1's
-// "Trust statement", including the --runtime-class gvisor recommendation)
+// template's next-steps output: the trust-boundary block (the
+// trust statement, including the --runtime-class gvisor recommendation)
 // and the exec-contract example turn body, in the env-already-exists /
 // direct-mode shape (mirrors TestAgentCreate_EnvPresent_NextStepsGolden).
 func TestAgentCreate_TemplateInterpreter_NextStepsGolden(t *testing.T) {
@@ -525,8 +525,8 @@ func TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate(t *test
 
 // TestAgentCreate_ExposeAsMCP_SetsToolConfig wires --expose-as-mcp through
 // function.GetToolConfig (exported by PR-1) onto the scaffolded Function,
-// exactly as `fn create --expose-as-mcp` does -- the doc 14 PR-1 section's
-// "MCP exposure" requirement.
+// exactly as `fn create --expose-as-mcp` does -- the scaffold's
+// MCP-exposure contract.
 func TestAgentCreate_ExposeAsMCP_SetsToolConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
