@@ -251,9 +251,18 @@ func TestRender_StateCredentialsFieldNames(t *testing.T) {
 // "waiting" and that YieldContinue's value ("continue") appears only inside
 // comments -- a scaffold that defaulted to "continue" would self-re-invoke
 // forever on a fresh install (constraints.md's "Yield story" ruling).
+//
+// The check below looks for the QUOTED form ('continue', single-quoted --
+// how both languages spell the yield VALUE everywhere it appears in these
+// templates, live or commented) rather than the bare word: PR-2's
+// hydrate/sync helper legitimately uses `continue` as Python's and JS's own
+// loop-control keyword throughout its walk/list loops, in ACTIVE code, and a
+// bare-word search would misidentify every one of those as this yield value
+// leaking into the active path.
 func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 	t.Parallel()
 
+	quotedContinue := "'" + agentruntime.YieldContinue + "'"
 	for _, kind := range []string{"agent", "interpreter"} {
 		for _, lang := range []string{"node", "python"} {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
@@ -267,10 +276,11 @@ func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 					trimmed := strings.TrimSpace(line)
 					isCode := trimmed != "" && !strings.HasPrefix(trimmed, prefix)
 
-					if strings.Contains(line, agentruntime.YieldContinue) {
-						// "continue" must never appear in the ACTIVE code path
-						// (a scaffold that yielded it by default would
-						// self-re-invoke forever on a fresh install).
+					if strings.Contains(line, quotedContinue) {
+						// The quoted yield VALUE must never appear in the
+						// ACTIVE code path (a scaffold that yielded it by
+						// default would self-re-invoke forever on a fresh
+						// install).
 						assert.False(t, isCode,
 							"%s/%s: %q value found outside a comment: %q", kind, lang, agentruntime.YieldContinue, line)
 					}
@@ -548,4 +558,287 @@ func TestRender_Interpreter_PythonHandlesSpawnFailure(t *testing.T) {
 		"python: _run_exec must catch a failed Popen and answer the exec contract, not raise")
 	assert.Contains(t, string(out), "failed to start",
 		"python: a failed Popen should report the same 'failed to start' note the node template uses")
+}
+
+// --- workspace hydration/sync tripwires (PR-2, abstraction C) --------------
+//
+// Unlike the PR-1 exec-contract tripwires above (interpreter-only, since the
+// exec verb is interpreter-only), every test below loops over BOTH kinds:
+// interpreter.{js,py}.tmpl wire the hydrate/sync helper into the exec turn
+// automatically, and agent.{js,py}.tmpl carry the SAME helper block as an
+// opt-in call (doc 14's "workspaceSync in interpreter.*.tmpl + exported into
+// agent.*.tmpl" placement) -- a drift in either copy is a real regression.
+
+// workspaceHelperBlock extracts the text between this template's
+// BEGIN/END marker comments (see interpreter.{js,py}.tmpl and
+// agent.{js,py}.tmpl) so TestRender_Workspace_HelperBlockIdenticalAcrossKinds
+// can diff the two kinds' copies directly, and other tests below can scope
+// their assertions to the helper block alone rather than the whole file.
+func workspaceHelperBlock(t *testing.T, text, lang string) string {
+	t.Helper()
+	prefix := "#"
+	if lang == "node" {
+		prefix = "//"
+	}
+	begin := prefix + " --- Workspace hydration/sync (PR-2, abstraction C) "
+	end := prefix + " --- End workspace hydration/sync helper "
+	start := strings.Index(text, begin)
+	require.GreaterOrEqualf(t, start, 0, "%s: BEGIN marker for the workspace helper block not found", lang)
+	stop := strings.Index(text, end)
+	require.GreaterOrEqualf(t, stop, start, "%s: END marker for the workspace helper block not found after BEGIN", lang)
+	return text[start:stop]
+}
+
+// TestRender_Workspace_HelperBlockIdenticalAcrossKinds pins doc 14's PR-2
+// "Placement" requirement directly: agent.*.tmpl's opt-in copy of the
+// hydrate/sync helper must be BYTE-IDENTICAL to interpreter.*.tmpl's wired-in
+// copy, per language -- the strongest guard against the two silently
+// drifting apart (a fix applied to one kind's copy and forgotten in the
+// other).
+func TestRender_Workspace_HelperBlockIdenticalAcrossKinds(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		t.Run(lang, func(t *testing.T) {
+			t.Parallel()
+			interpOut, _ := render(t, "interpreter", lang)
+			agentOut, _ := render(t, "agent", lang)
+			interpBlock := workspaceHelperBlock(t, string(interpOut), lang)
+			agentBlock := workspaceHelperBlock(t, string(agentOut), lang)
+			assert.Equal(t, interpBlock, agentBlock,
+				"%s: the workspace hydrate/sync helper block must be byte-identical between interpreter.*.tmpl and agent.*.tmpl", lang)
+		})
+	}
+}
+
+// TestRender_Workspace_IdentityHeaderNames pins the hydrate/sync helper's
+// outbound auth headers against pkg/agentruntime/identity.go's EXPORTED
+// HeaderIdentityNamespace/HeaderIdentityName -- these are headers the
+// template SETS on its own outgoing hydrate/sync requests (like the state
+// helper's X-Fission-State-* headers, TestRender_StateHeaderNames), so they
+// are checked exact-case, no folding, in every kind x lang combination.
+func TestRender_Workspace_IdentityHeaderNames(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			t.Run(kind+"/"+lang, func(t *testing.T) {
+				t.Parallel()
+				out, _ := render(t, kind, lang)
+				text := string(out)
+				assert.Contains(t, text, agentruntime.HeaderIdentityNamespace,
+					"%s/%s: missing identity namespace claim header", kind, lang)
+				assert.Contains(t, text, agentruntime.HeaderIdentityName,
+					"%s/%s: missing identity name claim header", kind, lang)
+			})
+		}
+	}
+}
+
+// TestRender_Workspace_EnvVarNames pins the hydrate/sync helper against
+// pkg/executor/util.AgentAPIEnvVars's actual injected names
+// (FISSION_AGENT_RUNTIME_URL / FISSION_AGENT_TOKEN_PATH) rather than re-typed
+// literals -- same drift-guard shape as TestRender_StateEnvVarNames, against
+// the agent identity env vars instead of the state ones.
+func TestRender_Workspace_EnvVarNames(t *testing.T) {
+	t.Setenv("AGENT_RUNTIME_URL", "http://agentruntime.fission:8888")
+
+	envVars := util.AgentAPIEnvVars("/userfunc")
+	require.NotEmpty(t, envVars, "AGENT_RUNTIME_URL was set; AgentAPIEnvVars must not return nil")
+
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			out, _ := render(t, kind, lang)
+			text := string(out)
+			for _, ev := range envVars {
+				assert.Containsf(t, text, ev.Name, "%s/%s: missing agent identity env var %s", kind, lang, ev.Name)
+			}
+		}
+	}
+}
+
+// TestRender_Workspace_CredentialsFieldNames pins the hydrate/sync helper's
+// token-file field access against fetcher.AgentCredentials's actual JSON
+// tags (agenttoken.go) via reflection, rather than hand-typed "namespace" /
+// "agent" / "token" strings that could silently drift from the fetcher's
+// real wire struct -- mirrors TestRender_StateCredentialsFieldNames.
+func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
+	t.Parallel()
+
+	typ := reflect.TypeOf(fetcher.AgentCredentials{})
+	require.Positive(t, typ.NumField())
+
+	var fieldNames []string
+	for i := range typ.NumField() {
+		tag := typ.Field(i).Tag.Get("json")
+		require.NotEmpty(t, tag, "field %s has no json tag", typ.Field(i).Name)
+		name, _, _ := strings.Cut(tag, ",")
+		require.NotEmpty(t, name)
+		fieldNames = append(fieldNames, name)
+	}
+
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			out, _ := render(t, kind, lang)
+			text := string(out)
+			for _, name := range fieldNames {
+				assert.Containsf(t, text, name, "%s/%s: missing AgentCredentials field %q", kind, lang, name)
+			}
+		}
+	}
+}
+
+// TestRender_Workspace_RouteShape pins the hydrate/sync helper's URL
+// construction against the shipped route shape
+// (pkg/agentruntime/workspace.go's mountWorkspaceRoutes):
+// "/workspace/{namespace}/{name}/{session}" for LIST (no trailing slash --
+// the shipped route 400s a trailing-slash request by design) and
+// "/workspace/{namespace}/{name}/{session}/{path...}" for GET/PUT. This
+// contract has no shared Go struct on the template side ("the SDK for
+// scaffolded agents is the template" -- doc 14's PR-2 Placement note), so
+// the rendered text is the only place these literals live.
+func TestRender_Workspace_RouteShape(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			t.Run(kind+"/"+lang, func(t *testing.T) {
+				t.Parallel()
+				out, _ := render(t, kind, lang)
+				text := string(out)
+				assert.Contains(t, text, "/workspace/", "%s/%s: missing /workspace/ route segment", kind, lang)
+				// The LIST url-builder function must not itself append a
+				// trailing slash or a path segment -- it is reused, with
+				// "/" + rel appended by the CALLER, for GET/PUT.
+				if lang == "python" {
+					assert.Contains(t, text, "'%s/workspace/%s/%s/%s' % (\n        WORKSPACE_URL, _workspace_creds['namespace'], _workspace_creds['agent'], session_id)",
+						"python: LIST url-builder must build exactly /workspace/{ns}/{agent}/{session} with no trailing slash")
+				} else {
+					assert.Contains(t, text, "`${WORKSPACE_URL}/workspace/${workspaceCreds.namespace}/${workspaceCreds.agent}/${sessionID}`",
+						"node: LIST url-builder must build exactly /workspace/{ns}/{agent}/{session} with no trailing slash")
+				}
+			})
+		}
+	}
+}
+
+// TestRender_Workspace_WarningsKey pins the interpreter template's turn
+// reply wire key doc 14's PR-2 section calls for ("a failed sync is
+// reported in the turn result ... surfaces as a structured warning field")
+// -- unlike PR-1's exec-contract keys this has no shared struct either, so
+// the rendered text is the drift guard. agent.*.tmpl is NOT checked here:
+// its helper is opt-in and never wired into a reply of its own.
+func TestRender_Workspace_WarningsKey(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		assert.Contains(t, string(out), "workspaceWarnings", "%s: missing workspaceWarnings reply key", lang)
+	}
+}
+
+// TestRender_Workspace_AdditiveOnly pins doc 14's "delete-on-absence off by
+// default (workspace is additive; explicit DELETE stays an app call)" rule:
+// neither kind's helper block may issue an HTTP DELETE against the workspace
+// routes. Scoped to the helper block (not the whole file) so a comment that
+// merely MENTIONS "DELETE" in prose (as this block's own doc comment does)
+// cannot false-negative the check by coincidence elsewhere in the file.
+func TestRender_Workspace_AdditiveOnly(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			t.Run(kind+"/"+lang, func(t *testing.T) {
+				t.Parallel()
+				out, _ := render(t, kind, lang)
+				block := workspaceHelperBlock(t, string(out), lang)
+				if lang == "python" {
+					assert.NotContains(t, block, "requests.delete(",
+						"%s/%s: workspace helper must never issue a DELETE (sync is additive-only)", kind, lang)
+				} else {
+					assert.NotContains(t, block, "method: 'DELETE'",
+						"%s/%s: workspace helper must never issue a DELETE (sync is additive-only)", kind, lang)
+				}
+			})
+		}
+	}
+}
+
+// TestRender_Workspace_SkipsSymlinks pins the review-motivated symlink guard
+// in the sync walk: a symlink written into the scratch dir must be SKIPPED,
+// not followed and uploaded -- see the trust-boundary comment at the top of
+// interpreter.{js,py}.tmpl for why (a link at a pod credential file would
+// otherwise get its target's bytes synced to a workspace this agent's
+// sibling sessions can read).
+func TestRender_Workspace_SkipsSymlinks(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		out, _ := render(t, kind, "python")
+		assert.Contains(t, string(out), "os.path.islink(local_path)", "%s/python: sync walk must skip symlinks", kind)
+
+		out, _ = render(t, kind, "node")
+		assert.Contains(t, string(out), "entry.isSymbolicLink()", "%s/node: sync walk must skip symlinks", kind)
+	}
+}
+
+// TestRender_Workspace_SkipCleanUsesManifest pins the "hash manifest kept in
+// the scratch dir; second turn on the same warm pod re-syncs nothing when
+// nothing changed" requirement: the sync walk must compare against a
+// previously recorded manifest entry (size+mtime) before ever falling back
+// to a content hash, and the manifest file itself must never be a candidate
+// for sync (excluded by name).
+func TestRender_Workspace_SkipCleanUsesManifest(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		out, _ := render(t, kind, "python")
+		text := string(out)
+		assert.Contains(t, text, "WORKSPACE_MANIFEST_FILENAME = '.fission-workspace-manifest.json'", "%s/python: manifest filename constant missing", kind)
+		assert.Contains(t, text, "skip-clean: unchanged since the last successful sync/hydrate", "%s/python: skip-clean short-circuit missing", kind)
+
+		out, _ = render(t, kind, "node")
+		text = string(out)
+		assert.Contains(t, text, "WORKSPACE_MANIFEST_FILENAME = '.fission-workspace-manifest.json'", "%s/node: manifest filename constant missing", kind)
+		assert.Contains(t, text, "skip-clean: unchanged since the last successful sync/hydrate", "%s/node: skip-clean short-circuit missing", kind)
+	}
+}
+
+// TestRender_Interpreter_Workspace_WiredIntoTurn pins that the interpreter
+// template (unlike agent.*.tmpl's opt-in copy) actually CALLS the helper
+// from main()/module.exports for a sessionful turn, and gates it on
+// is_session -- a stateless call (no session header, or one that failed
+// _safe_scratch_name's own charset check) must never hydrate/sync.
+func TestRender_Interpreter_Workspace_WiredIntoTurn(t *testing.T) {
+	t.Parallel()
+
+	// Call-site literals (not the helper functions' own `def`/`function`
+	// signature lines, which are present in BOTH kinds by design -- see
+	// TestRender_Workspace_HelperBlockIdenticalAcrossKinds) that only a
+	// wired-in caller, not merely a definition, would produce.
+	pyHydrateCall := "workspace_warnings += _hydrate_workspace(scratch_dir, session_id, manifest)"
+	pySyncCall := "workspace_warnings += _sync_workspace(scratch_dir, session_id, manifest)"
+	jsHydrateCall := "workspaceWarnings.concat(await hydrateWorkspace(scratchDir, sessionID, manifest))"
+	jsSyncCall := "workspaceWarnings.concat(await syncWorkspace(scratchDir, sessionID, manifest))"
+
+	pyOut, _ := render(t, "interpreter", "python")
+	pyText := string(pyOut)
+	assert.Contains(t, pyText, "is_session = bool(session_id) and scratch_name == session_id",
+		"python: main() must gate hydrate/sync on a validated session id")
+	assert.Contains(t, pyText, pyHydrateCall, "python: main() must call _hydrate_workspace at turn start")
+	assert.Contains(t, pyText, pySyncCall, "python: main() must call _sync_workspace at turn end")
+
+	jsOut, _ := render(t, "interpreter", "node")
+	jsText := string(jsOut)
+	assert.Contains(t, jsText, "const isSession = Boolean(sessionID) && scratchName === sessionID;",
+		"node: module.exports must gate hydrate/sync on a validated session id")
+	assert.Contains(t, jsText, jsHydrateCall, "node: module.exports must call hydrateWorkspace at turn start")
+	assert.Contains(t, jsText, jsSyncCall, "node: module.exports must call syncWorkspace at turn end")
+
+	// And the agent.*.tmpl copy must NOT be wired into anything -- it is
+	// opt-in only (doc 14's PR-2 Placement note): the helper function
+	// DEFINITIONS are present (asserted identical above), but no CALL site
+	// invoking them from module-level code should be.
+	agentPyOut, _ := render(t, "agent", "python")
+	agentPyText := string(agentPyOut)
+	assert.NotContains(t, agentPyText, pyHydrateCall, "python: agent.py.tmpl must not call the helper itself -- it is opt-in")
+	assert.NotContains(t, agentPyText, pySyncCall, "python: agent.py.tmpl must not call the helper itself -- it is opt-in")
+
+	agentJsOut, _ := render(t, "agent", "node")
+	agentJsText := string(agentJsOut)
+	assert.NotContains(t, agentJsText, jsHydrateCall, "node: agent.js.tmpl must not call the helper itself -- it is opt-in")
+	assert.NotContains(t, agentJsText, jsSyncCall, "node: agent.js.tmpl must not call the helper itself -- it is opt-in")
 }
