@@ -24,7 +24,7 @@ import (
 	"github.com/fission/fission/test/integration/framework"
 )
 
-// execTurnReply is the exec verb's response contract (doc 14 PR-1 section):
+// execTurnReply is the exec verb's response contract:
 // {"stdout": "...", "stderr": "...", "exitCode": 0, "durationMs": 12,
 // "truncated": false}. This has no shared Go struct on either side ("zero
 // new platform Go" is the point of a template-only exec verb) -- it exists
@@ -96,8 +96,7 @@ func dispatchExecTurn(t *testing.T, ctx context.Context, f *framework.Framework,
 // a handler that runs {"code": ...} / {"command": ...} turn bodies and
 // answers {stdout, stderr, exitCode, durationMs, truncated} -- through the
 // normal agent-runtime dispatch path, with zero platform-side awareness of
-// this contract. Subtests cover the four cases doc 14's PR-1 Files section
-// calls for: a basic exec, the timeout ceiling, output truncation, and the
+// this contract. Subtests cover four contract cases: a basic exec, the timeout ceiling, output truncation, and the
 // env-scrub guarantee.
 func TestAgentExec(t *testing.T) {
 	t.Parallel()
@@ -148,7 +147,7 @@ func TestAgentExec(t *testing.T) {
 
 	// Timeout case: a 5s sleep with a 1s ceiling must be killed (the WHOLE
 	// process group, not merely the shell) and reported as exitCode -1 with
-	// a note in stderr -- doc 14's "kill the whole process group on expiry,
+	// a note in stderr -- the contract's "kill the whole process group on expiry,
 	// report exitCode: -1 + stderr note".
 	t.Run("timeout kills the process and reports exitCode -1", func(t *testing.T) {
 		reply, _ := dispatchExecTurn(t, ctx, f, turnURL, sessionID, []byte(`{"command": "sleep 5", "timeoutSeconds": 1}`))
@@ -170,7 +169,7 @@ func TestAgentExec(t *testing.T) {
 
 	// Truncation case: ask Node to write more than the 256KiB (262144-byte)
 	// per-stream cap and confirm truncated:true plus a stdout capped at
-	// EXACTLY that many bytes -- doc 14's "stdout/stderr each capped at 256
+	// EXACTLY that many bytes -- the contract's "stdout/stderr each capped at 256
 	// KiB ... overflow sets truncated: true, never errors".
 	t.Run("output over 256KiB is truncated, not errored", func(t *testing.T) {
 		const overCap = 300000 // > 262144
@@ -186,7 +185,7 @@ func TestAgentExec(t *testing.T) {
 	})
 
 	// Env-scrub case: the exec'd process must see NONE of this pod's
-	// FISSION_* vars (state/agent token paths, runtime URLs) -- doc 14's
+	// FISSION_* vars (state/agent token paths, runtime URLs) -- the contract's
 	// "Subprocess env is allow-listed ... never pass-through". Dumping
 	// process.env as JSON (rather than shelling out to `env`, which isn't
 	// guaranteed present in every runtime image) is the code-form exec
