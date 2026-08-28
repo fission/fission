@@ -35,6 +35,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 
@@ -73,13 +74,44 @@ def _allowed_env():
     return {k: os.environ[k] for k in ALLOWED_ENV_VARS if k in os.environ}
 
 
-def _clip(data):
-    if data is None:
-        data = b''
-    truncated = len(data) > MAX_OUTPUT_BYTES
-    if truncated:
-        data = data[:MAX_OUTPUT_BYTES]
-    return data.decode('utf-8', errors='replace'), truncated
+class _OutputBuffer:
+    # Mirrors the JS template's outputBuffer: chunks are dropped at PUSH
+    # time once MAX_OUTPUT_BYTES is reached, not merely trimmed once
+    # collection ends -- so a runaway child cannot hold arbitrarily large
+    # stdout/stderr buffers in memory before the cap is applied (unlike
+    # subprocess.communicate(), which buffers the whole stream first).
+    def __init__(self):
+        self._chunks = []
+        self._bytes = 0
+        self.truncated = False
+
+    def push(self, chunk):
+        if self.truncated or not chunk:
+            return
+        remaining = MAX_OUTPUT_BYTES - self._bytes
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining]
+            self.truncated = True
+        self._chunks.append(chunk)
+        self._bytes += len(chunk)
+
+    def text(self):
+        return b''.join(self._chunks).decode('utf-8', errors='replace')
+
+
+def _drain(pipe, buf):
+    # Keeps reading (and, past the cap, discarding) until the pipe closes,
+    # even after buf.truncated -- otherwise an unread pipe fills its OS
+    # buffer and blocks the child, which would hang the whole exec instead
+    # of honoring MAX_OUTPUT_BYTES.
+    try:
+        while True:
+            chunk = pipe.read(65536)
+            if not chunk:
+                break
+            buf.push(chunk)
+    finally:
+        pipe.close()
 
 
 def _run_exec(argv, cwd, timeout_seconds):
@@ -95,27 +127,36 @@ def _run_exec(argv, cwd, timeout_seconds):
         stderr=subprocess.PIPE,
         start_new_session=True,
     )
+    stdout_buf = _OutputBuffer()
+    stderr_buf = _OutputBuffer()
+    stdout_thread = threading.Thread(target=_drain, args=(proc.stdout, stdout_buf))
+    stderr_thread = threading.Thread(target=_drain, args=(proc.stderr, stderr_buf))
+    stdout_thread.start()
+    stderr_thread.start()
+
     timed_out = False
     try:
-        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+        proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         timed_out = True
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         except ProcessLookupError:
             pass
-        stdout, stderr = proc.communicate()
+        proc.wait()
+    stdout_thread.join()
+    stderr_thread.join()
     duration_ms = int((time.monotonic() - start) * 1000)
 
-    stdout_text, stdout_truncated = _clip(stdout)
-    stderr_text, stderr_truncated = _clip(stderr)
+    stdout_text = stdout_buf.text()
+    stderr_text = stderr_buf.text()
     if timed_out:
         stderr_text += '\n[exec: killed after exceeding %ds timeout]' % int(timeout_seconds)
         exit_code = -1
     else:
         exit_code = proc.returncode
 
-    return stdout_text, stderr_text, exit_code, duration_ms, stdout_truncated or stderr_truncated
+    return stdout_text, stderr_text, exit_code, duration_ms, stdout_buf.truncated or stderr_buf.truncated
 
 
 def _clamp_timeout(value):
