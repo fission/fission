@@ -419,7 +419,12 @@ console.log(JSON.stringify({ hostname: os.hostname(), content: data }));
 	}, 3*time.Minute, 2*time.Second)
 	require.NotEmpty(t, after.Hostname, "turn 2 never succeeded on a different pod")
 
-	// doc 14's PR-2 acceptance criterion, verbatim: "hashes equal".
+	// doc 14's PR-2 acceptance criterion, verbatim: "hashes equal". This is
+	// documentation, not an independent check -- the Equalf on fileContent
+	// vs info.Content inside the EventuallyWithT loop above already requires
+	// byte-for-byte equality, so these hashes can never differ once this
+	// line is reached; it exists to make the assertion read the same way
+	// the spec states it.
 	assert.Equal(t, sha256Hex(fileContent), sha256Hex(after.Content),
 		"hydrated content's sha256 must match what turn 1 wrote")
 }
