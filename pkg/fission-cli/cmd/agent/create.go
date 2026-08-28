@@ -389,13 +389,24 @@ func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tm
 	// only in the PR description, so it survives however someone gets to
 	// this scaffold.
 	if tmplKind == interpreterTemplate {
+		// The applicable command depends on whether checkEnvironment found
+		// envName already registered: `env create ... --image ...` only
+		// makes sense when the Environment does not exist yet -- once it
+		// does, gvisor is applied with `env update`, which needs no --image
+		// guess at all (a real concern for a user-supplied --env whose
+		// image this scaffold cannot know; it only happens to be correct
+		// for the default node/python env names).
+		gvisorCmd := fmt.Sprintf("fission env update --name %s --runtime-class gvisor", envName)
+		if !envExists {
+			gvisorCmd = fmt.Sprintf("fission env create --name %s --image ghcr.io/fission/%s-env --runtime-class gvisor", envName, envName)
+		}
 		fmt.Fprintf(w,
 			"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
 				"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
 				"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
 				"one more layer of isolation, pair it with:\n"+
-				"    fission env create --name %s --image ghcr.io/fission/%s-env --runtime-class gvisor\n\n",
-			envName, envName)
+				"    %s\n\n",
+			gvisorCmd)
 	}
 
 	fmt.Fprintf(w, "Next steps:\n")
