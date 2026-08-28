@@ -26,6 +26,14 @@
 # above — NetworkPolicy podSelector only matches pods in the policy's own
 # namespace, so rendering this in the release namespace would make it a
 # no-op when functionNamespace differs.
+#
+# WARNING: the RFC1918 deny-list also blocks in-cluster control-plane
+# traffic (pod/Service CIDRs are themselves RFC1918 in most clusters) —
+# fetcher->storagesvc (package fetch), function->statesvc, and
+# agent->agentruntime (workspace sync) all cross it. See the
+# environmentNetworkPolicy comment in values.yaml for the extraEgress
+# allow-list an operator needs before enabling this in a cluster that
+# uses those features.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
