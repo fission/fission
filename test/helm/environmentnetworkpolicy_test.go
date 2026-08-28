@@ -34,6 +34,31 @@ func TestEnvironmentNetworkPolicyIndependentOfIngressKnob(t *testing.T) {
 		"the unrelated ingress-only networkPolicy knob must stay off")
 }
 
+// TestEnvironmentNetworkPolicyNamespaceScope pins the failure mode the
+// template's own comment names: NetworkPolicy podSelector only matches pods
+// in the policy's own namespace, so this must render into
+// fission-function-ns (functionNamespace if set, else defaultNamespace),
+// never the release namespace — otherwise it silently becomes a no-op
+// whenever functionNamespace differs (e.g. the kind-ci profile, which sets
+// functionNamespace=fission-function while the release lives in "fission").
+func TestEnvironmentNetworkPolicyNamespaceScope(t *testing.T) {
+	t.Run("defaultNamespace when functionNamespace unset", func(t *testing.T) {
+		docs := render(t, "--set", "environmentNetworkPolicy.enabled=true")
+		np := networkPolicy(t, docs, "environment-egress")
+		assert.Equal(t, "default", np.Namespace, "must fall back to defaultNamespace")
+	})
+
+	t.Run("functionNamespace when set", func(t *testing.T) {
+		docs := render(t,
+			"--set", "environmentNetworkPolicy.enabled=true",
+			"--set", "functionNamespace=fission-function")
+		np := networkPolicy(t, docs, "environment-egress")
+		assert.Equal(t, "fission-function", np.Namespace,
+			"must follow functionNamespace, not the release namespace — a mismatch here "+
+				"silently no-ops the policy since podSelector only matches its own namespace")
+	})
+}
+
 // TestEnvironmentNetworkPolicySelectorMatchesTheEnvironmentLabelConstant is
 // the drift tripwire: the podSelector's label key is a bare YAML string in
 // the template, not forced to agree with the Go constant poolmgr/newdeploy
