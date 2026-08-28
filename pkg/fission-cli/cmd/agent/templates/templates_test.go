@@ -686,7 +686,7 @@ func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
 	}
 }
 
-// TestRender_Workspace_RouteShape pins the hydrate/sync helper's URL
+// TestRender_Workspace_ListURLNoTrailingSlash pins the hydrate/sync helper's URL
 // construction against the shipped route shape
 // (pkg/agentruntime/workspace.go's mountWorkspaceRoutes):
 // "/workspace/{namespace}/{name}/{session}" for LIST (no trailing slash --
@@ -695,7 +695,7 @@ func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
 // contract has no shared Go struct on the template side ("the SDK for
 // scaffolded agents is the template" -- doc 14's PR-2 Placement note), so
 // the rendered text is the only place these literals live.
-func TestRender_Workspace_RouteShape(t *testing.T) {
+func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 	t.Parallel()
 	for _, kind := range []string{"agent", "interpreter"} {
 		for _, lang := range []string{"node", "python"} {
