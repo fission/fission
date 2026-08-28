@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.environmentNetworkPolicy.enabled }}
+# Egress isolation for environment/function pods (abstraction E of the
+# agent-runtime abstraction stack; doc 13 §E). Every poolmgr generic and
+# specialized pod, and every newdeploy pod, carries the `environmentName`
+# label (fv1.ENVIRONMENT_NAME — see pkg/executor/executortype/poolmgr/gp_pod.go
+# and pkg/executor/executortype/newdeploy/newdeploymgr.go); this policy
+# selects on the label's presence, so it covers every environment
+# regardless of name. Container-executortype pods don't carry this label
+# and fall outside this policy.
+#
+# Default posture copies Agent Sandbox's SandboxTemplate-managed
+# NetworkPolicy default: allow general internet egress, deny RFC1918
+# (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and link-local
+# (169.254.0.0/16, which also covers the 169.254.169.254 cloud metadata
+# endpoint) destinations. Cluster DNS (kube-system/kube-dns, port 53) is
+# allowed by default so hostname-based egress destinations resolve;
+# environmentNetworkPolicy.allowClusterDNS=false drops that rule for a
+# stricter numeric-IP-only posture.
+#
+# Rendered into the namespace where executor creates function pods
+# (`fission-function-ns` helper), same as functionpods-allow-internal
+# above — NetworkPolicy podSelector only matches pods in the policy's own
+# namespace, so rendering this in the release namespace would make it a
+# no-op when functionNamespace differs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: environment-egress
+  namespace: {{ include "fission-function-ns" . | quote }}
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    svc: executor
+spec:
+  podSelector:
+    matchExpressions:
+      - key: environmentName
+        operator: Exists
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.environmentNetworkPolicy.allowClusterDNS }}
+    # Cluster DNS. Scoped to kube-system/kube-dns (the kubeadm/kOps/GKE/EKS
+    # convention) rather than an unscoped `namespaceSelector: {}`, which
+    # would admit any in-cluster listener on port 53 and undercut the
+    # RFC1918 deny-list below. A cluster running CoreDNS under a different
+    # label needs an extraEgress override.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    # General egress: the whole internet except RFC1918 private ranges and
+    # link-local (which subsumes the 169.254.169.254 cloud metadata IP).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+    {{- with .Values.environmentNetworkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
