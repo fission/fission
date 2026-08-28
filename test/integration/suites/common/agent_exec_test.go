@@ -151,17 +151,21 @@ func TestAgentExec(t *testing.T) {
 	// a note in stderr -- doc 14's "kill the whole process group on expiry,
 	// report exitCode: -1 + stderr note".
 	t.Run("timeout kills the process and reports exitCode -1", func(t *testing.T) {
-		start := time.Now()
 		reply, _ := dispatchExecTurn(t, ctx, f, turnURL, sessionID, []byte(`{"command": "sleep 5", "timeoutSeconds": 1}`))
-		elapsed := time.Since(start)
 
 		assert.Equal(t, -1, reply.ExitCode)
 		assert.Contains(t, reply.Stderr, "timeout")
 		// The process must actually have been killed near the 1s ceiling,
-		// not run to completion (5s) before the reply came back -- a
-		// generous upper bound (well under the sleep's own 5s) distinguishes
-		// "killed early" from "timeout is decorative".
-		assert.Lessf(t, elapsed, 4*time.Second, "exec did not appear to be killed at the timeout ceiling (took %s)", elapsed)
+		// not run to completion (the sleep's own 5s), before the reply came
+		// back. reply.DurationMs is measured template-side around the
+		// subprocess call itself (see interpreter.{js,py}.tmpl) -- unlike a
+		// wall-clock measurement wrapped around dispatchExecTurn's own
+		// retrying poller (turnAttemptTimeout up to 60s per attempt, on a
+		// 2s EventuallyWithT interval), it is immune to an unrelated
+		// transient dispatch retry inflating the elapsed time and flaking
+		// this assertion.
+		assert.GreaterOrEqualf(t, reply.DurationMs, int64(900), "exec returned before the 1s timeout ceiling (durationMs=%d)", reply.DurationMs)
+		assert.Lessf(t, reply.DurationMs, int64(4000), "exec did not appear to be killed at the timeout ceiling, not run to the sleep's own 5s (durationMs=%d)", reply.DurationMs)
 	})
 
 	// Truncation case: ask Node to write more than the 256KiB (262144-byte)
