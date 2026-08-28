@@ -31,6 +31,7 @@
 import json
 import math
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -119,14 +120,24 @@ def _run_exec(argv, cwd, timeout_seconds):
     # WHOLE tree (a shell plus whatever it launches) can be killed on
     # timeout via os.killpg, not just the direct child.
     start = time.monotonic()
-    proc = subprocess.Popen(
-        argv,
-        cwd=cwd,
-        env=_allowed_env(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
+    try:
+        proc = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=_allowed_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as err:
+        # argv[0] missing (e.g. no /bin/sh or python3 in the image) or not
+        # executable -- mirrors the JS template's spawn() 'error' handler:
+        # map the failure into the {stdout,stderr,exitCode,durationMs,
+        # truncated} reply instead of letting it raise past main() as an
+        # uncaught 500.
+        duration_ms = int((time.monotonic() - start) * 1000)
+        return '', '[exec: failed to start: %s]' % err, -1, duration_ms, False
+
     stdout_buf = _OutputBuffer()
     stderr_buf = _OutputBuffer()
     stdout_thread = threading.Thread(target=_drain, args=(proc.stdout, stdout_buf))
@@ -159,6 +170,36 @@ def _run_exec(argv, cwd, timeout_seconds):
     return stdout_text, stderr_text, exit_code, duration_ms, stdout_buf.truncated or stderr_buf.truncated
 
 
+# _SESSION_ID_CHARSET_RE mirrors the dispatcher's own sessionIDPattern
+# (pkg/agentruntime/dispatcher.go) exactly. This template is reached two
+# ways: through the dispatcher, which already validates X-Fission-Session
+# against that pattern before forwarding it, but ALSO directly against the
+# router internal listener (a bare `fission function test`/curl, or the MCP
+# fast lane) -- a path with no dispatcher in front of it at all, where the
+# header is whatever the caller sent, unconstrained by any pattern. Re-
+# validating here (fullmatch, not match+'$', since '$' also matches just
+# before a trailing newline) is what makes the guard below hold on BOTH
+# paths rather than only the one that happens to enforce it upstream.
+_SESSION_ID_CHARSET_RE = re.compile(r'[A-Za-z0-9._-]{1,128}')
+
+
+def _safe_scratch_name(session_id):
+    # This template turns session_id into a path SEGMENT
+    # ($TMPDIR/exec/<segment>), so a value of "." resolves to $TMPDIR/exec
+    # itself, ".." resolves to $TMPDIR itself, and anything containing "/"
+    # (never possible through the dispatcher, but possible on the direct
+    # path above) can walk arbitrarily far outside $TMPDIR/exec -- all of
+    # which get shutil.rmtree'd at the start and end of every turn, wiping
+    # sibling sessions' scratch dirs or worse on a shared warm-pool pod.
+    # pkg/agentruntime/workspace.go's validateWorkspaceSegment applies the
+    # same charset + "."/".." rejection for the same reason on the
+    # platform's own workspace routes; mirrored here by falling back to a
+    # fresh uniquely-named scratch dir instead of erroring the turn.
+    if session_id in ('.', '..') or not _SESSION_ID_CHARSET_RE.fullmatch(session_id):
+        return 'stateless-%s' % uuid.uuid4().hex
+    return session_id
+
+
 def _clamp_timeout(value):
     try:
         seconds = float(value)
@@ -185,12 +226,18 @@ def main():
     # or a bare direct invocation) is stateless exec: a fresh, uniquely-named
     # scratch dir per call rather than one keyed on a session that does not
     # exist here.
-    scratch_name = session_id or ('stateless-%s' % uuid.uuid4().hex)
+    scratch_name = _safe_scratch_name(session_id) if session_id else ('stateless-%s' % uuid.uuid4().hex)
     scratch_dir = os.path.join(tempfile.gettempdir(), 'exec', scratch_name)
 
     headers = {'Content-Type': 'application/json', YIELD_HEADER: 'waiting'}
 
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    # A syntactically valid but non-object JSON body ([1,2], "x", 42) parses
+    # truthy; without this guard the payload.get(...) calls below raise an
+    # uncaught AttributeError (non-dicts have no .get), turning a malformed
+    # request into a 500 instead of the exactly-one-of contract's 400.
+    if not isinstance(payload, dict):
+        payload = {}
     has_code = isinstance(payload.get('code'), str)
     has_command = isinstance(payload.get('command'), str)
     if has_code == has_command:
