@@ -1777,6 +1777,21 @@ networkPolicy:
 ## out of scope here — it is CNI-specific (e.g. Cilium identity-based
 ## policy) and not something a portable Helm chart can author.
 ##
+## IPv4-only allow rule: the default posture's "allow general internet
+## egress" rule is `ipBlock: 0.0.0.0/0` only — there is no `::/0` rule. On a
+## dual-stack cluster this is still fail-closed (no accidental IPv6 egress
+## opens up) but it means IPv6 destinations are unreachable even where an
+## IPv4 destination would be allowed. Add an `::/0` ipBlock (with your
+## cluster's IPv6 pod/Service CIDRs excepted) via extraEgress if your
+## environment pods need outbound IPv6.
+##
+## NodeLocal DNSCache: the well-known NodeLocal DNSCache listener address
+## (169.254.20.10) falls inside the 169.254.0.0/16 link-local deny range,
+## so on a cluster running it, allowClusterDNS=true's kube-system/kube-dns
+## rule does not cover it — DNS resolution breaks even with the DNS knob on.
+## Add an extraEgress ipBlock allow for 169.254.20.10/32 port 53 (UDP+TCP)
+## if your cluster uses NodeLocal DNSCache.
+##
 ## THE RFC1918 DENY-LIST BLOCKS IN-CLUSTER CONTROL-PLANE TRAFFIC TOO — pod
 ## and Service CIDRs are themselves RFC1918 ranges in most clusters. If
 ## your environment pods also need any of the following, allow-list the
