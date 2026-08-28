@@ -483,3 +483,60 @@ func TestRender_Interpreter_TrustStatementMentionsGvisor(t *testing.T) {
 		assert.Contains(t, string(out), "--runtime-class gvisor", "%s: trust-boundary comment missing the gvisor recommendation", lang)
 	}
 }
+
+// TestRender_Interpreter_ScratchNameGuardsTraversal pins the review fix for
+// the dispatcher's sessionIDPattern (^[A-Za-z0-9._-]{1,128}$,
+// pkg/agentruntime/dispatcher.go) legitimately admitting the exact strings
+// "." and ".." as a caller-supplied session id: since both templates turn
+// the session id into a scratch-dir path SEGMENT
+// ($TMPDIR/exec/<segment>), an unguarded "." or ".." resolves to
+// $TMPDIR/exec or $TMPDIR itself -- both of which get recursively removed
+// at the start and end of every turn. This also has to hold on the direct
+// (no-dispatcher) invocation path, where nothing upstream enforces
+// sessionIDPattern's charset at all -- so both templates must re-validate
+// the FULL charset here, not just reject the two degenerate values, and
+// fall back to a fresh scratch name on anything that fails either check.
+func TestRender_Interpreter_ScratchNameGuardsTraversal(t *testing.T) {
+	t.Parallel()
+
+	pyOut, _ := render(t, "interpreter", "python")
+	assert.Contains(t, string(pyOut), "session_id in ('.', '..')",
+		"python: scratch-dir name must guard against the exact session ids \".\" and \"..\"")
+	assert.Contains(t, string(pyOut), "_SESSION_ID_CHARSET_RE.fullmatch(session_id)",
+		"python: scratch-dir name must also be re-validated against the full session-id charset (the dispatcher's sessionIDPattern is not enforced on the direct-invocation path)")
+
+	jsOut, _ := render(t, "interpreter", "node")
+	assert.Contains(t, string(jsOut), "sessionID === '.' || sessionID === '..'",
+		"node: scratch-dir name must guard against the exact session ids \".\" and \"..\"")
+	assert.Contains(t, string(jsOut), "SESSION_ID_CHARSET_RE.test(sessionID)",
+		"node: scratch-dir name must also be re-validated against the full session-id charset (the dispatcher's sessionIDPattern is not enforced on the direct-invocation path)")
+}
+
+// TestRender_Interpreter_PythonRejectsNonObjectBody pins the review fix for
+// a syntactically valid but non-object JSON body ([1,2], "x", 42): parsed
+// via request.get_json(silent=True) it comes back truthy, so without an
+// isinstance guard payload.get(...) raises an uncaught AttributeError (a
+// 500) instead of the exactly-one-of contract's 400. The node template
+// already survives this via parseBody/typeof checks, so only python needs
+// the pin.
+func TestRender_Interpreter_PythonRejectsNonObjectBody(t *testing.T) {
+	t.Parallel()
+	out, _ := render(t, "interpreter", "python")
+	assert.Contains(t, string(out), "isinstance(payload, dict)",
+		"python: a non-object JSON body must be coerced to {} before payload.get(...) is called")
+}
+
+// TestRender_Interpreter_PythonHandlesSpawnFailure pins the review fix
+// making subprocess.Popen failure (e.g. a missing /bin/sh or python3
+// binary) symmetric with the node template's spawn() 'error' handler: both
+// must map the failure into the {stdout,stderr,exitCode,durationMs,
+// truncated} reply instead of letting it raise past the turn as an
+// uncaught 500.
+func TestRender_Interpreter_PythonHandlesSpawnFailure(t *testing.T) {
+	t.Parallel()
+	out, _ := render(t, "interpreter", "python")
+	assert.Contains(t, string(out), "except OSError as err:",
+		"python: _run_exec must catch a failed Popen and answer the exec contract, not raise")
+	assert.Contains(t, string(out), "failed to start",
+		"python: a failed Popen should report the same 'failed to start' note the node template uses")
+}
