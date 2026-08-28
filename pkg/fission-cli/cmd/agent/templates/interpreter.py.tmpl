@@ -29,6 +29,7 @@
 # isolation before running code you did not write yourself.
 
 import json
+import math
 import os
 import shutil
 import signal
@@ -120,9 +121,13 @@ def _run_exec(argv, cwd, timeout_seconds):
 def _clamp_timeout(value):
     try:
         seconds = float(value)
-        if seconds <= 0:
-            raise ValueError
     except (TypeError, ValueError):
+        return DEFAULT_TIMEOUT_SECONDS
+    # math.isfinite rejects NaN and +/-inf -- float('nan') <= 0 is False, so
+    # a NaN would otherwise sail past a bare `seconds <= 0` guard and reach
+    # subprocess timeouts as-is, raising an uncaught ValueError instead of
+    # the {stdout,stderr,exitCode,durationMs,truncated} contract.
+    if not math.isfinite(seconds) or seconds <= 0:
         return DEFAULT_TIMEOUT_SECONDS
     return min(seconds, MAX_TIMEOUT_SECONDS)
 
