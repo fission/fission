@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 
 from flask import request
 import requests
@@ -288,12 +289,24 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
         res = requests.get(_workspace_session_url(session_id), headers=_workspace_headers(),
                             timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
         res.raise_for_status()
-        items = res.json().get('items', [])
+        payload = res.json()
+        # A non-dict listing body (server bug, or something in front of it
+        # rewriting the response) degrades to "nothing to hydrate" rather
+        # than an AttributeError escaping this function -- mirrors the JS
+        # helper's `(await res.json()).items || []`, which is equally inert
+        # against a non-object payload.
+        items = payload.get('items', []) if isinstance(payload, dict) else []
     except (requests.RequestException, ValueError) as err:
         _append_workspace_warning(warnings, 'workspace hydrate: listing failed: %s' % err)
         return warnings
 
     for item in items:
+        if not isinstance(item, dict):
+            # A non-dict entry in the listing (tampered or malformed server
+            # response) is simply not hydratable -- mirrors the JS helper's
+            # `item && item.path`, which is equally inert against a
+            # non-object item.
+            continue
         rel = item.get('path')
         size = item.get('size')
         if (not isinstance(rel, str) or not isinstance(size, int) or not _valid_workspace_relpath(rel)
@@ -308,6 +321,19 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
                 continue
         except OSError:
             pass
+        if os.path.islink(local_path) or (os.path.lexists(local_path) and not os.path.isfile(local_path)):
+            # A local path that already exists but is a symlink (or
+            # otherwise not a regular file -- a FIFO, socket, or device that
+            # exec'd code created at this exact relative path) would have
+            # the open(local_path, 'wb') below follow the symlink and
+            # overwrite its TARGET with hydrated workspace bytes, or hang
+            # forever waiting for a reader (FIFO) -- same failure class the
+            # sync walk's symlink/regular-file guards exist for, just
+            # triggered from the opposite direction. Skip and report rather
+            # than write through it or wedge the turn.
+            _append_workspace_warning(
+                warnings, 'workspace hydrate: %s: local path exists and is not a regular file, skipped' % rel)
+            continue
         try:
             get_res = requests.get(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
                                     timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
@@ -372,9 +398,25 @@ def _sync_workspace(scratch_dir, session_id, manifest):
                 st = os.stat(local_path)
             except OSError:
                 continue
+            if not stat.S_ISREG(st.st_mode):
+                # os.walk's `files` list is every non-directory dirent, not
+                # just regular files -- a FIFO or socket exec'd code created
+                # in the scratch dir lands here too, and the plain
+                # open(local_path, 'rb') a few lines down blocks forever on
+                # a FIFO with no writer, wedging the turn outside the exec
+                # timeout's kill mechanism. Silent skip, not counted in
+                # skipped_names, mirroring the JS walk's entry.isFile() guard.
+                continue
             seen.add(rel)
 
             prev = manifest.get(rel)
+            if not isinstance(prev, dict):
+                # A tampered or hand-edited manifest value that is not
+                # dict-shaped would otherwise raise AttributeError on the
+                # .get() calls below -- treat it as "no prior record" rather
+                # than 500ing the turn (mirrors the JS helper, where
+                # prev.size on a non-object simply reads as undefined).
+                prev = None
             if prev and prev.get('size') == st.st_size and prev.get('mtime_ns') == st.st_mtime_ns:
                 continue  # skip-clean: unchanged since the last successful sync/hydrate
 
