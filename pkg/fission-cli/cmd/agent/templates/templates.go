@@ -4,10 +4,12 @@
 
 // Package templates embeds the handler files `fission agent create`
 // scaffolds (G17 DX slice, see docs/superpowers/plans/2026-08-26-agent-runtime-scaffold.md
-// Task 1). Render fills in the one placeholder every template carries (the
-// scaffolded function's name, used only in a header comment and in a couple
-// of log-line prefixes) and returns the rendered bytes plus the file
-// extension the caller should write them under.
+// Task 1). Render fills in the templateData every template carries -- the
+// scaffolded function's name (used only in a header comment and in a couple
+// of log-line prefixes) plus, for the interpreter templates only, the
+// MAX_TIMEOUT_SECONDS ceiling (see InterpreterMaxTimeoutSeconds) -- and
+// returns the rendered bytes plus the file extension the caller should
+// write them under.
 //
 // Why .tmpl, not .js/.py: the Makefile's LICENSE_FILES glob (`make license`
 // / `make license-check`, see Makefile's "License headers" section) matches
@@ -69,11 +71,23 @@ var nodeInterpreterTemplateSrc string
 //go:embed interpreter.py.tmpl
 var pythonInterpreterTemplateSrc string
 
+// InterpreterMaxTimeoutSeconds is the interpreter template's own hard
+// ceiling on the request-carried `timeoutSeconds` (rendered into both
+// interpreter templates as MAX_TIMEOUT_SECONDS) and the single source of
+// truth `fission agent create` uses to set the scaffolded Function's own
+// FunctionTimeout to match -- see create.go's buildFunction. Exported so
+// that caller stays in lockstep with the templates instead of carrying an
+// independent literal.
+const InterpreterMaxTimeoutSeconds = 300
+
 // templateData is the substitution set every template receives. Name is the
 // scaffolded function's name; it appears only in a header comment and a
 // couple of log-line prefixes, never in anything the wire contract checks.
+// MaxTimeoutSeconds is only referenced by the interpreter templates (see
+// InterpreterMaxTimeoutSeconds).
 type templateData struct {
-	Name string
+	Name              string
+	MaxTimeoutSeconds int
 }
 
 // langTemplate pairs an embedded template source with the file extension
@@ -136,7 +150,7 @@ func Render(kind, lang, name string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("parsing %s/%s handler template: %w", kind, lang, err)
 	}
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, templateData{Name: name}); err != nil {
+	if err := tmpl.Execute(&buf, templateData{Name: name, MaxTimeoutSeconds: InterpreterMaxTimeoutSeconds}); err != nil {
 		return nil, "", fmt.Errorf("rendering %s/%s handler template: %w", kind, lang, err)
 	}
 	return buf.Bytes(), lt.ext, nil
