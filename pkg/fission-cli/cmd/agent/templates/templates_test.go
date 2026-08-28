@@ -797,6 +797,28 @@ func TestRender_Workspace_SkipCleanUsesManifest(t *testing.T) {
 	}
 }
 
+// TestRender_Workspace_HydrateExcludesManifest pins a review-motivated fix:
+// the hydrate loop, like the sync walk (TestRender_Workspace_SkipCleanUsesManifest),
+// must never treat the manifest filename as an ordinary workspace artifact --
+// a same-named remote artifact would otherwise get downloaded over the local
+// manifest every turn and poison skip-clean decisions. Checked in both kinds
+// since the byte-identical helper block means a fix to one without the other
+// would itself be the regression this guards against.
+func TestRender_Workspace_HydrateExcludesManifest(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"agent", "interpreter"} {
+		out, _ := render(t, kind, "python")
+		assert.Contains(t, string(out),
+			"or rel in (WORKSPACE_MANIFEST_FILENAME, WORKSPACE_MANIFEST_FILENAME + '.tmp')",
+			"%s/python: hydrate loop must exclude the manifest filename by name", kind)
+
+		out, _ = render(t, kind, "node")
+		assert.Contains(t, string(out),
+			"rel === WORKSPACE_MANIFEST_FILENAME ||\n      rel === WORKSPACE_MANIFEST_FILENAME + '.tmp'",
+			"%s/node: hydrate loop must exclude the manifest filename by name", kind)
+	}
+}
+
 // TestRender_Interpreter_Workspace_WiredIntoTurn pins that the interpreter
 // template (unlike agent.*.tmpl's opt-in copy) actually CALLS the helper
 // from main()/module.exports for a sessionful turn, and gates it on
