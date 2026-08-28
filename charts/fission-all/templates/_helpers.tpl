@@ -550,6 +550,34 @@ annotation would fight that design — hence the same tenancy gate.
 {{- end -}}
 
 {{/*
+fission.functionNamespaces is the deduped namespace set function workloads
+render into: .Values.functionNamespace when set (else .Values.defaultNamespace),
+plus every .Values.additionalFissionNamespaces entry. Mirrors pkg/utils
+NamespaceResolver.FunctionNamespaces (each resource namespace resolved through
+GetFunctionNS): functionNamespace replaces only the DEFAULT namespace when set;
+additionalFissionNamespaces entries always map to themselves. This is the exact
+range router/role-dataplane.yaml and executor/networkpolicy-environment-egress.yaml
+each recomputed inline before switching to this helper.
+
+Space-joined like fission.adoptSecretNamespaces above; split with
+`splitList " "` at the call site, e.g.:
+
+  {{- range $ns := splitList " " (include "fission.functionNamespaces" $) }}
+*/}}
+{{- define "fission.functionNamespaces" -}}
+{{- $namespaces := list -}}
+{{- if .Values.functionNamespace -}}
+{{-   $namespaces = append $namespaces .Values.functionNamespace -}}
+{{- else -}}
+{{-   $namespaces = append $namespaces .Values.defaultNamespace -}}
+{{- end -}}
+{{- range $ns := .Values.additionalFissionNamespaces -}}
+{{-   $namespaces = append $namespaces $ns -}}
+{{- end -}}
+{{- join " " ($namespaces | uniq) -}}
+{{- end -}}
+
+{{/*
 fission.saMetadata renders the annotations and labels a ServiceAccount inherits
 from the `serviceAccounts` values block, as complete metadata sub-blocks.
 

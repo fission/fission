@@ -44,16 +44,7 @@
 # environmentNetworkPolicy comment in values.yaml for the extraEgress
 # allow-list an operator needs before enabling this in a cluster that
 # uses those features.
-{{- $namespaces := list }}
-{{- if .Values.functionNamespace }}
-{{- $namespaces = append $namespaces .Values.functionNamespace }}
-{{- else }}
-{{- $namespaces = append $namespaces .Values.defaultNamespace }}
-{{- end }}
-{{- range $ns := .Values.additionalFissionNamespaces }}
-{{- $namespaces = append $namespaces $ns }}
-{{- end }}
-{{- range $ns := ($namespaces | uniq) }}
+{{- range $ns := splitList " " (include "fission.functionNamespaces" $) }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
