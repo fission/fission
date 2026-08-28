@@ -483,7 +483,7 @@ func TestAgentCreate_TemplateInterpreter_NextStepsGolden(t *testing.T) {
 			"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
 			"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
 			"one more layer of isolation, pair it with:\n"+
-			"    fission env create --name node --image ghcr.io/fission/node-env --runtime-class gvisor\n\n"+
+			"    fission env update --name node --runtime-class gvisor\n\n"+
 			"Next steps:\n"+
 			"  1. Function default/myinterp is already created.\n"+
 			"  2. Port-forward the agent runtime and dispatch a turn:\n"+
@@ -498,6 +498,27 @@ func TestAgentCreate_TemplateInterpreter_NextStepsGolden(t *testing.T) {
 		svcinfo.PortAgentRuntime, fv1.DefaultAgentSessionHeader,
 	)
 	assert.Contains(t, out, want)
+}
+
+// TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate is the
+// env-missing control for TestAgentCreate_TemplateInterpreter_NextStepsGolden:
+// when checkEnvironment found no Environment yet, the gvisor pairing
+// suggestion must be `env create ... --runtime-class gvisor` (an image is
+// needed to create anything), not the `env update` form the env-exists case
+// uses.
+func TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	setAgentCreateClient(t, ns) // no Environment object: env missing
+
+	in := baseCreateInput("myinterp")
+	in.SetString(flagkey.FnAgentTemplate, "interpreter")
+	in.SetBool(flagkey.SpecSave, true)
+
+	out := captureStdout(t, func() error { return Create(in) })
+	assert.Contains(t, out, "fission env create --name node --image ghcr.io/fission/node-env --runtime-class gvisor")
+	assert.NotContains(t, out, "env update --name node --runtime-class gvisor")
 }
 
 // --- MCP exposure (PR-1: FnExposeAsMCP/FnToolDescription/FnToolInputSchema/FnToolName) ---
