@@ -183,6 +183,34 @@ function parseBody(raw) {
   return {};
 }
 
+// SESSION_ID_CHARSET_RE mirrors the dispatcher's own sessionIDPattern
+// (pkg/agentruntime/dispatcher.go) exactly. This template is reached two
+// ways: through the dispatcher, which already validates X-Fission-Session
+// against that pattern before forwarding it, but ALSO directly against the
+// router internal listener (a bare `fission function test`/curl, or the MCP
+// fast lane) -- a path with no dispatcher in front of it at all, where the
+// header is whatever the caller sent, unconstrained by any pattern.
+// Re-validating here is what makes safeScratchName's guard hold on BOTH
+// paths rather than only the one that happens to enforce it upstream.
+const SESSION_ID_CHARSET_RE = /^[A-Za-z0-9._-]{1,128}$/;
+
+// safeScratchName mirrors pkg/agentruntime/workspace.go's
+// validateWorkspaceSegment. This template turns sessionID into a path
+// SEGMENT (path.join(os.tmpdir(), 'exec', scratchName)), so a value of "."
+// resolves to $TMPDIR/exec itself, ".." resolves to $TMPDIR itself, and
+// anything containing "/" (never possible through the dispatcher, but
+// possible on the direct path above) can walk arbitrarily far outside
+// $TMPDIR/exec -- all of which get fs.rmSync({recursive:true})'d at the
+// start and end of every turn, wiping sibling sessions' scratch dirs or
+// worse on a shared warm-pool pod. Falls back to a fresh uniquely-named
+// scratch dir instead of erroring the turn.
+function safeScratchName(sessionID) {
+  if (sessionID === '.' || sessionID === '..' || !SESSION_ID_CHARSET_RE.test(sessionID)) {
+    return 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
+  return sessionID;
+}
+
 function clampTimeout(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) {
@@ -200,7 +228,9 @@ module.exports = async function (context) {
   // or a bare direct invocation) is stateless exec: a fresh, uniquely-named
   // scratch dir per call rather than one keyed on a session that does not
   // exist here.
-  const scratchName = sessionID || 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const scratchName = sessionID
+    ? safeScratchName(sessionID)
+    : 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   const scratchDir = path.join(os.tmpdir(), 'exec', scratchName);
 
   const headers = { 'Content-Type': 'application/json', [YIELD_HEADER]: 'waiting' };
