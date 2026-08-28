@@ -1737,9 +1737,45 @@ grafana:
 ## that don't already restrict pod-to-pod traffic.
 ##
 ## Requires a NetworkPolicy-aware CNI (Calico, Cilium, Weave, etc.).
-## Egress rules are intentionally not added in this round.
+## Egress rules are intentionally not added here — see the separate
+## `environmentNetworkPolicy` knob below for environment-pod egress.
 networkPolicy:
   enabled: false
+
+
+## environmentNetworkPolicy: egress isolation for environment/function pods.
+## When enabled, the chart renders one Egress-only NetworkPolicy selecting
+## every pod that carries the `environmentName` label — poolmgr generic and
+## specialized pods, and newdeploy pods (see pkg/apis/core/v1/const.go
+## ENVIRONMENT_NAME and pkg/executor/executortype/{poolmgr/gp_pod.go,
+## newdeploy/newdeploymgr.go}). Container-executortype pods don't carry this
+## label and are unaffected by this knob.
+##
+## Default posture mirrors Agent Sandbox's SandboxTemplate managed
+## NetworkPolicy default (their "good default" for agent pods): allow general
+## internet egress, deny RFC1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+## and link-local (169.254.0.0/16 — which also covers the 169.254.169.254
+## cloud metadata endpoint) destinations.
+##
+## Independent of the ingress-only `networkPolicy` knob above — enable
+## either or both. Requires a NetworkPolicy-aware CNI (Calico, Cilium,
+## Weave, etc.).
+##
+## Pod-level egress only. Per-agent egress policy (finer than per-pod) is
+## out of scope here — it is CNI-specific (e.g. Cilium identity-based
+## policy) and not something a portable Helm chart can author.
+environmentNetworkPolicy:
+  enabled: false
+  ## Allow egress to cluster DNS (kube-system/kube-dns, port 53 TCP+UDP).
+  ## Needed to resolve hostname-based egress destinations. Set false for a
+  ## stricter numeric-IP-only posture (mirrors the "DNS blocked" half of
+  ## Agent Sandbox's default posture).
+  allowClusterDNS: true
+  ## Extra raw NetworkPolicy egress rule entries (networking.k8s.io/v1
+  ## NetworkPolicyEgressRule shape), appended verbatim after the default
+  ## deny-list rule — e.g. to allow-list a specific in-cluster or RFC1918
+  ## destination the deny rule above would otherwise block.
+  extraEgress: []
 
 
 ## InternalAuth: HMAC-SHA256 application-layer authentication for the
