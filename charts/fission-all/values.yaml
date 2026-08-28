@@ -1744,12 +1744,24 @@ networkPolicy:
 
 
 ## environmentNetworkPolicy: egress isolation for environment/function pods.
-## When enabled, the chart renders one Egress-only NetworkPolicy selecting
-## every pod that carries the `environmentName` label — poolmgr generic and
-## specialized pods, and newdeploy pods (see pkg/apis/core/v1/const.go
-## ENVIRONMENT_NAME and pkg/executor/executortype/{poolmgr/gp_pod.go,
-## newdeploy/newdeploymgr.go}). Container-executortype pods don't carry this
-## label and are unaffected by this knob.
+## When enabled, the chart renders one Egress-only NetworkPolicy per function
+## namespace, each selecting every pod in that namespace that carries the
+## `environmentName` label — poolmgr generic and specialized pods, and
+## newdeploy pods (see pkg/apis/core/v1/const.go ENVIRONMENT_NAME and
+## pkg/executor/executortype/{poolmgr/gp_pod.go, newdeploy/newdeploymgr.go}).
+## Container-executortype pods don't carry this label and are unaffected by
+## this knob.
+##
+## Namespace coverage: functionNamespace (or defaultNamespace when unset)
+## plus every additionalFissionNamespaces entry — the STATIC-tenancy
+## function-namespace set, mirrored from pkg/utils
+## NamespaceResolver.FunctionNamespaces. Under tenancy.mode: dynamic or
+## cluster, namespaces the tenant controller onboards at runtime are NOT in
+## that list and so are unknown at chart render time — this knob does not
+## enforce egress isolation for function pods in those namespaces. There is
+## no chart-level fix for that gap; a dynamic/cluster-tenancy install needs
+## an out-of-band mechanism (e.g. a controller that stamps the same policy
+## into each onboarded namespace) to get equivalent coverage.
 ##
 ## Default posture mirrors Agent Sandbox's SandboxTemplate managed
 ## NetworkPolicy default (their "good default" for agent pods): allow general
