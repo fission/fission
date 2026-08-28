@@ -49,13 +49,19 @@ func Commands() *cobra.Command {
 	}, Create, flag.FlagSet{
 		Required: []flag.Flag{flag.FnName},
 		Optional: []flag.Flag{
-			flag.FnEnvName, flag.FnAgentLang, flag.PkgCode,
+			flag.FnEnvName, flag.FnAgentLang, flag.FnAgentTemplate, flag.PkgCode,
 			agentCreateStateFlag, flag.FnStateKeyspace, flag.FnStateMaxKeys,
 			flag.FnStateMaxValueBytes, flag.FnStateTTL,
 			flag.FnStateStickySource, flag.FnStateStickyName,
 			agentCreateAgentFlag, flag.FnAgentSessionSource, flag.FnAgentSessionName,
 			flag.FnAgentIdleAfter, flag.FnAgentArchiveAfter, flag.FnAgentMaxSessions,
 			flag.FnAgentHistoryTrim,
+			// MCP exposure (PR-1): --expose-as-mcp lets the scaffolded handler
+			// (interpreter template in particular) be called as an MCP tool.
+			// function.GetToolConfig (exported for this) applies the same
+			// flag-merge semantics `fn create`/`fn update` use.
+			flag.FnExposeAsMCP, flag.FnToolDescription,
+			flag.FnToolInputSchema, flag.FnToolName,
 			flag.SpecSave,
 		},
 	})

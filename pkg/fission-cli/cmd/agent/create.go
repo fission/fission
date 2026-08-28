@@ -35,6 +35,27 @@ import (
 // dummy/unit-test Input, when a test never sets it at all.
 const defaultLang = "node"
 
+// defaultTemplate / interpreterTemplate are `--template`'s recognized
+// values (PR-1, abstraction A / Q35 resolution): the same
+// dummy/unit-test-Input caveat as defaultLang applies -- a real CLI
+// invocation gets defaultTemplate from flag.FnAgentTemplate's
+// DefaultString, but a test Input that never sets --template needs this
+// fallback applied explicitly.
+const (
+	defaultTemplate     = "agent"
+	interpreterTemplate = "interpreter"
+)
+
+// interpreterMaxTimeoutSeconds is the interpreter template's own hard
+// ceiling on the request-carried `timeoutSeconds` (see
+// templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS -- pinned
+// against this exact value by templates_test.go's
+// TestRender_Interpreter_TimeoutCeiling). The scaffolded Function's own
+// FunctionTimeout is set to match (see buildFunction) so the platform's
+// own request timeout never kills a full-length exec call before the
+// template's own timeout does.
+const interpreterMaxTimeoutSeconds = 300
+
 // scaffoldFunctionTimeout mirrors `fn create`'s own --fntimeout default of
 // 60 (flag.FnExecutionTimeout's DefaultInt, cmd/function's flag.go). This
 // command intentionally exposes no --fntimeout/--concurrency/--executortype
@@ -66,6 +87,11 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	lang := input.String(flagkey.FnAgentLang)
 	if lang == "" {
 		lang = defaultLang
+	}
+
+	tmplKind := input.String(flagkey.FnAgentTemplate)
+	if tmplKind == "" {
+		tmplKind = defaultTemplate
 	}
 
 	envName := input.String(flagkey.FnEnvironmentName)
@@ -108,7 +134,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	// 2. Render the handler and write it to disk, refusing to clobber an
 	// existing file (an idempotent re-run must point at a different --code,
 	// never silently overwrite someone's edited handler).
-	rendered, ext, err := templates.Render(lang, name)
+	rendered, ext, err := templates.Render(tmplKind, lang, name)
 	if err != nil {
 		return err
 	}
@@ -155,7 +181,10 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error creating package: %w", err)
 	}
 
-	fn := buildFunction(input, name, fnNamespace, envName, pkgMeta)
+	fn, err := buildFunction(input, name, fnNamespace, envName, tmplKind, pkgMeta)
+	if err != nil {
+		return err
+	}
 	if toSpec {
 		fn.Namespace = userProvidedNS
 		fn.Spec.Package.PackageRef.Namespace = userProvidedNS
@@ -173,7 +202,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		fmt.Fprintf(input.Stdout(), "function '%s' created\n", fn.Name)
 	}
 
-	printNextSteps(input.Stdout(), name, fnNamespace, envName, codePath, specDir, toSpec, envExists)
+	printNextSteps(input.Stdout(), name, fnNamespace, envName, codePath, specDir, tmplKind, toSpec, envExists)
 	return nil
 }
 
@@ -258,7 +287,19 @@ func (opts *CreateSubCommand) checkEnvironment(input cli.Input, fnName, envName,
 // such built-in default -- it is opt-in, so a scaffold that wants the demo's
 // "the router lands on the same pod the dispatcher predicts" property has to
 // set it explicitly.
-func buildFunction(input cli.Input, name, fnNamespace, envName string, pkgMeta *metav1.ObjectMeta) *fv1.Function {
+//
+// MCP exposure (PR-1) reuses function.GetToolConfig -- the SAME
+// --expose-as-mcp/--tool-* flag-merge helper `fn create`/`fn update` use --
+// so a scaffolded interpreter can be registered as an MCP tool with no
+// second implementation of that flag handling to drift out of sync.
+//
+// tmplKind selects the scaffolded Function's own FunctionTimeout:
+// interpreterTemplate gets interpreterMaxTimeoutSeconds (300, matching the
+// interpreter template's own request-timeoutSeconds ceiling) so the
+// platform's request timeout is never what kills a full-length exec call;
+// every other template keeps scaffoldFunctionTimeout (60, `fn create`'s own
+// default).
+func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string, pkgMeta *metav1.ObjectMeta) (*fv1.Function, error) {
 	stateCfg := function.GetStateConfig(input, nil)
 	if stateCfg != nil {
 		if stateCfg.Keyspace == "" {
@@ -272,6 +313,16 @@ func buildFunction(input cli.Input, name, fnNamespace, envName string, pkgMeta *
 		}
 	}
 	agentCfg := function.GetAgentConfig(input, nil)
+
+	toolCfg, err := function.GetToolConfig(input, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	fnTimeout := scaffoldFunctionTimeout
+	if tmplKind == interpreterTemplate {
+		fnTimeout = interpreterMaxTimeoutSeconds
+	}
 
 	return &fv1.Function{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: fnNamespace},
@@ -291,26 +342,48 @@ func buildFunction(input cli.Input, name, fnNamespace, envName string, pkgMeta *
 				},
 				StrategyType: fv1.StrategyTypeExecution,
 			},
-			FunctionTimeout: scaffoldFunctionTimeout,
+			FunctionTimeout: fnTimeout,
 			Resources:       apiv1.ResourceRequirements{},
 			State:           stateCfg,
 			Agent:           agentCfg,
+			Tool:            toolCfg,
 		},
-	}
+	}, nil
 }
 
 // printNextSteps writes the scaffold's <10-minute-to-first-turn punch list:
-// the file it wrote, how to get the resource(s) onto a cluster (conditional
-// on --spec), the env-create line when checkEnvironment found none
-// (conditional, and always step 1 when present -- Global Constraints item
-// 6), the dispatch curl (POST /agents/<ns>/<name> + the platform's session
-// header, pinned via fv1.DefaultAgentSessionHeader/svcinfo rather than
-// retyped literals -- the same contract-drift discipline Task 1's tests
-// apply), and where to look afterwards. This is a spec'd, golden-tested
-// deliverable (create_test.go) -- keep any wording change here in sync with
-// the golden strings there.
-func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir string, toSpec, envExists bool) {
-	fmt.Fprintf(w, "\nScaffolded %s\n\nNext steps:\n", codePath)
+// the file it wrote, the interpreter template's trust-boundary note
+// (conditional on tmplKind, PR-1), how to get the resource(s) onto a
+// cluster (conditional on --spec), the env-create line when
+// checkEnvironment found none (conditional, and always step 1 when present
+// -- Global Constraints item 6), the dispatch curl (POST /agents/<ns>/<name>
+// + the platform's session header, pinned via
+// fv1.DefaultAgentSessionHeader/svcinfo rather than retyped literals -- the
+// same contract-drift discipline Task 1's tests apply; the exec verb's own
+// wire-contract body for the interpreter template), and where to look
+// afterwards. This is a spec'd, golden-tested deliverable (create_test.go)
+// -- keep any wording change here in sync with the golden strings there.
+func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tmplKind string, toSpec, envExists bool) {
+	fmt.Fprintf(w, "\nScaffolded %s\n\n", codePath)
+
+	// Trust statement (doc 14 PR-1 section): env-scrubbing keeps ACCIDENTAL
+	// credential leakage out of exec'd code, but it is not a sandbox -- a
+	// process in the same container can still read the pod's own token
+	// files, so exec'd code runs at the agent's own trust level. Printed
+	// here (and repeated in the template's own header comment) rather than
+	// only in the PR description, so it survives however someone gets to
+	// this scaffold.
+	if tmplKind == interpreterTemplate {
+		fmt.Fprintf(w,
+			"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
+				"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
+				"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
+				"one more layer of isolation, pair it with:\n"+
+				"    fission env create --name %s --image ghcr.io/fission/%s-env --runtime-class gvisor\n\n",
+			envName, envName)
+	}
+
+	fmt.Fprintf(w, "Next steps:\n")
 
 	step := 1
 	if !envExists {
@@ -326,15 +399,22 @@ func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir str
 	}
 	step++
 
+	// The interpreter template ignores an empty body's absent code/command
+	// (it 400s), so its example turn carries a working exec payload instead
+	// of the agent template's empty '{}'.
+	turnBody := "{}"
+	if tmplKind == interpreterTemplate {
+		turnBody = `{"command": "echo hello"}`
+	}
 	fmt.Fprintf(w,
 		"  %d. Port-forward the agent runtime and dispatch a turn:\n"+
 			"       kubectl -n %s port-forward svc/%s %d:%d\n"+
 			"       curl -i -X POST http://127.0.0.1:%d/agents/%s/%s \\\n"+
 			"         -H 'Content-Type: application/json' \\\n"+
 			"         -H '%s: %s-demo-1' \\\n"+
-			"         -d '{}'\n",
+			"         -d '%s'\n",
 		step, fissionNamespace(), svcinfo.SvcAgentRuntime, svcinfo.PortAgentRuntime, svcinfo.PortAgentRuntime,
-		svcinfo.PortAgentRuntime, namespace, name, fv1.DefaultAgentSessionHeader, name)
+		svcinfo.PortAgentRuntime, namespace, name, fv1.DefaultAgentSessionHeader, name, turnBody)
 	step++
 
 	fmt.Fprintf(w, "  %d. Inspect sessions:\n       fission agent sessions list --name %s --tree\n", step, name)

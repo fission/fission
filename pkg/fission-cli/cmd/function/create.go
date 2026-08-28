@@ -243,14 +243,17 @@ func GetAgentConfig(input cli.Input, existing *fv1.AgentConfig) *fv1.AgentConfig
 	return ac
 }
 
-// getToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
+// GetToolConfig builds a ToolConfig from the --expose-as-mcp / --tool-* flags,
 // or nil when --expose-as-mcp is not set (the function is not advertised as an
 // MCP tool). It merges onto existing (the function's current Tool, or nil on
 // create), overwriting only the fields whose flag was explicitly set — so an
 // `fn update --expose-as-mcp` that omits --tool-name/--tool-input-schema keeps
 // the previously-set values instead of clearing them. The --tool-input-schema
 // flag points at a JSON Schema file whose raw contents are stored verbatim.
-func getToolConfig(input cli.Input, existing *fv1.ToolConfig) (*fv1.ToolConfig, error) {
+// Exported (same in-place rename pattern as GetStateConfig/GetAgentConfig)
+// so `fission agent create` (PR-1) can wire --expose-as-mcp onto its
+// scaffolded Function without duplicating this flag-merge logic.
+func GetToolConfig(input cli.Input, existing *fv1.ToolConfig) (*fv1.ToolConfig, error) {
 	if !input.Bool(flagkey.FnExposeAsMCP) {
 		return nil, nil
 	}
@@ -585,7 +588,7 @@ func (opts *CreateSubCommand) complete(input cli.Input) error {
 		return err
 	}
 
-	toolConfig, err := getToolConfig(input, nil)
+	toolConfig, err := GetToolConfig(input, nil)
 	if err != nil {
 		return err
 	}

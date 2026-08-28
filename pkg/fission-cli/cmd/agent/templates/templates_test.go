@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/executor/util"
 	"github.com/fission/fission/pkg/fetcher"
 
@@ -39,18 +41,31 @@ func commentPrefix(lang string) string {
 	return "//"
 }
 
-// render is a small helper: render lang's template and require success.
-func render(t *testing.T, lang string) ([]byte, string) {
+// render is a small helper: render kind/lang's template and require success.
+func render(t *testing.T, kind, lang string) ([]byte, string) {
 	t.Helper()
-	out, ext, err := Render(lang, "widget")
+	out, ext, err := Render(kind, lang, "widget")
 	require.NoError(t, err)
 	require.NotEmpty(t, out)
 	return out, ext
 }
 
+// renderAgent is the pre-PR-1 default-kind shorthand every test below that
+// predates the --template flag still uses.
+func renderAgent(t *testing.T, lang string) ([]byte, string) {
+	t.Helper()
+	return render(t, "agent", lang)
+}
+
 func TestRender_UnsupportedLanguage(t *testing.T) {
 	t.Parallel()
-	_, _, err := Render("ruby", "widget")
+	_, _, err := Render("agent", "ruby", "widget")
+	require.Error(t, err)
+}
+
+func TestRender_UnsupportedTemplateKind(t *testing.T) {
+	t.Parallel()
+	_, _, err := Render("wizard", "node", "widget")
 	require.Error(t, err)
 }
 
@@ -81,35 +96,48 @@ func TestRender_RejectsUnsafeNames(t *testing.T) {
 		{name: "uppercase (not DNS-1123, but worth covering)", payload: "Widget"},
 		{name: "empty", payload: ""},
 	}
-	for _, lang := range []string{"node", "python"} {
-		for _, tc := range cases {
-			t.Run(lang+"/"+tc.name, func(t *testing.T) {
-				t.Parallel()
-				out, _, err := Render(lang, tc.payload)
-				require.Error(t, err, "Render must reject unsafe name %q", tc.payload)
-				assert.Empty(t, out, "Render must not return partial output on a rejected name")
-			})
+	// Both kinds share ValidateKubeName as the actual gate (it runs before
+	// either template is even parsed), but the loop covers "agent" AND
+	// "interpreter" anyway: agent's own backtick/single-quote cases are the
+	// documented regression, and running the full matrix against
+	// interpreter too catches any future template that grows its own
+	// live-code interpolation of {{.Name}} without a matching test.
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			for _, tc := range cases {
+				t.Run(kind+"/"+lang+"/"+tc.name, func(t *testing.T) {
+					t.Parallel()
+					out, _, err := Render(kind, lang, tc.payload)
+					require.Error(t, err, "Render must reject unsafe name %q", tc.payload)
+					assert.Empty(t, out, "Render must not return partial output on a rejected name")
+				})
+			}
 		}
 	}
 }
 
 func TestRender_Extensions(t *testing.T) {
 	t.Parallel()
-	_, ext := render(t, "node")
-	assert.Equal(t, "js", ext)
-	_, ext = render(t, "python")
-	assert.Equal(t, "py", ext)
+	for _, kind := range []string{"agent", "interpreter"} {
+		_, ext := render(t, kind, "node")
+		assert.Equal(t, "js", ext)
+		_, ext = render(t, kind, "python")
+		assert.Equal(t, "py", ext)
+	}
 }
 
 func TestRender_NoTemplateArtifacts(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
-		out, _ := render(t, lang)
-		text := string(out)
-		assert.NotContains(t, text, "{{", "%s template left an unrendered placeholder", lang)
-		// render(t, lang) passes name "widget" -- confirm substitution
-		// actually ran, not merely that the placeholder syntax is gone.
-		assert.Contains(t, text, "widget", "%s: Name substitution did not run", lang)
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			out, _ := render(t, kind, lang)
+			text := string(out)
+			assert.NotContains(t, text, "{{", "%s/%s template left an unrendered placeholder", kind, lang)
+			// render(t, kind, lang) passes name "widget" -- confirm
+			// substitution actually ran, not merely that the placeholder
+			// syntax is gone.
+			assert.Contains(t, text, "widget", "%s/%s: Name substitution did not run", kind, lang)
+		}
 	}
 }
 
@@ -134,7 +162,7 @@ func TestRender_HeaderNames(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.lang, func(t *testing.T) {
 			t.Parallel()
-			out, _ := render(t, tc.lang)
+			out, _ := renderAgent(t, tc.lang)
 			text := string(out)
 
 			session, turns := agentruntime.HeaderSession, agentruntime.HeaderTurns
@@ -161,7 +189,7 @@ func TestRender_HeaderNames(t *testing.T) {
 func TestRender_StateHeaderNames(t *testing.T) {
 	t.Parallel()
 	for _, lang := range []string{"node", "python"} {
-		out, _ := render(t, lang)
+		out, _ := renderAgent(t, lang)
 		text := string(out)
 		assert.Contains(t, text, stateapi.HeaderNamespace, "%s: missing state namespace header", lang)
 		assert.Contains(t, text, stateapi.HeaderKeyspace, "%s: missing state keyspace header", lang)
@@ -182,7 +210,7 @@ func TestRender_StateEnvVarNames(t *testing.T) {
 	require.NotEmpty(t, envVars, "STATESVC_URL was set; StateAPIEnvVars must not return nil")
 
 	for _, lang := range []string{"node", "python"} {
-		out, _ := render(t, lang)
+		out, _ := renderAgent(t, lang)
 		text := string(out)
 		for _, ev := range envVars {
 			assert.Contains(t, text, ev.Name, "%s: missing state env var %s", lang, ev.Name)
@@ -211,7 +239,7 @@ func TestRender_StateCredentialsFieldNames(t *testing.T) {
 	}
 
 	for _, lang := range []string{"node", "python"} {
-		out, _ := render(t, lang)
+		out, _ := renderAgent(t, lang)
 		text := string(out)
 		for _, name := range fieldNames {
 			assert.Contains(t, text, name, "%s: missing StateCredentials field %q", lang, name)
@@ -226,65 +254,213 @@ func TestRender_StateCredentialsFieldNames(t *testing.T) {
 func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 	t.Parallel()
 
-	for _, lang := range []string{"node", "python"} {
-		t.Run(lang, func(t *testing.T) {
-			t.Parallel()
-			out, _ := render(t, lang)
-			text := string(out)
-			prefix := commentPrefix(lang)
+	for _, kind := range []string{"agent", "interpreter"} {
+		for _, lang := range []string{"node", "python"} {
+			t.Run(kind+"/"+lang, func(t *testing.T) {
+				t.Parallel()
+				out, _ := render(t, kind, lang)
+				text := string(out)
+				prefix := commentPrefix(lang)
 
-			var activeWaiting bool
-			for _, line := range strings.Split(text, "\n") {
-				trimmed := strings.TrimSpace(line)
-				isCode := trimmed != "" && !strings.HasPrefix(trimmed, prefix)
+				var activeWaiting bool
+				for _, line := range strings.Split(text, "\n") {
+					trimmed := strings.TrimSpace(line)
+					isCode := trimmed != "" && !strings.HasPrefix(trimmed, prefix)
 
-				if strings.Contains(line, agentruntime.YieldContinue) {
-					// "continue" must never appear in the ACTIVE code path
-					// (a scaffold that yielded it by default would
-					// self-re-invoke forever on a fresh install).
-					assert.False(t, isCode,
-						"%s: %q value found outside a comment: %q", lang, agentruntime.YieldContinue, line)
+					if strings.Contains(line, agentruntime.YieldContinue) {
+						// "continue" must never appear in the ACTIVE code path
+						// (a scaffold that yielded it by default would
+						// self-re-invoke forever on a fresh install).
+						assert.False(t, isCode,
+							"%s/%s: %q value found outside a comment: %q", kind, lang, agentruntime.YieldContinue, line)
+					}
+					if isCode && strings.Contains(line, agentruntime.YieldWaiting) {
+						activeWaiting = true
+					}
 				}
-				if isCode && strings.Contains(line, agentruntime.YieldWaiting) {
-					activeWaiting = true
-				}
-			}
-			assert.True(t, activeWaiting,
-				"%s: no active (non-comment) line yields %q", lang, agentruntime.YieldWaiting)
-		})
+				assert.True(t, activeWaiting,
+					"%s/%s: no active (non-comment) line yields %q", kind, lang, agentruntime.YieldWaiting)
+			})
+		}
 	}
 }
 
-// TestRender_NodeSyntax runs `node --check` against the rendered Node
-// template. Skipped (with a note) when node is not on PATH.
+// TestRender_NodeSyntax runs `node --check` against every rendered Node
+// template (both --template kinds). Skipped (with a note) when node is not
+// on PATH.
 func TestRender_NodeSyntax(t *testing.T) {
 	nodeBin, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not found on PATH; skipping node --check")
 	}
 
-	out, _ := render(t, "node")
-	path := t.TempDir() + "/agent.js"
-	require.NoError(t, os.WriteFile(path, out, 0o600))
+	for _, kind := range []string{"agent", "interpreter"} {
+		out, _ := render(t, kind, "node")
+		path := t.TempDir() + "/" + kind + ".js"
+		require.NoError(t, os.WriteFile(path, out, 0o600))
 
-	cmd := exec.Command(nodeBin, "--check", path)
-	output, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "node --check failed: %s", output)
+		cmd := exec.Command(nodeBin, "--check", path)
+		output, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%s: node --check failed: %s", kind, output)
+	}
 }
 
-// TestRender_PythonSyntax runs `python3 -m py_compile` against the rendered
-// Python template. Skipped (with a note) when python3 is not on PATH.
+// TestRender_PythonSyntax runs `python3 -m py_compile` against every
+// rendered Python template (both --template kinds). Skipped (with a note)
+// when python3 is not on PATH.
 func TestRender_PythonSyntax(t *testing.T) {
 	pyBin, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 not found on PATH; skipping py_compile")
 	}
 
-	out, _ := render(t, "python")
-	path := t.TempDir() + "/agent.py"
-	require.NoError(t, os.WriteFile(path, out, 0o600))
+	for _, kind := range []string{"agent", "interpreter"} {
+		out, _ := render(t, kind, "python")
+		path := t.TempDir() + "/" + kind + ".py"
+		require.NoError(t, os.WriteFile(path, out, 0o600))
 
-	cmd := exec.Command(pyBin, "-m", "py_compile", path)
-	output, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "python3 -m py_compile failed: %s", output)
+		cmd := exec.Command(pyBin, "-m", "py_compile", path)
+		output, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "%s: python3 -m py_compile failed: %s", kind, output)
+	}
+}
+
+// --- interpreter template tripwires (PR-1, abstraction A / Q35) -----------
+
+// TestRender_Interpreter_HeaderNames pins the interpreter template against
+// the SAME dispatcher constants TestRender_HeaderNames pins the agent
+// template against -- it reads the session header (to name its scratch
+// dir) and always sets the yield header, but never touches the turns
+// header (it carries no per-turn counter).
+func TestRender_Interpreter_HeaderNames(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		lang        string
+		foldToLower bool
+	}{
+		{lang: "node", foldToLower: true},
+		{lang: "python", foldToLower: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.lang, func(t *testing.T) {
+			t.Parallel()
+			out, _ := render(t, "interpreter", tc.lang)
+			text := string(out)
+
+			session := agentruntime.HeaderSession
+			if tc.foldToLower {
+				text = strings.ToLower(text)
+				session = strings.ToLower(session)
+			}
+			assert.Contains(t, text, session, "%s: session header const not found", tc.lang)
+			assert.Contains(t, string(out), agentruntime.HeaderYield, "%s: yield header const not found", tc.lang)
+		})
+	}
+}
+
+// TestRender_Interpreter_ExecContractKeys pins every JSON key doc 14's PR-1
+// section spells out in the exec verb's wire contract (both the request
+// keys, code/command/timeoutSeconds, and the response keys,
+// stdout/stderr/exitCode/durationMs/truncated) -- this contract has no
+// shared Go struct on either side ("zero new platform Go" is the whole
+// point of a template-only exec verb), so the rendered template text is
+// the only place these key literals live; this test is the drift guard.
+func TestRender_Interpreter_ExecContractKeys(t *testing.T) {
+	t.Parallel()
+
+	wireKeys := []string{
+		"code", "command", "timeoutSeconds",
+		"stdout", "stderr", "exitCode", "durationMs", "truncated",
+	}
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		text := string(out)
+		for _, key := range wireKeys {
+			assert.Contains(t, text, key, "%s: missing exec-contract key %q", lang, key)
+		}
+	}
+}
+
+// TestRender_Interpreter_TimeoutCeiling pins the request-carried
+// timeoutSeconds default (60) and hard ceiling (300) doc 14's PR-1 section
+// specifies ("timeoutSeconds default 60, clamped to a template constant
+// ceiling (300)").
+func TestRender_Interpreter_TimeoutCeiling(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		text := string(out)
+		assert.Contains(t, text, "DEFAULT_TIMEOUT_SECONDS = 60", "%s: default timeout constant not found or changed", lang)
+		assert.Contains(t, text, "MAX_TIMEOUT_SECONDS = 300", "%s: timeout ceiling constant not found or changed", lang)
+	}
+}
+
+// TestRender_Interpreter_OutputCapMatchesStateDefault pins the stdout/stderr
+// cap to fv1.DefaultStateMaxValueBytes (pkg/apis/core/v1/const.go) rather
+// than a re-typed 262144 literal -- doc 14's PR-1 section requires the two
+// stay aligned ("stdout/stderr each capped at 256 KiB (aligns with state
+// MaxValueBytes default)"). Both templates spell the cap as the expression
+// `256 * 1024` rather than the raw byte count, so this both checks that
+// expression is present and that it still equals the platform constant.
+func TestRender_Interpreter_OutputCapMatchesStateDefault(t *testing.T) {
+	t.Parallel()
+	require.EqualValues(t, 256*1024, fv1.DefaultStateMaxValueBytes,
+		"platform's DefaultStateMaxValueBytes moved off 256KiB; update the interpreter templates' MAX_OUTPUT_BYTES to match")
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		assert.Contains(t, string(out), "256 * 1024", "%s: output-cap expression not found", lang)
+	}
+}
+
+// allowedEnvVarsListRe extracts the ALLOWED_ENV_VARS literal (a single-line
+// ['A', 'B', ...] / ["A", "B", ...] list in both templates) so
+// TestRender_Interpreter_EnvAllowlistExcludesFissionVars can inspect its
+// entries without re-parsing JS or Python.
+var allowedEnvVarsListRe = regexp.MustCompile(`ALLOWED_ENV_VARS = \[([^\]]*)\]`)
+
+// TestRender_Interpreter_EnvAllowlistExcludesFissionVars is the static
+// (non-cluster) half of doc 14's env-scrub requirement ("Subprocess env is
+// allow-listed ... never pass-through -- FISSION_* vars ... are scrubbed"):
+// it asserts the allow-list itself never names a FISSION_-prefixed
+// variable, so the subprocess's environment cannot contain one BY
+// CONSTRUCTION regardless of what this pod's own environment carries. The
+// dynamic half (actually exec `env` against a live pod and assert no
+// FISSION_ keys come back) is
+// test/integration/suites/common/agent_exec_test.go's env-scrub case.
+func TestRender_Interpreter_EnvAllowlistExcludesFissionVars(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		text := string(out)
+
+		match := allowedEnvVarsListRe.FindStringSubmatch(text)
+		require.Lenf(t, match, 2, "%s: ALLOWED_ENV_VARS list literal not found", lang)
+
+		var names []string
+		for _, entry := range strings.Split(match[1], ",") {
+			name := strings.Trim(strings.TrimSpace(entry), `'"`)
+			if name != "" {
+				names = append(names, name)
+			}
+		}
+		require.NotEmpty(t, names, "%s: ALLOWED_ENV_VARS list is empty", lang)
+		assert.Contains(t, names, "PATH", "%s: allow-list should carry PATH", lang)
+		for _, name := range names {
+			assert.False(t, strings.HasPrefix(name, "FISSION_"),
+				"%s: ALLOWED_ENV_VARS must never allow-list a FISSION_ var (found %q)", lang, name)
+		}
+	}
+}
+
+// TestRender_Interpreter_TrustStatementMentionsGvisor pins the interpreter
+// template's own trust-boundary comment against the doc 14 PR-1 section's
+// requirement that the scaffold recommend `--runtime-class gvisor` for
+// stronger isolation before running untrusted code.
+func TestRender_Interpreter_TrustStatementMentionsGvisor(t *testing.T) {
+	t.Parallel()
+	for _, lang := range []string{"node", "python"} {
+		out, _ := render(t, "interpreter", lang)
+		assert.Contains(t, string(out), "--runtime-class gvisor", "%s: trust-boundary comment missing the gvisor recommendation", lang)
+	}
 }
