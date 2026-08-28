@@ -59,6 +59,55 @@ func TestEnvironmentNetworkPolicyNamespaceScope(t *testing.T) {
 	})
 }
 
+// TestEnvironmentNetworkPolicyCoversAdditionalFissionNamespaces pins the
+// STATIC-tenancy multi-namespace case: function pods for functions in
+// additionalFissionNamespaces live in their own namespace (pkg/utils
+// NamespaceResolver.GetFunctionNS maps only the DEFAULT namespace through
+// functionNamespace), so a single copy of this policy would silently leave
+// those pods' egress unenforced. The template must render one copy per
+// namespace in the set — mirroring router/role-dataplane.yaml's own range —
+// and none of them in the release namespace, which is not itself a function
+// namespace.
+func TestEnvironmentNetworkPolicyCoversAdditionalFissionNamespaces(t *testing.T) {
+	t.Run("functionNamespace unset: defaultNamespace plus additional", func(t *testing.T) {
+		docs := render(t,
+			"--set", "environmentNetworkPolicy.enabled=true",
+			"--set", "additionalFissionNamespaces[0]=team-a",
+			"--set", "additionalFissionNamespaces[1]=team-b")
+
+		policies := docs.findAllNamed("NetworkPolicy", "environment-egress")
+		var namespaces []string
+		for _, p := range policies {
+			namespaces = append(namespaces, p.Namespace)
+		}
+		assert.ElementsMatch(t, []string{"default", "team-a", "team-b"}, namespaces,
+			"must render one environment-egress policy per function namespace")
+
+		for _, ns := range []string{"default", "team-a", "team-b"} {
+			require.NotNilf(t, docs.findInNamespace("NetworkPolicy", "environment-egress", ns),
+				"expected an environment-egress policy in namespace %q", ns)
+		}
+		assert.Nil(t, docs.findInNamespace("NetworkPolicy", "environment-egress", "fission"),
+			"the release namespace is not a function namespace and must not get a copy")
+	})
+
+	t.Run("functionNamespace set: functionNamespace plus additional, defaultNamespace excluded", func(t *testing.T) {
+		docs := render(t,
+			"--set", "environmentNetworkPolicy.enabled=true",
+			"--set", "functionNamespace=fission-function",
+			"--set", "additionalFissionNamespaces[0]=team-a")
+
+		policies := docs.findAllNamed("NetworkPolicy", "environment-egress")
+		var namespaces []string
+		for _, p := range policies {
+			namespaces = append(namespaces, p.Namespace)
+		}
+		assert.ElementsMatch(t, []string{"fission-function", "team-a"}, namespaces,
+			"functionNamespace replaces the default-namespace entry; additionalFissionNamespaces "+
+				"still get their own copy")
+	})
+}
+
 // TestEnvironmentNetworkPolicySelectorMatchesTheEnvironmentLabelConstant is
 // the drift tripwire: the podSelector's label key is a bare YAML string in
 // the template, not forced to agree with the Go constant poolmgr/newdeploy
