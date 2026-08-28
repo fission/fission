@@ -1,0 +1,176 @@
+# {{.Name}} -- an interpreter agent handler, scaffolded by
+# `fission agent create --template interpreter`.
+#
+# WHAT THIS FILE IS
+# ------------------
+# This implements the "exec" verb (abstraction A, PR-1): a turn's body is
+# {"code": "..."} (interpreted with `python3 -c`) or {"command": "..."}
+# (run through a shell) -- exactly one of the two -- and the reply is
+# {stdout, stderr, exitCode, durationMs, truncated}. It is an ordinary
+# Fission Python function (the environment calls main() with no arguments
+# for every request, github.com/fission/environments python/server.py)
+# that the agent runtime calls once per turn like any other agent handler,
+# so it runs through the normal dispatch path -- no new platform code, no
+# new environment image.
+#
+# TRUST BOUNDARY -- READ BEFORE USE
+# ----------------------------------
+# The subprocess environment below is an ALLOW-LIST, not a filtered copy:
+# the child starts with nothing and gets only PATH/HOME/LANG/etc, so
+# FISSION_* vars (state/agent token paths, runtime URLs) are never passed
+# through -- that keeps ACCIDENTAL credential leakage out of exec'd code.
+# It is NOT a sandbox: a process in the SAME CONTAINER can still read the
+# pod's token files directly, so exec'd code runs at the agent's own trust
+# level. That is fine for run-your-own-code tools (an analyst's own
+# interpreter, a calculator tool) -- it is NOT a boundary for adversarial
+# or multi-tenant code, which needs a dedicated pod per session (a Tier C
+# bare-Sandbox executor), not this template. Pair this environment with
+# `fission env create ... --runtime-class gvisor` for one more layer of
+# isolation before running code you did not write yourself.
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import tempfile
+import time
+import uuid
+
+from flask import request
+
+# The dispatcher stamps the session header on every forwarded call (see
+# pkg/agentruntime/dispatcher.go); this template reads it only to name the
+# per-session scratch directory, and always answers with the default yield
+# (below) so a session-scoped call never self-re-invokes. flask.request.headers
+# is a case-insensitive mapping (Werkzeug EnvironHeaders).
+SESSION_HEADER = 'X-Fission-Session'
+YIELD_HEADER = 'X-Fission-Agent-Yield'
+
+# DEFAULT_TIMEOUT_SECONDS / MAX_TIMEOUT_SECONDS -- the request-carried
+# timeoutSeconds is clamped into (0, MAX_TIMEOUT_SECONDS]; a request that
+# omits it (or sends a non-positive value) gets DEFAULT_TIMEOUT_SECONDS.
+# MAX_TIMEOUT_SECONDS is also this scaffold's own FunctionTimeout (see
+# `fission agent create`'s next-steps output), so a full-length exec call
+# is never killed by the platform's own request timeout first.
+DEFAULT_TIMEOUT_SECONDS = 60
+MAX_TIMEOUT_SECONDS = 300
+
+# MAX_OUTPUT_BYTES caps stdout/stderr EACH (aligns with the state API's
+# MaxValueBytes default, DefaultStateMaxValueBytes, pkg/apis/core/v1/const.go)
+# -- overflow sets truncated=True, it never turns into an error response.
+MAX_OUTPUT_BYTES = 256 * 1024
+
+# ALLOWED_ENV_VARS: see the trust-boundary note above -- this is the
+# complete list of names copied into the child's environment. Nothing
+# outside it reaches the subprocess, however this pod's own environment
+# grows in the future.
+ALLOWED_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ']
+
+
+def _allowed_env():
+    return {k: os.environ[k] for k in ALLOWED_ENV_VARS if k in os.environ}
+
+
+def _clip(data):
+    if data is None:
+        data = b''
+    truncated = len(data) > MAX_OUTPUT_BYTES
+    if truncated:
+        data = data[:MAX_OUTPUT_BYTES]
+    return data.decode('utf-8', errors='replace'), truncated
+
+
+def _run_exec(argv, cwd, timeout_seconds):
+    # start_new_session=True puts the child in its own process group so the
+    # WHOLE tree (a shell plus whatever it launches) can be killed on
+    # timeout via os.killpg, not just the direct child.
+    start = time.monotonic()
+    proc = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=_allowed_env(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    timed_out = False
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = proc.communicate()
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    stdout_text, stdout_truncated = _clip(stdout)
+    stderr_text, stderr_truncated = _clip(stderr)
+    if timed_out:
+        stderr_text += '\n[exec: killed after exceeding %ds timeout]' % int(timeout_seconds)
+        exit_code = -1
+    else:
+        exit_code = proc.returncode
+
+    return stdout_text, stderr_text, exit_code, duration_ms, stdout_truncated or stderr_truncated
+
+
+def _clamp_timeout(value):
+    try:
+        seconds = float(value)
+        if seconds <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return DEFAULT_TIMEOUT_SECONDS
+    return min(seconds, MAX_TIMEOUT_SECONDS)
+
+
+# --- The turn --------------------------------------------------------------
+#
+# Flask's documented view-return-value contract accepts (body, status,
+# headers) tuples -- see agent.py.tmpl's comment for the citation -- which
+# is what sets YIELD_HEADER on the response below.
+def main():
+    session_id = request.headers.get(SESSION_HEADER, '').strip()
+    # A call with no session header (the MCP fast lane -- tools/call goes
+    # straight to the router internal listener, bypassing the dispatcher --
+    # or a bare direct invocation) is stateless exec: a fresh, uniquely-named
+    # scratch dir per call rather than one keyed on a session that does not
+    # exist here.
+    scratch_name = session_id or ('stateless-%s' % uuid.uuid4().hex)
+    scratch_dir = os.path.join(tempfile.gettempdir(), 'exec', scratch_name)
+
+    headers = {'Content-Type': 'application/json', YIELD_HEADER: 'waiting'}
+
+    payload = request.get_json(silent=True) or {}
+    has_code = isinstance(payload.get('code'), str)
+    has_command = isinstance(payload.get('command'), str)
+    if has_code == has_command:
+        return json.dumps({'error': 'exactly one of "code" or "command" is required'}), 400, headers
+
+    timeout_seconds = _clamp_timeout(payload.get('timeoutSeconds'))
+
+    shutil.rmtree(scratch_dir, ignore_errors=True)
+    os.makedirs(scratch_dir, exist_ok=True)
+
+    try:
+        if has_code:
+            argv = ['python3', '-c', payload['code']]
+        else:
+            argv = ['/bin/sh', '-c', payload['command']]
+        stdout_text, stderr_text, exit_code, duration_ms, truncated = _run_exec(argv, scratch_dir, timeout_seconds)
+    finally:
+        # Best-effort cleanup -- a leftover scratch dir is not worth failing
+        # the turn over.
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+
+    reply = {
+        'stdout': stdout_text,
+        'stderr': stderr_text,
+        'exitCode': exit_code,
+        'durationMs': duration_ms,
+        'truncated': truncated,
+    }
+    return json.dumps(reply), 200, headers

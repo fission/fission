@@ -54,10 +54,20 @@ import (
 )
 
 //go:embed agent.js.tmpl
-var nodeTemplateSrc string
+var nodeAgentTemplateSrc string
 
 //go:embed agent.py.tmpl
-var pythonTemplateSrc string
+var pythonAgentTemplateSrc string
+
+// interpreter.{js,py}.tmpl (PR-1, abstraction A / Q35 resolution): the
+// stateless exec verb -- code/command in, stdout/stderr/exit out -- see
+// their own doc comments for the wire contract.
+//
+//go:embed interpreter.js.tmpl
+var nodeInterpreterTemplateSrc string
+
+//go:embed interpreter.py.tmpl
+var pythonInterpreterTemplateSrc string
 
 // templateData is the substitution set every template receives. Name is the
 // scaffolded function's name; it appears only in a header comment and a
@@ -73,16 +83,23 @@ type langTemplate struct {
 	ext string
 }
 
-// languages is the supported `--lang` values. Keyed by the same lowercase
-// strings the CLI flag accepts.
-var languages = map[string]langTemplate{
-	"node":   {src: nodeTemplateSrc, ext: "js"},
-	"python": {src: pythonTemplateSrc, ext: "py"},
+// kinds is the supported `--template` x `--lang` matrix. Keyed by the same
+// lowercase strings the CLI flags accept.
+var kinds = map[string]map[string]langTemplate{
+	"agent": {
+		"node":   {src: nodeAgentTemplateSrc, ext: "js"},
+		"python": {src: pythonAgentTemplateSrc, ext: "py"},
+	},
+	"interpreter": {
+		"node":   {src: nodeInterpreterTemplateSrc, ext: "js"},
+		"python": {src: pythonInterpreterTemplateSrc, ext: "py"},
+	},
 }
 
-// Render renders the embedded handler template for lang ("node" or
-// "python") with name substituted in, and returns the rendered bytes plus
-// the file extension (no leading dot) the caller should write them under.
+// Render renders the embedded handler template for kind ("agent" or
+// "interpreter") and lang ("node" or "python") with name substituted in,
+// and returns the rendered bytes plus the file extension (no leading dot)
+// the caller should write them under.
 //
 // name is validated against Fission's own Kubernetes-name charset
 // (fv1.ValidateKubeName, the same DNS-1123-label check `fn create` et al.
@@ -92,30 +109,35 @@ var languages = map[string]langTemplate{
 // handler file to disk BEFORE any k8s-side validation runs (the k8s API
 // only rejects an invalid name once the Package/Function object is
 // created, several steps later) -- so Render must be safe to call with an
-// adversarial name on its own. Both templates interpolate {{.Name}} inside
-// JS backtick template literals and Python %-format single-quoted strings
-// (log-line prefixes); an unvalidated name containing a backtick or a
-// single quote breaks out of those literals and lands arbitrary text in
-// LIVE, non-comment code in the scaffolded file -- confirmed exploitable in
-// review, not theoretical. A DNS-1123 label (lowercase alphanumeric/'-',
-// alphanumeric start/end, <=63 chars) cannot contain a backtick, quote,
-// `{{`, or a newline, so validating here closes the injection regardless of
-// what any caller does or forgets to do upstream.
-func Render(lang, name string) ([]byte, string, error) {
-	lt, ok := languages[lang]
+// adversarial name on its own. Every template interpolates {{.Name}} inside
+// JS backtick template literals and/or Python %-format single-quoted
+// strings (log-line/comment prefixes); an unvalidated name containing a
+// backtick or a single quote breaks out of those literals and lands
+// arbitrary text in LIVE, non-comment code in the scaffolded file --
+// confirmed exploitable in review, not theoretical. A DNS-1123 label
+// (lowercase alphanumeric/'-', alphanumeric start/end, <=63 chars) cannot
+// contain a backtick, quote, `{{`, or a newline, so validating here closes
+// the injection regardless of what any caller does or forgets to do
+// upstream.
+func Render(kind, lang, name string) ([]byte, string, error) {
+	langs, ok := kinds[kind]
+	if !ok {
+		return nil, "", fmt.Errorf("unsupported agent template %q (want \"agent\" or \"interpreter\")", kind)
+	}
+	lt, ok := langs[lang]
 	if !ok {
 		return nil, "", fmt.Errorf("unsupported agent handler language %q (want \"node\" or \"python\")", lang)
 	}
 	if err := fv1.ValidateKubeName("name", name); err != nil {
 		return nil, "", fmt.Errorf("invalid agent name %q: %w", name, err)
 	}
-	tmpl, err := template.New(lang).Parse(lt.src)
+	tmpl, err := template.New(kind + "/" + lang).Parse(lt.src)
 	if err != nil {
-		return nil, "", fmt.Errorf("parsing %s handler template: %w", lang, err)
+		return nil, "", fmt.Errorf("parsing %s/%s handler template: %w", kind, lang, err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, templateData{Name: name}); err != nil {
-		return nil, "", fmt.Errorf("rendering %s handler template: %w", lang, err)
+		return nil, "", fmt.Errorf("rendering %s/%s handler template: %w", kind, lang, err)
 	}
 	return buf.Bytes(), lt.ext, nil
 }

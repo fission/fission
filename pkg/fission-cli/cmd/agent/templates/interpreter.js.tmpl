@@ -1,0 +1,257 @@
+'use strict';
+
+// {{.Name}} -- an interpreter agent handler, scaffolded by
+// `fission agent create --template interpreter`.
+//
+// WHAT THIS FILE IS
+// ------------------
+// This implements the "exec" verb (abstraction A, PR-1): a turn's body is
+// { "code": "..." } (interpreted with `node -e`) or { "command": "..." }
+// (run through a shell) -- exactly one of the two -- and the reply is
+// { stdout, stderr, exitCode, durationMs, truncated }. It is an ordinary
+// Fission function (module.exports takes one `context` argument and
+// returns {status, body, headers}) that the agent runtime calls once per
+// turn like any other agent handler, so it runs through the normal
+// dispatch path -- no new platform code, no new environment image.
+//
+// TRUST BOUNDARY -- READ BEFORE USE
+// ----------------------------------
+// The subprocess environment below is an ALLOW-LIST, not a filtered copy:
+// the child starts with nothing and gets only PATH/HOME/LANG/etc, so
+// FISSION_* vars (state/agent token PATHS, runtime URLs) are never passed
+// through -- that keeps ACCIDENTAL credential leakage out of exec'd code.
+// It is NOT a sandbox: a process in the SAME CONTAINER can still read the
+// pod's token files directly, so exec'd code runs at the agent's own trust
+// level. That is fine for run-your-own-code tools (an analyst's own
+// interpreter, a calculator tool) -- it is NOT a boundary for adversarial
+// or multi-tenant code, which needs a dedicated pod per session (a Tier C
+// bare-Sandbox executor), not this template. Pair this environment with
+// `fission env create ... --runtime-class gvisor` for one more layer of
+// isolation before running code you did not write yourself.
+
+const { spawn } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// The dispatcher stamps the session header on every forwarded call (see
+// pkg/agentruntime/dispatcher.go); this template reads it only to name the
+// per-session scratch directory, and always answers with the default
+// yield (below) so a session-scoped call never self-re-invokes. Node
+// lower-cases incoming header names.
+const SESSION_HEADER = 'x-fission-session';
+const YIELD_HEADER = 'X-Fission-Agent-Yield';
+
+// DEFAULT_TIMEOUT_SECONDS / MAX_TIMEOUT_SECONDS -- the request-carried
+// timeoutSeconds is clamped into (0, MAX_TIMEOUT_SECONDS]; a request that
+// omits it (or sends a non-positive value) gets DEFAULT_TIMEOUT_SECONDS.
+// MAX_TIMEOUT_SECONDS is also this scaffold's own FunctionTimeout (see
+// `fission agent create`'s next-steps output), so a full-length exec call
+// is never killed by the platform's own request timeout first.
+const DEFAULT_TIMEOUT_SECONDS = 60;
+const MAX_TIMEOUT_SECONDS = 300;
+
+// MAX_OUTPUT_BYTES caps stdout/stderr EACH (aligns with the state API's
+// MaxValueBytes default, DefaultStateMaxValueBytes, pkg/apis/core/v1/const.go)
+// -- overflow sets truncated:true, it never turns into an error response.
+const MAX_OUTPUT_BYTES = 256 * 1024;
+
+// ALLOWED_ENV_VARS: see the trust-boundary note above -- this is the
+// complete list of names copied into the child's environment. Nothing
+// outside it reaches the subprocess, however this pod's own environment
+// grows in the future.
+const ALLOWED_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ'];
+
+function allowedEnv() {
+  const env = {};
+  for (const key of ALLOWED_ENV_VARS) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+  return env;
+}
+
+// outputBuffer accumulates chunks up to MAX_OUTPUT_BYTES; further bytes are
+// dropped at push time (not merely trimmed once collection ends), so a
+// runaway process cannot hold arbitrarily large buffers in memory before
+// the cap is applied.
+function outputBuffer() {
+  let bytes = 0;
+  let truncated = false;
+  const chunks = [];
+  return {
+    push(chunk) {
+      if (truncated) {
+        return;
+      }
+      const remaining = MAX_OUTPUT_BYTES - bytes;
+      if (chunk.length > remaining) {
+        chunks.push(chunk.subarray(0, remaining));
+        bytes += remaining;
+        truncated = true;
+        return;
+      }
+      chunks.push(chunk);
+      bytes += chunk.length;
+    },
+    text() {
+      return Buffer.concat(chunks).toString('utf8');
+    },
+    truncated() {
+      return truncated;
+    },
+  };
+}
+
+// runExec spawns argv[0](...argv[1:]) in cwd with the allow-listed
+// environment, killing the WHOLE process group (detached: true + a
+// negative pid to process.kill) if it outlives timeoutSeconds -- a shell
+// running `command` can fork children of its own, and only killing the
+// direct child would leave those running.
+function runExec(argv, cwd, timeoutSeconds) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const stdout = outputBuffer();
+    const stderr = outputBuffer();
+    let timedOut = false;
+
+    const child = spawn(argv[0], argv.slice(1), {
+      cwd,
+      env: allowedEnv(),
+      detached: true,
+    });
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (err) {
+        // Process already exited between the timer firing and the kill --
+        // nothing left to clean up.
+      }
+    }, timeoutSeconds * 1000);
+
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({
+        stdoutText: stdout.text(),
+        stderrText: stderr.text() + '\n[exec: failed to start: ' + err.message + ']',
+        truncated: stdout.truncated() || stderr.truncated(),
+        exitCode: -1,
+        durationMs: Date.now() - start,
+      });
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        resolve({
+          stdoutText: stdout.text(),
+          stderrText: stderr.text() + '\n[exec: killed after exceeding ' + timeoutSeconds + 's timeout]',
+          truncated: stdout.truncated() || stderr.truncated(),
+          exitCode: -1,
+          durationMs: Date.now() - start,
+        });
+        return;
+      }
+      resolve({
+        stdoutText: stdout.text(),
+        stderrText: stderr.text(),
+        truncated: stdout.truncated() || stderr.truncated(),
+        exitCode: code === null ? -1 : code,
+        durationMs: Date.now() - start,
+      });
+    });
+  });
+}
+
+function parseBody(raw) {
+  if (raw && typeof raw === 'object') {
+    return raw;
+  }
+  if (typeof raw === 'string' && raw.length > 0) {
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      return {};
+    }
+  }
+  return {};
+}
+
+function clampTimeout(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return DEFAULT_TIMEOUT_SECONDS;
+  }
+  return Math.min(n, MAX_TIMEOUT_SECONDS);
+}
+
+// --- The turn --------------------------------------------------------------
+module.exports = async function (context) {
+  const req = context.request;
+  const sessionID = (req.headers[SESSION_HEADER] || '').trim();
+  // A call with no session header (the MCP fast lane -- tools/call goes
+  // straight to the router internal listener, bypassing the dispatcher --
+  // or a bare direct invocation) is stateless exec: a fresh, uniquely-named
+  // scratch dir per call rather than one keyed on a session that does not
+  // exist here.
+  const scratchName = sessionID || 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const scratchDir = path.join(os.tmpdir(), 'exec', scratchName);
+
+  const headers = { 'Content-Type': 'application/json', [YIELD_HEADER]: 'waiting' };
+
+  const body = parseBody(req.body);
+  const hasCode = typeof body.code === 'string';
+  const hasCommand = typeof body.command === 'string';
+  if (hasCode === hasCommand) {
+    return {
+      status: 400,
+      headers,
+      body: JSON.stringify({ error: 'exactly one of "code" or "command" is required' }),
+    };
+  }
+
+  const timeoutSeconds = clampTimeout(body.timeoutSeconds);
+
+  try {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  } catch (err) {
+    // Nothing to clean up yet -- fine.
+  }
+  fs.mkdirSync(scratchDir, { recursive: true });
+
+  let result;
+  try {
+    if (hasCode) {
+      result = await runExec([process.execPath, '-e', body.code], scratchDir, timeoutSeconds);
+    } else {
+      result = await runExec(['/bin/sh', '-c', body.command], scratchDir, timeoutSeconds);
+    }
+  } finally {
+    try {
+      fs.rmSync(scratchDir, { recursive: true, force: true });
+    } catch (err) {
+      // Best-effort cleanup -- a leftover scratch dir is not worth failing
+      // the turn over.
+    }
+  }
+
+  const reply = {
+    stdout: result.stdoutText,
+    stderr: result.stderrText,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    truncated: result.truncated,
+  };
+
+  return {
+    status: 200,
+    headers,
+    body: JSON.stringify(reply),
+  };
+};
