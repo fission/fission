@@ -28,8 +28,9 @@ import (
 // into a typed object on demand by decodeAs.
 type manifest struct {
 	metav1.TypeMeta
-	Name string
-	raw  []byte
+	Name      string
+	Namespace string
+	raw       []byte
 }
 
 // manifests is a rendered chart.
@@ -70,9 +71,10 @@ func parseManifests(t *testing.T, stream string) manifests {
 			continue
 		}
 		docs = append(docs, manifest{
-			TypeMeta: head.TypeMeta,
-			Name:     head.Metadata.Name,
-			raw:      []byte(doc),
+			TypeMeta:  head.TypeMeta,
+			Name:      head.Metadata.Name,
+			Namespace: head.Metadata.Namespace,
+			raw:       []byte(doc),
 		})
 	}
 	require.NotEmpty(t, docs)
@@ -106,6 +108,30 @@ func render(t *testing.T, extraArgs ...string) manifests {
 func (ms manifests) find(kind, name string) *manifest {
 	for i := range ms {
 		if ms[i].Kind == kind && ms[i].Name == name {
+			return &ms[i]
+		}
+	}
+	return nil
+}
+
+// findAllNamed returns every doc with the given kind and metadata.name,
+// across every namespace it renders into — for templates that emit one copy
+// per namespace (e.g. environment-egress, router-dataplane).
+func (ms manifests) findAllNamed(kind, name string) manifests {
+	var out manifests
+	for i := range ms {
+		if ms[i].Kind == kind && ms[i].Name == name {
+			out = append(out, ms[i])
+		}
+	}
+	return out
+}
+
+// findInNamespace returns the doc with the given kind, metadata.name, and
+// metadata.namespace, or nil.
+func (ms manifests) findInNamespace(kind, name, namespace string) *manifest {
+	for i := range ms {
+		if ms[i].Kind == kind && ms[i].Name == name && ms[i].Namespace == namespace {
 			return &ms[i]
 		}
 	}
