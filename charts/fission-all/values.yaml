@@ -1764,6 +1764,21 @@ networkPolicy:
 ## Pod-level egress only. Per-agent egress policy (finer than per-pod) is
 ## out of scope here — it is CNI-specific (e.g. Cilium identity-based
 ## policy) and not something a portable Helm chart can author.
+##
+## THE RFC1918 DENY-LIST BLOCKS IN-CLUSTER CONTROL-PLANE TRAFFIC TOO — pod
+## and Service CIDRs are themselves RFC1918 ranges in most clusters. If
+## your environment pods also need any of the following, allow-list the
+## destination via extraEgress before enabling this knob:
+##   - fetcher sidecar -> storagesvc (port 8000): package fetch at
+##     specialization time; without it, cold starts fail for every
+##     packaged (non-image-volume) function.
+##   - function pod -> statesvc (functionState.enabled): keyed state
+##     reads/writes.
+##   - agent pod -> agentruntime (agentRuntime.enabled): dispatch,
+##     workspace hydration/sync (abstraction C).
+## router -> function pod (port 8888) and executor -> fetcher (port 8000)
+## are unaffected: this policy governs EGRESS from environment pods, not
+## ingress to them.
 environmentNetworkPolicy:
   enabled: false
   ## Allow egress to cluster DNS (kube-system/kube-dns, port 53 TCP+UDP).
