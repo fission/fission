@@ -130,9 +130,10 @@ func (ms manifests) findAllNamed(kind, name string) manifests {
 // findInNamespace returns the doc with the given kind, metadata.name, and
 // metadata.namespace, or nil.
 func (ms manifests) findInNamespace(kind, name, namespace string) *manifest {
-	for i := range ms {
-		if ms[i].Kind == kind && ms[i].Name == name && ms[i].Namespace == namespace {
-			return &ms[i]
+	named := ms.findAllNamed(kind, name)
+	for i := range named {
+		if named[i].Namespace == namespace {
+			return &named[i]
 		}
 	}
 	return nil

@@ -7,7 +7,6 @@
 package common_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -43,23 +42,6 @@ type execTurnReply struct {
 	WorkspaceWarnings []string `json:"workspaceWarnings"`
 }
 
-// postExecTurn POSTs one turn carrying an arbitrary JSON payload (the exec
-// verb's request body), unlike postTurn (agentruntime_test.go) which always
-// sends "{}". Carries sessionID on agentruntime.HeaderSession when
-// non-empty. The caller is responsible for closing the response body on a
-// nil error.
-func postExecTurn(ctx context.Context, f *framework.Framework, turnURL, sessionID string, payload []byte) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, turnURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if sessionID != "" {
-		req.Header.Set(agentruntime.HeaderSession, sessionID)
-	}
-	return f.HTTPClient().Do(req)
-}
-
 // dispatchExecTurn POSTs payload to turnURL (carrying sessionID when
 // non-empty) and decodes a 200 response as execTurnReply, retrying inside
 // EventuallyWithT so a cold pod / a still-converging agentruntime
@@ -73,7 +55,7 @@ func dispatchExecTurn(t *testing.T, ctx context.Context, f *framework.Framework,
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
 		defer cancel()
-		resp, err := postExecTurn(attemptCtx, f, turnURL, sessionID, payload)
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, sessionID, "", string(payload))
 		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
 			return
 		}
@@ -369,7 +351,7 @@ console.log(JSON.stringify({ hostname: os.hostname(), content: data }));
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
 		defer cancel()
-		resp, err := postExecTurn(attemptCtx, f, turnURL, sessionID, readPayload)
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, sessionID, "", string(readPayload))
 		if !assert.NoErrorf(c, err, "POST %s (turn 2)", turnURL) {
 			return
 		}
