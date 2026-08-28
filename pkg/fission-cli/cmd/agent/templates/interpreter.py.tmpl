@@ -146,17 +146,41 @@ def _run_exec(argv, cwd, timeout_seconds):
     stderr_thread.start()
 
     timed_out = False
+
+    def _kill_group():
+        # The child's pgid == its pid (start_new_session), and the GROUP can
+        # outlive the direct child (a backgrounded grandchild keeps running
+        # after the shell exits), so signal by the saved pid -- os.getpgid on
+        # an already-reaped child raises before the kill ever happens.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    deadline = start + timeout_seconds
     try:
         proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         timed_out = True
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        _kill_group()
         proc.wait()
-    stdout_thread.join()
-    stderr_thread.join()
+    # The direct child exiting is NOT the end of the turn: a backgrounded
+    # grandchild (sh -c 'daemon &' exits instantly) inherits the stdout/
+    # stderr pipes and keeps the drain threads reading past the deadline.
+    # Bound the drains by the SAME deadline and kill the whole group on
+    # overrun -- that is what "kill the whole process group on expiry"
+    # means, and it matches the JS template, whose 'close' event also waits
+    # for the pipes and whose timer kills the group regardless of the
+    # direct child's state.
+    for drain_thread in (stdout_thread, stderr_thread):
+        drain_thread.join(timeout=max(0.0, deadline - time.monotonic()))
+    if stdout_thread.is_alive() or stderr_thread.is_alive():
+        timed_out = True
+        _kill_group()
+        # Post-SIGKILL the pipe writers are gone and the drains see EOF; the
+        # short grace only covers a straggler thread being scheduled late.
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
     duration_ms = int((time.monotonic() - start) * 1000)
 
     stdout_text = stdout_buf.text()
