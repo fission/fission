@@ -48,12 +48,19 @@ const (
 
 // interpreterMaxTimeoutSeconds is the interpreter template's own hard
 // ceiling on the request-carried `timeoutSeconds` (see
-// templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS -- pinned
-// against this exact value by templates_test.go's
-// TestRender_Interpreter_TimeoutCeiling). The scaffolded Function's own
-// FunctionTimeout is set to match (see buildFunction) so the platform's
-// own request timeout never kills a full-length exec call before the
-// template's own timeout does.
+// templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS). This constant
+// and the template's are independent literals -- templates_test.go's
+// TestRender_Interpreter_TimeoutCeiling only pins the template's own value
+// in isolation, so it is create_test.go's
+// TestAgentCreate_TemplateInterpreter_DirectMode that asserts the rendered
+// template actually contains "MAX_TIMEOUT_SECONDS = <this constant>",
+// closing the gap a change to only one side would otherwise leave silent.
+// The scaffolded Function's own FunctionTimeout is set to match (see
+// buildFunction) so the platform's own request timeout does not kill a
+// full-length exec call substantially ahead of the template's own timeout;
+// at the exact ceiling the two race (the platform's clock starts first),
+// so this is a "close together", not a strict "template always wins",
+// guarantee.
 const interpreterMaxTimeoutSeconds = 300
 
 // scaffoldFunctionTimeout mirrors `fn create`'s own --fntimeout default of

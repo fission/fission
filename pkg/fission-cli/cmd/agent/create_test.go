@@ -369,7 +369,21 @@ func TestAgentCreate_TemplateInterpreter_DirectMode(t *testing.T) {
 	assert.Equal(t, interpreterMaxTimeoutSeconds, fn.Spec.FunctionTimeout,
 		"interpreter template's FunctionTimeout must match its own exec-timeout ceiling")
 
-	assert.FileExists(t, filepath.Join(dir, "myinterp.js"))
+	handlerPath := filepath.Join(dir, "myinterp.js")
+	assert.FileExists(t, handlerPath)
+
+	// Closes the gap TestRender_Interpreter_TimeoutCeiling
+	// (templates/templates_test.go) leaves open: that test only pins the
+	// template's own MAX_TIMEOUT_SECONDS literal in isolation, so a change
+	// to interpreterMaxTimeoutSeconds alone (with the template's literal
+	// left at 300) would break no test while silently decoupling
+	// FunctionTimeout from the template's actual exec-timeout ceiling. This
+	// asserts the rendered template's constant equals this Go const
+	// directly.
+	handlerSrc, err := os.ReadFile(handlerPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(handlerSrc), fmt.Sprintf("MAX_TIMEOUT_SECONDS = %d", interpreterMaxTimeoutSeconds),
+		"rendered interpreter template's timeout ceiling must match interpreterMaxTimeoutSeconds")
 }
 
 // TestAgentCreate_TemplateAgent_DefaultFunctionTimeout is the control for
@@ -417,6 +431,13 @@ func TestAgentCreate_TemplateInterpreter_LangPython(t *testing.T) {
 	var fn fv1.Function
 	require.NoError(t, yaml.Unmarshal(docs[2], &fn))
 	assert.Equal(t, interpreterMaxTimeoutSeconds, fn.Spec.FunctionTimeout)
+
+	// Same cross-pin as TestAgentCreate_TemplateInterpreter_DirectMode, for
+	// the python side of the template pair -- js was already checked there.
+	handlerSrc, err := os.ReadFile(filepath.Join(dir, "pyinterp.py"))
+	require.NoError(t, err)
+	assert.Contains(t, string(handlerSrc), fmt.Sprintf("MAX_TIMEOUT_SECONDS = %d", interpreterMaxTimeoutSeconds),
+		"rendered python interpreter template's timeout ceiling must match interpreterMaxTimeoutSeconds")
 }
 
 // TestAgentCreate_TemplateUnsupported: an invalid --template surfaces
