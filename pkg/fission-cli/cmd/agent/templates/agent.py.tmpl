@@ -171,6 +171,12 @@ WORKSPACE_MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 # / _sync_workspace uncaught.
 _WORKSPACE_CREDS_FIELDS = ('token', 'namespace', 'agent')
 
+# _workspace_session pools one HTTP connection across every hydrate/sync
+# call instead of requests.get/put opening a fresh TCP+TLS connection per
+# call -- a hydrate pass over dozens of files, or several turns on the same
+# warm pod, otherwise pays that setup cost on every single request.
+_workspace_session = requests.Session()
+
 _workspace_creds = None
 if WORKSPACE_URL and WORKSPACE_TOKEN_PATH:
     try:
@@ -247,12 +253,8 @@ def _save_workspace_manifest(scratch_dir, manifest):
         print('{{.Name}}: could not save workspace manifest: %s' % err)
 
 
-def _sha256_file(path):
-    digest = hashlib.sha256()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(65536), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
+def _sha256_bytes(data):
+    return hashlib.sha256(data).hexdigest()
 
 
 def _append_workspace_warning(warnings, message):
@@ -286,8 +288,8 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
         _append_workspace_warning(warnings, 'workspace hydrate: agent identity credentials unavailable, skipped')
         return warnings
     try:
-        res = requests.get(_workspace_session_url(session_id), headers=_workspace_headers(),
-                            timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+        res = _workspace_session.get(_workspace_session_url(session_id), headers=_workspace_headers(),
+                                      timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
         res.raise_for_status()
         payload = res.json()
         # A non-dict listing body (server bug, or something in front of it
@@ -335,8 +337,8 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
                 warnings, 'workspace hydrate: %s: local path exists and is not a regular file, skipped' % rel)
             continue
         try:
-            get_res = requests.get(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
-                                    timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+            get_res = _workspace_session.get(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
+                                              timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
             get_res.raise_for_status()
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
@@ -348,8 +350,9 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
         # A freshly hydrated file is, by definition, in sync with the
         # workspace it just came from -- recording it here means the sync
         # pass that follows this same turn's exec does not immediately
-        # re-upload a file nothing has touched.
-        manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': _sha256_file(local_path)}
+        # re-upload a file nothing has touched. Hash the bytes already in
+        # memory rather than re-reading the file just written.
+        manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': _sha256_bytes(get_res.content)}
     return warnings
 
 
@@ -431,27 +434,28 @@ def _sync_workspace(scratch_dir, session_id, manifest):
                         rel, st.st_size, WORKSPACE_MAX_ARTIFACT_BYTES))
                 continue
 
-            digest = None
-            if prev and prev.get('size') == st.st_size:
-                # Ambiguous: same size, different mtime -- hash before
-                # deciding this is a genuine change rather than a touch.
-                digest = _sha256_file(local_path)
-                if digest == prev.get('sha256'):
-                    manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
-                    continue
-
+            # Read once -- the same bytes are hashed below (including to
+            # resolve the ambiguous same-size/different-mtime case) and, if
+            # the file turns out changed, reused as the PUT body, instead of
+            # a first read to hash from disk and a second to build the
+            # upload.
             try:
                 with open(local_path, 'rb') as f:
                     data = f.read()
             except OSError as err:
                 _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, err))
                 continue
-            if digest is None:
-                digest = hashlib.sha256(data).hexdigest()
+            digest = _sha256_bytes(data)
+
+            if prev and prev.get('size') == st.st_size and digest == prev.get('sha256'):
+                # Ambiguous case resolved: same size, different mtime, but
+                # the content hash matches -- a touch, not a genuine change.
+                manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
+                continue
 
             try:
-                put_res = requests.put(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
-                                        data=data, timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+                put_res = _workspace_session.put(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
+                                                  data=data, timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
                 if not put_res.ok:
                     _append_workspace_warning(warnings, 'workspace sync: %s: HTTP %d' % (rel, put_res.status_code))
                     continue
