@@ -15,7 +15,9 @@
 // contract it implements -- then replace the TODO in the middle with real
 // agent logic (call an LLM, run a tool, whatever your agent does).
 
+const crypto = require('crypto');
 const fs = require('fs');
+const path = require('path');
 
 // The dispatcher stamps two request headers on every forwarded call (see
 // pkg/agentruntime/dispatcher.go), and reads one response header back:
@@ -106,6 +108,309 @@ async function saveState(sessionID, state) {
     throw new Error(`state PUT ${sessionID} failed: ${res.status}`);
   }
 }
+
+// --- Optional: session workspace hydration/sync (PR-2, abstraction C) ------
+//
+// This is the SAME hydrate/sync helper `fission agent create --template
+// interpreter` wires in automatically for its exec verb -- here it is
+// opt-in: nothing below calls it, module.exports above still only
+// loads/saves state. If your own agent logic maintains files on disk (a
+// scratch dir it manages itself, analogous to interpreter.js.tmpl's
+// $TMPDIR/exec/<session>) and you want those files to survive this pod
+// being replaced (idle eviction, an executor roll, a crash), call these two
+// functions yourself:
+//
+//   const manifest = loadWorkspaceManifest(myDir);
+//   let warnings = await hydrateWorkspace(myDir, sessionID, manifest);   // turn start
+//   // ... your own logic, using myDir as a working directory ...
+//   warnings = warnings.concat(await syncWorkspace(myDir, sessionID, manifest)); // turn end
+//   saveWorkspaceManifest(myDir, manifest);
+//
+// Report `warnings` however your agent reports failures -- never drop them
+// silently (the shipped design's own stance on a failed sync, restated in
+// this block's own doc comment below).
+
+// --- Workspace hydration/sync (PR-2, abstraction C) -------------------------
+//
+// The executor injects FISSION_AGENT_RUNTIME_URL / FISSION_AGENT_TOKEN_PATH
+// whenever the agent runtime feature is enabled cluster-wide
+// (pkg/executor/util/agentenv.go's AgentAPIEnvVars) -- the SAME credential
+// file (pkg/fetcher/agenttoken.go's AgentCredentials, written at specialize
+// time) that authenticates this pod's own dispatch/spawn calls also
+// authenticates its session workspace calls, just against a stricter
+// own-workspace-only authorization rule (pkg/agentruntime/identity.go). The
+// file is {"namespace": "...", "agent": "...", "token": "..."}.
+const WORKSPACE_URL = process.env.FISSION_AGENT_RUNTIME_URL || '';
+const WORKSPACE_TOKEN_PATH = process.env.FISSION_AGENT_TOKEN_PATH || '';
+
+// HEADER_IDENTITY_NAMESPACE / HEADER_IDENTITY_NAME carry the claimed
+// (namespace, agent) identity alongside the bearer token -- verification
+// recomputes the derived key from exactly these two claims, so a bearer with
+// no claim headers (or the wrong ones) 401s (pkg/agentruntime/identity.go's
+// HeaderIdentityNamespace/HeaderIdentityName).
+const HEADER_IDENTITY_NAMESPACE = 'X-Fission-Agent-Auth-Namespace';
+const HEADER_IDENTITY_NAME = 'X-Fission-Agent-Auth-Name';
+
+// WORKSPACE_MANIFEST_FILENAME is a hash manifest kept in the scratch dir
+// itself (never synced -- excluded from every sync walk by name below) that
+// is what lets a second turn on the SAME warm pod skip re-uploading anything
+// unchanged since the last successful hydrate/sync of that path.
+const WORKSPACE_MANIFEST_FILENAME = '.fission-workspace-manifest.json';
+
+// WORKSPACE_MAX_WARNINGS caps how many entries workspaceWarnings can carry --
+// see appendWorkspaceWarning.
+const WORKSPACE_MAX_WARNINGS = 20;
+
+let workspaceCreds = null;
+if (WORKSPACE_URL && WORKSPACE_TOKEN_PATH) {
+  try {
+    workspaceCreds = JSON.parse(fs.readFileSync(WORKSPACE_TOKEN_PATH, 'utf8'));
+  } catch (err) {
+    console.error(`{{.Name}}: could not read agent identity token file ${WORKSPACE_TOKEN_PATH}: ${err.code || err.name}`);
+  }
+}
+
+const WORKSPACE_SEGMENT_RE = /^[A-Za-z0-9._-]+$/;
+
+// validWorkspaceRelPath mirrors pkg/agentruntime/workspace.go's
+// validateWorkspaceSegment: every '/'-split segment must be non-empty, not
+// '.'/'..', not start with '_' (reserved for the platform's own
+// "_workspace_" root marker -- this also has the useful side effect of
+// silently excluding this template's own manifest file, and any similarly
+// named dotfile, from sync), and drawn from the same charset. A path failing
+// this is skipped entirely -- never synced, never a fatal error for the
+// turn.
+function validWorkspaceRelPath(rel) {
+  if (!rel) {
+    return false;
+  }
+  return rel
+    .split('/')
+    .every((seg) => seg !== '' && seg !== '.' && seg !== '..' && !seg.startsWith('_') && WORKSPACE_SEGMENT_RE.test(seg));
+}
+
+function workspaceHeaders(extra) {
+  return Object.assign(
+    {
+      Authorization: `Bearer ${workspaceCreds.token}`,
+      [HEADER_IDENTITY_NAMESPACE]: workspaceCreds.namespace,
+      [HEADER_IDENTITY_NAME]: workspaceCreds.agent,
+    },
+    extra,
+  );
+}
+
+// workspaceSessionURL builds the LIST route (NO trailing slash -- the
+// shipped route 400s a trailing-slash request by design, workspace.go's
+// validateWorkspacePath doc comment); GET/PUT append '/' + rel themselves.
+function workspaceSessionURL(sessionID) {
+  return `${WORKSPACE_URL}/workspace/${workspaceCreds.namespace}/${workspaceCreds.agent}/${sessionID}`;
+}
+
+function workspaceManifestPath(scratchDir) {
+  return path.join(scratchDir, WORKSPACE_MANIFEST_FILENAME);
+}
+
+function loadWorkspaceManifest(scratchDir) {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(workspaceManifestPath(scratchDir), 'utf8'));
+    return manifest && typeof manifest === 'object' ? manifest : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveWorkspaceManifest(scratchDir, manifest) {
+  const manifestPath = workspaceManifestPath(scratchDir);
+  const tmpPath = manifestPath + '.tmp';
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(manifest));
+    fs.renameSync(tmpPath, manifestPath);
+  } catch (err) {
+    console.error(`{{.Name}}: could not save workspace manifest: ${err.code || err.name}`);
+  }
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+// appendWorkspaceWarning caps warnings -- a scratch dir full of failures (a
+// pip/npm install that wrote thousands of files past the per-session quota,
+// say) cannot blow up the turn reply the way MAX_OUTPUT_BYTES caps
+// stdout/stderr -- the silent-failure rule requires reporting a failure, not
+// reporting an unbounded number of them.
+function appendWorkspaceWarning(warnings, message) {
+  if (warnings.length < WORKSPACE_MAX_WARNINGS) {
+    warnings.push(message);
+  } else if (warnings.length === WORKSPACE_MAX_WARNINGS) {
+    warnings.push('... additional workspace warnings suppressed');
+  }
+}
+
+// hydrateWorkspace lists the session's workspace and downloads any file
+// missing locally or whose local size does not match the remote listing --
+// lazy: a file already resident with a matching size is assumed unchanged
+// (the common case on a warm pod serving a later turn of the same session,
+// where this costs exactly one LIST call and nothing else).
+async function hydrateWorkspace(scratchDir, sessionID, manifest) {
+  const warnings = [];
+  if (!workspaceCreds) {
+    return warnings;
+  }
+  let items;
+  try {
+    const res = await fetch(workspaceSessionURL(sessionID), { headers: workspaceHeaders() });
+    if (!res.ok) {
+      throw new Error(`list failed: HTTP ${res.status}`);
+    }
+    items = (await res.json()).items || [];
+  } catch (err) {
+    appendWorkspaceWarning(warnings, `workspace hydrate: listing failed: ${err.message || err}`);
+    return warnings;
+  }
+
+  for (const item of items) {
+    const rel = item && item.path;
+    const size = item && item.size;
+    if (typeof rel !== 'string' || typeof size !== 'number' || !validWorkspaceRelPath(rel)) {
+      continue;
+    }
+    const localPath = path.join(scratchDir, ...rel.split('/'));
+    try {
+      const st = fs.statSync(localPath);
+      if (st.isFile() && st.size === size) {
+        continue;
+      }
+    } catch (err) {
+      // Not present locally yet -- fall through to download.
+    }
+    try {
+      const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, { headers: workspaceHeaders() });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = Buffer.from(await res.arrayBuffer());
+      fs.mkdirSync(path.dirname(localPath), { recursive: true });
+      fs.writeFileSync(localPath, data);
+      const st = fs.statSync(localPath);
+      // A freshly hydrated file is, by definition, in sync with the
+      // workspace it just came from -- recording it here means the sync
+      // pass that follows this same turn's exec does not immediately
+      // re-upload a file nothing has touched.
+      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: sha256File(localPath) };
+    } catch (err) {
+      appendWorkspaceWarning(warnings, `workspace hydrate: ${rel}: ${err.message || err}`);
+    }
+  }
+  return warnings;
+}
+
+// syncWorkspace walks scratchDir and PUTs any file new or changed since the
+// last successful hydrate/sync of that same path -- mtime+size compare,
+// content hash only on ambiguity (matching size, differing mtime). Delete-
+// on-absence is OFF: a path that disappeared locally is dropped from the
+// local manifest (bookkeeping only) but is NEVER DELETEd from the
+// workspace -- sync is additive-only by design.
+async function syncWorkspace(scratchDir, sessionID, manifest) {
+  const warnings = [];
+  if (!workspaceCreds) {
+    return warnings;
+  }
+
+  const seen = new Set();
+
+  async function walk(dir) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      return;
+    }
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        // Skipped, not followed: exec'd code could otherwise link a
+        // scratch-dir path at a pod credential file and have ITS bytes
+        // uploaded to a workspace this agent's sibling sessions can read --
+        // see the trust-boundary comment at the top of this file.
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(entryPath);
+        continue;
+      }
+      if (!entry.isFile()) {
+        continue;
+      }
+      const rel = path.relative(scratchDir, entryPath).split(path.sep).join('/');
+      if (rel === WORKSPACE_MANIFEST_FILENAME || rel === WORKSPACE_MANIFEST_FILENAME + '.tmp' || !validWorkspaceRelPath(rel)) {
+        continue;
+      }
+      let st;
+      try {
+        st = fs.statSync(entryPath);
+      } catch (err) {
+        continue;
+      }
+      seen.add(rel);
+
+      const prev = manifest[rel];
+      if (prev && prev.size === st.size && prev.mtimeMs === st.mtimeMs) {
+        continue; // skip-clean: unchanged since the last successful sync/hydrate
+      }
+
+      let digest = null;
+      if (prev && prev.size === st.size) {
+        // Ambiguous: same size, different mtime -- hash before deciding this
+        // is a genuine change rather than a touch.
+        digest = sha256File(entryPath);
+        if (digest === prev.sha256) {
+          manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
+          continue;
+        }
+      }
+
+      let data;
+      try {
+        data = fs.readFileSync(entryPath);
+      } catch (err) {
+        appendWorkspaceWarning(warnings, `workspace sync: ${rel}: ${err.message || err}`);
+        continue;
+      }
+      if (digest === null) {
+        digest = crypto.createHash('sha256').update(data).digest('hex');
+      }
+
+      try {
+        const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, {
+          method: 'PUT',
+          headers: workspaceHeaders(),
+          body: data,
+        });
+        if (!res.ok) {
+          appendWorkspaceWarning(warnings, `workspace sync: ${rel}: HTTP ${res.status}`);
+          continue;
+        }
+      } catch (err) {
+        appendWorkspaceWarning(warnings, `workspace sync: ${rel}: ${err.message || err}`);
+        continue;
+      }
+      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
+    }
+  }
+
+  await walk(scratchDir);
+
+  for (const rel of Object.keys(manifest)) {
+    if (!seen.has(rel)) {
+      delete manifest[rel];
+    }
+  }
+  return warnings;
+}
+// --- End workspace hydration/sync helper ------------------------------------
+
 
 // --- The turn --------------------------------------------------------------
 module.exports = async function (context) {

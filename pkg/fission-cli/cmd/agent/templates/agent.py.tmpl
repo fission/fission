@@ -15,8 +15,10 @@
 # contract it implements -- then replace the TODO in main() with real agent
 # logic (call an LLM, run a tool, whatever your agent does).
 
+import hashlib
 import json
 import os
+import re
 
 from flask import request
 import requests
@@ -97,6 +99,264 @@ def _save_state(session_id, state):
         data=json.dumps(state),
     )
     res.raise_for_status()
+
+
+# --- Optional: session workspace hydration/sync (PR-2, abstraction C) ------
+#
+# This is the SAME hydrate/sync helper `fission agent create --template
+# interpreter` wires in automatically for its exec verb -- here it is
+# opt-in: nothing below calls it, main() above still only loads/saves state.
+# If your own agent logic maintains files on disk (a scratch dir it manages
+# itself, analogous to interpreter.py.tmpl's $TMPDIR/exec/<session>) and you
+# want those files to survive this pod being replaced (idle eviction, an
+# executor roll, a crash), call these two functions yourself:
+#
+#   manifest = _load_workspace_manifest(my_dir)
+#   warnings = _hydrate_workspace(my_dir, session_id, manifest)   # turn start
+#   ... your own logic, using my_dir as a working directory ...
+#   warnings += _sync_workspace(my_dir, session_id, manifest)     # turn end
+#   _save_workspace_manifest(my_dir, manifest)
+#
+# Report `warnings` however your agent reports failures -- never drop them
+# silently (the shipped design's own stance on a failed sync, restated in
+# this block's own doc comment below).
+
+# --- Workspace hydration/sync (PR-2, abstraction C) -------------------------
+#
+# The executor injects FISSION_AGENT_RUNTIME_URL / FISSION_AGENT_TOKEN_PATH
+# whenever the agent runtime feature is enabled cluster-wide
+# (pkg/executor/util/agentenv.go's AgentAPIEnvVars) -- the SAME credential
+# file (pkg/fetcher/agenttoken.go's AgentCredentials, written at specialize
+# time) that authenticates this pod's own dispatch/spawn calls also
+# authenticates its session workspace calls, just against a stricter
+# own-workspace-only authorization rule (pkg/agentruntime/identity.go). The
+# file is {"namespace": "...", "agent": "...", "token": "..."}.
+WORKSPACE_URL = os.environ.get('FISSION_AGENT_RUNTIME_URL', '')
+WORKSPACE_TOKEN_PATH = os.environ.get('FISSION_AGENT_TOKEN_PATH', '')
+
+# HEADER_IDENTITY_NAMESPACE / HEADER_IDENTITY_NAME carry the claimed
+# (namespace, agent) identity alongside the bearer token -- verification
+# recomputes the derived key from exactly these two claims, so a bearer with
+# no claim headers (or the wrong ones) 401s (pkg/agentruntime/identity.go's
+# HeaderIdentityNamespace/HeaderIdentityName).
+HEADER_IDENTITY_NAMESPACE = 'X-Fission-Agent-Auth-Namespace'
+HEADER_IDENTITY_NAME = 'X-Fission-Agent-Auth-Name'
+
+# WORKSPACE_MANIFEST_FILENAME is a hash manifest kept in the scratch dir
+# itself (never synced -- excluded from every sync walk by name below) that
+# is what lets a second turn on the SAME warm pod skip re-uploading anything
+# unchanged since the last successful hydrate/sync of that path.
+WORKSPACE_MANIFEST_FILENAME = '.fission-workspace-manifest.json'
+
+# WORKSPACE_MAX_WARNINGS caps how many entries workspaceWarnings can carry --
+# see _append_workspace_warning.
+WORKSPACE_MAX_WARNINGS = 20
+
+WORKSPACE_REQUEST_TIMEOUT_SECONDS = 30
+
+_workspace_creds = None
+if WORKSPACE_URL and WORKSPACE_TOKEN_PATH:
+    try:
+        with open(WORKSPACE_TOKEN_PATH) as f:
+            _workspace_creds = json.load(f)
+    except (OSError, ValueError) as err:
+        print('{{.Name}}: could not read agent identity token file %s: %s' % (WORKSPACE_TOKEN_PATH, err))
+
+_WORKSPACE_SEGMENT_RE = re.compile(r'^[A-Za-z0-9._-]+$')
+
+
+def _valid_workspace_relpath(rel):
+    # Mirrors pkg/agentruntime/workspace.go's validateWorkspaceSegment: every
+    # '/'-split segment must be non-empty, not '.'/'..', not start with '_'
+    # (reserved for the platform's own "_workspace_" root marker -- this also
+    # has the useful side effect of silently excluding directories like
+    # "__pycache__" from sync, not just this template's own manifest file),
+    # and drawn from the same charset. A path failing this is skipped
+    # entirely -- never synced, never a fatal error for the turn.
+    if not rel:
+        return False
+    for seg in rel.split('/'):
+        if seg in ('', '.', '..') or seg.startswith('_') or not _WORKSPACE_SEGMENT_RE.match(seg):
+            return False
+    return True
+
+
+def _workspace_headers(extra=None):
+    headers = {
+        'Authorization': 'Bearer %s' % _workspace_creds['token'],
+        HEADER_IDENTITY_NAMESPACE: _workspace_creds['namespace'],
+        HEADER_IDENTITY_NAME: _workspace_creds['agent'],
+    }
+    if extra:
+        headers.update(extra)
+    return headers
+
+
+def _workspace_session_url(session_id):
+    # NO trailing slash -- the shipped route 400s a trailing-slash request
+    # by design (workspace.go's validateWorkspacePath doc comment).
+    return '%s/workspace/%s/%s/%s' % (
+        WORKSPACE_URL, _workspace_creds['namespace'], _workspace_creds['agent'], session_id)
+
+
+def _workspace_manifest_path(scratch_dir):
+    return os.path.join(scratch_dir, WORKSPACE_MANIFEST_FILENAME)
+
+
+def _load_workspace_manifest(scratch_dir):
+    try:
+        with open(_workspace_manifest_path(scratch_dir)) as f:
+            manifest = json.load(f)
+        return manifest if isinstance(manifest, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_workspace_manifest(scratch_dir, manifest):
+    path = _workspace_manifest_path(scratch_dir)
+    tmp_path = path + '.tmp'
+    try:
+        with open(tmp_path, 'w') as f:
+            json.dump(manifest, f)
+        os.replace(tmp_path, path)
+    except OSError as err:
+        print('{{.Name}}: could not save workspace manifest: %s' % err)
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _append_workspace_warning(warnings, message):
+    # Capped so a scratch dir full of failures (a pip/npm install that wrote
+    # thousands of files past the per-session quota, say) cannot blow up the
+    # turn reply the way MAX_OUTPUT_BYTES caps stdout/stderr -- the
+    # silent-failure rule requires reporting a failure, not reporting an
+    # unbounded number of them.
+    if len(warnings) < WORKSPACE_MAX_WARNINGS:
+        warnings.append(message)
+    elif len(warnings) == WORKSPACE_MAX_WARNINGS:
+        warnings.append('... additional workspace warnings suppressed')
+
+
+def _hydrate_workspace(scratch_dir, session_id, manifest):
+    # Lazy: a file already resident locally with a size matching the remote
+    # listing is assumed unchanged and is NOT re-downloaded -- the common
+    # case on a warm pod serving a later turn of the same session, where
+    # this costs exactly one LIST call and nothing else.
+    warnings = []
+    if not _workspace_creds:
+        return warnings
+    try:
+        res = requests.get(_workspace_session_url(session_id), headers=_workspace_headers(),
+                            timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+        res.raise_for_status()
+        items = res.json().get('items', [])
+    except (requests.RequestException, ValueError) as err:
+        _append_workspace_warning(warnings, 'workspace hydrate: listing failed: %s' % err)
+        return warnings
+
+    for item in items:
+        rel = item.get('path')
+        size = item.get('size')
+        if not isinstance(rel, str) or not isinstance(size, int) or not _valid_workspace_relpath(rel):
+            continue
+        local_path = os.path.join(scratch_dir, *rel.split('/'))
+        try:
+            if os.path.isfile(local_path) and os.path.getsize(local_path) == size:
+                continue
+        except OSError:
+            pass
+        try:
+            get_res = requests.get(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
+                                    timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+            get_res.raise_for_status()
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(get_res.content)
+        except (requests.RequestException, OSError) as err:
+            _append_workspace_warning(warnings, 'workspace hydrate: %s: %s' % (rel, err))
+            continue
+        st = os.stat(local_path)
+        # A freshly hydrated file is, by definition, in sync with the
+        # workspace it just came from -- recording it here means the sync
+        # pass that follows this same turn's exec does not immediately
+        # re-upload a file nothing has touched.
+        manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': _sha256_file(local_path)}
+    return warnings
+
+
+def _sync_workspace(scratch_dir, session_id, manifest):
+    # mtime+size compare, content hash only on ambiguity (matching size,
+    # differing mtime) -- see this section's module doc comment. Delete-on-
+    # absence is OFF: a path that disappeared locally is dropped from the
+    # local manifest (bookkeeping only) but is NEVER DELETEd from the
+    # workspace -- sync is additive-only by design.
+    warnings = []
+    if not _workspace_creds:
+        return warnings
+
+    seen = set()
+    for root, _dirs, files in os.walk(scratch_dir):
+        for fname in files:
+            local_path = os.path.join(root, fname)
+            rel = os.path.relpath(local_path, scratch_dir).replace(os.sep, '/')
+            if rel in (WORKSPACE_MANIFEST_FILENAME, WORKSPACE_MANIFEST_FILENAME + '.tmp'):
+                continue
+            # Symlinks are skipped, not followed: exec'd code could otherwise
+            # link a scratch-dir path at a pod credential file and have ITS
+            # bytes uploaded to a workspace this agent's sibling sessions can
+            # read -- see the trust-boundary comment at the top of this file.
+            if os.path.islink(local_path) or not _valid_workspace_relpath(rel):
+                continue
+            try:
+                st = os.stat(local_path)
+            except OSError:
+                continue
+            seen.add(rel)
+
+            prev = manifest.get(rel)
+            if prev and prev.get('size') == st.st_size and prev.get('mtime_ns') == st.st_mtime_ns:
+                continue  # skip-clean: unchanged since the last successful sync/hydrate
+
+            digest = None
+            if prev and prev.get('size') == st.st_size:
+                # Ambiguous: same size, different mtime -- hash before
+                # deciding this is a genuine change rather than a touch.
+                digest = _sha256_file(local_path)
+                if digest == prev.get('sha256'):
+                    manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
+                    continue
+
+            try:
+                with open(local_path, 'rb') as f:
+                    data = f.read()
+            except OSError as err:
+                _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, err))
+                continue
+            if digest is None:
+                digest = hashlib.sha256(data).hexdigest()
+
+            try:
+                put_res = requests.put(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
+                                        data=data, timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+                if not put_res.ok:
+                    _append_workspace_warning(warnings, 'workspace sync: %s: HTTP %d' % (rel, put_res.status_code))
+                    continue
+            except requests.RequestException as err:
+                _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, err))
+                continue
+            manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
+
+    for rel in list(manifest):
+        if rel not in seen:
+            del manifest[rel]
+    return warnings
+# --- End workspace hydration/sync helper ------------------------------------
 
 
 # --- The turn --------------------------------------------------------------
