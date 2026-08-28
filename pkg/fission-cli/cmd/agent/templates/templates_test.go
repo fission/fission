@@ -359,8 +359,8 @@ func TestRender_Interpreter_HeaderNames(t *testing.T) {
 	}
 }
 
-// TestRender_Interpreter_ExecContractKeys pins every JSON key doc 14's PR-1
-// section spells out in the exec verb's wire contract (both the request
+// TestRender_Interpreter_ExecContractKeys pins every JSON key of the exec
+// verb's wire contract (both the request
 // keys, code/command/timeoutSeconds, and the response keys,
 // stdout/stderr/exitCode/durationMs/truncated) -- this contract has no
 // shared Go struct on either side ("zero new platform Go" is the whole
@@ -369,23 +369,32 @@ func TestRender_Interpreter_HeaderNames(t *testing.T) {
 func TestRender_Interpreter_ExecContractKeys(t *testing.T) {
 	t.Parallel()
 
-	wireKeys := []string{
-		"code", "command", "timeoutSeconds",
-		"stdout", "stderr", "exitCode", "durationMs", "truncated",
+	// Anchored on the wire-touching forms (request-key reads and
+	// response-literal keys), not bare words: "code"/"stdout" etc. also
+	// occur in comment prose, so a bare Contains would keep passing after
+	// the actual contract site was renamed.
+	wireForms := map[string][]string{
+		"node": {
+			`body.code`, `body.command`, `body.timeoutSeconds`,
+			`stdout: `, `stderr: `, `exitCode: `, `durationMs: `, `truncated: `,
+		},
+		"python": {
+			`payload.get('code')`, `payload.get('command')`, `payload.get('timeoutSeconds')`,
+			`'stdout':`, `'stderr':`, `'exitCode':`, `'durationMs':`, `'truncated':`,
+		},
 	}
-	for _, lang := range []string{"node", "python"} {
+	for lang, forms := range wireForms {
 		out, _ := render(t, "interpreter", lang)
 		text := string(out)
-		for _, key := range wireKeys {
-			assert.Contains(t, text, key, "%s: missing exec-contract key %q", lang, key)
+		for _, form := range forms {
+			assert.Contains(t, text, form, "%s: missing exec-contract wire form %q", lang, form)
 		}
 	}
 }
 
 // TestRender_Interpreter_TimeoutCeiling pins the request-carried
-// timeoutSeconds default (60) and hard ceiling (300) doc 14's PR-1 section
-// specifies ("timeoutSeconds default 60, clamped to a template constant
-// ceiling (300)").
+// timeoutSeconds default (60) and hard ceiling (300) the exec
+// contract specifies.
 func TestRender_Interpreter_TimeoutCeiling(t *testing.T) {
 	t.Parallel()
 	for _, lang := range []string{"node", "python"} {
@@ -417,7 +426,7 @@ func TestRender_Interpreter_TimeoutRejectsNonFinite(t *testing.T) {
 
 // TestRender_Interpreter_OutputCapMatchesStateDefault pins the stdout/stderr
 // cap to fv1.DefaultStateMaxValueBytes (pkg/apis/core/v1/const.go) rather
-// than a re-typed 262144 literal -- doc 14's PR-1 section requires the two
+// than a re-typed 262144 literal -- the two must
 // stay aligned ("stdout/stderr each capped at 256 KiB (aligns with state
 // MaxValueBytes default)"). Both templates spell the cap as the expression
 // `256 * 1024` rather than the raw byte count, so this both checks that
@@ -439,7 +448,7 @@ func TestRender_Interpreter_OutputCapMatchesStateDefault(t *testing.T) {
 var allowedEnvVarsListRe = regexp.MustCompile(`ALLOWED_ENV_VARS = \[([^\]]*)\]`)
 
 // TestRender_Interpreter_EnvAllowlistExcludesFissionVars is the static
-// (non-cluster) half of doc 14's env-scrub requirement ("Subprocess env is
+// (non-cluster) half of the env-scrub requirement ("Subprocess env is
 // allow-listed ... never pass-through -- FISSION_* vars ... are scrubbed"):
 // it asserts the allow-list itself never names a FISSION_-prefixed
 // variable, so the subprocess's environment cannot contain one BY
@@ -473,7 +482,7 @@ func TestRender_Interpreter_EnvAllowlistExcludesFissionVars(t *testing.T) {
 }
 
 // TestRender_Interpreter_TrustStatementMentionsGvisor pins the interpreter
-// template's own trust-boundary comment against the doc 14 PR-1 section's
+// template's own trust-boundary comment against the
 // requirement that the scaffold recommend `--runtime-class gvisor` for
 // stronger isolation before running untrusted code.
 func TestRender_Interpreter_TrustStatementMentionsGvisor(t *testing.T) {
