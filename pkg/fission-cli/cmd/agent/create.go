@@ -46,22 +46,21 @@ const (
 	interpreterTemplate = "interpreter"
 )
 
-// interpreterMaxTimeoutSeconds is the interpreter template's own hard
-// ceiling on the request-carried `timeoutSeconds` (see
-// templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS). This constant
-// and the template's are independent literals -- templates_test.go's
-// TestRender_Interpreter_TimeoutCeiling only pins the template's own value
-// in isolation, so it is create_test.go's
-// TestAgentCreate_TemplateInterpreter_DirectMode that asserts the rendered
-// template actually contains "MAX_TIMEOUT_SECONDS = <this constant>",
-// closing the gap a change to only one side would otherwise leave silent.
-// The scaffolded Function's own FunctionTimeout is set to match (see
-// buildFunction) so the platform's own request timeout does not kill a
+// interpreterMaxTimeoutSeconds mirrors templates.InterpreterMaxTimeoutSeconds,
+// the single source of truth also rendered into
+// templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS -- see that
+// constant's doc comment. This local alias just saves every call site below
+// from spelling out the package-qualified name. create_test.go's
+// TestAgentCreate_TemplateInterpreter_DirectMode still asserts the rendered
+// template actually contains "MAX_TIMEOUT_SECONDS = <this constant>", which
+// now checks the two sides of a single value rather than two independent
+// literals. The scaffolded Function's own FunctionTimeout is set to match
+// (see buildFunction) so the platform's own request timeout does not kill a
 // full-length exec call substantially ahead of the template's own timeout;
-// at the exact ceiling the two race (the platform's clock starts first),
-// so this is a "close together", not a strict "template always wins",
+// at the exact ceiling the two race (the platform's clock starts first), so
+// this is a "close together", not a strict "template always wins",
 // guarantee.
-const interpreterMaxTimeoutSeconds = 300
+const interpreterMaxTimeoutSeconds = templates.InterpreterMaxTimeoutSeconds
 
 // scaffoldFunctionTimeout mirrors `fn create`'s own --fntimeout default of
 // 60 (flag.FnExecutionTimeout's DefaultInt, cmd/function's flag.go). This

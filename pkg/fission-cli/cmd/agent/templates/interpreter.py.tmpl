@@ -115,7 +115,7 @@ YIELD_HEADER = 'X-Fission-Agent-Yield'
 # `fission agent create`'s next-steps output), so a full-length exec call
 # is never killed by the platform's own request timeout first.
 DEFAULT_TIMEOUT_SECONDS = 60
-MAX_TIMEOUT_SECONDS = 300
+MAX_TIMEOUT_SECONDS = {{.MaxTimeoutSeconds}}
 
 # MAX_OUTPUT_BYTES caps stdout/stderr EACH (aligns with the state API's
 # MaxValueBytes default, DefaultStateMaxValueBytes, pkg/apis/core/v1/const.go)
