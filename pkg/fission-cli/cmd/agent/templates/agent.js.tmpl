@@ -177,10 +177,25 @@ const WORKSPACE_REQUEST_TIMEOUT_MS = 30000;
 // guaranteed 413 from the server.
 const WORKSPACE_MAX_ARTIFACT_BYTES = 32 * 1024 * 1024;
 
+// WORKSPACE_CREDS_FIELDS are the keys workspaceHeaders/workspaceSessionURL
+// dereference unconditionally -- validated below so a corrupt-but-valid-JSON
+// token file (e.g. `{}`) degrades to "credentials unavailable" (a warning,
+// never a fatal error for the turn) instead of leaving workspaceCreds truthy
+// and sending "Bearer undefined" on every hydrate/sync call (mirrors the
+// Python helper's _WORKSPACE_CREDS_FIELDS check).
+const WORKSPACE_CREDS_FIELDS = ['token', 'namespace', 'agent'];
+
 let workspaceCreds = null;
 if (WORKSPACE_URL && WORKSPACE_TOKEN_PATH) {
   try {
-    workspaceCreds = JSON.parse(fs.readFileSync(WORKSPACE_TOKEN_PATH, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(WORKSPACE_TOKEN_PATH, 'utf8'));
+    if (parsed && typeof parsed === 'object' && WORKSPACE_CREDS_FIELDS.every((k) => k in parsed)) {
+      workspaceCreds = parsed;
+    } else {
+      console.error(
+        `{{.Name}}: agent identity token file ${WORKSPACE_TOKEN_PATH} is malformed (missing ${WORKSPACE_CREDS_FIELDS.join(', ')})`,
+      );
+    }
   } catch (err) {
     console.error(`{{.Name}}: could not read agent identity token file ${WORKSPACE_TOKEN_PATH}: ${err.code || err.name}`);
   }
@@ -324,6 +339,21 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
       }
     } catch (err) {
       // Not present locally yet -- fall through to download.
+    }
+    try {
+      const lst = fs.lstatSync(localPath);
+      if (lst.isSymbolicLink() || !lst.isFile()) {
+        // A local path that already exists but is a symlink (or otherwise
+        // not a regular file -- exec'd code planted it there) would have
+        // fs.writeFileSync below follow the symlink and overwrite its
+        // TARGET with hydrated workspace bytes, or block forever on a FIFO
+        // -- skip and report instead of writing through it. Mirrors the
+        // sync walk's symlink guard.
+        appendWorkspaceWarning(warnings, `workspace hydrate: ${rel}: local path exists and is not a regular file, skipped`);
+        continue;
+      }
+    } catch (err) {
+      // Not present locally yet -- fine, this is a fresh write.
     }
     try {
       const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, {
