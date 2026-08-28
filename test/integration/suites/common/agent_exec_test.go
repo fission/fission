@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/fission/fission/pkg/agentruntime"
 	"github.com/fission/fission/test/integration/framework"
@@ -322,29 +323,39 @@ console.log(JSON.stringify({ hostname: os.hostname() }));
 	require.NoErrorf(t, json.Unmarshal([]byte(writeReply.Stdout), &before), "decoding turn 1 stdout %q", writeReply.Stdout)
 	require.NotEmpty(t, before.Hostname, "turn 1 did not report a hostname")
 
-	// Kill the specialized pod. This is what makes the next turn's pod
-	// GENUINELY new: poolmgr respecializes a fresh pod, with an empty
-	// $TMPDIR/exec/<session> -- the only way turn 2 can read
-	// notes/summary.txt back is if it was hydrated down from the session
-	// workspace turn 1 synced it to.
+	// Kill EVERY specialized pod, not just the first listed -- a racing
+	// router retry can leave more than one specialized pod for this
+	// function (the same caveat pool_warm_survival_test.go and
+	// provisioned_concurrency_test.go both document), and turn 1's actual
+	// reply could have come from any of them. Deleting only one risks
+	// killing the wrong pod, leaving turn 2 free to land on the SAME
+	// survivor and report the SAME hostname -- a false negative that looks
+	// like a hydration bug but is really a pod-selection bug in the test.
+	// This is what makes the next turn's pod GENUINELY new: poolmgr
+	// respecializes a fresh pod, with an empty $TMPDIR/exec/<session> -- the
+	// only way turn 2 can read notes/summary.txt back is if it was hydrated
+	// down from the session workspace turn 1 synced it to.
 	podsBefore, err := ns.SpecializedFunctionPods(ctx, fnName)
 	require.NoError(t, err)
 	require.NotEmptyf(t, podsBefore, "turn 1 must have specialized a pod for %q", fnName)
-	killedName, killedUID := podsBefore[0].Name, podsBefore[0].UID
-	require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, killedName, metav1.DeleteOptions{}),
-		"delete specialized pod %q", killedName)
+	killedUIDs := make(map[types.UID]bool, len(podsBefore))
+	for _, p := range podsBefore {
+		killedUIDs[p.UID] = true
+		require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, p.Name, metav1.DeleteOptions{}),
+			"delete specialized pod %q", p.Name)
+	}
 
-	// Wait for the killed pod's UID to actually be gone before dispatching
-	// turn 2 -- a still-Terminating pod could otherwise serve turn 2 and
-	// mask a hydration bug behind a false "different hostname never even
-	// got exercised" pass.
+	// Wait for every killed UID to actually be gone before dispatching turn
+	// 2 -- a still-Terminating pod could otherwise serve turn 2 and mask a
+	// hydration bug behind a false "different hostname never even got
+	// exercised" pass.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		cur, lerr := ns.SpecializedFunctionPods(ctx, fnName)
 		if !assert.NoError(c, lerr) {
 			return
 		}
 		for _, p := range cur {
-			assert.NotEqualf(c, killedUID, p.UID, "killed pod %q must be fully gone before turn 2", killedName)
+			assert.Falsef(c, killedUIDs[p.UID], "killed pod %q (uid %s) must be fully gone before turn 2", p.Name, p.UID)
 		}
 	}, 2*time.Minute, 2*time.Second)
 
