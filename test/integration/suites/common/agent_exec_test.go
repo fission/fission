@@ -9,7 +9,10 @@ package common_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -19,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/fission/fission/pkg/agentruntime"
 	"github.com/fission/fission/test/integration/framework"
@@ -26,15 +30,27 @@ import (
 
 // execTurnReply is the exec verb's response contract:
 // {"stdout": "...", "stderr": "...", "exitCode": 0, "durationMs": 12,
-// "truncated": false}. This has no shared Go struct on either side ("zero
-// new platform Go" is the point of a template-only exec verb) -- it exists
-// only to decode the wire response in this test.
+// "truncated": false}, extended by doc 14's PR-2 section with
+// workspaceWarnings (the hydrate/sync helper's failure-reporting field).
+// This has no shared Go struct on either side ("zero new platform Go" is the
+// point of a template-only exec verb) -- it exists only to decode the wire
+// response in this test.
 type execTurnReply struct {
-	Stdout     string `json:"stdout"`
-	Stderr     string `json:"stderr"`
-	ExitCode   int    `json:"exitCode"`
-	DurationMs int64  `json:"durationMs"`
-	Truncated  bool   `json:"truncated"`
+	Stdout            string   `json:"stdout"`
+	Stderr            string   `json:"stderr"`
+	ExitCode          int      `json:"exitCode"`
+	DurationMs        int64    `json:"durationMs"`
+	Truncated         bool     `json:"truncated"`
+	WorkspaceWarnings []string `json:"workspaceWarnings"`
+}
+
+// sha256Hex is the "hashes equal" check doc 14's PR-2 acceptance criterion
+// asks for verbatim ("the doc-13 mcp-server-sandbox persistence demo pattern
+// (write -> suspend-equivalent -> read back, hashes equal) passes on
+// Fission").
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }
 
 // postExecTurn POSTs one turn carrying an arbitrary JSON payload (the exec
@@ -200,4 +216,199 @@ func TestAgentExec(t *testing.T) {
 			assert.Falsef(t, strings.HasPrefix(k, "FISSION_"), "exec'd subprocess env must never carry a FISSION_ var, found %q", k)
 		}
 	})
+}
+
+// hostnameContent is the turn payload both halves of
+// TestAgentExecWorkspaceHydration decode from stdout: the exec'd code's own
+// os.hostname() (never the pod's HOSTNAME env var, which ALLOWED_ENV_VARS
+// deliberately excludes -- see interpreter.js.tmpl's trust-boundary comment)
+// plus, on turn 2 only, the file content read back.
+type hostnameContent struct {
+	Hostname string `json:"hostname"`
+	Content  string `json:"content"`
+}
+
+// TestAgentExecWorkspaceHydration exercises the PR-2 (abstraction C)
+// hydrate/sync helper end to end: a file an exec turn writes into its
+// scratch dir must survive the specialized pod being killed and a
+// respecialize onto a DIFFERENT pod, because it was synced to the session's
+// G12 workspace at turn 1's end and hydrated back down at turn 2's start --
+// doc 14's PR-2 acceptance criterion (the doc-13 mcp-server-sandbox
+// persistence demo pattern: write -> suspend-equivalent -> read back, hashes
+// equal).
+//
+// The discriminating assertion is NOT merely "turn 2 reads the file" --
+// os.hostname() must differ between the two turns, proving turn 2 actually
+// ran on a new pod with no local disk continuity from turn 1, rather than a
+// lingering Terminating pod quietly serving the request and passing this
+// test for the wrong reason.
+func TestAgentExecWorkspaceHydration(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "agent-workspace-hydrate-node-" + ns.ID
+	fnName := "agent-workspace-hydrate-" + ns.ID
+
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	workdir := t.TempDir()
+	ns.WithCWD(t, workdir, func() {
+		ns.CLI(t, ctx, "spec", "init")
+		ns.CLI(t, ctx, "agent", "create", "--name", fnName, "--env", envName, "--template", "interpreter", "--spec")
+		ns.CLI(t, ctx, "spec", "apply")
+	})
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// Auth-posture probe -- same three-outcome rationale as
+	// TestAgentRuntimeWorkspace's own probe (401 authz-enabled / 503
+	// workspace disabled via STORAGESVC_URL unset / 404 pass-through). Run
+	// BEFORE dispatching any turn: on a hand-managed install that doesn't
+	// wire STORAGESVC_URL, hydrate/sync degrade gracefully turn-side (no
+	// warnings surfaced as failures, just a no-op), so skipping here rather
+	// than discovering it later as a confusing hostname-never-changed
+	// failure is the honest signal.
+	probeSessionID := "exec-workspace-posture-probe-" + ns.ID
+	probeURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + probeSessionID
+	probeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	require.NoErrorf(t, err, "building auth-posture probe request")
+	probeResp, err := f.HTTPClient().Do(probeReq)
+	require.NoErrorf(t, err, "GET %s (auth-posture probe)", probeURL)
+	_ = probeResp.Body.Close()
+	switch probeResp.StatusCode {
+	case http.StatusUnauthorized:
+		t.Skipf("agent runtime on this cluster requires a JWT (authz enabled) and this test framework has no "+
+			"way to mint or sign one, so it cannot dispatch even the first turn here (GET %s got 401); skipping", probeURL)
+	case http.StatusServiceUnavailable:
+		t.Skipf("agent runtime's session workspace routes are disabled on this cluster (STORAGESVC_URL unset, "+
+			"GET %s got 503); skipping", probeURL)
+	case http.StatusNotFound:
+		// Pass-through posture: proceed.
+	default:
+		t.Fatalf("auth-posture probe GET %s: want 401 (authz enabled), 404 (pass-through), or 503 "+
+			"(workspace disabled), got %d", probeURL, probeResp.StatusCode)
+	}
+
+	const fileContent = "hydration-proof-payload"
+
+	// Turn 1: write a file under a subdirectory (notes/summary.txt, not the
+	// scratch dir root) and report which pod ran it. No session header --
+	// mints the session, mirroring TestAgentExec's own first turn.
+	writeCode := fmt.Sprintf(`
+const fs = require('fs');
+const os = require('os');
+fs.mkdirSync('notes', { recursive: true });
+fs.writeFileSync('notes/summary.txt', %q);
+console.log(JSON.stringify({ hostname: os.hostname() }));
+`, fileContent)
+	writePayload, err := json.Marshal(map[string]any{"code": writeCode})
+	require.NoError(t, err)
+
+	writeReply, sessionID := dispatchExecTurn(t, ctx, f, turnURL, "", writePayload)
+	require.NotEmpty(t, sessionID, "scaffolded interpreter never minted a session id")
+	require.Equalf(t, 0, writeReply.ExitCode, "turn 1 exec failed: stderr=%s", writeReply.Stderr)
+	assert.Emptyf(t, writeReply.WorkspaceWarnings, "turn 1's sync must not warn: %v", writeReply.WorkspaceWarnings)
+
+	var before hostnameContent
+	require.NoErrorf(t, json.Unmarshal([]byte(writeReply.Stdout), &before), "decoding turn 1 stdout %q", writeReply.Stdout)
+	require.NotEmpty(t, before.Hostname, "turn 1 did not report a hostname")
+
+	// Kill the specialized pod. This is what makes the next turn's pod
+	// GENUINELY new: poolmgr respecializes a fresh pod, with an empty
+	// $TMPDIR/exec/<session> -- the only way turn 2 can read
+	// notes/summary.txt back is if it was hydrated down from the session
+	// workspace turn 1 synced it to.
+	podsBefore, err := ns.SpecializedFunctionPods(ctx, fnName)
+	require.NoError(t, err)
+	require.NotEmptyf(t, podsBefore, "turn 1 must have specialized a pod for %q", fnName)
+	killedName, killedUID := podsBefore[0].Name, podsBefore[0].UID
+	require.NoErrorf(t, f.KubeClient().CoreV1().Pods(ns.Name).Delete(ctx, killedName, metav1.DeleteOptions{}),
+		"delete specialized pod %q", killedName)
+
+	// Wait for the killed pod's UID to actually be gone before dispatching
+	// turn 2 -- a still-Terminating pod could otherwise serve turn 2 and
+	// mask a hydration bug behind a false "different hostname never even
+	// got exercised" pass.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		cur, lerr := ns.SpecializedFunctionPods(ctx, fnName)
+		if !assert.NoError(c, lerr) {
+			return
+		}
+		for _, p := range cur {
+			assert.NotEqualf(c, killedUID, p.UID, "killed pod %q must be fully gone before turn 2", killedName)
+		}
+	}, 2*time.Minute, 2*time.Second)
+
+	// Turn 2, same session: read the file back and report which pod ran it.
+	// Re-issuing the WHOLE turn on every retry (not polling a read-only
+	// endpoint) mirrors TestAgentRuntimeWorkspace's own artifact-turn loop --
+	// the respecialize + hydrate window can need more than one attempt.
+	readCode := `
+const fs = require('fs');
+const os = require('os');
+let data;
+try {
+  data = fs.readFileSync('notes/summary.txt', 'utf8');
+} catch (err) {
+  data = 'MISSING: ' + err.message;
+}
+console.log(JSON.stringify({ hostname: os.hostname(), content: data }));
+`
+	readPayload, err := json.Marshal(map[string]any{"code": readCode})
+	require.NoError(t, err)
+
+	var after hostnameContent
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postExecTurn(attemptCtx, f, turnURL, sessionID, readPayload)
+		if !assert.NoErrorf(c, err, "POST %s (turn 2)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "turn 2 to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading turn 2 response body") {
+			return
+		}
+		var reply execTurnReply
+		if !assert.NoErrorf(c, json.Unmarshal(body, &reply), "decoding turn 2 reply %q", body) {
+			return
+		}
+		if !assert.Equalf(c, 0, reply.ExitCode, "turn 2 exec failed: stderr=%s", reply.Stderr) {
+			return
+		}
+		var info hostnameContent
+		if !assert.NoErrorf(c, json.Unmarshal([]byte(reply.Stdout), &info), "decoding turn 2 stdout %q", reply.Stdout) {
+			return
+		}
+		// The discriminating assertion: a genuinely NEW pod (different
+		// hostname) that still reads back the ORIGINAL content proves
+		// hydration ran -- not merely that some pod happened to still have
+		// the file on local disk.
+		if !assert.NotEqualf(c, before.Hostname, info.Hostname,
+			"turn 2 must run on a DIFFERENT pod than turn 1 (both report hostname %q)", info.Hostname) {
+			return
+		}
+		if !assert.Equalf(c, fileContent, info.Content, "hydrated file content mismatch (got %q)", info.Content) {
+			return
+		}
+		after = info
+	}, 3*time.Minute, 2*time.Second)
+	require.NotEmpty(t, after.Hostname, "turn 2 never succeeded on a different pod")
+
+	// doc 14's PR-2 acceptance criterion, verbatim: "hashes equal".
+	assert.Equal(t, sha256Hex(fileContent), sha256Hex(after.Content),
+		"hydrated content's sha256 must match what turn 1 wrote")
 }
