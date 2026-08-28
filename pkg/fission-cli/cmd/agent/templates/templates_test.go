@@ -396,6 +396,25 @@ func TestRender_Interpreter_TimeoutCeiling(t *testing.T) {
 	}
 }
 
+// TestRender_Interpreter_TimeoutRejectsNonFinite pins each language's own
+// guard against a non-finite `timeoutSeconds` (NaN, +/-Inf): a bare `<= 0`
+// comparison never catches NaN (float('nan') <= 0 is False in Python,
+// Number.isFinite(NaN) still gates it in JS only because that check exists),
+// so a request carrying {"timeoutSeconds": "nan"} would otherwise reach the
+// subprocess timeout as-is and crash the turn with an uncaught error instead
+// of the {stdout,stderr,exitCode,durationMs,truncated} contract. The Python
+// template must call math.isfinite; the JS template must call
+// Number.isFinite -- this is the drift guard for both.
+func TestRender_Interpreter_TimeoutRejectsNonFinite(t *testing.T) {
+	t.Parallel()
+
+	pyOut, _ := render(t, "interpreter", "python")
+	assert.Contains(t, string(pyOut), "math.isfinite(seconds)", "python: _clamp_timeout must reject non-finite values via math.isfinite")
+
+	jsOut, _ := render(t, "interpreter", "node")
+	assert.Contains(t, string(jsOut), "Number.isFinite(n)", "node: clampTimeout must reject non-finite values via Number.isFinite")
+}
+
 // TestRender_Interpreter_OutputCapMatchesStateDefault pins the stdout/stderr
 // cap to fv1.DefaultStateMaxValueBytes (pkg/apis/core/v1/const.go) rather
 // than a re-typed 262144 literal -- doc 14's PR-1 section requires the two
