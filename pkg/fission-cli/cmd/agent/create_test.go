@@ -342,3 +342,186 @@ func TestAgentCreate_DirectMode_EnvMissing_WarnsAndCreates(t *testing.T) {
 	)
 	assert.Contains(t, out, want)
 }
+
+// --- --template interpreter (PR-1, abstraction A / Q35 resolution) --------
+
+// TestAgentCreate_TemplateInterpreter_DirectMode exercises the interpreter
+// template end to end through the same pipeline TestAgentCreate_DirectMode
+// covers for the default (agent) template: the scaffolded Function must
+// carry the interpreter's own FunctionTimeout ceiling
+// (interpreterMaxTimeoutSeconds, matching the template's own
+// MAX_TIMEOUT_SECONDS) rather than the agent template's
+// scaffoldFunctionTimeout.
+func TestAgentCreate_TemplateInterpreter_DirectMode(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	cs := setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myinterp")
+	in.SetString(flagkey.FnAgentTemplate, "interpreter")
+	out := captureStdout(t, func() error { return Create(in) })
+	assert.Contains(t, out, "function 'myinterp' created")
+
+	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myinterp", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, interpreterMaxTimeoutSeconds, fn.Spec.FunctionTimeout,
+		"interpreter template's FunctionTimeout must match its own exec-timeout ceiling")
+
+	assert.FileExists(t, filepath.Join(dir, "myinterp.js"))
+}
+
+// TestAgentCreate_TemplateAgent_DefaultFunctionTimeout is the control for
+// TestAgentCreate_TemplateInterpreter_DirectMode: the default (agent)
+// template must keep `fn create`'s own scaffoldFunctionTimeout, not the
+// interpreter's wider ceiling.
+func TestAgentCreate_TemplateAgent_DefaultFunctionTimeout(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	cs := setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myagent")
+	_ = captureStdout(t, func() error { return Create(in) })
+
+	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myagent", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, scaffoldFunctionTimeout, fn.Spec.FunctionTimeout)
+}
+
+// TestAgentCreate_TemplateInterpreter_LangPython mirrors
+// TestAgentCreate_LangPython for the interpreter template: --spec mode,
+// python handler, correct file extension and Package environment.
+func TestAgentCreate_TemplateInterpreter_LangPython(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	setAgentCreateClient(t, "default")
+
+	in := baseCreateInput("pyinterp")
+	in.SetString(flagkey.FnAgentLang, "python")
+	in.SetString(flagkey.FnAgentTemplate, "interpreter")
+	in.SetBool(flagkey.SpecSave, true)
+
+	_ = captureStdout(t, func() error { return Create(in) })
+
+	assert.FileExists(t, filepath.Join(dir, "pyinterp.py"))
+
+	docs := readYAMLDocs(t, filepath.Join(dir, "specs", "agent-pyinterp.yaml"))
+	require.Len(t, docs, 3)
+	var pkg fv1.Package
+	require.NoError(t, yaml.Unmarshal(docs[1], &pkg))
+	assert.Equal(t, "python", pkg.Spec.Environment.Name)
+
+	var fn fv1.Function
+	require.NoError(t, yaml.Unmarshal(docs[2], &fn))
+	assert.Equal(t, interpreterMaxTimeoutSeconds, fn.Spec.FunctionTimeout)
+}
+
+// TestAgentCreate_TemplateUnsupported: an invalid --template surfaces
+// templates.Render's own "unsupported agent template" error, and (like
+// TestAgentCreate_RefusesExistingHandlerFile's sibling W6 concern) must be
+// checked BEFORE any file is written -- Render's kind lookup runs before
+// name validation or any disk write.
+func TestAgentCreate_TemplateUnsupported(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	setAgentCreateClient(t, "default")
+
+	in := baseCreateInput("myagent")
+	in.SetString(flagkey.FnAgentTemplate, "wizard")
+	err := Create(in)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported agent template")
+
+	assert.NoFileExists(t, filepath.Join(dir, "myagent.js"))
+}
+
+// TestAgentCreate_TemplateInterpreter_NextStepsGolden pins the interpreter
+// template's next-steps output: the trust-boundary block (doc 14 PR-1's
+// "Trust statement", including the --runtime-class gvisor recommendation)
+// and the exec-contract example turn body, in the env-already-exists /
+// direct-mode shape (mirrors TestAgentCreate_EnvPresent_NextStepsGolden).
+func TestAgentCreate_TemplateInterpreter_NextStepsGolden(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("FISSION_NAMESPACE", "")
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myinterp")
+	in.SetString(flagkey.FnAgentTemplate, "interpreter")
+
+	out := captureStdout(t, func() error { return Create(in) })
+
+	want := fmt.Sprintf(
+		"\nScaffolded myinterp.js\n\n"+
+			"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
+			"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
+			"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
+			"one more layer of isolation, pair it with:\n"+
+			"    fission env create --name node --image ghcr.io/fission/node-env --runtime-class gvisor\n\n"+
+			"Next steps:\n"+
+			"  1. Function default/myinterp is already created.\n"+
+			"  2. Port-forward the agent runtime and dispatch a turn:\n"+
+			"       kubectl -n fission port-forward svc/%s %d:%d\n"+
+			"       curl -i -X POST http://127.0.0.1:%d/agents/default/myinterp \\\n"+
+			"         -H 'Content-Type: application/json' \\\n"+
+			"         -H '%s: myinterp-demo-1' \\\n"+
+			"         -d '{\"command\": \"echo hello\"}'\n"+
+			"  3. Inspect sessions:\n"+
+			"       fission agent sessions list --name myinterp --tree\n",
+		svcinfo.SvcAgentRuntime, svcinfo.PortAgentRuntime, svcinfo.PortAgentRuntime,
+		svcinfo.PortAgentRuntime, fv1.DefaultAgentSessionHeader,
+	)
+	assert.Contains(t, out, want)
+}
+
+// --- MCP exposure (PR-1: FnExposeAsMCP/FnToolDescription/FnToolInputSchema/FnToolName) ---
+
+// TestAgentCreate_ExposeAsMCP_SetsToolConfig wires --expose-as-mcp through
+// function.GetToolConfig (exported by PR-1) onto the scaffolded Function,
+// exactly as `fn create --expose-as-mcp` does -- the doc 14 PR-1 section's
+// "MCP exposure" requirement.
+func TestAgentCreate_ExposeAsMCP_SetsToolConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	cs := setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myinterp")
+	in.SetString(flagkey.FnAgentTemplate, "interpreter")
+	in.SetBool(flagkey.FnExposeAsMCP, true)
+	in.SetString(flagkey.FnToolDescription, "runs code or a shell command and returns its output")
+	in.SetString(flagkey.FnToolName, "code_exec")
+
+	_ = captureStdout(t, func() error { return Create(in) })
+
+	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myinterp", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, fn.Spec.Tool, "--expose-as-mcp must set FunctionSpec.Tool")
+	assert.Equal(t, "runs code or a shell command and returns its output", fn.Spec.Tool.Description)
+	assert.Equal(t, "code_exec", fn.Spec.Tool.ToolName)
+}
+
+// TestAgentCreate_NoExposeAsMCP_LeavesToolNil is the control: without
+// --expose-as-mcp the scaffolded Function must carry a nil Tool, exactly
+// like a plain `fn create` (presence of FunctionSpec.Tool is itself the on
+// switch -- ToolConfig's own doc comment, types.go).
+func TestAgentCreate_NoExposeAsMCP_LeavesToolNil(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	cs := setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myagent")
+	_ = captureStdout(t, func() error { return Create(in) })
+
+	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myagent", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Nil(t, fn.Spec.Tool)
+}

@@ -276,6 +276,11 @@ var (
 	// below (same "code" flag key, same meaning: a single handler file path).
 	FnAgentLang = Flag{Type: String, Name: flagkey.FnAgentLang, Usage: "Scaffolded handler language: node or python", DefaultString: "node"}
 
+	// `fission agent create --template` (PR-1, abstraction A / Q35 resolution):
+	// "agent" scaffolds the stateful session-driven handler (default); "interpreter"
+	// scaffolds the exec verb (code/command in, stdout/stderr/exit out).
+	FnAgentTemplate = Flag{Type: String, Name: flagkey.FnAgentTemplate, Usage: "Scaffold template: agent (stateful, session-driven; default) or interpreter (stateless code/command exec verb)", DefaultString: "agent"}
+
 	// `fission agent sessions` introspection CLI (slice 4).
 	AgentSession      = Flag{Type: String, Name: flagkey.AgentSession, Usage: "Session id"}
 	AgentToken        = Flag{Type: String, Name: flagkey.AgentToken, Usage: "Bearer token for the agent runtime (defaults to FISSION_AGENT_TOKEN; unset works only when agentRuntime.allowInsecure is set)"}
