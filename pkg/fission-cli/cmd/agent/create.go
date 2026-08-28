@@ -131,7 +131,19 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	// 2. Render the handler and write it to disk, refusing to clobber an
+	// 2. Validate --tool-* flags (e.g. an unreadable --tool-input-schema
+	// file) BEFORE any side effect below -- the same "validate before
+	// touching disk/cluster" discipline step 1's duplicate-name check
+	// applies, and what `fn create` gets for free by validating tool config
+	// in complete() before create() runs. Read only here; buildFunction
+	// (step 6) receives the already-validated result so a bad flag never
+	// strands a scaffolded handler file or an uploaded-but-orphaned Package.
+	toolCfg, err := function.GetToolConfig(input, nil)
+	if err != nil {
+		return err
+	}
+
+	// 3. Render the handler and write it to disk, refusing to clobber an
 	// existing file (an idempotent re-run must point at a different --code,
 	// never silently overwrite someone's edited handler).
 	rendered, ext, err := templates.Render(tmplKind, lang, name)
@@ -152,7 +164,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 	}
 	console.Info(fmt.Sprintf("Scaffolded %s handler: %s", lang, codePath))
 
-	// 3. --spec mode: auto-init a fresh spec directory when none exists yet
+	// 4. --spec mode: auto-init a fresh spec directory when none exists yet
 	// (spec.go's save() precondition, spec.go:140-142, is what every write
 	// below hits otherwise: "couldn't find specs, run `fission spec init`
 	// first"). A directory that already has fission-deployment-config.yaml
@@ -164,14 +176,14 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	// 4. Environment existence: warn, don't create (fn-create precedent,
+	// 5. Environment existence: warn, don't create (fn-create precedent,
 	// cmd/function/create.go:507-542).
 	envExists, err := opts.checkEnvironment(input, name, envName, fnNamespace, userProvidedNS, toSpec, specDir, specIgnore)
 	if err != nil {
 		return err
 	}
 
-	// 5. Compose the shipped pipeline: build (and, in direct mode, upload)
+	// 6. Compose the shipped pipeline: build (and, in direct mode, upload)
 	// the Package from the handler file just written. noZip=true and a
 	// single-file deployArchiveFiles mirrors `fn create --code`'s own path
 	// (cmd/function/create.go:548-554).
@@ -181,10 +193,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error creating package: %w", err)
 	}
 
-	fn, err := buildFunction(input, name, fnNamespace, envName, tmplKind, pkgMeta)
-	if err != nil {
-		return err
-	}
+	fn := buildFunction(input, name, fnNamespace, envName, tmplKind, pkgMeta, toolCfg)
 	if toSpec {
 		fn.Namespace = userProvidedNS
 		fn.Spec.Package.PackageRef.Namespace = userProvidedNS
@@ -292,6 +301,10 @@ func (opts *CreateSubCommand) checkEnvironment(input cli.Input, fnName, envName,
 // --expose-as-mcp/--tool-* flag-merge helper `fn create`/`fn update` use --
 // so a scaffolded interpreter can be registered as an MCP tool with no
 // second implementation of that flag handling to drift out of sync.
+// toolCfg is computed by the caller, BEFORE any side effect (handler-file
+// write, Package create/upload), so a bad --tool-input-schema path fails
+// fast instead of stranding an orphaned Package or handler file (its only
+// failure mode is os.ReadFile on that flag) -- see the call site's step 2.
 //
 // tmplKind selects the scaffolded Function's own FunctionTimeout:
 // interpreterTemplate gets interpreterMaxTimeoutSeconds (300, matching the
@@ -299,7 +312,7 @@ func (opts *CreateSubCommand) checkEnvironment(input cli.Input, fnName, envName,
 // platform's request timeout is never what kills a full-length exec call;
 // every other template keeps scaffoldFunctionTimeout (60, `fn create`'s own
 // default).
-func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string, pkgMeta *metav1.ObjectMeta) (*fv1.Function, error) {
+func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string, pkgMeta *metav1.ObjectMeta, toolCfg *fv1.ToolConfig) *fv1.Function {
 	stateCfg := function.GetStateConfig(input, nil)
 	if stateCfg != nil {
 		if stateCfg.Keyspace == "" {
@@ -313,11 +326,6 @@ func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string,
 		}
 	}
 	agentCfg := function.GetAgentConfig(input, nil)
-
-	toolCfg, err := function.GetToolConfig(input, nil)
-	if err != nil {
-		return nil, err
-	}
 
 	fnTimeout := scaffoldFunctionTimeout
 	if tmplKind == interpreterTemplate {
@@ -348,7 +356,7 @@ func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string,
 			Agent:           agentCfg,
 			Tool:            toolCfg,
 		},
-	}, nil
+	}
 }
 
 // printNextSteps writes the scaffold's <10-minute-to-first-turn punch list:

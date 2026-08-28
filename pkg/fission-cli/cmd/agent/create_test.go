@@ -525,3 +525,36 @@ func TestAgentCreate_NoExposeAsMCP_LeavesToolNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, fn.Spec.Tool)
 }
+
+// TestAgentCreate_BadToolInputSchema_LeavesNoSideEffects pins the fix for a
+// review finding on this command: function.GetToolConfig's only failure
+// mode (os.ReadFile on --tool-input-schema, cmd/function/create.go) must be
+// validated BEFORE any side effect, exactly like the direct-mode duplicate
+// check (TestAgentCreate_DirectMode_DuplicateFunctionLeavesNoOrphanFile) --
+// otherwise a bad path would fail after the handler file was written and
+// (direct mode) the Package already created/uploaded, stranding both.
+func TestAgentCreate_BadToolInputSchema_LeavesNoSideEffects(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	const ns = "default"
+	env := &fv1.Environment{Name: "node", Namespace: ns}
+	cs := setAgentCreateClient(t, ns, env)
+
+	in := baseCreateInput("myinterp")
+	in.SetBool(flagkey.FnExposeAsMCP, true)
+	in.SetString(flagkey.FnToolInputSchema, filepath.Join(dir, "does-not-exist.json"))
+
+	err := Create(in)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does-not-exist.json")
+
+	assert.NoFileExists(t, filepath.Join(dir, "myinterp.js"), "a bad --tool-input-schema must be validated before the handler file is written")
+
+	pkgs, err := cs.CoreV1().Packages(ns).List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, pkgs.Items, "a bad --tool-input-schema must be validated before any Package is created")
+
+	fns, err := cs.CoreV1().Functions(ns).List(context.Background(), metav1.ListOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, fns.Items, "a bad --tool-input-schema must be validated before any Function is created")
+}
