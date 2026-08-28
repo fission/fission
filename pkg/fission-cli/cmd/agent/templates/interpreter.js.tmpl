@@ -262,8 +262,8 @@ function saveWorkspaceManifest(scratchDir, manifest) {
   }
 }
 
-function sha256File(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+function sha256Buffer(data) {
+  return crypto.createHash('sha256').update(data).digest('hex');
 }
 
 // appendWorkspaceWarning caps warnings -- a scratch dir full of failures (a
@@ -368,8 +368,9 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
       // A freshly hydrated file is, by definition, in sync with the
       // workspace it just came from -- recording it here means the sync
       // pass that follows this same turn's exec does not immediately
-      // re-upload a file nothing has touched.
-      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: sha256File(localPath) };
+      // re-upload a file nothing has touched. Hash the bytes already in
+      // memory rather than re-reading the file just written.
+      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: sha256Buffer(data) };
     } catch (err) {
       appendWorkspaceWarning(warnings, `workspace hydrate: ${rel}: ${err.message || err}`);
     }
@@ -462,17 +463,10 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
         continue;
       }
 
-      let digest = null;
-      if (prev && prev.size === st.size) {
-        // Ambiguous: same size, different mtime -- hash before deciding this
-        // is a genuine change rather than a touch.
-        digest = sha256File(entryPath);
-        if (digest === prev.sha256) {
-          manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
-          continue;
-        }
-      }
-
+      // Read once -- the same buffer is hashed below (including to resolve
+      // the ambiguous same-size/different-mtime case) and, if the file
+      // turns out changed, reused as the PUT body, instead of a first read
+      // to hash from disk and a second to build the upload.
       let data;
       try {
         data = fs.readFileSync(entryPath);
@@ -480,8 +474,13 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
         appendWorkspaceWarning(warnings, `workspace sync: ${rel}: ${err.message || err}`);
         continue;
       }
-      if (digest === null) {
-        digest = crypto.createHash('sha256').update(data).digest('hex');
+      const digest = sha256Buffer(data);
+
+      if (prev && prev.size === st.size && digest === prev.sha256) {
+        // Ambiguous case resolved: same size, different mtime, but the
+        // content hash matches -- a touch, not a genuine change.
+        manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
+        continue;
       }
 
       try {
@@ -683,9 +682,7 @@ module.exports = async function (context) {
   // enforcing sessionIDPattern upstream), and a scratch dir named after a
   // fabricated fallback id is not a real session's workspace to hydrate from
   // or sync to.
-  const scratchName = sessionID
-    ? safeScratchName(sessionID)
-    : 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const scratchName = safeScratchName(sessionID);
   const isSession = Boolean(sessionID) && scratchName === sessionID;
   const scratchDir = path.join(os.tmpdir(), 'exec', scratchName);
 
