@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -204,19 +205,40 @@ func findIPBlockPeer(t *testing.T, np *networkingv1.NetworkPolicy, cidr string) 
 	return networkingv1.NetworkPolicyPeer{}
 }
 
-// hasDNSRule reports whether the policy admits egress to a kube-dns pod on
-// port 53.
+// hasDNSRule reports whether the policy admits egress to the kube-system/
+// kube-dns pod specifically, on port 53. Deliberately narrow — matching any
+// rule that merely mentions port 53 would also pass a regression that drops
+// the load-bearing kube-system namespaceSelector the template's own comment
+// calls out (letting env pods egress to any self-labelled k8s-app=kube-dns
+// pod in ANY namespace on port 53, not just the real cluster DNS).
 func hasDNSRule(np *networkingv1.NetworkPolicy) bool {
 	for _, rule := range np.Spec.Egress {
+		var scopedToKubeDNS bool
 		for _, to := range rule.To {
-			if to.PodSelector != nil && to.PodSelector.MatchLabels["k8s-app"] == "kube-dns" {
-				return true
+			if to.NamespaceSelector != nil &&
+				to.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] == "kube-system" &&
+				to.PodSelector != nil &&
+				to.PodSelector.MatchLabels["k8s-app"] == "kube-dns" {
+				scopedToKubeDNS = true
 			}
 		}
+		if !scopedToKubeDNS {
+			continue
+		}
+		var udp53, tcp53 bool
 		for _, p := range rule.Ports {
-			if p.Port != nil && p.Port.IntVal == 53 {
-				return true
+			if p.Port == nil || p.Port.IntVal != 53 || p.Protocol == nil {
+				continue
 			}
+			switch *p.Protocol {
+			case corev1.ProtocolUDP:
+				udp53 = true
+			case corev1.ProtocolTCP:
+				tcp53 = true
+			}
+		}
+		if udp53 && tcp53 {
+			return true
 		}
 	}
 	return false
