@@ -36,6 +36,16 @@ const WORKSPACE_MAX_WARNINGS = 20;
 // neither does fetch).
 const WORKSPACE_REQUEST_TIMEOUT_MS = 30000;
 
+// WORKSPACE_SYNC_CONCURRENCY bounds how many hydrate downloads / sync
+// uploads are in flight at once. Sequential round-trips made a many-file
+// turn's latency linear in file count; an UNbounded fan-out would hold
+// every pending upload's buffer (up to the per-artifact cap each) in
+// memory at once. Four keeps at most four file buffers in flight. Manifest
+// and warning mutation stays OUT of the concurrent section: workers return
+// outcomes, applied sequentially in job order (see runWorkspacePool call
+// sites).
+const WORKSPACE_SYNC_CONCURRENCY = 4;
+
 // WORKSPACE_MAX_ARTIFACT_BYTES is a best-effort client-side mirror of the
 // server's default per-artifact cap (pkg/agentruntime/main.go's
 // defaultMaxArtifactBytes, overridable there via AGENT_MAX_ARTIFACT_BYTES --
@@ -149,6 +159,33 @@ function appendWorkspaceWarning(warnings, message) {
   }
 }
 
+// runWorkspacePool runs worker(job) over jobs with at most
+// WORKSPACE_SYNC_CONCURRENCY in flight, returning outcomes in job order.
+// Workers must not touch the manifest or warnings -- they return an
+// outcome and the caller applies outcomes sequentially afterwards, so the
+// shared bookkeeping never sees concurrent mutation.
+async function runWorkspacePool(jobs, worker) {
+  const results = new Array(jobs.length);
+  let next = 0;
+  const width = Math.min(WORKSPACE_SYNC_CONCURRENCY, jobs.length);
+  const runners = [];
+  for (let i = 0; i < width; i++) {
+    runners.push(
+      (async () => {
+        for (;;) {
+          const idx = next++;
+          if (idx >= jobs.length) {
+            return;
+          }
+          results[idx] = await worker(jobs[idx]);
+        }
+      })(),
+    );
+  }
+  await Promise.all(runners);
+  return results;
+}
+
 // hydrateWorkspace lists the session's workspace and downloads any file
 // missing locally or whose local size does not match the remote listing --
 // lazy: a file already resident with a matching size is assumed unchanged
@@ -190,6 +227,10 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
     return warnings;
   }
 
+  // Decide phase (sequential): every filesystem check happens here, before
+  // any network work, so the concurrent phase below is pure per-file
+  // download with no shared state.
+  const downloads = [];
   for (const item of items) {
     const rel = item && item.path;
     const size = item && item.size;
@@ -229,6 +270,12 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
     } catch (err) {
       // Not present locally yet -- fine, this is a fresh write.
     }
+    downloads.push({ rel, localPath });
+  }
+
+  // Download phase (bounded concurrency): each worker touches only its own
+  // file path and returns an outcome; nothing shared is mutated here.
+  const outcomes = await runWorkspacePool(downloads, async ({ rel, localPath }) => {
     try {
       const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, {
         headers: workspaceHeaders(),
@@ -242,13 +289,23 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
       fs.writeFileSync(localPath, data);
       const st = fs.statSync(localPath);
       // A freshly hydrated file is, by definition, in sync with the
-      // workspace it just came from -- recording it here means the sync
-      // pass that follows this same turn's exec does not immediately
-      // re-upload a file nothing has touched. Hash the bytes already in
-      // memory rather than re-reading the file just written.
-      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: sha256Buffer(data) };
+      // workspace it just came from -- recording it means the sync pass
+      // that follows this same turn's exec does not immediately re-upload
+      // a file nothing has touched. Hash the bytes already in memory
+      // rather than re-reading the file just written.
+      return { rel, entry: { size: st.size, mtimeMs: st.mtimeMs, sha256: sha256Buffer(data) } };
     } catch (err) {
-      appendWorkspaceWarning(warnings, `workspace hydrate: ${rel}: ${err.message || err}`);
+      return { rel, error: `${err.message || err}` };
+    }
+  });
+
+  // Apply phase (sequential, job order): the manifest and warnings only
+  // ever see single-threaded mutation.
+  for (const outcome of outcomes) {
+    if (outcome.entry) {
+      manifest[outcome.rel] = outcome.entry;
+    } else {
+      appendWorkspaceWarning(warnings, `workspace hydrate: ${outcome.rel}: ${outcome.error}`);
     }
   }
   return warnings;
@@ -278,7 +335,15 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
   const seen = new Set();
   let skippedNames = 0;
 
-  async function walk(dir) {
+  // Walk phase (sequential): every skip decision that needs only directory
+  // entries and stat happens here; candidates that might need an upload are
+  // collected as jobs. Files are NOT read in this phase -- the read (and
+  // the hash that resolves the ambiguous same-size/different-mtime case)
+  // happens inside the bounded worker below, so at most
+  // WORKSPACE_SYNC_CONCURRENCY file buffers are ever in memory at once.
+  const jobs = [];
+
+  function walk(dir) {
     let entries;
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -295,7 +360,7 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
         continue;
       }
       if (entry.isDirectory()) {
-        await walk(entryPath);
+        walk(entryPath);
         continue;
       }
       if (!entry.isFile()) {
@@ -339,46 +404,58 @@ async function syncWorkspace(scratchDir, sessionID, manifest) {
         continue;
       }
 
-      // Read once -- the same buffer is hashed below (including to resolve
-      // the ambiguous same-size/different-mtime case) and, if the file
-      // turns out changed, reused as the PUT body, instead of a first read
-      // to hash from disk and a second to build the upload.
-      let data;
-      try {
-        data = fs.readFileSync(entryPath);
-      } catch (err) {
-        appendWorkspaceWarning(warnings, `workspace sync: ${rel}: ${err.message || err}`);
-        continue;
-      }
-      const digest = sha256Buffer(data);
-
-      if (prev && prev.size === st.size && digest === prev.sha256) {
-        // Ambiguous case resolved: same size, different mtime, but the
-        // content hash matches -- a touch, not a genuine change.
-        manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
-        continue;
-      }
-
-      try {
-        const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, {
-          method: 'PUT',
-          headers: workspaceHeaders(),
-          body: data,
-          signal: AbortSignal.timeout(WORKSPACE_REQUEST_TIMEOUT_MS),
-        });
-        if (!res.ok) {
-          appendWorkspaceWarning(warnings, `workspace sync: ${rel}: HTTP ${res.status}`);
-          continue;
-        }
-      } catch (err) {
-        appendWorkspaceWarning(warnings, `workspace sync: ${rel}: ${err.message || err}`);
-        continue;
-      }
-      manifest[rel] = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
+      jobs.push({ rel, entryPath, st, prev });
     }
   }
 
-  await walk(scratchDir);
+  walk(scratchDir);
+
+  // Upload phase (bounded concurrency): each worker reads once -- the same
+  // buffer is hashed (including to resolve the ambiguous
+  // same-size/different-mtime case) and, if the file turns out changed,
+  // reused as the PUT body. Workers return outcomes; nothing shared is
+  // mutated here.
+  const outcomes = await runWorkspacePool(jobs, async ({ rel, entryPath, st, prev }) => {
+    let data;
+    try {
+      data = fs.readFileSync(entryPath);
+    } catch (err) {
+      return { rel, error: `${err.message || err}` };
+    }
+    const digest = sha256Buffer(data);
+    const entry = { size: st.size, mtimeMs: st.mtimeMs, sha256: digest };
+
+    if (prev && prev.size === st.size && digest === prev.sha256) {
+      // Ambiguous case resolved: same size, different mtime, but the
+      // content hash matches -- a touch, not a genuine change.
+      return { rel, entry };
+    }
+
+    try {
+      const res = await fetch(`${workspaceSessionURL(sessionID)}/${rel}`, {
+        method: 'PUT',
+        headers: workspaceHeaders(),
+        body: data,
+        signal: AbortSignal.timeout(WORKSPACE_REQUEST_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        return { rel, error: `HTTP ${res.status}` };
+      }
+    } catch (err) {
+      return { rel, error: `${err.message || err}` };
+    }
+    return { rel, entry };
+  });
+
+  // Apply phase (sequential, job order): manifest and warnings only ever
+  // see single-threaded mutation.
+  for (const outcome of outcomes) {
+    if (outcome.entry) {
+      manifest[outcome.rel] = outcome.entry;
+    } else {
+      appendWorkspaceWarning(warnings, `workspace sync: ${outcome.rel}: ${outcome.error}`);
+    }
+  }
 
   if (skippedNames > 0) {
     appendWorkspaceWarning(warnings, `workspace sync: ${skippedNames} file(s) skipped: names not syncable to the workspace`);

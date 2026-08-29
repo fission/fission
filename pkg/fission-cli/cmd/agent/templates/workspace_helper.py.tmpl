@@ -133,6 +133,33 @@ def _sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
+# WORKSPACE_SYNC_CONCURRENCY bounds how many hydrate downloads / sync
+# uploads are in flight at once. Sequential round-trips made a many-file
+# turn's latency linear in file count; an UNbounded fan-out would hold
+# every pending upload's bytes (up to the per-artifact cap each) in memory
+# at once. Four keeps at most four file buffers in flight. Manifest and
+# warning mutation stays OUT of the concurrent section: workers return
+# outcomes, applied sequentially in job order (see _run_workspace_pool call
+# sites).
+WORKSPACE_SYNC_CONCURRENCY = 4
+
+import concurrent.futures  # mid-module by design: the helper block is self-contained
+
+
+def _run_workspace_pool(jobs, worker):
+    # Runs worker(job) over jobs with at most WORKSPACE_SYNC_CONCURRENCY in
+    # flight, returning outcomes in job order. Workers must not touch the
+    # manifest or warnings -- they return an outcome and the caller applies
+    # outcomes sequentially afterwards, so the shared bookkeeping never sees
+    # concurrent mutation. The shared requests.Session is thread-safe for
+    # this use (independent requests, no shared response state).
+    if not jobs:
+        return []
+    width = min(WORKSPACE_SYNC_CONCURRENCY, len(jobs))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=width) as pool:
+        return list(pool.map(worker, jobs))
+
+
 def _append_workspace_warning(warnings, message):
     # Capped so a scratch dir full of failures (a pip/npm install that wrote
     # thousands of files past the per-session quota, say) cannot blow up the
@@ -183,6 +210,10 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
         _append_workspace_warning(warnings, 'workspace hydrate: listing failed: %s' % err)
         return warnings
 
+    # Decide phase (sequential): every filesystem check happens here, before
+    # any network work, so the concurrent phase below is pure per-file
+    # download with no shared state.
+    downloads = []
     for item in items:
         if not isinstance(item, dict):
             # A non-dict entry in the listing (tampered or malformed server
@@ -208,15 +239,21 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
             # A local path that already exists but is a symlink (or
             # otherwise not a regular file -- a FIFO, socket, or device that
             # exec'd code created at this exact relative path) would have
-            # the open(local_path, 'wb') below follow the symlink and
-            # overwrite its TARGET with hydrated workspace bytes, or hang
-            # forever waiting for a reader (FIFO) -- same failure class the
-            # sync walk's symlink/regular-file guards exist for, just
-            # triggered from the opposite direction. Skip and report rather
-            # than write through it or wedge the turn.
+            # the open(local_path, 'wb') in the download worker follow the
+            # symlink and overwrite its TARGET with hydrated workspace
+            # bytes, or hang forever waiting for a reader (FIFO) -- same
+            # failure class the sync walk's symlink/regular-file guards
+            # exist for, just triggered from the opposite direction. Skip
+            # and report rather than write through it or wedge the turn.
             _append_workspace_warning(
                 warnings, 'workspace hydrate: %s: local path exists and is not a regular file, skipped' % rel)
             continue
+        downloads.append((rel, local_path))
+
+    # Download phase (bounded concurrency): each worker touches only its own
+    # file path and returns an outcome; nothing shared is mutated here.
+    def _download(job):
+        rel, local_path = job
         try:
             get_res = _workspace_session.get(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
                                               timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
@@ -225,15 +262,22 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
             with open(local_path, 'wb') as f:
                 f.write(get_res.content)
         except (requests.RequestException, OSError) as err:
-            _append_workspace_warning(warnings, 'workspace hydrate: %s: %s' % (rel, err))
-            continue
+            return (rel, None, '%s' % err)
         st = os.stat(local_path)
         # A freshly hydrated file is, by definition, in sync with the
-        # workspace it just came from -- recording it here means the sync
-        # pass that follows this same turn's exec does not immediately
-        # re-upload a file nothing has touched. Hash the bytes already in
-        # memory rather than re-reading the file just written.
-        manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': _sha256_bytes(get_res.content)}
+        # workspace it just came from -- recording it means the sync pass
+        # that follows this same turn's exec does not immediately re-upload
+        # a file nothing has touched. Hash the bytes already in memory
+        # rather than re-reading the file just written.
+        return (rel, {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': _sha256_bytes(get_res.content)}, None)
+
+    # Apply phase (sequential, job order): the manifest and warnings only
+    # ever see single-threaded mutation.
+    for rel, entry, error in _run_workspace_pool(downloads, _download):
+        if entry is not None:
+            manifest[rel] = entry
+        else:
+            _append_workspace_warning(warnings, 'workspace hydrate: %s: %s' % (rel, error))
     return warnings
 
 
@@ -258,6 +302,13 @@ def _sync_workspace(scratch_dir, session_id, manifest):
 
     seen = set()
     skipped_names = 0
+    # Walk phase (sequential): every skip decision that needs only directory
+    # entries and stat happens here; candidates that might need an upload
+    # are collected as jobs. Files are NOT read in this phase -- the read
+    # (and the hash that resolves the ambiguous same-size/different-mtime
+    # case) happens inside the bounded worker below, so at most
+    # WORKSPACE_SYNC_CONCURRENCY file buffers are ever in memory at once.
+    jobs = []
     for root, _dirs, files in os.walk(scratch_dir):
         for fname in files:
             local_path = os.path.join(root, fname)
@@ -315,35 +366,44 @@ def _sync_workspace(scratch_dir, session_id, manifest):
                         rel, st.st_size, WORKSPACE_MAX_ARTIFACT_BYTES))
                 continue
 
-            # Read once -- the same bytes are hashed below (including to
-            # resolve the ambiguous same-size/different-mtime case) and, if
-            # the file turns out changed, reused as the PUT body, instead of
-            # a first read to hash from disk and a second to build the
-            # upload.
-            try:
-                with open(local_path, 'rb') as f:
-                    data = f.read()
-            except OSError as err:
-                _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, err))
-                continue
-            digest = _sha256_bytes(data)
+            jobs.append((rel, local_path, st, prev))
 
-            if prev and prev.get('size') == st.st_size and digest == prev.get('sha256'):
-                # Ambiguous case resolved: same size, different mtime, but
-                # the content hash matches -- a touch, not a genuine change.
-                manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
-                continue
+    # Upload phase (bounded concurrency): each worker reads once -- the
+    # same bytes are hashed (including to resolve the ambiguous
+    # same-size/different-mtime case) and, if the file turns out changed,
+    # reused as the PUT body. Workers return outcomes; nothing shared is
+    # mutated here.
+    def _upload(job):
+        rel, local_path, st, prev = job
+        try:
+            with open(local_path, 'rb') as f:
+                data = f.read()
+        except OSError as err:
+            return (rel, None, '%s' % err)
+        digest = _sha256_bytes(data)
+        entry = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
 
-            try:
-                put_res = _workspace_session.put(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
-                                                  data=data, timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
-                if not put_res.ok:
-                    _append_workspace_warning(warnings, 'workspace sync: %s: HTTP %d' % (rel, put_res.status_code))
-                    continue
-            except requests.RequestException as err:
-                _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, err))
-                continue
-            manifest[rel] = {'size': st.st_size, 'mtime_ns': st.st_mtime_ns, 'sha256': digest}
+        if prev and prev.get('size') == st.st_size and digest == prev.get('sha256'):
+            # Ambiguous case resolved: same size, different mtime, but the
+            # content hash matches -- a touch, not a genuine change.
+            return (rel, entry, None)
+
+        try:
+            put_res = _workspace_session.put(_workspace_session_url(session_id) + '/' + rel, headers=_workspace_headers(),
+                                              data=data, timeout=WORKSPACE_REQUEST_TIMEOUT_SECONDS)
+            if not put_res.ok:
+                return (rel, None, 'HTTP %d' % put_res.status_code)
+        except requests.RequestException as err:
+            return (rel, None, '%s' % err)
+        return (rel, entry, None)
+
+    # Apply phase (sequential, job order): manifest and warnings only ever
+    # see single-threaded mutation.
+    for rel, entry, error in _run_workspace_pool(jobs, _upload):
+        if entry is not None:
+            manifest[rel] = entry
+        else:
+            _append_workspace_warning(warnings, 'workspace sync: %s: %s' % (rel, error))
 
     if skipped_names:
         _append_workspace_warning(
