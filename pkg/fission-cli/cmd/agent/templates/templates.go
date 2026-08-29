@@ -71,6 +71,20 @@ var nodeInterpreterTemplateSrc string
 //go:embed interpreter.py.tmpl
 var pythonInterpreterTemplateSrc string
 
+// workspace_helper.{js,py}.tmpl hold the workspace hydrate/sync helper block
+// each kind's template includes via {{template "workspaceHelper" .}}. One
+// physical copy per language: interpreter.*.tmpl wires the helper into its
+// exec turn, agent.*.tmpl carries it as an opt-in call, and both render the
+// IDENTICAL block because they include the same fragment -- the cross-kind
+// byte-identity that used to rest on a regression test alone is now
+// structural (the test remains as a tripwire on the include sites).
+//
+//go:embed workspace_helper.js.tmpl
+var nodeWorkspaceHelperSrc string
+
+//go:embed workspace_helper.py.tmpl
+var pythonWorkspaceHelperSrc string
+
 // InterpreterMaxTimeoutSeconds is the interpreter template's own hard
 // ceiling on the request-carried `timeoutSeconds` (rendered into both
 // interpreter templates as MAX_TIMEOUT_SECONDS) and the single source of
@@ -91,22 +105,25 @@ type templateData struct {
 }
 
 // langTemplate pairs an embedded template source with the file extension
-// (no leading dot) the rendered handler should be written under.
+// (no leading dot) the rendered handler should be written under, plus the
+// language's shared workspace-helper fragment (see the embed comment above)
+// associated into the template set at parse time.
 type langTemplate struct {
-	src string
-	ext string
+	src    string
+	helper string
+	ext    string
 }
 
 // kinds is the supported `--template` x `--lang` matrix. Keyed by the same
 // lowercase strings the CLI flags accept.
 var kinds = map[string]map[string]langTemplate{
 	"agent": {
-		"node":   {src: nodeAgentTemplateSrc, ext: "js"},
-		"python": {src: pythonAgentTemplateSrc, ext: "py"},
+		"node":   {src: nodeAgentTemplateSrc, helper: nodeWorkspaceHelperSrc, ext: "js"},
+		"python": {src: pythonAgentTemplateSrc, helper: pythonWorkspaceHelperSrc, ext: "py"},
 	},
 	"interpreter": {
-		"node":   {src: nodeInterpreterTemplateSrc, ext: "js"},
-		"python": {src: pythonInterpreterTemplateSrc, ext: "py"},
+		"node":   {src: nodeInterpreterTemplateSrc, helper: nodeWorkspaceHelperSrc, ext: "js"},
+		"python": {src: pythonInterpreterTemplateSrc, helper: pythonWorkspaceHelperSrc, ext: "py"},
 	},
 }
 
@@ -148,6 +165,9 @@ func Render(kind, lang, name string) ([]byte, string, error) {
 	tmpl, err := template.New(kind + "/" + lang).Parse(lt.src)
 	if err != nil {
 		return nil, "", fmt.Errorf("parsing %s/%s handler template: %w", kind, lang, err)
+	}
+	if _, err := tmpl.New("workspaceHelper").Parse(lt.helper); err != nil {
+		return nil, "", fmt.Errorf("parsing %s workspace helper fragment: %w", lang, err)
 	}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, templateData{Name: name, MaxTimeoutSeconds: InterpreterMaxTimeoutSeconds}); err != nil {
