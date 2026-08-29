@@ -135,8 +135,9 @@ func TestEnvironmentNetworkPolicySelectorMatchesTheEnvironmentLabelConstant(t *t
 
 // TestEnvironmentNetworkPolicyDefaultPosture pins the default egress shape:
 // Egress-only policyType, a deny-list ipBlock rule covering RFC1918 +
-// link-local (which subsumes the 169.254.169.254 cloud metadata IP), and a
-// cluster-DNS allow rule present by default.
+// RFC6598/CGNAT (100.64.0.0/10 — EKS custom-networking clusters use this for
+// pod/Service CIDRs) + link-local (which subsumes the 169.254.169.254 cloud
+// metadata IP), and a cluster-DNS allow rule present by default.
 func TestEnvironmentNetworkPolicyDefaultPosture(t *testing.T) {
 	docs := render(t, "--set", "environmentNetworkPolicy.enabled=true")
 	np := networkPolicy(t, docs, "environment-egress")
@@ -148,8 +149,9 @@ func TestEnvironmentNetworkPolicyDefaultPosture(t *testing.T) {
 		"10.0.0.0/8",
 		"172.16.0.0/12",
 		"192.168.0.0/16",
+		"100.64.0.0/10",
 		"169.254.0.0/16",
-	}, peer.IPBlock.Except, "RFC1918 + link-local must all be excluded from the allowed CIDR")
+	}, peer.IPBlock.Except, "RFC1918 + RFC6598/CGNAT + link-local must all be excluded from the allowed CIDR")
 
 	assert.True(t, hasDNSRule(np), "cluster-DNS egress rule must be present by default (allowClusterDNS defaults true)")
 }

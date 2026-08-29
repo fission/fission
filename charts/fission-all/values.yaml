@@ -1765,9 +1765,16 @@ networkPolicy:
 ##
 ## Default posture mirrors Agent Sandbox's SandboxTemplate managed
 ## NetworkPolicy default (their "good default" for agent pods): allow general
-## internet egress, deny RFC1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
-## and link-local (169.254.0.0/16 — which also covers the 169.254.169.254
-## cloud metadata endpoint) destinations.
+## internet egress, deny RFC1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+## RFC6598/CGNAT (100.64.0.0/10) and link-local (169.254.0.0/16 — which also
+## covers the 169.254.169.254 cloud metadata endpoint) destinations.
+##
+## CGNAT (100.64.0.0/10): included in the deny-list alongside RFC1918
+## because EKS clusters running VPC CNI custom networking use this range for
+## pod and/or Service CIDRs — without it, the deny-in-cluster posture
+## silently fails to cover in-cluster traffic on those clusters (identical
+## failure mode to the RFC1918 case below, just for a range the classic
+## "private ranges" mental model omits).
 ##
 ## Independent of the ingress-only `networkPolicy` knob above — enable
 ## either or both. Requires a NetworkPolicy-aware CNI (Calico, Cilium,
@@ -1792,8 +1799,9 @@ networkPolicy:
 ## Add an extraEgress ipBlock allow for 169.254.20.10/32 port 53 (UDP+TCP)
 ## if your cluster uses NodeLocal DNSCache.
 ##
-## THE RFC1918 DENY-LIST BLOCKS IN-CLUSTER CONTROL-PLANE TRAFFIC TOO — pod
-## and Service CIDRs are themselves RFC1918 ranges in most clusters. If
+## THE RFC1918/CGNAT DENY-LIST BLOCKS IN-CLUSTER CONTROL-PLANE TRAFFIC TOO —
+## pod and Service CIDRs are themselves RFC1918 ranges in most clusters (or
+## 100.64.0.0/10 CGNAT on an EKS cluster running VPC custom networking). If
 ## your environment pods also need any of the following, allow-list the
 ## destination via extraEgress before enabling this knob:
 ##   - fetcher sidecar -> storagesvc (port 8000): package fetch at

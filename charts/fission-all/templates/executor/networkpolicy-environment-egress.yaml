@@ -14,9 +14,11 @@
 #
 # Default posture copies Agent Sandbox's SandboxTemplate-managed
 # NetworkPolicy default: allow general internet egress, deny RFC1918
-# (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and link-local
-# (169.254.0.0/16, which also covers the 169.254.169.254 cloud metadata
-# endpoint) destinations. Cluster DNS (kube-system/kube-dns, port 53) is
+# (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), RFC6598/CGNAT
+# (100.64.0.0/10 — used as pod/Service CIDRs by EKS clusters running VPC
+# custom networking) and link-local (169.254.0.0/16, which also covers the
+# 169.254.169.254 cloud metadata endpoint) destinations. Cluster DNS
+# (kube-system/kube-dns, port 53) is
 # allowed by default so hostname-based egress destinations resolve;
 # environmentNetworkPolicy.allowClusterDNS=false drops that rule for a
 # stricter numeric-IP-only posture.
@@ -37,8 +39,9 @@
 # This knob does NOT enforce egress isolation for function pods in those
 # namespaces — see the environmentNetworkPolicy comment in values.yaml.
 #
-# WARNING: the RFC1918 deny-list also blocks in-cluster control-plane
-# traffic (pod/Service CIDRs are themselves RFC1918 in most clusters) —
+# WARNING: the RFC1918/CGNAT deny-list also blocks in-cluster control-plane
+# traffic (pod/Service CIDRs are themselves RFC1918 in most clusters, and
+# 100.64.0.0/10 on an EKS cluster running VPC custom networking) —
 # fetcher->storagesvc (package fetch), function->statesvc, and
 # agent->agentruntime (workspace sync) all cross it. See the
 # environmentNetworkPolicy comment in values.yaml for the extraEgress
@@ -81,8 +84,11 @@ spec:
         - port: 53
           protocol: TCP
     {{- end }}
-    # General egress: the whole internet except RFC1918 private ranges and
-    # link-local (which subsumes the 169.254.169.254 cloud metadata IP).
+    # General egress: the whole internet except RFC1918 private ranges,
+    # RFC6598/CGNAT (100.64.0.0/10 — EKS custom-networking clusters use this
+    # for pod/Service CIDRs, so omitting it would silently fail the
+    # deny-in-cluster posture on those clusters) and link-local (which
+    # subsumes the 169.254.169.254 cloud metadata IP).
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -90,6 +96,7 @@ spec:
               - 10.0.0.0/8
               - 172.16.0.0/12
               - 192.168.0.0/16
+              - 100.64.0.0/10
               - 169.254.0.0/16
     {{- with $.Values.environmentNetworkPolicy.extraEgress }}
     {{- toYaml . | nindent 4 }}
