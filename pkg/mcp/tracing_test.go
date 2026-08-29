@@ -27,6 +27,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -230,17 +231,28 @@ func TestCallTool_MetaAbsent_ServerSpanChild(t *testing.T) {
 	// UNRELATED server span in a different trace before the tools/call one --
 	// so the server span under test must be found by matching
 	// toolSpan.Parent(), not by taking the first "POST "-prefixed span.
-	ended := rec.Ended()
-	toolSpan, ok := findSpan(ended, "execute_tool ")
-	require.True(t, ok, "expected an execute_tool span, got spans: %v", spanNames(ended))
-
-	var serverSpan sdktrace.ReadOnlySpan
-	for _, sp := range ended {
-		if sp.SpanContext().SpanID() == toolSpan.Parent().SpanID() {
-			serverSpan = sp
+	//
+	// Re-read rec.Ended() until the parent lands: CallTool returning means
+	// the CLIENT has the result, but the server-side otelhttp span only ends
+	// after the handler finishes writing the response stream -- under load
+	// (CI) a single immediate read races that end and finds the initialize
+	// POST's span but not the tools/call one.
+	var toolSpan, serverSpan sdktrace.ReadOnlySpan
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		ended := rec.Ended()
+		ts, ok := findSpan(ended, "execute_tool ")
+		if !assert.True(c, ok, "expected an execute_tool span, got spans: %v", spanNames(ended)) {
+			return
 		}
-	}
-	require.NotNil(t, serverSpan, "expected to find execute_tool's parent span among the ended spans: %v", spanNames(ended))
+		toolSpan = ts
+		serverSpan = nil
+		for _, sp := range ended {
+			if sp.SpanContext().SpanID() == toolSpan.Parent().SpanID() {
+				serverSpan = sp
+			}
+		}
+		assert.NotNil(c, serverSpan, "expected to find execute_tool's parent span among the ended spans: %v", spanNames(ended))
+	}, 5*time.Second, 10*time.Millisecond, "server span for the tools/call POST never ended")
 	assert.True(t, strings.HasPrefix(serverSpan.Name(), "POST"), "execute_tool's parent must be the otelhttp server span, got %q", serverSpan.Name())
 	assert.Equal(t, serverSpan.SpanContext().TraceID(), toolSpan.SpanContext().TraceID(), "execute_tool must share the server span's trace when _meta carries no trace context")
 	assert.Equal(t, serverSpan.SpanContext().SpanID(), toolSpan.Parent().SpanID(), "execute_tool must be a CHILD of the server span -- proving context VALUES survive the SDK's ctx detach")
