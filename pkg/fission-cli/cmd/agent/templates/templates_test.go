@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -31,6 +32,53 @@ import (
 	"github.com/fission/fission/pkg/agentruntime"
 	"github.com/fission/fission/pkg/statesvc/stateapi"
 )
+
+// kindNames is the sorted list of --template kind keys sourced from the
+// kinds map (templates.go), the single source of truth for the --template x
+// --lang matrix. Tests range over this instead of retyping
+// []string{"agent", "interpreter"} literals: a third kind added to kinds
+// gets real coverage from every matrix test below instead of silently
+// reading back zero.
+func kindNames(t *testing.T) []string {
+	t.Helper()
+	names := make([]string, 0, len(kinds))
+	for k := range kinds {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// langsFor is the sorted list of --lang keys kinds[kind] actually supports,
+// sourced the same way kindNames is -- used in place of retyped
+// []string{"node", "python"} literals so a lang added to (or removed from)
+// one kind's entry is picked up by every test that iterates it.
+func langsFor(t *testing.T, kind string) []string {
+	t.Helper()
+	langs := kinds[kind]
+	names := make([]string, 0, len(langs))
+	for l := range langs {
+		names = append(names, l)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// normalizeWhitespace collapses every run of whitespace -- including an
+// embedded newline + indent a source reformat could reflow -- to a single
+// space. Used only where a test needs to pin a multi-line wire SHAPE rather
+// than a single-line token, so the assertion survives a reformat instead of
+// false-failing on whitespace that carries no contract meaning.
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// assertContainsNormalized is assert.Contains with normalizeWhitespace
+// applied to both sides -- see normalizeWhitespace.
+func assertContainsNormalized(t *testing.T, haystack, needle string, msgAndArgs ...any) {
+	t.Helper()
+	assert.Contains(t, normalizeWhitespace(haystack), normalizeWhitespace(needle), msgAndArgs...)
+}
 
 // commentPrefix returns the line-comment marker for a rendered language, so
 // tests can tell an explanatory mention of a yield value from a live one.
@@ -102,8 +150,8 @@ func TestRender_RejectsUnsafeNames(t *testing.T) {
 	// documented regression, and running the full matrix against
 	// interpreter too catches any future template that grows its own
 	// live-code interpolation of {{.Name}} without a matching test.
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			for _, tc := range cases {
 				t.Run(kind+"/"+lang+"/"+tc.name, func(t *testing.T) {
 					t.Parallel()
@@ -118,18 +166,18 @@ func TestRender_RejectsUnsafeNames(t *testing.T) {
 
 func TestRender_Extensions(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
-		_, ext := render(t, kind, "node")
-		assert.Equal(t, "js", ext)
-		_, ext = render(t, kind, "python")
-		assert.Equal(t, "py", ext)
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
+			_, ext := render(t, kind, lang)
+			assert.Equal(t, kinds[kind][lang].ext, ext, "%s/%s: rendered extension does not match kinds[%q][%q].ext", kind, lang, kind, lang)
+		}
 	}
 }
 
 func TestRender_NoTemplateArtifacts(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			out, _ := render(t, kind, lang)
 			text := string(out)
 			assert.NotContains(t, text, "{{", "%s/%s template left an unrendered placeholder", kind, lang)
@@ -188,7 +236,7 @@ func TestRender_HeaderNames(t *testing.T) {
 // the dispatcher's.
 func TestRender_StateHeaderNames(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "agent") {
 		out, _ := renderAgent(t, lang)
 		text := string(out)
 		assert.Contains(t, text, stateapi.HeaderNamespace, "%s: missing state namespace header", lang)
@@ -209,7 +257,7 @@ func TestRender_StateEnvVarNames(t *testing.T) {
 	envVars := util.StateAPIEnvVars("/userfunc")
 	require.NotEmpty(t, envVars, "STATESVC_URL was set; StateAPIEnvVars must not return nil")
 
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "agent") {
 		out, _ := renderAgent(t, lang)
 		text := string(out)
 		for _, ev := range envVars {
@@ -238,7 +286,7 @@ func TestRender_StateCredentialsFieldNames(t *testing.T) {
 		fieldNames = append(fieldNames, name)
 	}
 
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "agent") {
 		out, _ := renderAgent(t, lang)
 		text := string(out)
 		for _, name := range fieldNames {
@@ -268,8 +316,8 @@ func TestRender_YieldDefaultsToWaiting(t *testing.T) {
 		"'" + agentruntime.YieldContinue + "'",
 		"\"" + agentruntime.YieldContinue + "\"",
 	}
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
 				t.Parallel()
 				out, _ := render(t, kind, lang)
@@ -311,7 +359,7 @@ func TestRender_NodeSyntax(t *testing.T) {
 		t.Skip("node not found on PATH; skipping node --check")
 	}
 
-	for _, kind := range []string{"agent", "interpreter"} {
+	for _, kind := range kindNames(t) {
 		out, _ := render(t, kind, "node")
 		path := t.TempDir() + "/" + kind + ".js"
 		require.NoError(t, os.WriteFile(path, out, 0o600))
@@ -331,7 +379,7 @@ func TestRender_PythonSyntax(t *testing.T) {
 		t.Skip("python3 not found on PATH; skipping py_compile")
 	}
 
-	for _, kind := range []string{"agent", "interpreter"} {
+	for _, kind := range kindNames(t) {
 		out, _ := render(t, kind, "python")
 		path := t.TempDir() + "/" + kind + ".py"
 		require.NoError(t, os.WriteFile(path, out, 0o600))
@@ -414,7 +462,7 @@ func TestRender_Interpreter_ExecContractKeys(t *testing.T) {
 // contract specifies.
 func TestRender_Interpreter_TimeoutCeiling(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "interpreter") {
 		out, _ := render(t, "interpreter", lang)
 		text := string(out)
 		assert.Contains(t, text, "DEFAULT_TIMEOUT_SECONDS = 60", "%s: default timeout constant not found or changed", lang)
@@ -452,7 +500,7 @@ func TestRender_Interpreter_OutputCapMatchesStateDefault(t *testing.T) {
 	t.Parallel()
 	require.EqualValues(t, 256*1024, fv1.DefaultStateMaxValueBytes,
 		"platform's DefaultStateMaxValueBytes moved off 256KiB; update the interpreter templates' MAX_OUTPUT_BYTES to match")
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "interpreter") {
 		out, _ := render(t, "interpreter", lang)
 		assert.Contains(t, string(out), "256 * 1024", "%s: output-cap expression not found", lang)
 	}
@@ -475,7 +523,7 @@ var allowedEnvVarsListRe = regexp.MustCompile(`ALLOWED_ENV_VARS = \[([^\]]*)\]`)
 // test/integration/suites/common/agent_exec_test.go's env-scrub case.
 func TestRender_Interpreter_EnvAllowlistExcludesFissionVars(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "interpreter") {
 		out, _ := render(t, "interpreter", lang)
 		text := string(out)
 
@@ -504,7 +552,7 @@ func TestRender_Interpreter_EnvAllowlistExcludesFissionVars(t *testing.T) {
 // stronger isolation before running untrusted code.
 func TestRender_Interpreter_TrustStatementMentionsGvisor(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "interpreter") {
 		out, _ := render(t, "interpreter", lang)
 		assert.Contains(t, string(out), "--runtime-class gvisor", "%s: trust-boundary comment missing the gvisor recommendation", lang)
 	}
@@ -604,7 +652,7 @@ func workspaceHelperBlock(t *testing.T, text, lang string) string {
 // other).
 func TestRender_Workspace_HelperBlockIdenticalAcrossKinds(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "agent") {
 		t.Run(lang, func(t *testing.T) {
 			t.Parallel()
 			interpOut, _ := render(t, "interpreter", lang)
@@ -625,8 +673,8 @@ func TestRender_Workspace_HelperBlockIdenticalAcrossKinds(t *testing.T) {
 // are checked exact-case, no folding, in every kind x lang combination.
 func TestRender_Workspace_IdentityHeaderNames(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
 				t.Parallel()
 				out, _ := render(t, kind, lang)
@@ -651,8 +699,8 @@ func TestRender_Workspace_EnvVarNames(t *testing.T) {
 	envVars := util.AgentAPIEnvVars("/userfunc")
 	require.NotEmpty(t, envVars, "AGENT_RUNTIME_URL was set; AgentAPIEnvVars must not return nil")
 
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			out, _ := render(t, kind, lang)
 			text := string(out)
 			for _, ev := range envVars {
@@ -682,8 +730,8 @@ func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
 		fieldNames = append(fieldNames, name)
 	}
 
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			out, _ := render(t, kind, lang)
 			text := string(out)
 			for _, name := range fieldNames {
@@ -704,8 +752,8 @@ func TestRender_Workspace_CredentialsFieldNames(t *testing.T) {
 // the rendered text is the only place these literals live.
 func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
 				t.Parallel()
 				out, _ := render(t, kind, lang)
@@ -715,7 +763,11 @@ func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 				// trailing slash or a path segment -- it is reused, with
 				// "/" + rel appended by the CALLER, for GET/PUT.
 				if lang == "python" {
-					assert.Contains(t, text, "'%s/workspace/%s/%s/%s' % (\n        WORKSPACE_URL, _workspace_creds['namespace'], _workspace_creds['agent'], session_id)",
+					// Whitespace-normalized: the Python source line-wraps the
+					// call's continuation arguments, and the exact indent is
+					// not part of the wire contract this test pins (see
+					// normalizeWhitespace).
+					assertContainsNormalized(t, text, "'%s/workspace/%s/%s/%s' % ( WORKSPACE_URL, _workspace_creds['namespace'], _workspace_creds['agent'], session_id)",
 						"python: LIST url-builder must build exactly /workspace/{ns}/{agent}/{session} with no trailing slash")
 				} else {
 					assert.Contains(t, text, "`${WORKSPACE_URL}/workspace/${workspaceCreds.namespace}/${workspaceCreds.agent}/${sessionID}`",
@@ -734,7 +786,7 @@ func TestRender_Workspace_ListURLNoTrailingSlash(t *testing.T) {
 // its helper is opt-in and never wired into a reply of its own.
 func TestRender_Workspace_WarningsKey(t *testing.T) {
 	t.Parallel()
-	for _, lang := range []string{"node", "python"} {
+	for _, lang := range langsFor(t, "interpreter") {
 		out, _ := render(t, "interpreter", lang)
 		assert.Contains(t, string(out), "workspaceWarnings", "%s: missing workspaceWarnings reply key", lang)
 	}
@@ -748,8 +800,8 @@ func TestRender_Workspace_WarningsKey(t *testing.T) {
 // cannot false-negative the check by coincidence elsewhere in the file.
 func TestRender_Workspace_AdditiveOnly(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
-		for _, lang := range []string{"node", "python"} {
+	for _, kind := range kindNames(t) {
+		for _, lang := range langsFor(t, kind) {
 			t.Run(kind+"/"+lang, func(t *testing.T) {
 				t.Parallel()
 				out, _ := render(t, kind, lang)
@@ -779,7 +831,7 @@ func TestRender_Workspace_AdditiveOnly(t *testing.T) {
 // alone could satisfy.
 func TestRender_Workspace_SkipsSymlinks(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
+	for _, kind := range kindNames(t) {
 		out, _ := render(t, kind, "python")
 		text := string(out)
 		assert.Contains(t, text, "if os.path.islink(local_path):", "%s/python: sync walk must skip symlinks", kind)
@@ -801,7 +853,7 @@ func TestRender_Workspace_SkipsSymlinks(t *testing.T) {
 // for sync (excluded by name).
 func TestRender_Workspace_SkipCleanUsesManifest(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
+	for _, kind := range kindNames(t) {
 		out, _ := render(t, kind, "python")
 		text := string(out)
 		assert.Contains(t, text, "WORKSPACE_MANIFEST_FILENAME = '.fission-workspace-manifest.json'", "%s/python: manifest filename constant missing", kind)
@@ -823,15 +875,18 @@ func TestRender_Workspace_SkipCleanUsesManifest(t *testing.T) {
 // would itself be the regression this guards against.
 func TestRender_Workspace_HydrateExcludesManifest(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []string{"agent", "interpreter"} {
+	for _, kind := range kindNames(t) {
 		out, _ := render(t, kind, "python")
 		assert.Contains(t, string(out),
 			"or rel in (WORKSPACE_MANIFEST_FILENAME, WORKSPACE_MANIFEST_FILENAME + '.tmp')",
 			"%s/python: hydrate loop must exclude the manifest filename by name", kind)
 
 		out, _ = render(t, kind, "node")
-		assert.Contains(t, string(out),
-			"rel === WORKSPACE_MANIFEST_FILENAME ||\n      rel === WORKSPACE_MANIFEST_FILENAME + '.tmp'",
+		// Whitespace-normalized: the JS source line-wraps this `if` condition
+		// across two operands, and the exact indent is not part of the wire
+		// contract this test pins (see normalizeWhitespace).
+		assertContainsNormalized(t, string(out),
+			"rel === WORKSPACE_MANIFEST_FILENAME || rel === WORKSPACE_MANIFEST_FILENAME + '.tmp'",
 			"%s/node: hydrate loop must exclude the manifest filename by name", kind)
 	}
 }
