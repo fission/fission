@@ -155,9 +155,19 @@ def _run_workspace_pool(jobs, worker):
     # this use (independent requests, no shared response state).
     if not jobs:
         return []
+
+    def _guarded(job):
+        try:
+            return worker(job)
+        except Exception as err:  # enforce, not assume, the no-throw contract
+            # A worker exception would otherwise re-raise out of pool.map
+            # and 500 the whole turn; every job tuple leads with rel, so a
+            # warning outcome can always be shaped.
+            return (job[0], None, '%s' % err)
+
     width = min(WORKSPACE_SYNC_CONCURRENCY, len(jobs))
     with concurrent.futures.ThreadPoolExecutor(max_workers=width) as pool:
-        return list(pool.map(worker, jobs))
+        return list(pool.map(_guarded, jobs))
 
 
 def _append_workspace_warning(warnings, message):
@@ -261,9 +271,13 @@ def _hydrate_workspace(scratch_dir, session_id, manifest):
             os.makedirs(os.path.dirname(local_path), exist_ok=True)
             with open(local_path, 'wb') as f:
                 f.write(get_res.content)
+            # Inside the try: the just-written file can vanish before the
+            # stat (exec-adjacent cleanup, another turn's rmtree on the
+            # direct path) and an escape here would re-raise out of the
+            # pool instead of becoming a warning outcome.
+            st = os.stat(local_path)
         except (requests.RequestException, OSError) as err:
             return (rel, None, '%s' % err)
-        st = os.stat(local_path)
         # A freshly hydrated file is, by definition, in sync with the
         # workspace it just came from -- recording it means the sync pass
         # that follows this same turn's exec does not immediately re-upload
