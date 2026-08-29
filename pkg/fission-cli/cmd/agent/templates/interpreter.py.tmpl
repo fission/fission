@@ -4,7 +4,7 @@
 # WHAT THIS FILE IS
 # ------------------
 # This implements the "exec" verb (abstraction A, PR-1): a turn's body is
-# {"code": "..."} (interpreted with `python3 -c`) or {"command": "..."}
+# {"code": "..."} (interpreted with `sys.executable -c`) or {"command": "..."}
 # (run through a shell) -- exactly one of the two -- and the reply is
 # {stdout, stderr, exitCode, durationMs, truncated}. It is an ordinary
 # Fission Python function (the environment calls main() with no arguments
@@ -92,6 +92,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -247,7 +248,7 @@ def _run_exec(argv, cwd, timeout_seconds):
     stdout_text = stdout_buf.text()
     stderr_text = stderr_buf.text()
     if timed_out:
-        stderr_text += '\n[exec: killed after exceeding %ds timeout]' % int(timeout_seconds)
+        stderr_text += '\n[exec: killed after exceeding %gs timeout]' % timeout_seconds
         exit_code = -1
     else:
         exit_code = proc.returncode
@@ -358,7 +359,7 @@ def main():
 
     try:
         if has_code:
-            argv = ['python3', '-c', payload['code']]
+            argv = [sys.executable, '-c', payload['code']]
         else:
             argv = ['/bin/sh', '-c', payload['command']]
         stdout_text, stderr_text, exit_code, duration_ms, truncated = _run_exec(argv, scratch_dir, timeout_seconds)

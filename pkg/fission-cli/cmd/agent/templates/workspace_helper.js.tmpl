@@ -179,6 +179,12 @@ async function hydrateWorkspace(scratchDir, sessionID, manifest) {
       throw new Error(`list failed: HTTP ${res.status}`);
     }
     items = (await res.json()).items || [];
+    if (!Array.isArray(items)) {
+      // A non-array `items` ({"items": 42}) would throw out of the for-of
+      // below, past this try, and 500 the turn -- route it into warnings
+      // like every other malformed-response case instead.
+      throw new Error('list response items is not an array');
+    }
   } catch (err) {
     appendWorkspaceWarning(warnings, `workspace hydrate: listing failed: ${err.message || err}`);
     return warnings;
