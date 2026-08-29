@@ -5,6 +5,8 @@
 package agent
 
 import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -35,22 +37,25 @@ import (
 // dummy/unit-test Input, when a test never sets it at all.
 const defaultLang = "node"
 
-// defaultTemplate / interpreterTemplate are `--template`'s recognized
-// values (PR-1, abstraction A / Q35 resolution): the same
-// dummy/unit-test-Input caveat as defaultLang applies -- a real CLI
-// invocation gets defaultTemplate from flag.FnAgentTemplate's
-// DefaultString, but a test Input that never sets --template needs this
-// fallback applied explicitly.
-const (
-	defaultTemplate     = "agent"
-	interpreterTemplate = "interpreter"
-)
+// defaultTemplate is `--template`'s recognized fallback value (PR-1,
+// abstraction A / Q35 resolution): the same dummy/unit-test-Input caveat as
+// defaultLang applies -- a real CLI invocation gets defaultTemplate from
+// flag.FnAgentTemplate's DefaultString, but a test Input that never sets
+// --template needs this fallback applied explicitly. The other recognized
+// value, "interpreter", has no matching Go constant: every place that used
+// to compare tmplKind against one now looks it up in
+// templates.Descriptors (kind-specific behavior lives there, colocated with
+// the kinds map templates.Render already owns -- see KindDescriptor's doc
+// comment).
+const defaultTemplate = "agent"
 
 // interpreterMaxTimeoutSeconds mirrors templates.InterpreterMaxTimeoutSeconds,
 // the single source of truth also rendered into
 // templates/interpreter.{js,py}.tmpl's MAX_TIMEOUT_SECONDS -- see that
 // constant's doc comment. This local alias just saves every call site below
-// from spelling out the package-qualified name. create_test.go's
+// from spelling out the package-qualified name; it is also, via
+// templates.Descriptors["interpreter"].FunctionTimeoutSeconds, the value
+// buildFunction's descriptor-table lookup applies. create_test.go's
 // TestAgentCreate_TemplateInterpreter_DirectMode still asserts the rendered
 // template actually contains "MAX_TIMEOUT_SECONDS = <this constant>", which
 // now checks the two sides of a single value rather than two independent
@@ -74,6 +79,25 @@ const scaffoldFunctionTimeout = 60
 
 type CreateSubCommand struct {
 	cmd.CommandActioner
+}
+
+// scaffoldInfo carries the fields do() derives across its guard/render/spec
+// steps that both buildFunction and printNextSteps need in order to build
+// the scaffolded Function and its next-steps output -- one struct instead
+// of the two hand-kept positional-parameter lists (7 for buildFunction, 9
+// for printNextSteps) whose argument order used to be the only thing
+// keeping caller and callee in sync. Populated incrementally as do() learns
+// each field: CodePath only after the handler write, EnvExists only after
+// checkEnvironment runs.
+type scaffoldInfo struct {
+	Name      string
+	Namespace string
+	EnvName   string
+	TmplKind  string
+	CodePath  string
+	SpecDir   string
+	ToSpec    bool
+	EnvExists bool
 }
 
 // Create implements `fission agent create`: it writes one of Task 1's
@@ -123,11 +147,20 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error retrieving namespace information: %w", err)
 	}
 
-	// 1. Direct mode only: refuse a duplicate function name BEFORE writing
-	// anything to disk, so a refused create never strands a scaffolded handler
-	// file (same duplicate check `fn create` runs,
-	// cmd/function/create.go:414-422). In --spec mode there is no live cluster
-	// object to collide with at this point.
+	info := scaffoldInfo{
+		Name:      name,
+		Namespace: fnNamespace,
+		EnvName:   envName,
+		TmplKind:  tmplKind,
+		SpecDir:   specDir,
+		ToSpec:    toSpec,
+	}
+
+	// Duplicate-name guard (direct mode only): refuse a duplicate function
+	// name BEFORE writing anything to disk, so a refused create never
+	// strands a scaffolded handler file (same duplicate check `fn create`
+	// runs, cmd/function/create.go:414-422). In --spec mode there is no live
+	// cluster object to collide with at this point.
 	if !toSpec {
 		fn, err := opts.Client().FissionClientSet.CoreV1().Functions(fnNamespace).Get(input.Context(), name, metav1.GetOptions{})
 		if err != nil && !k8serrors.IsNotFound(err) {
@@ -137,21 +170,30 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		}
 	}
 
-	// 2. Validate --tool-* flags (e.g. an unreadable --tool-input-schema
-	// file) BEFORE any side effect below -- the same "validate before
-	// touching disk/cluster" discipline step 1's duplicate-name check
-	// applies, and what `fn create` gets for free by validating tool config
-	// in complete() before create() runs. Read only here; buildFunction
-	// (step 6) receives the already-validated result so a bad flag never
-	// strands a scaffolded handler file or an uploaded-but-orphaned Package.
+	// Tool-config validation guard: validate --tool-* flags -- an unreadable
+	// --tool-input-schema file (function.GetToolConfig's own os.ReadFile)
+	// and a readable-but-content-invalid one (validateToolInputSchema,
+	// mirroring fv1.ToolConfig.Validate's own InputSchema structural check)
+	// -- BEFORE any side effect below. Same "validate before touching
+	// disk/cluster" discipline the duplicate-name guard above applies, and
+	// what `fn create` gets for free by validating tool config in
+	// complete() before create() runs. buildFunction receives the
+	// already-validated result so neither failure mode strands a scaffolded
+	// handler file or an uploaded-but-orphaned Package.
 	toolCfg, err := function.GetToolConfig(input, nil)
 	if err != nil {
 		return err
 	}
+	if toolCfg != nil && toolCfg.InputSchema != nil && len(toolCfg.InputSchema.Raw) > 0 {
+		if err := validateToolInputSchema(toolCfg.InputSchema.Raw); err != nil {
+			return err
+		}
+	}
 
-	// 3. Render the handler and write it to disk, refusing to clobber an
-	// existing file (an idempotent re-run must point at a different --code,
-	// never silently overwrite someone's edited handler).
+	// Handler render + write: render the handler and write it to disk,
+	// refusing to clobber an existing file (an idempotent re-run must point
+	// at a different --code, never silently overwrite someone's edited
+	// handler).
 	rendered, ext, err := templates.Render(tmplKind, lang, name)
 	if err != nil {
 		return err
@@ -169,28 +211,30 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("writing handler file %q: %w", codePath, err)
 	}
 	console.Info(fmt.Sprintf("Scaffolded %s handler: %s", lang, codePath))
+	info.CodePath = codePath
 
-	// 4. --spec mode: auto-init a fresh spec directory when none exists yet
-	// (spec.go's save() precondition, spec.go:140-142, is what every write
-	// below hits otherwise: "couldn't find specs, run `fission spec init`
-	// first"). A directory that already has fission-deployment-config.yaml
-	// is used silently and never touched -- this only mints one when it is
-	// genuinely absent.
+	// Spec-dir auto-init (--spec mode only): mint a fresh spec directory
+	// when none exists yet (spec.go's save() precondition, spec.go:140-142,
+	// is what every write below hits otherwise: "couldn't find specs, run
+	// `fission spec init` first"). A directory that already has
+	// fission-deployment-config.yaml is used silently and never touched --
+	// this only mints one when it is genuinely absent.
 	if toSpec {
 		if err := ensureSpecInitialized(input, specDir); err != nil {
 			return err
 		}
 	}
 
-	// 5. Environment existence: warn, don't create (fn-create precedent,
+	// Environment existence check: warn, don't create (fn-create precedent,
 	// cmd/function/create.go:507-542).
 	envExists, err := opts.checkEnvironment(input, name, envName, fnNamespace, userProvidedNS, toSpec, specDir, specIgnore)
 	if err != nil {
 		return err
 	}
+	info.EnvExists = envExists
 
-	// 6. Compose the shipped pipeline: build (and, in direct mode, upload)
-	// the Package from the handler file just written. noZip=true and a
+	// Package + Function build: build (and, in direct mode, upload) the
+	// Package from the handler file just written. noZip=true and a
 	// single-file deployArchiveFiles mirrors `fn create --code`'s own path
 	// (cmd/function/create.go:548-554).
 	pkgMeta, err := _package.CreatePackage(input, opts.Client(), "", fnNamespace, envName,
@@ -199,7 +243,7 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		return fmt.Errorf("error creating package: %w", err)
 	}
 
-	fn := buildFunction(input, name, fnNamespace, envName, tmplKind, pkgMeta, toolCfg)
+	fn := buildFunction(input, info, pkgMeta, toolCfg)
 	if toSpec {
 		fn.Namespace = userProvidedNS
 		fn.Spec.Package.PackageRef.Namespace = userProvidedNS
@@ -217,7 +261,36 @@ func (opts *CreateSubCommand) do(input cli.Input) error {
 		fmt.Fprintf(input.Stdout(), "function '%s' created\n", fn.Name)
 	}
 
-	printNextSteps(input.Stdout(), name, fnNamespace, envName, codePath, specDir, tmplKind, toSpec, envExists)
+	printNextSteps(input.Stdout(), info)
+	return nil
+}
+
+// validateToolInputSchema mirrors fv1.ToolConfig.Validate's InputSchema
+// structural check (pkg/apis/core/v1/validation.go, reached at admission,
+// only when FunctionSpec.Tool is non-nil): a supplied --tool-input-schema
+// file must parse as a JSON object whose "type" is "object". Reusing that
+// check's exact semantics and error wording here, before any side effect,
+// closes the gap admission-only validation leaves for this command: by the
+// time a Function reaches admission, do()'s caller has already written the
+// handler file to disk and (direct mode) already created the Package -- see
+// do()'s tool-config validation guard. See ToolConfig.Validate's own doc
+// comment for why the "type": "object" check matters (the MCP SDK's AddTool
+// panics on anything else). Same ADMISSION LENIENCY as the webhook check:
+// duplicate JSON member names and invalid UTF-8 are allowed, matching what
+// a stored/GitOps-applied schema is allowed to contain.
+func validateToolInputSchema(raw []byte) error {
+	var obj map[string]jsontext.Value
+	if err := json.Unmarshal(raw, &obj, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
+		return fmt.Errorf("--%s: must be a JSON object", flagkey.FnToolInputSchema)
+	}
+	typRaw, ok := obj["type"]
+	if !ok {
+		return fmt.Errorf("--%s: must be a JSON Schema object with a \"type\" key", flagkey.FnToolInputSchema)
+	}
+	var typ string
+	if json.Unmarshal(typRaw, &typ, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) != nil || typ != "object" {
+		return fmt.Errorf("--%s: \"type\" must be \"object\" (MCP tool arguments are always an object)", flagkey.FnToolInputSchema)
+	}
 	return nil
 }
 
@@ -308,21 +381,23 @@ func (opts *CreateSubCommand) checkEnvironment(input cli.Input, fnName, envName,
 // so a scaffolded interpreter can be registered as an MCP tool with no
 // second implementation of that flag handling to drift out of sync.
 // toolCfg is computed by the caller, BEFORE any side effect (handler-file
-// write, Package create/upload), so a bad --tool-input-schema path fails
-// fast instead of stranding an orphaned Package or handler file (its only
-// failure mode is os.ReadFile on that flag) -- see the call site's step 2.
+// write, Package create/upload), so a bad --tool-input-schema path (an
+// unreadable file, or a readable but content-invalid schema) fails fast
+// instead of stranding an orphaned Package or handler file -- see do()'s
+// tool-config validation guard.
 //
-// tmplKind selects the scaffolded Function's own FunctionTimeout:
-// interpreterTemplate gets interpreterMaxTimeoutSeconds (300, matching the
-// interpreter template's own request-timeoutSeconds ceiling) so the
-// platform's request timeout is never what kills a full-length exec call;
-// every other template keeps scaffoldFunctionTimeout (60, `fn create`'s own
-// default).
-func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string, pkgMeta *metav1.ObjectMeta, toolCfg *fv1.ToolConfig) *fv1.Function {
+// info.TmplKind selects the scaffolded Function's own FunctionTimeout via a
+// templates.Descriptors lookup: the interpreter kind's
+// FunctionTimeoutSeconds (interpreterMaxTimeoutSeconds, matching the
+// interpreter template's own request-timeoutSeconds ceiling) overrides
+// scaffoldFunctionTimeout (60, `fn create`'s own default) so the platform's
+// request timeout is never what kills a full-length exec call; every other
+// kind's zero-value descriptor leaves the default in place.
+func buildFunction(input cli.Input, info scaffoldInfo, pkgMeta *metav1.ObjectMeta, toolCfg *fv1.ToolConfig) *fv1.Function {
 	stateCfg := function.GetStateConfig(input, nil)
 	if stateCfg != nil {
 		if stateCfg.Keyspace == "" {
-			stateCfg.Keyspace = name
+			stateCfg.Keyspace = info.Name
 		}
 		if stateCfg.Sticky == nil {
 			stateCfg.Sticky = &fv1.StickyConfig{
@@ -334,14 +409,14 @@ func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string,
 	agentCfg := function.GetAgentConfig(input, nil)
 
 	fnTimeout := scaffoldFunctionTimeout
-	if tmplKind == interpreterTemplate {
-		fnTimeout = interpreterMaxTimeoutSeconds
+	if desc := templates.Descriptors[info.TmplKind]; desc.FunctionTimeoutSeconds > 0 {
+		fnTimeout = desc.FunctionTimeoutSeconds
 	}
 
 	return &fv1.Function{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: fnNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: info.Name, Namespace: info.Namespace},
 		Spec: fv1.FunctionSpec{
-			Environment: fv1.EnvironmentReference{Name: envName, Namespace: fnNamespace},
+			Environment: fv1.EnvironmentReference{Name: info.EnvName, Namespace: info.Namespace},
 			Package: fv1.FunctionPackageRef{
 				PackageRef: fv1.PackageRef{
 					Namespace:       pkgMeta.Namespace,
@@ -366,19 +441,29 @@ func buildFunction(input cli.Input, name, fnNamespace, envName, tmplKind string,
 }
 
 // printNextSteps writes the scaffold's <10-minute-to-first-turn punch list:
-// the file it wrote, the interpreter template's trust-boundary note
-// (conditional on tmplKind, PR-1), how to get the resource(s) onto a
-// cluster (conditional on --spec), the env-create line when
-// checkEnvironment found none (conditional, and always step 1 when present
-// -- Global Constraints item 6), the dispatch curl (POST /agents/<ns>/<name>
-// + the platform's session header, pinned via
+// the file it wrote, the interpreter template's trust-boundary note (gated
+// on templates.Descriptors[info.TmplKind].RecommendGvisor, PR-1), how to get
+// the resource(s) onto a cluster (conditional on info.ToSpec), the
+// env-create line when checkEnvironment found none (conditional, and always
+// step 1 when present -- Global Constraints item 6), the dispatch curl (POST
+// /agents/<ns>/<name> + the platform's session header, pinned via
 // fv1.DefaultAgentSessionHeader/svcinfo rather than retyped literals -- the
 // same contract-drift discipline Task 1's tests apply; the exec verb's own
-// wire-contract body for the interpreter template), and where to look
-// afterwards. This is a spec'd, golden-tested deliverable (create_test.go)
-// -- keep any wording change here in sync with the golden strings there.
-func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tmplKind string, toSpec, envExists bool) {
-	fmt.Fprintf(w, "\nScaffolded %s\n\n", codePath)
+// wire-contract body via the descriptor's ExampleTurnBody for kinds that
+// need one), and where to look afterwards. This is a spec'd, golden-tested
+// deliverable (create_test.go) -- keep any wording change here in sync with
+// the golden strings there.
+//
+// The trust-boundary note and step 1's env-create command share one
+// --runtime-class gvisor recommendation rather than each printing their own:
+// when the Environment is missing, step 1 below is what actually creates it,
+// so folding the flag into that one command (and having the trust note point
+// at it) avoids a second `env create` that would 409 AlreadyExists if
+// someone followed both literally.
+func printNextSteps(w io.Writer, info scaffoldInfo) {
+	fmt.Fprintf(w, "\nScaffolded %s\n\n", info.CodePath)
+
+	desc := templates.Descriptors[info.TmplKind]
 
 	// Trust statement: env-scrubbing keeps ACCIDENTAL
 	// credential leakage out of exec'd code, but it is not a sandbox -- a
@@ -387,49 +472,61 @@ func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tm
 	// here (and repeated in the template's own header comment) rather than
 	// only in the PR description, so it survives however someone gets to
 	// this scaffold.
-	if tmplKind == interpreterTemplate {
-		// The applicable command depends on whether checkEnvironment found
-		// envName already registered: `env create ... --image ...` only
-		// makes sense when the Environment does not exist yet -- once it
-		// does, gvisor is applied with `env update`, which needs no --image
-		// guess at all (a real concern for a user-supplied --env whose
-		// image this scaffold cannot know; it only happens to be correct
-		// for the default node/python env names).
-		gvisorCmd := fmt.Sprintf("fission env update --name %s --runtime-class gvisor", envName)
-		if !envExists {
-			gvisorCmd = fmt.Sprintf("fission env create --name %s --image ghcr.io/fission/%s-env --runtime-class gvisor", envName, envName)
+	if desc.RecommendGvisor {
+		if info.EnvExists {
+			// The Environment already exists, so no step below creates one --
+			// gvisor has to be applied separately with `env update`, which
+			// needs no --image guess at all (a real concern for a
+			// user-supplied --env whose image this scaffold cannot know; it
+			// only happens to be correct for the default node/python env
+			// names).
+			fmt.Fprintf(w,
+				"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
+					"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
+					"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
+					"one more layer of isolation, pair it with:\n"+
+					"    fission env update --name %s --runtime-class gvisor\n\n",
+				info.EnvName)
+		} else {
+			// checkEnvironment found no Environment yet, so step 1 below
+			// already creates it -- point at that single command instead of
+			// printing a second, conflicting `env create` here.
+			fmt.Fprintf(w,
+				"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
+					"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
+					"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
+					"one more layer of isolation, step 1 below already creates the\n"+
+					"environment with --runtime-class gvisor.\n\n")
 		}
-		fmt.Fprintf(w,
-			"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
-				"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
-				"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
-				"one more layer of isolation, pair it with:\n"+
-				"    %s\n\n",
-			gvisorCmd)
 	}
 
 	fmt.Fprintf(w, "Next steps:\n")
 
 	step := 1
-	if !envExists {
-		fmt.Fprintf(w, "  %d. Create the environment (not found in namespace %q):\n       fission env create --name %s --image ghcr.io/fission/%s-env\n",
-			step, namespace, envName, envName)
+	if !info.EnvExists {
+		envCreateCmd := fmt.Sprintf("fission env create --name %s --image ghcr.io/fission/%s-env", info.EnvName, info.EnvName)
+		if desc.RecommendGvisor {
+			envCreateCmd += " --runtime-class gvisor"
+		}
+		fmt.Fprintf(w, "  %d. Create the environment (not found in namespace %q):\n       %s\n",
+			step, info.Namespace, envCreateCmd)
 		step++
 	}
 
-	if toSpec {
-		fmt.Fprintf(w, "  %d. Apply the spec:\n       fission spec apply --specdir %s\n", step, specDir)
+	if info.ToSpec {
+		fmt.Fprintf(w, "  %d. Apply the spec:\n       fission spec apply --specdir %s\n", step, info.SpecDir)
 	} else {
-		fmt.Fprintf(w, "  %d. Function %s/%s is already created.\n", step, namespace, name)
+		fmt.Fprintf(w, "  %d. Function %s/%s is already created.\n", step, info.Namespace, info.Name)
 	}
 	step++
 
-	// The interpreter template ignores an empty body's absent code/command
-	// (it 400s), so its example turn carries a working exec payload instead
-	// of the agent template's empty '{}'.
+	// A kind whose descriptor carries no ExampleTurnBody keeps the empty
+	// '{}' body (the agent template's shape); the interpreter template
+	// ignores an empty body's absent code/command (it 400s), so its
+	// descriptor supplies a working exec payload instead.
 	turnBody := "{}"
-	if tmplKind == interpreterTemplate {
-		turnBody = `{"command": "echo hello"}`
+	if desc.ExampleTurnBody != "" {
+		turnBody = desc.ExampleTurnBody
 	}
 	fmt.Fprintf(w,
 		"  %d. Port-forward the agent runtime and dispatch a turn:\n"+
@@ -439,8 +536,8 @@ func printNextSteps(w io.Writer, name, namespace, envName, codePath, specDir, tm
 			"         -H '%s: %s-demo-1' \\\n"+
 			"         -d '%s'\n",
 		step, fissionNamespace(), svcinfo.SvcAgentRuntime, svcinfo.PortAgentRuntime, svcinfo.PortAgentRuntime,
-		svcinfo.PortAgentRuntime, namespace, name, fv1.DefaultAgentSessionHeader, name, turnBody)
+		svcinfo.PortAgentRuntime, info.Namespace, info.Name, fv1.DefaultAgentSessionHeader, info.Name, turnBody)
 	step++
 
-	fmt.Fprintf(w, "  %d. Inspect sessions:\n       fission agent sessions list --name %s --tree\n", step, name)
+	fmt.Fprintf(w, "  %d. Inspect sessions:\n       fission agent sessions list --name %s --tree\n", step, info.Name)
 }

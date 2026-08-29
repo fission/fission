@@ -127,6 +127,39 @@ var kinds = map[string]map[string]langTemplate{
 	},
 }
 
+// KindDescriptor carries the per-kind knobs create.go's Function-building and
+// next-steps rendering need, colocated here (next to kinds, the other
+// per-kind table) instead of scattered as `tmplKind == "interpreter"`
+// branches over there. Fields exist only for what those call sites actually
+// use -- this is deliberately not a general plugin/registration mechanism.
+type KindDescriptor struct {
+	// FunctionTimeoutSeconds overrides create.go's own scaffoldFunctionTimeout
+	// default when non-zero -- the interpreter template's request-timeoutSeconds
+	// ceiling (InterpreterMaxTimeoutSeconds) is the only current user.
+	FunctionTimeoutSeconds int
+	// ExampleTurnBody is the request body create.go's next-steps dispatch
+	// example curls with. Empty means the zero-arg default, "{}".
+	ExampleTurnBody string
+	// RecommendGvisor gates create.go's trust-boundary note recommending
+	// --runtime-class gvisor pairing (interpreter's exec-at-agent-trust-level
+	// contract; the agent template has no such note).
+	RecommendGvisor bool
+}
+
+// Descriptors is keyed the same as kinds' outer map. A kind absent here (or
+// looked up before Render has validated it) reads back the zero
+// KindDescriptor, which is exactly the "agent" template's own behavior --
+// default FunctionTimeout, default "{}" turn body, no gvisor note -- so
+// "agent"'s entry below is written out for readability, not necessity.
+var Descriptors = map[string]KindDescriptor{
+	"agent": {},
+	"interpreter": {
+		FunctionTimeoutSeconds: InterpreterMaxTimeoutSeconds,
+		ExampleTurnBody:        `{"command": "echo hello"}`,
+		RecommendGvisor:        true,
+	},
+}
+
 // Render renders the embedded handler template for kind ("agent" or
 // "interpreter") and lang ("node" or "python") with name substituted in,
 // and returns the rendered bytes plus the file extension (no leading dot)

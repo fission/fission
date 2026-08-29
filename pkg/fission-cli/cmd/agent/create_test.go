@@ -502,13 +502,16 @@ func TestAgentCreate_TemplateInterpreter_NextStepsGolden(t *testing.T) {
 
 // TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate is the
 // env-missing control for TestAgentCreate_TemplateInterpreter_NextStepsGolden:
-// when checkEnvironment found no Environment yet, the gvisor pairing
-// suggestion must be `env create ... --runtime-class gvisor` (an image is
-// needed to create anything), not the `env update` form the env-exists case
-// uses.
+// when checkEnvironment found no Environment yet, --runtime-class gvisor is
+// folded into step 1's own `env create` command (an image is needed to
+// create anything, and step 1 already creates one) instead of the trust
+// block printing a second, conflicting `env create` -- following both would
+// hit AlreadyExists on the second call. The trust block instead points at
+// step 1 rather than repeating a command.
 func TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	t.Setenv("FISSION_NAMESPACE", "")
 	const ns = "default"
 	setAgentCreateClient(t, ns) // no Environment object: env missing
 
@@ -517,7 +520,31 @@ func TestAgentCreate_TemplateInterpreter_EnvMissing_GvisorSuggestsCreate(t *test
 	in.SetBool(flagkey.SpecSave, true)
 
 	out := captureStdout(t, func() error { return Create(in) })
-	assert.Contains(t, out, "fission env create --name node --image ghcr.io/fission/node-env --runtime-class gvisor")
+
+	want := fmt.Sprintf(
+		"\nScaffolded myinterp.js\n\n"+
+			"exec contract: this handler runs the turn body's \"code\" or \"command\" at\n"+
+			"the agent's OWN trust level (env-scrubbed, not sandboxed) -- fine for\n"+
+			"run-your-own-code tools, not for adversarial or multi-tenant code. For\n"+
+			"one more layer of isolation, step 1 below already creates the\n"+
+			"environment with --runtime-class gvisor.\n\n"+
+			"Next steps:\n"+
+			"  1. Create the environment (not found in namespace \"default\"):\n"+
+			"       fission env create --name node --image ghcr.io/fission/node-env --runtime-class gvisor\n"+
+			"  2. Apply the spec:\n"+
+			"       fission spec apply --specdir specs\n"+
+			"  3. Port-forward the agent runtime and dispatch a turn:\n"+
+			"       kubectl -n fission port-forward svc/%s %d:%d\n"+
+			"       curl -i -X POST http://127.0.0.1:%d/agents/default/myinterp \\\n"+
+			"         -H 'Content-Type: application/json' \\\n"+
+			"         -H '%s: myinterp-demo-1' \\\n"+
+			"         -d '{\"command\": \"echo hello\"}'\n"+
+			"  4. Inspect sessions:\n"+
+			"       fission agent sessions list --name myinterp --tree\n",
+		svcinfo.SvcAgentRuntime, svcinfo.PortAgentRuntime, svcinfo.PortAgentRuntime,
+		svcinfo.PortAgentRuntime, fv1.DefaultAgentSessionHeader,
+	)
+	assert.Contains(t, out, want)
 	assert.NotContains(t, out, "env update --name node --runtime-class gvisor")
 }
 
@@ -542,7 +569,7 @@ func TestAgentCreate_ExposeAsMCP_SetsToolConfig(t *testing.T) {
 
 	_ = captureStdout(t, func() error { return Create(in) })
 
-	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myinterp", metav1.GetOptions{})
+	fn, err := cs.CoreV1().Functions(ns).Get(t.Context(), "myinterp", metav1.GetOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, fn.Spec.Tool, "--expose-as-mcp must set FunctionSpec.Tool")
 	assert.Equal(t, "runs code or a shell command and returns its output", fn.Spec.Tool.Description)
@@ -563,40 +590,74 @@ func TestAgentCreate_NoExposeAsMCP_LeavesToolNil(t *testing.T) {
 	in := baseCreateInput("myagent")
 	_ = captureStdout(t, func() error { return Create(in) })
 
-	fn, err := cs.CoreV1().Functions(ns).Get(context.Background(), "myagent", metav1.GetOptions{})
+	fn, err := cs.CoreV1().Functions(ns).Get(t.Context(), "myagent", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Nil(t, fn.Spec.Tool)
 }
 
 // TestAgentCreate_BadToolInputSchema_LeavesNoSideEffects pins the fix for a
-// review finding on this command: function.GetToolConfig's only failure
-// mode (os.ReadFile on --tool-input-schema, cmd/function/create.go) must be
-// validated BEFORE any side effect, exactly like the direct-mode duplicate
-// check (TestAgentCreate_DirectMode_DuplicateFunctionLeavesNoOrphanFile) --
-// otherwise a bad path would fail after the handler file was written and
-// (direct mode) the Package already created/uploaded, stranding both.
+// review finding on this command: --tool-input-schema must be validated
+// BEFORE any side effect, exactly like the direct-mode duplicate check
+// (TestAgentCreate_DirectMode_DuplicateFunctionLeavesNoOrphanFile) --
+// otherwise a bad path/content would fail after the handler file was
+// written and (direct mode) the Package already created/uploaded, stranding
+// both. Two failure modes, both caught by do()'s tool-config validation
+// guard before the handler write: an unreadable file
+// (function.GetToolConfig's own os.ReadFile) and a readable file whose
+// content is not a JSON Schema object with "type": "object"
+// (validateToolInputSchema, mirroring fv1.ToolConfig.Validate's own
+// InputSchema structural check, pkg/apis/core/v1/validation.go) -- the
+// latter used to reach admission unvalidated, writing the handler file and
+// (direct mode) creating the Package before the webhook ever rejected it.
 func TestAgentCreate_BadToolInputSchema_LeavesNoSideEffects(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	const ns = "default"
-	env := &fv1.Environment{Name: "node", Namespace: ns}
-	cs := setAgentCreateClient(t, ns, env)
+	cases := []struct {
+		name       string
+		schemaPath func(t *testing.T, dir string) string
+		wantErr    string
+	}{
+		{
+			name: "unreadable file",
+			schemaPath: func(t *testing.T, dir string) string {
+				return filepath.Join(dir, "does-not-exist.json")
+			},
+			wantErr: "does-not-exist.json",
+		},
+		{
+			name: "readable but content-invalid schema",
+			schemaPath: func(t *testing.T, dir string) string {
+				path := filepath.Join(dir, "bad-schema.json")
+				require.NoError(t, os.WriteFile(path, []byte(`{"type": "string"}`), 0o600))
+				return path
+			},
+			wantErr: `"type" must be "object"`,
+		},
+	}
 
-	in := baseCreateInput("myinterp")
-	in.SetBool(flagkey.FnExposeAsMCP, true)
-	in.SetString(flagkey.FnToolInputSchema, filepath.Join(dir, "does-not-exist.json"))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			const ns = "default"
+			env := &fv1.Environment{Name: "node", Namespace: ns}
+			cs := setAgentCreateClient(t, ns, env)
 
-	err := Create(in)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "does-not-exist.json")
+			in := baseCreateInput("myinterp")
+			in.SetBool(flagkey.FnExposeAsMCP, true)
+			in.SetString(flagkey.FnToolInputSchema, tc.schemaPath(t, dir))
 
-	assert.NoFileExists(t, filepath.Join(dir, "myinterp.js"), "a bad --tool-input-schema must be validated before the handler file is written")
+			err := Create(in)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
 
-	pkgs, err := cs.CoreV1().Packages(ns).List(context.Background(), metav1.ListOptions{})
-	require.NoError(t, err)
-	assert.Empty(t, pkgs.Items, "a bad --tool-input-schema must be validated before any Package is created")
+			assert.NoFileExists(t, filepath.Join(dir, "myinterp.js"), "a bad --tool-input-schema must be validated before the handler file is written")
 
-	fns, err := cs.CoreV1().Functions(ns).List(context.Background(), metav1.ListOptions{})
-	require.NoError(t, err)
-	assert.Empty(t, fns.Items, "a bad --tool-input-schema must be validated before any Function is created")
+			pkgs, err := cs.CoreV1().Packages(ns).List(t.Context(), metav1.ListOptions{})
+			require.NoError(t, err)
+			assert.Empty(t, pkgs.Items, "a bad --tool-input-schema must be validated before any Package is created")
+
+			fns, err := cs.CoreV1().Functions(ns).List(t.Context(), metav1.ListOptions{})
+			require.NoError(t, err)
+			assert.Empty(t, fns.Items, "a bad --tool-input-schema must be validated before any Function is created")
+		})
+	}
 }
