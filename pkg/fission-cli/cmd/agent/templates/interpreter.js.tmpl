@@ -173,6 +173,30 @@ function runExec(argv, cwd, timeoutSeconds) {
     const stdout = outputBuffer();
     const stderr = outputBuffer();
     let timedOut = false;
+    let settled = false;
+    let timer = null;
+    let forceTimer = null;
+
+    // finish is the ONLY way out of this promise: 'close' and 'error' race
+    // the post-kill force timer below, and whichever fires first wins --
+    // the settled flag makes the losers no-ops instead of double-resolves.
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(forceTimer);
+      resolve(result);
+    };
+
+    const timeoutResult = () => ({
+      stdoutText: stdout.text(),
+      stderrText: stderr.text() + '\n[exec: killed after exceeding ' + timeoutSeconds + 's timeout]',
+      truncated: stdout.truncated() || stderr.truncated(),
+      exitCode: -1,
+      durationMs: Date.now() - start,
+    });
 
     const child = spawn(argv[0], argv.slice(1), {
       cwd,
@@ -180,7 +204,7 @@ function runExec(argv, cwd, timeoutSeconds) {
       detached: true,
     });
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       timedOut = true;
       try {
         process.kill(-child.pid, 'SIGKILL');
@@ -188,14 +212,21 @@ function runExec(argv, cwd, timeoutSeconds) {
         // Process already exited between the timer firing and the kill --
         // nothing left to clean up.
       }
+      // 'close' only fires once the stdio pipes shut, and a child that
+      // escaped the process group (setsid) survives the group kill while
+      // still holding the inherited pipes -- without this, such a child
+      // wedges the turn until the platform's own request timeout, exactly
+      // the class the Python template's post-kill join(timeout=5) grace
+      // bounds. Force-resolve with whatever output was collected; the late
+      // 'close' (if it ever comes) is a no-op via the settled flag.
+      forceTimer = setTimeout(() => finish(timeoutResult()), 5000);
     }, timeoutSeconds * 1000);
 
     child.stdout.on('data', (chunk) => stdout.push(chunk));
     child.stderr.on('data', (chunk) => stderr.push(chunk));
 
     child.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         stdoutText: stdout.text(),
         stderrText: stderr.text() + '\n[exec: failed to start: ' + err.message + ']',
         truncated: stdout.truncated() || stderr.truncated(),
@@ -205,18 +236,11 @@ function runExec(argv, cwd, timeoutSeconds) {
     });
 
     child.on('close', (code) => {
-      clearTimeout(timer);
       if (timedOut) {
-        resolve({
-          stdoutText: stdout.text(),
-          stderrText: stderr.text() + '\n[exec: killed after exceeding ' + timeoutSeconds + 's timeout]',
-          truncated: stdout.truncated() || stderr.truncated(),
-          exitCode: -1,
-          durationMs: Date.now() - start,
-        });
+        finish(timeoutResult());
         return;
       }
-      resolve({
+      finish({
         stdoutText: stdout.text(),
         stderrText: stderr.text(),
         truncated: stdout.truncated() || stderr.truncated(),
