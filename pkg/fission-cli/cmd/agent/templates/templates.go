@@ -50,6 +50,9 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"text/template"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
@@ -127,6 +130,42 @@ var kinds = map[string]map[string]langTemplate{
 	},
 }
 
+// mapKeys returns m's keys in map iteration order (unspecified) -- callers
+// that need a deterministic order (error messages, test iteration) must sort
+// the result themselves, e.g. via quotedOr below.
+func mapKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// quotedOr renders items as a sorted, double-quoted, English "or" list (e.g.
+// `"agent" or "interpreter"`), used to build Render's "unsupported ..."
+// error messages FROM the kinds map itself -- kinds is the single source of
+// truth for the --template x --lang matrix, so the error text can never go
+// stale the way a hand-typed `want "agent" or "interpreter"` pin could once
+// a kind or lang is added to (or removed from) that map.
+func quotedOr(items []string) string {
+	sorted := append([]string(nil), items...)
+	sort.Strings(sorted)
+	quoted := make([]string, len(sorted))
+	for i, item := range sorted {
+		quoted[i] = strconv.Quote(item)
+	}
+	switch len(quoted) {
+	case 0:
+		return ""
+	case 1:
+		return quoted[0]
+	case 2:
+		return quoted[0] + " or " + quoted[1]
+	default:
+		return strings.Join(quoted[:len(quoted)-1], ", ") + ", or " + quoted[len(quoted)-1]
+	}
+}
+
 // KindDescriptor carries the per-kind knobs create.go's Function-building and
 // next-steps rendering need, colocated here (next to kinds, the other
 // per-kind table) instead of scattered as `tmplKind == "interpreter"`
@@ -186,11 +225,11 @@ var Descriptors = map[string]KindDescriptor{
 func Render(kind, lang, name string) ([]byte, string, error) {
 	langs, ok := kinds[kind]
 	if !ok {
-		return nil, "", fmt.Errorf("unsupported agent template %q (want \"agent\" or \"interpreter\")", kind)
+		return nil, "", fmt.Errorf("unsupported agent template %q (want %s)", kind, quotedOr(mapKeys(kinds)))
 	}
 	lt, ok := langs[lang]
 	if !ok {
-		return nil, "", fmt.Errorf("unsupported agent handler language %q (want \"node\" or \"python\")", lang)
+		return nil, "", fmt.Errorf("unsupported agent handler language %q (want %s)", lang, quotedOr(mapKeys(langs)))
 	}
 	if err := fv1.ValidateKubeName("name", name); err != nil {
 		return nil, "", fmt.Errorf("invalid agent name %q: %w", name, err)
