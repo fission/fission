@@ -17,8 +17,8 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
-	github.com/google/go-containerregistry v0.21.9
-	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260820212917-c6b5acd7d45e
+	github.com/google/go-containerregistry v0.22.0
+	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260831202016-7673ae25baf2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kedacore/keda/v2 v2.20.2
 	github.com/mholt/archives v0.1.5
@@ -29,8 +29,8 @@ require (
 	github.com/ohler55/ojg v1.28.5
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.70.1
+	github.com/prometheus/client_model v0.6.3
+	github.com/prometheus/common v0.71.0
 	github.com/prometheus/otlptranslator v1.0.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
