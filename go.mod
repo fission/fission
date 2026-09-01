@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	dario.cat/mergo v1.0.2
-	github.com/IBM/sarama v1.60.1
+	github.com/IBM/sarama v1.60.2
 	github.com/anishathalye/porcupine v1.3.0
 	github.com/bep/debounce v1.2.1
 	github.com/coder/websocket v1.8.15
@@ -189,7 +189,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.3.6 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.27 // indirect
+	github.com/pierrec/lz4/v4 v4.1.29 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
