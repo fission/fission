@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fission Boardroom</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --card: #182130;
+    --border: #26313f;
+    --text: #d7e0ea;
+    --muted: #7c8a9c;
+    --active: #3ddc84;
+    --idle: #f2b705;
+    --archived: #5a6472;
+    --accent: #5aa9ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .stats { display: flex; gap: 20px; margin-left: auto; }
+  .stat { text-align: center; }
+  .stat span { display: block; font-size: 20px; font-weight: 700; }
+  .stat label { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
+  #conn-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #boardroom-main {
+    position: relative;
+    display: flex;
+    gap: 0;
+    height: calc(100vh - 57px);
+  }
+  section { flex: 1 1 50%; min-width: 0; overflow-y: auto; padding: 16px; }
+  section h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+  #pool-panel { border-left: 1px solid var(--border); }
+  #pool-note { color: var(--muted); font-style: italic; }
+  .card-list { display: flex; flex-direction: column; gap: 8px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--archived);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .card-id { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
+  .card-agent { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .card-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .card-badges { margin-top: 6px; display: flex; gap: 6px; }
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .badge.status-active { color: var(--active); border-color: var(--active); }
+  .badge.status-idle { color: var(--idle); border-color: var(--idle); }
+  .badge.status-archived { color: var(--archived); border-color: var(--archived); }
+  .badge.served { color: var(--active); border-color: var(--active); margin-left: 0; }
+  .badge.warm { color: var(--muted); margin-left: 0; }
+  .badge.provisioned { color: var(--accent); border-color: var(--accent); }
+  .badge.ready { color: var(--active); border-color: var(--active); margin-left: auto; }
+  /* Family-tree badge: depth sits right after the card id, not pushed to the
+     far right the way the trailing status badge is (its margin-left stays
+     the general .badge auto, since it renders LAST in .card-top). */
+  .badge.depth { color: var(--accent); border-color: var(--accent); margin-left: 0; }
+  .teleport { color: var(--accent); }
+  .empty { color: var(--muted); font-style: italic; padding: 8px 0; }
+  /* Family tree: one row per session card, indented by nesting level
+     (inline style, computed from the parent chain -- see renderSubtree).
+     The connector glyph marks a child row; a root row has none. */
+  .card-row { display: flex; align-items: flex-start; gap: 4px; }
+  .card-row > .card { flex: 1 1 auto; min-width: 0; }
+  .tree-connector {
+    flex: none;
+    color: var(--muted);
+    font-family: ui-monospace, Menlo, monospace;
+    line-height: 1;
+    padding-top: 10px;
+  }
+  .group-header {
+    font-size: 11px;
+    font-style: italic;
+    color: var(--muted);
+    margin: 12px 0 4px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .card-list > .group-header:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  #anchor-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; }
+  .card[data-key] { cursor: pointer; }
+  .card[data-key]:hover { border-color: var(--accent); }
+
+  /* Session transcript detail panel (Task 6): a right-hand overlay opened by
+     clicking a session card, closed on Escape or an outside click. Lives
+     OUTSIDE #sessions-list on purpose -- that list's innerHTML is replaced
+     wholesale on every SSE event / 5s poll tick, which would otherwise blow
+     away an open panel mid-view. */
+  #detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 7, 11, 0.55);
+    z-index: 50;
+    display: flex;
+    justify-content: flex-end;
+  }
+  #detail-overlay[hidden] { display: none; }
+  #detail-panel {
+    width: min(480px, 92vw);
+    height: 100%;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+  }
+  #detail-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  #detail-title { font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; }
+  #detail-close {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    line-height: 1;
+    font-size: 16px;
+    cursor: pointer;
+    flex: none;
+  }
+  #detail-close:hover { border-color: var(--accent); color: var(--accent); }
+  #detail-body { flex: 1 1 auto; overflow-y: auto; padding: 14px 16px; }
+  .ckpt-marker {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--accent);
+    border-top: 1px dashed var(--accent);
+    border-bottom: 1px dashed var(--accent);
+    padding: 6px 0;
+    margin-bottom: 8px;
+  }
+  .ckpt-payload {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    margin: 0 0 16px;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .turn-group { margin-bottom: 14px; }
+  .turn-group h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .event-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+  }
+  .event-meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .event-type { color: var(--text); font-weight: 600; }
+  .event-payload {
+    margin: 0;
+    font-size: 11px;
+    font-family: ui-monospace, Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .detail-head-line { color: var(--muted); font-size: 11px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="boardroom">
+  <header>
+    <h1>Fission Boardroom</h1>
+    <div class="stats">
+      <div class="stat"><span id="stat-sessions">0</span><label>sessions</label></div>
+      <div class="stat"><span id="stat-pods">0</span><label>pods</label></div>
+      <div class="stat"><span id="stat-density">&mdash;</span><label>density</label></div>
+      <div class="stat"><span id="stat-teleports">0</span><label>teleports</label></div>
+    </div>
+    <div id="conn-status">connecting&hellip;</div>
+  </header>
+  <div id="boardroom-main">
+    <section id="sessions-panel">
+      <h2>Sessions</h2>
+      <div id="sessions-list" class="card-list"></div>
+    </section>
+    <svg id="anchor-svg"></svg>
+    <section id="pool-panel">
+      <h2>Pool</h2>
+      <div id="pool-note"></div>
+      <div id="pool-list" class="card-list"></div>
+    </section>
+  </div>
+</div>
+<div id="detail-overlay" hidden>
+  <div id="detail-panel" role="dialog" aria-modal="true" aria-label="Session transcript">
+    <div id="detail-header">
+      <div id="detail-title"></div>
+      <button id="detail-close" type="button" aria-label="Close">&times;</button>
+    </div>
+    <div id="detail-body"></div>
+  </div>
+</div>
+<script>
+"use strict";
+
+// STATUS_COLOR keys match SessionRecord.Status ("active"/"idle"/"archived")
+// from pkg/agentruntime/session.go.
+var STATUS_COLOR = { active: "#3ddc84", idle: "#f2b705", archived: "#5a6472" };
+var STATUS_ORDER = { active: 0, idle: 1, archived: 2 };
+
+// MAX_SESSION_PAGES bounds pollAgentSessions's page-cursor loop (500 sessions
+// per page => 50,000 sessions for one agent). Without a ceiling, a buggy
+// server -- or a registry bug that returns a repeating cursor -- wedges this
+// agent's poll tick forever, looping on `next` with no forward progress.
+var MAX_SESSION_PAGES = 100;
+
+// TOKEN is read once from the page's URL fragment (#token=...), never the
+// query string: a fragment is never sent to the server or logged by a
+// fronting proxy, unlike EventsHandler's own ?token= transport (which exists
+// only because a browser EventSource cannot set request headers -- see
+// events.go's SECURITY note). Every other call here is a plain fetch(), so
+// it carries the token as a normal Authorization header instead.
+var TOKEN = (function () {
+  var m = location.hash.match(/token=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
+})();
+
+function authHeaders() {
+  return TOKEN ? { Authorization: "Bearer " + TOKEN } : {};
+}
+
+function sseURL() {
+  return "/registry/events" + (TOKEN ? "?token=" + encodeURIComponent(TOKEN) : "");
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+
+function qs(sel) { return document.querySelector(sel); }
+
+// sessions maps "namespace/agent/id" -> {record, teleports}. teleports is a
+// client-side-only counter of CurrentPod CHANGES seen for that session (not
+// its first assignment) -- the demo's "teleport" story.
+var sessions = new Map();
+var agents = [];
+var pods = [];
+var poolAvailable = false;
+
+function sessionKey(r) { return r.namespace + "/" + r.agent + "/" + r.id; }
+function cardId(r) { return "sess-" + sessionKey(r).replace(/[^a-zA-Z0-9]/g, "_"); }
+function podCardId(p) { return "pod-" + (p.namespace + "_" + p.name).replace(/[^a-zA-Z0-9]/g, "_"); }
+
+function upsertSession(rec) {
+  var key = sessionKey(rec);
+  var prev = sessions.get(key);
+  var teleports = prev ? prev.teleports : 0;
+  if (prev && prev.record.currentPod && rec.currentPod && prev.record.currentPod !== rec.currentPod) {
+    teleports++;
+  }
+  sessions.set(key, { record: rec, teleports: teleports });
+}
+
+// matchPod finds the pool pod serving a session's CurrentPod, which is a
+// "host:port" address (endpointcache.Endpoint.Address) -- PodSummary only
+// carries the pod IP, so the join is on the address's host part.
+function matchPod(currentPod) {
+  var ip = currentPod.split(":")[0];
+  for (var i = 0; i < pods.length; i++) {
+    if (pods[i].ip === ip) return pods[i];
+  }
+  return null;
+}
+
+var renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(function () { renderQueued = false; render(); });
+}
+
+function render() {
+  renderStats();
+  renderSessions();
+  renderPool();
+  requestAnimationFrame(drawAnchors);
+}
+
+function renderStats() {
+  var sessionCount = sessions.size;
+  var podCount = pods.length;
+  qs("#stat-sessions").textContent = sessionCount;
+  qs("#stat-pods").textContent = podCount;
+  qs("#stat-density").textContent = podCount > 0 ? (sessionCount / podCount).toFixed(1) + "x" : "—";
+  var teleports = 0;
+  sessions.forEach(function (e) { teleports += e.teleports; });
+  qs("#stat-teleports").textContent = teleports;
+}
+
+function emptyState(msg) { return '<div class="empty">' + esc(msg) + "</div>"; }
+
+// compareEntries is the deterministic sibling order shared by every level of
+// the family tree (and, before the tree existed, the flat list): active
+// before idle before archived, most-recently-active first within a status.
+function compareEntries(a, b) {
+  var oa = STATUS_ORDER[a.record.status], ob = STATUS_ORDER[b.record.status];
+  if (oa !== ob) return oa - ob;
+  var byActive = (b.record.lastActiveAt || "").localeCompare(a.record.lastActiveAt || "");
+  if (byActive !== 0) return byActive;
+  // Final tiebreak for full determinism: siblings spawned by parallel
+  // requests (e.g. architect.js's 3 concurrent expert POSTs) can share both
+  // status and lastActiveAt, which would otherwise fall back to Map
+  // insertion order -- i.e. arrival order, not deterministic across renders.
+  return sessionKey(a.record).localeCompare(sessionKey(b.record));
+}
+
+// parentKeyOf returns the sessionKey-shaped "<ns>/<agent>/<id>" string for a
+// record's parent field (session.go's ParentRef, carried on the wire as
+// {namespace,agent,id} -- see SessionRecord.Parent), or "" for a root
+// session (parent omitted/omitzero on the wire).
+function parentKeyOf(r) {
+  return r.parent ? r.parent.namespace + "/" + r.parent.agent + "/" + r.parent.id : "";
+}
+
+// sessionCardHTML renders one card. `level` is this card's DEPTH IN THE
+// RENDERED TREE (0 = no indent), which drives the connector/indent and is
+// distinct from SessionRecord.Depth (the platform's absolute spawn-chain
+// depth, shown as the "dN" badge) -- a child under an "(unknown parent)"
+// group header is drawn at tree level 0 even though its own record.depth may
+// be >0.
+function sessionCardHTML(entry, level) {
+  var r = entry.record;
+  var color = STATUS_COLOR[r.status] || STATUS_COLOR.archived;
+  var shortId = r.id.slice(0, 8);
+  var meta = "turns " + (r.stats.turns || 0) + " · continuations " + (r.stats.continuations || 0);
+  if (entry.teleports > 0) {
+    meta += ' · <span class="teleport">teleports ' + entry.teleports + "</span>";
+  }
+  var depthBadge = r.depth ? '<span class="badge depth">d' + esc(r.depth) + "</span>" : "";
+  // data-key carries the exact sessions Map key (not the sanitized DOM id,
+  // which is lossy) so the click handler below can look the record back up.
+  var card = '<div class="card" id="' + cardId(r) + '" data-key="' + esc(sessionKey(r)) + '" style="border-left-color:' + color + '">' +
+    '<div class="card-top"><span class="dot" style="background:' + color + '"></span>' +
+    '<span class="card-id">' + esc(shortId) + "</span>" + depthBadge +
+    '<span class="badge status-' + esc(r.status) + '">' + esc(r.status) + "</span></div>" +
+    '<div class="card-agent">' + esc(r.namespace) + "/" + esc(r.agent) + "</div>" +
+    '<div class="card-meta">' + meta + "</div></div>";
+  if (level === 0) {
+    return '<div class="card-row">' + card + "</div>";
+  }
+  return '<div class="card-row" style="margin-left:' + (level * 18) +
+    'px"><span class="tree-connector">└</span>' + card + "</div>";
+}
+
+// buildFamilyForest partitions the current session set into a forest: `roots`
+// (no parent field at all), `childrenOf` (keyed by the PARENT's sessionKey,
+// for children whose parent is itself in the current card set), and
+// `unknownGroups` (keyed by the raw, unresolvable parent ref string, for
+// children whose parent is NOT in the current card set -- e.g. the parent
+// session already archived off the list, or belongs to an agent this page
+// never fetched). Every live entry lands in exactly one of the three
+// buckets, so the render pass below is a complete, non-duplicating walk.
+function buildFamilyForest() {
+  var childrenOf = new Map();
+  var roots = [];
+  var unknownGroups = new Map();
+
+  sessions.forEach(function (entry) {
+    var r = entry.record;
+    if (!r.parent) {
+      roots.push(entry);
+      return;
+    }
+    var pKey = parentKeyOf(r);
+    if (sessions.has(pKey)) {
+      if (!childrenOf.has(pKey)) childrenOf.set(pKey, []);
+      childrenOf.get(pKey).push(entry);
+      return;
+    }
+    if (!unknownGroups.has(pKey)) unknownGroups.set(pKey, []);
+    unknownGroups.get(pKey).push(entry);
+  });
+
+  return { childrenOf: childrenOf, roots: roots, unknownGroups: unknownGroups };
+}
+
+// renderSubtree renders `entry` plus every descendant reachable through
+// childrenOf, each level indented one step deeper than its parent.
+//
+// `printed` guards against a parent cycle: a record whose ancestor chain
+// revisits a node it already produced (self-parent, or two-or-more records
+// naming each other as parent) would otherwise recurse forever. Once a
+// session's key is in `printed`, this returns immediately instead of
+// descending into it again -- the same guard printSessionTree (the CLI's
+// `--tree` printer, pkg/fission-cli/cmd/agent/sessions.go) uses, and for the
+// same reason: it is the smallest change that guarantees every member is
+// rendered exactly once, cycle or not.
+function renderSubtree(entry, childrenOf, level, printed) {
+  var key = sessionKey(entry.record);
+  if (printed.has(key)) return "";
+  printed.add(key);
+  var html = sessionCardHTML(entry, level);
+  var kids = (childrenOf.get(key) || []).slice().sort(compareEntries);
+  kids.forEach(function (child) {
+    html += renderSubtree(child, childrenOf, level + 1, printed);
+  });
+  return html;
+}
+
+function groupHeaderHTML(parentRef) {
+  return '<div class="group-header">(unknown parent: ' + esc(parentRef) + ")</div>";
+}
+
+function renderSessions() {
+  var forest = buildFamilyForest();
+  var html = "";
+  var printed = new Set();
+
+  forest.roots.slice().sort(compareEntries).forEach(function (entry) {
+    html += renderSubtree(entry, forest.childrenOf, 0, printed);
+  });
+
+  // Deterministic group order: sort by the parent ref string itself, not
+  // insertion order (a Map iterates in insertion order, which would jitter
+  // across renders as different children arrive first).
+  Array.from(forest.unknownGroups.keys()).sort().forEach(function (parentKey) {
+    html += groupHeaderHTML(parentKey);
+    forest.unknownGroups.get(parentKey).slice().sort(compareEntries).forEach(function (entry) {
+      html += renderSubtree(entry, forest.childrenOf, 0, printed);
+    });
+  });
+
+  // Leftover pass: a parent cycle (every member has a parent field set AND
+  // that parent is present in the current session set, so none of them ever
+  // lands in `roots` or `unknownGroups`, and nothing outside the cycle
+  // points into it) would otherwise vanish from the board entirely instead
+  // of rendering. Anything still unprinted after the two passes above gets
+  // its own top-level card -- mirrors the CLI tree printer's group 3.
+  var leftover = [];
+  sessions.forEach(function (entry) {
+    if (!printed.has(sessionKey(entry.record))) leftover.push(entry);
+  });
+  leftover.sort(compareEntries).forEach(function (entry) {
+    html += renderSubtree(entry, forest.childrenOf, 0, printed);
+  });
+
+  qs("#sessions-list").innerHTML = html || emptyState("no sessions yet");
+}
+
+function podCardHTML(p) {
+  var badges = p.served
+    ? '<span class="badge served">served</span>'
+    : '<span class="badge warm">warm</span>';
+  if (p.provisioned) badges += '<span class="badge provisioned">provisioned</span>';
+  var ready = p.ready ? '<span class="badge ready">ready</span>' : "";
+  return '<div class="card" id="' + podCardId(p) + '">' +
+    '<div class="card-top"><span class="card-id">' + esc(p.name) + "</span>" + ready + "</div>" +
+    '<div class="card-meta">' + esc(p.environment || "—") + " · " + esc(p.ip || "no ip") + "</div>" +
+    '<div class="card-badges">' + badges + "</div></div>";
+}
+
+function renderPool() {
+  var note = qs("#pool-note");
+  if (!poolAvailable) {
+    note.textContent = "pool unavailable";
+    qs("#pool-list").innerHTML = "";
+    return;
+  }
+  note.textContent = "";
+  var sorted = pods.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+  qs("#pool-list").innerHTML = sorted.map(podCardHTML).join("") || emptyState("no pods");
+}
+
+// drawAnchors draws one SVG line per active session whose CurrentPod
+// resolves to a pool pod: the "boardroom" visual (session card <-> pod,
+// color-matched).
+function drawAnchors() {
+  var svg = qs("#anchor-svg");
+  var container = qs("#boardroom-main");
+  var rect = container.getBoundingClientRect();
+  svg.setAttribute("width", rect.width);
+  svg.setAttribute("height", rect.height);
+  svg.innerHTML = "";
+  sessions.forEach(function (entry) {
+    var r = entry.record;
+    if (r.status !== "active" || !r.currentPod) return;
+    var pod = matchPod(r.currentPod);
+    if (!pod) return;
+    var sEl = document.getElementById(cardId(r));
+    var pEl = document.getElementById(podCardId(pod));
+    if (!sEl || !pEl) return;
+    var sr = sEl.getBoundingClientRect();
+    var pr = pEl.getBoundingClientRect();
+    var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", sr.right - rect.left);
+    line.setAttribute("y1", sr.top + sr.height / 2 - rect.top);
+    line.setAttribute("x2", pr.left - rect.left);
+    line.setAttribute("y2", pr.top + pr.height / 2 - rect.top);
+    line.setAttribute("stroke", STATUS_COLOR.active);
+    line.setAttribute("stroke-width", "1.5");
+    line.setAttribute("opacity", "0.55");
+    svg.appendChild(line);
+  });
+}
+
+function setConnStatus(text) { qs("#conn-status").textContent = text; }
+
+async function apiGet(path) {
+  return fetch(path, { headers: authHeaders() });
+}
+
+async function loadAgents() {
+  try {
+    var res = await apiGet("/registry/agents");
+    if (res.ok) {
+      var data = await res.json();
+      agents = data.agents || [];
+    }
+  } catch (e) { /* keep the previous list; next tick retries */ }
+}
+
+async function loadPool() {
+  try {
+    var res = await apiGet("/registry/pool");
+    if (res.status === 503) {
+      poolAvailable = false;
+      pods = [];
+    } else if (res.ok) {
+      var data = await res.json();
+      poolAvailable = true;
+      pods = data.pods || [];
+    }
+  } catch (e) {
+    poolAvailable = false;
+    pods = [];
+  }
+  scheduleRender();
+}
+
+// pollAgentSessions re-lists ONE agent's ENTIRE live-session set, paging the
+// `page` cursor to exhaustion (mirroring events.go's collectAgentSessions,
+// the SSE path's own server-side poller), then treats the full accumulated
+// set as ground truth: any previously-seen session for this agent that does
+// not appear in it is dropped (the SSE feed never sends deletions either --
+// see events.go's package doc -- so this is the same reconciliation the
+// feed's own fallback advice prescribes).
+//
+// Bug fixed here: this used to fetch exactly ONE ?limit=500 page and delete
+// every session absent from THAT page -- past 500 live sessions for one
+// agent, a truncated first page deleted LIVE cards, not just orphans. Paging
+// to exhaustion before running the delete pass is the actual fix; limit=500
+// per page is just a page size now, not an assumed ceiling.
+//
+// On a page-fetch error partway through, this agent's walk is abandoned for
+// the tick with NO delete pass run at all: an incomplete `seen` set would
+// otherwise delete every live session past the point of failure, which is
+// the same class of bug this function exists to fix. Sessions upserted from
+// pages fetched before the failure still land (freshened), matching
+// collectAgentSessions's own "a page fetched before the error already landed
+// in out" comment. The next 5s tick retries this agent from the top.
+//
+// Hitting MAX_SESSION_PAGES is treated the same way as a fetch error: the
+// accumulated `seen` set is partial by construction, so running the
+// delete-on-absence pass against it would delete live cards past the
+// ceiling -- same rule as the partial-failure path above, just a different
+// reason the set is incomplete. Sessions upserted from pages fetched before
+// the ceiling still land.
+async function pollAgentSessions(a) {
+  var seen = new Set();
+  var pageToken = "";
+  for (var page = 0; page < MAX_SESSION_PAGES; page++) {
+    var path = "/registry/agents/" + encodeURIComponent(a.namespace) + "/" +
+      encodeURIComponent(a.name) + "/sessions?limit=500" +
+      (pageToken ? "&page=" + encodeURIComponent(pageToken) : "");
+    var res = await apiGet(path);
+    if (!res.ok) return; // abort this agent's walk; no deletion this tick
+    var data = await res.json();
+    (data.sessions || []).forEach(function (rec) {
+      upsertSession(rec);
+      seen.add(sessionKey(rec));
+    });
+    if (!data.next) {
+      sessions.forEach(function (entry, key) {
+        if (entry.record.namespace === a.namespace && entry.record.agent === a.name && !seen.has(key)) {
+          sessions.delete(key);
+        }
+      });
+      return;
+    }
+    pageToken = data.next;
+  }
+  // Ceiling hit with a cursor still outstanding: proceed with the partial
+  // set already upserted above, but skip the delete pass -- see the doc
+  // comment.
+}
+
+// pollSessionsTick is the SSE-unavailable fallback: it walks every known
+// agent via pollAgentSessions (see its doc comment for the pagination fix).
+async function pollSessionsTick() {
+  await loadAgents();
+  for (var i = 0; i < agents.length; i++) {
+    try {
+      await pollAgentSessions(agents[i]);
+    } catch (e) { /* leave this agent's sessions stale for one tick */ }
+  }
+  scheduleRender();
+}
+
+var pollTimer = null;
+function startPolling() {
+  if (pollTimer) return;
+  pollSessionsTick();
+  pollTimer = setInterval(pollSessionsTick, 5000);
+}
+function stopPolling() {
+  if (!pollTimer) return;
+  clearInterval(pollTimer);
+  pollTimer = null;
+}
+
+var sseReconnectDelay = 1000; // grows to a 30s cap on repeated failures
+var sseReconnectTimer = null;
+function connectSSE() {
+  var es = new EventSource(sseURL());
+  es.addEventListener("session", function (ev) {
+    try {
+      var msg = JSON.parse(ev.data);
+      upsertSession(msg.record);
+      scheduleRender();
+    } catch (e) { /* malformed frame: next diff or poll heals it */ }
+  });
+  es.addEventListener("agents", function () { loadAgents(); });
+  es.onopen = function () {
+    // SSE is live again: drop the polling stopgap and reset the backoff.
+    setConnStatus("live (SSE)");
+    stopPolling();
+    sseReconnectDelay = 1000;
+  };
+  es.onerror = function () {
+    // Any stream end — the intentional ~1h lifetime ceiling, a token expiry, a
+    // transient network blip — polls as a STOPGAP but keeps retrying SSE with a
+    // capped backoff, so live push resumes instead of downgrading forever.
+    es.close();
+    setConnStatus("polling (reconnecting SSE)");
+    startPolling();
+    if (!sseReconnectTimer) {
+      sseReconnectTimer = setTimeout(function () {
+        sseReconnectTimer = null;
+        sseReconnectDelay = Math.min(sseReconnectDelay * 2, 30000);
+        connectSSE();
+      }, sseReconnectDelay);
+    }
+  };
+}
+
+// --- Session transcript detail panel (Task 6) -----------------------------
+//
+// Fetches Task 4's registry history/checkpoint endpoints for one session and
+// renders them: events grouped by turn (base64-decoded, pretty-printed JSON)
+// with the checkpoint shown as a leading "compacted through seq N" marker.
+// Uses the SAME apiGet()/authHeaders() plumbing as every other registry call
+// on this page -- no new auth path.
+
+function detailOverlay() { return qs("#detail-overlay"); }
+function detailBody() { return qs("#detail-body"); }
+function detailTitleEl() { return qs("#detail-title"); }
+
+// decodeEventPayload turns one history/checkpoint event's base64 `payload`
+// field back into {ok, value, text}: value is the parsed JSON object when
+// the bytes decode as JSON, text is always the raw decoded string (used as a
+// fallback rendering, and to survive a payload that isn't JSON at all).
+// atob() alone mangles non-ASCII payload bytes, so the base64 is expanded to
+// a Uint8Array and decoded as UTF-8 explicitly.
+function decodeEventPayload(b64) {
+  try {
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var text = new TextDecoder().decode(bytes);
+    try {
+      return { ok: true, value: JSON.parse(text), text: text };
+    } catch (e) {
+      return { ok: true, value: null, text: text };
+    }
+  } catch (e) {
+    return { ok: false, value: null, text: "" };
+  }
+}
+
+// eventTurnOf extracts the {turn} tag this fixture writes into every history
+// event payload (support-desk.js's {v,turn,step,kind,at} envelope). Events
+// this page cannot parse a numeric turn out of land in a single -1 "other"
+// bucket rather than being dropped, so a non-support-desk agent's history
+// still renders.
+function eventTurnOf(decoded) {
+  if (decoded.ok && decoded.value && typeof decoded.value.turn === "number") {
+    return decoded.value.turn;
+  }
+  return -1;
+}
+
+function prettyPayload(decoded) {
+  if (decoded.ok && decoded.value !== null) {
+    try { return JSON.stringify(decoded.value, null, 2); } catch (e) { /* fall through */ }
+  }
+  return decoded.text || "(unreadable payload)";
+}
+
+function eventRowHTML(ev) {
+  var decoded = decodeEventPayload(ev.payload);
+  return '<div class="event-row">' +
+    '<div class="event-meta">seq ' + esc(ev.seq) + ' · <span class="event-type">' + esc(ev.type) +
+    "</span> · " + esc(ev.at) + "</div>" +
+    '<pre class="event-payload">' + esc(prettyPayload(decoded)) + "</pre></div>";
+}
+
+function renderDetailBody(history, checkpoint) {
+  var events = (history && history.events) || [];
+  var groups = new Map(); // turn number (or -1) -> events[]
+  events.forEach(function (ev) {
+    var t = eventTurnOf(decodeEventPayload(ev.payload));
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(ev);
+  });
+  var turns = Array.from(groups.keys()).sort(function (a, b) { return a - b; });
+
+  var html = "";
+  if (checkpoint) {
+    html += '<div class="ckpt-marker">compacted through seq ' + esc(checkpoint.coveredThroughSeq) +
+      " · checkpoint turn " + esc(checkpoint.turn) +
+      " · " + esc(checkpoint.createdAt) + "</div>";
+    var payloadText = "(no payload)";
+    try { payloadText = JSON.stringify(checkpoint.payload, null, 2); } catch (e) { /* leave default */ }
+    html += '<pre class="ckpt-payload">' + esc(payloadText) + "</pre>";
+  }
+
+  if (turns.length === 0) {
+    html += emptyState("no history events for this session");
+  } else {
+    turns.forEach(function (t) {
+      html += '<div class="turn-group"><h3>' + (t >= 0 ? "turn " + esc(t) : "other events") + "</h3>";
+      html += groups.get(t).map(eventRowHTML).join("");
+      html += "</div>";
+    });
+  }
+
+  html += '<div class="detail-head-line">history head: seq ' + esc((history && history.head) || 0) + "</div>";
+  detailBody().innerHTML = html;
+}
+
+// detailEpoch guards against a slow fetch from a PREVIOUS card overwriting a
+// later click's content: clicking card A then quickly card B before A's
+// fetches land must not paint A's transcript under B's title.
+var detailEpoch = 0;
+
+async function openSessionDetail(rec) {
+  var myEpoch = ++detailEpoch;
+  detailTitleEl().textContent = rec.namespace + "/" + rec.agent + " · " + rec.id;
+  detailBody().innerHTML = emptyState("loading transcript…");
+  detailOverlay().hidden = false;
+
+  var base = "/registry/agents/" + encodeURIComponent(rec.namespace) + "/" +
+    encodeURIComponent(rec.agent) + "/sessions/" + encodeURIComponent(rec.id);
+
+  var history = { head: 0, events: [] };
+  var checkpoint = null;
+  try {
+    var histRes = await apiGet(base + "/history?limit=200");
+    if (histRes.ok) {
+      history = await histRes.json();
+      // The first page reads from fromSeq=0, so a head beyond the 200-event
+      // page size lands the OLDEST 200 events, not the most recent -- refetch
+      // the tail (the last 200 events up to head) so the panel shows what
+      // just happened instead of ancient history.
+      if (history.head > 200) {
+        var tailRes = await apiGet(base + "/history?limit=200&fromSeq=" + (history.head - 200));
+        if (tailRes.ok) history = await tailRes.json();
+      }
+    }
+  } catch (e) { /* history stays empty; the panel still opens */ }
+  try {
+    var ckptRes = await apiGet(base + "/checkpoint");
+    // 404 is the documented "no checkpoint yet" shape (also what a
+    // history-disabled agent's session answers) -- not an error, just no
+    // marker line.
+    if (ckptRes.ok) checkpoint = await ckptRes.json();
+  } catch (e) { /* checkpoint stays null */ }
+
+  // The overlay may have been closed (Escape/outside-click), or another
+  // card opened, while these two fetches were in flight; do not resurrect
+  // stale content or paint over a newer selection.
+  if (detailOverlay().hidden || myEpoch !== detailEpoch) return;
+  renderDetailBody(history, checkpoint);
+}
+
+function closeSessionDetail() {
+  detailOverlay().hidden = true;
+  detailBody().innerHTML = "";
+}
+
+// Delegated listener: #sessions-list's innerHTML is replaced wholesale on
+// every render(), so a per-card handler would be lost on the next tick.
+qs("#sessions-list").addEventListener("click", function (ev) {
+  var card = ev.target.closest(".card");
+  if (!card) return;
+  var key = card.getAttribute("data-key");
+  var entry = key && sessions.get(key);
+  if (!entry) return;
+  openSessionDetail(entry.record);
+});
+
+qs("#detail-close").addEventListener("click", closeSessionDetail);
+detailOverlay().addEventListener("click", function (ev) {
+  if (ev.target === detailOverlay()) closeSessionDetail(); // outside click
+});
+document.addEventListener("keydown", function (ev) {
+  if (ev.key === "Escape" && !detailOverlay().hidden) closeSessionDetail();
+});
+
+async function init() {
+  await loadAgents();
+  await loadPool();
+  setInterval(loadPool, 5000); // pool topology has no SSE event; always polled
+  connectSSE();
+  render();
+}
+
+window.addEventListener("resize", function () { requestAnimationFrame(drawAnchors); });
+
+init();
+</script>
+</body>
+</html>

@@ -179,10 +179,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 			Name:  fv1.ResourceVersionCount,
 			Value: fmt.Sprintf("%d", rvCount),
 		},
-		// RFC-0023 state API env (nil when functionState is off). The token
-		// itself arrives via the specialize-on-startup fetcher, which writes
-		// it to the shared mount (see fetcher.StateTokenFileName).
-	}, util.StateAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)
+		// RFC-0023 state API env (nil when functionState is off) and G16
+		// agent runtime env (nil when agentRuntime is off). The tokens
+		// themselves arrive via the specialize-on-startup fetcher, which
+		// writes them to the shared mount (see fetcher.StateTokenFileName,
+		// fetcher.AgentTokenFileName).
+	}, util.SidecarAPIEnvVars(deploy.fetcherConfig.SharedMountPath())...)
 
 	container, err := util.MergeContainer(&apiv1.Container{
 		Name:                   env.Name,
@@ -306,6 +308,12 @@ func (deploy *NewDeploy) getDeploymentSpec(ctx context.Context, fn *fv1.Function
 		// container. See GHSA-85g2-pmrx-r49q.
 		deployment.Spec.Template.Spec.AutomountServiceAccountToken = new(false)
 	}
+
+	// Fill-if-nil: applies env.Spec.RuntimeClassName only when the merge
+	// above (or the base spec) left RuntimeClassName unset, so a
+	// Runtime.PodSpec override always wins. Unconditional — an env can set
+	// RuntimeClassName with no Runtime.PodSpec at all.
+	util.ApplyEnvRuntimeClass(&deployment.Spec.Template.Spec, env)
 
 	// RFC-0030 per-function env. This must run AFTER the
 	// env.Spec.Runtime.PodSpec merge (and after the container merge above):

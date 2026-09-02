@@ -322,6 +322,61 @@ func TestGenericPoolPodSpecRuntimePodSpecCannotIntroduceDuplicateSATokenMount(t 
 		"the surviving mount must be backed by the projected SA token volume, not the user-supplied one")
 }
 
+// TestGenDeploymentSpecRuntimeClassFieldOnly asserts that
+// env.Spec.RuntimeClassName reaches the pod template's RuntimeClassName when
+// NO env.Spec.Runtime.PodSpec is set at all — the common case, and the one
+// that would silently pass if ApplyEnvRuntimeClass were wired inside the
+// "if env.Spec.Runtime.PodSpec != nil" block instead of unconditionally.
+func TestGenDeploymentSpecRuntimeClassFieldOnly(t *testing.T) {
+	t.Parallel()
+	gp := newTestGenericPool(t)
+	env := newTestEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	require.Nil(t, env.Spec.Runtime.PodSpec, "this test must exercise the no-PodSpec path")
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+
+	require.NotNil(t, deploymentSpec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "gvisor", *deploymentSpec.Template.Spec.RuntimeClassName)
+}
+
+// TestGenDeploymentSpecRuntimeClassNilWhenUnset asserts that an env with no
+// RuntimeClassName leaves the pod template's RuntimeClassName nil (omitted),
+// not defaulted to some empty string.
+func TestGenDeploymentSpecRuntimeClassNilWhenUnset(t *testing.T) {
+	t.Parallel()
+	gp := newTestGenericPool(t)
+	env := newTestEnv()
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+
+	assert.Nil(t, deploymentSpec.Template.Spec.RuntimeClassName)
+}
+
+// TestGenDeploymentSpecRuntimeClassPodSpecOverridesField pins the precedence
+// rule: when both env.Spec.RuntimeClassName and env.Spec.Runtime.PodSpec.
+// RuntimeClassName are set to different values, the PodSpec's value wins —
+// Runtime.PodSpec is the documented full-override escape hatch, and
+// ApplyEnvRuntimeClass is fill-if-nil, applied AFTER MergePodSpec.
+func TestGenDeploymentSpecRuntimeClassPodSpecOverridesField(t *testing.T) {
+	t.Parallel()
+	gp := newTestGenericPool(t)
+	env := newTestEnv()
+	env.Spec.RuntimeClassName = new("gvisor")
+	env.Spec.Runtime.PodSpec = &apiv1.PodSpec{
+		RuntimeClassName: new("kata"),
+	}
+
+	deploymentSpec, err := gp.genDeploymentSpec(env)
+	require.NoError(t, err)
+
+	require.NotNil(t, deploymentSpec.Template.Spec.RuntimeClassName)
+	assert.Equal(t, "kata", *deploymentSpec.Template.Spec.RuntimeClassName,
+		"env.Spec.Runtime.PodSpec.RuntimeClassName must win over env.Spec.RuntimeClassName")
+}
+
 // newTestOCIPool returns a GenericPool configured as a per-image image-volume
 // pool (RFC-0001 Path B, fetcherless B-direct variant).
 func newTestOCIPool(t *testing.T, oci *fv1.OCIArchive) *GenericPool {

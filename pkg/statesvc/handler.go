@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statesvc/stateapi"
 	"github.com/fission/fission/pkg/utils/httpx"
@@ -26,6 +27,18 @@ const (
 	defaultListLimit = 100
 	maxListLimit     = 1000
 )
+
+// eventLogSmallBodyCap bounds POST /v1/eventlog/read and .../head request
+// bodies: neither carries a value payload, only a stream name and small
+// integers, so a small fixed cap (unlike append's payload-sized formula) is
+// enough.
+const eventLogSmallBodyCap = 4096
+
+// maxEventTypeBytes bounds EventInput.Type, which the append-body envelope
+// otherwise leaves capped only by the whole-request LimitReader (bodyCap in
+// eventAppend) — a caller could otherwise spend the payload-sized budget on
+// type-string bytes instead of the per-event Payload cap.
+const maxEventTypeBytes = 128
 
 func writeError(w http.ResponseWriter, status int, code, msg string) {
 	_ = httpx.WriteJSON(w, status, stateapi.Error{Error: msg, Code: code})
@@ -51,16 +64,17 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 
 // handler serves the scoped keyed-state API. Every request's Scope was
 // established by the auth middleware; the raw driver is never reachable —
-// kv is the scoped store (quota-enforcing) built over it.
+// kv and el are the scoped/metered stores built over it.
 type handler struct {
 	kv     statestore.KVStore
+	el     statestore.EventLog
 	index  *FunctionIndex
 	logger logr.Logger
 }
 
 // newHandler builds the authenticated API handler. ready gates /readyz.
-func newHandler(kv statestore.KVStore, index *FunctionIndex, auth *authenticator, ready func() bool, logger logr.Logger) http.Handler {
-	h := &handler{kv: kv, index: index, logger: logger}
+func newHandler(kv statestore.KVStore, el statestore.EventLog, index *FunctionIndex, auth *authenticator, ready func() bool, logger logr.Logger) http.Handler {
+	h := &handler{kv: kv, el: el, index: index, logger: logger}
 
 	api := http.NewServeMux()
 	api.HandleFunc("GET /v1/state/{key}", h.get)
@@ -68,6 +82,9 @@ func newHandler(kv statestore.KVStore, index *FunctionIndex, auth *authenticator
 	api.HandleFunc("DELETE /v1/state/{key}", h.del)
 	api.HandleFunc("POST /v1/state/{key}/cas", h.cas)
 	api.HandleFunc("GET /v1/state", h.list)
+	api.HandleFunc("POST /v1/eventlog/append", h.eventAppend)
+	api.HandleFunc("POST /v1/eventlog/read", h.eventRead)
+	api.HandleFunc("POST /v1/eventlog/head", h.eventHead)
 	authed := auth.middleware(h.requireKnownKeyspace(api))
 
 	root := http.NewServeMux()
@@ -81,6 +98,10 @@ func newHandler(kv statestore.KVStore, index *FunctionIndex, auth *authenticator
 	})
 	root.Handle("/v1/state", authed)
 	root.Handle("/v1/state/", authed)
+	// The root mux only forwards /v1/state paths above; /v1/eventlog/ needs
+	// its own registration or the eventlog routes 404 before ever reaching
+	// the inner api mux (and requireKnownKeyspace).
+	root.Handle("/v1/eventlog/", authed)
 	return root
 }
 
@@ -159,6 +180,17 @@ func (h *handler) readValue(w http.ResponseWriter, body io.Reader, sc authedScop
 // both hit it), keeping the status and machine-readable code in one place.
 func writeValueTooLarge(w http.ResponseWriter) {
 	writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeQuotaValueBytes, "value exceeds the keyspace MaxValueBytes quota")
+}
+
+// writeEventConflict answers an EventLog.Append CAS mismatch: 412 (matching
+// writeStoreErr's ErrVersionConflict mapping) with the stream's current head
+// attached, so the caller can resynchronize without a separate Head call.
+func writeEventConflict(w http.ResponseWriter, head int64) {
+	_ = httpx.WriteJSON(w, http.StatusPreconditionFailed, stateapi.Error{
+		Error: "version precondition failed",
+		Code:  stateapi.CodeVersionConflict,
+		Head:  &head,
+	})
 }
 
 func (h *handler) put(w http.ResponseWriter, r *http.Request) {
@@ -247,4 +279,126 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
+}
+
+// eventAppend serves POST /v1/eventlog/append. expectedSeq < 0 (the wire form
+// of statestore.AppendAny) is rejected here: this API is CAS-only, so
+// AppendAny is never reachable through statesvc.
+func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
+	sc, _ := scopeFrom(r.Context())
+	maxValueBytes := h.index.Resolve(sc.scope).MaxValueBytes
+	// Clamp the resolved per-value cap to the admission ceiling before deriving
+	// the body cap: MaxValueBytes is a tenant-owned field, and although admission
+	// now bounds it (fv1.MaxStateMaxValueBytes), a keyspace stored before that
+	// bound existed could still carry a larger value. Clamping here keeps the
+	// body cap bounded and overflow-safe for the shared statesvc regardless of
+	// what a stored config claims.
+	if maxValueBytes > fv1.MaxStateMaxValueBytes {
+		maxValueBytes = fv1.MaxStateMaxValueBytes
+	}
+	// Envelope cap: MaxAppendEvents payloads at the (clamped) MaxValueBytes cap,
+	// base64-inflated (4/3), plus field/envelope overhead. Deliberately NOT the
+	// KV route's maxBytes*2+4096 formula (handler.go's cas), which sizes for a
+	// single value and would truncate a legitimate full batch.
+	bodyCap := int64(stateapi.MaxAppendEvents)*maxValueBytes*4/3 + 64<<10
+	body := io.LimitReader(r.Body, bodyCap)
+	var req stateapi.EventAppendRequest
+	if err := json.UnmarshalRead(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid append body: "+err.Error())
+		return
+	}
+	if req.ExpectedSeq < 0 {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "expectedSeq must be >= 0")
+		return
+	}
+	if len(req.Events) == 0 {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "events must not be empty")
+		return
+	}
+	if len(req.Events) > stateapi.MaxAppendEvents {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "events exceeds the per-append limit")
+		return
+	}
+	if !stateapi.ValidStream(req.Stream) {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadStream, "invalid stream name")
+		return
+	}
+	events := make([]statestore.Event, len(req.Events))
+	for i, ev := range req.Events {
+		if ev.Type == "" || len(ev.Type) > maxEventTypeBytes {
+			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "event type must be 1-128 bytes")
+			return
+		}
+		if int64(len(ev.Payload)) > maxValueBytes {
+			writeValueTooLarge(w)
+			return
+		}
+		events[i] = statestore.Event{Type: ev.Type, Payload: ev.Payload}
+	}
+
+	stream := stateapi.StreamName(sc.scope.Namespace, sc.scope.Keyspace, req.Stream)
+	head, err := h.el.Append(r.Context(), stream, req.ExpectedSeq, events)
+	if err != nil {
+		if errors.Is(err, statestore.ErrVersionConflict) {
+			writeEventConflict(w, head)
+			return
+		}
+		writeStoreErr(w, err)
+		return
+	}
+	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.EventAppendResponse{Head: head})
+}
+
+// eventRead serves POST /v1/eventlog/read.
+func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
+	sc, _ := scopeFrom(r.Context())
+	body := io.LimitReader(r.Body, eventLogSmallBodyCap)
+	var req stateapi.EventReadRequest
+	if err := json.UnmarshalRead(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid read body: "+err.Error())
+		return
+	}
+	if !stateapi.ValidStream(req.Stream) {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadStream, "invalid stream name")
+		return
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = stateapi.DefaultReadLimit
+	}
+	limit = min(limit, stateapi.MaxReadLimit)
+
+	stream := stateapi.StreamName(sc.scope.Namespace, sc.scope.Keyspace, req.Stream)
+	events, err := h.el.Read(r.Context(), stream, req.FromSeq, limit)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	out := make([]stateapi.EventOutput, len(events))
+	for i, ev := range events {
+		out[i] = stateapi.EventOutput{Seq: ev.Seq, Type: ev.Type, Payload: ev.Payload, At: ev.At}
+	}
+	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.EventReadResponse{Events: out})
+}
+
+// eventHead serves POST /v1/eventlog/head.
+func (h *handler) eventHead(w http.ResponseWriter, r *http.Request) {
+	sc, _ := scopeFrom(r.Context())
+	body := io.LimitReader(r.Body, eventLogSmallBodyCap)
+	var req stateapi.EventHeadRequest
+	if err := json.UnmarshalRead(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid head body: "+err.Error())
+		return
+	}
+	if !stateapi.ValidStream(req.Stream) {
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadStream, "invalid stream name")
+		return
+	}
+	stream := stateapi.StreamName(sc.scope.Namespace, sc.scope.Keyspace, req.Stream)
+	head, err := h.el.Head(r.Context(), stream)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.EventHeadResponse{Head: head})
 }

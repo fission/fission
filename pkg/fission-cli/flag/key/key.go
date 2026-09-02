@@ -155,6 +155,31 @@ const (
 	FnStateStickySource  = "state-sticky-source"
 	FnStateStickyName    = "state-sticky-name"
 
+	// Agent runtime config (fn create/update).
+	FnAgent              = "agent"
+	FnAgentSessionSource = "agent-session-source"
+	FnAgentSessionName   = "agent-session-name"
+	FnAgentIdleAfter     = "agent-idle-after"
+	FnAgentArchiveAfter  = "agent-archive-after"
+	FnAgentMaxSessions   = "agent-max-sessions"
+	FnAgentHistoryTrim   = "agent-history-trim"
+
+	// `fission agent create` scaffold (Task 2, G17 DX). --code reuses
+	// PkgCode's "code" key below (same meaning: the single handler file's
+	// path), so only --lang is genuinely new here.
+	FnAgentLang = "lang"
+
+	// `fission agent create --template` (PR-1, abstraction A / Q35): selects
+	// which embedded handler template is scaffolded -- "agent" (the
+	// stateful, session-driven default) or "interpreter" (the stateless
+	// exec verb, pkg/fission-cli/cmd/agent/templates/interpreter.{js,py}.tmpl).
+	FnAgentTemplate = "template"
+
+	// `fission agent sessions` introspection CLI (slice 4).
+	AgentSession      = "session"
+	AgentToken        = "agent-token"
+	AgentSessionsTree = "tree"
+
 	HtName              = resourceName
 	HtMethod            = "method"
 	HtInvocationMode    = "invocation-mode"
@@ -226,6 +251,7 @@ const (
 	EnvForce           = force
 	EnvBuilder         = "builder-env"
 	EnvRuntime         = "runtime-env"
+	EnvRuntimeClass    = "runtimeclass"
 
 	KwName      = resourceName
 	KwFnName    = "function"

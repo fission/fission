@@ -1,0 +1,399 @@
+'use strict';
+
+// {{.Name}} -- an interpreter agent handler, scaffolded by
+// `fission agent create --template interpreter`.
+//
+// WHAT THIS FILE IS
+// ------------------
+// This implements the "exec" verb (abstraction A, PR-1): a turn's body is
+// { "code": "..." } (interpreted with `node -e`) or { "command": "..." }
+// (run through a shell) -- exactly one of the two -- and the reply is
+// { stdout, stderr, exitCode, durationMs, truncated }. It is an ordinary
+// Fission function (module.exports takes one `context` argument and
+// returns {status, body, headers}) that the agent runtime calls once per
+// turn like any other agent handler, so it runs through the normal
+// dispatch path -- no new platform code, no new environment image.
+//
+// TRUST BOUNDARY -- READ BEFORE USE
+// ----------------------------------
+// The subprocess environment below is an ALLOW-LIST, not a filtered copy:
+// the child starts with nothing and gets only PATH/HOME/LANG/etc, so
+// FISSION_* vars (state/agent token PATHS, runtime URLs) are never passed
+// through -- that keeps ACCIDENTAL credential leakage out of exec'd code.
+// It is NOT a sandbox: a process in the SAME CONTAINER can still read the
+// pod's token files directly, so exec'd code runs at the agent's own trust
+// level. That is fine for run-your-own-code tools (an analyst's own
+// interpreter, a calculator tool) -- it is NOT a boundary for adversarial
+// or multi-tenant code, which needs a dedicated pod per session (a Tier C
+// bare-Sandbox executor), not this template. Pair this environment with
+// `fission env create ... --runtime-class gvisor` for one more layer of
+// isolation before running code you did not write yourself. The same
+// accidental-leakage posture applies to workspace sync below: a symlink
+// written into the scratch dir pointing at, say, the pod's token file would
+// get its TARGET's bytes uploaded to a workspace sibling sessions of this
+// same agent can read (see the workspace hydration/sync section) -- that is
+// why the sync walk below skips symlinks outright rather than following them.
+//
+// WORKING DIRECTORY AND WORKSPACE HYDRATION/SYNC (PR-2, abstraction C)
+// ----------------------------------------------------------------------
+// For a STATELESS call (no session header -- the MCP fast lane or a bare
+// direct invocation), the working directory is still a fresh scratch dir,
+// wiped before and best-effort removed after every call: there is no session
+// to key a workspace on, so nothing here changes for that path.
+//
+// For a SESSIONFUL call, the scratch dir ($TMPDIR/exec/<session>) is no
+// longer wiped at the start or end of a turn. Instead:
+//   - Turn start: HYDRATE -- list the session's G12 workspace
+//     (pkg/agentruntime/workspace.go) and download any file that is missing
+//     locally or whose local size does not match the remote size. On a warm
+//     pod where nothing changed since the last turn this is one LIST call
+//     and no downloads (lazy).
+//   - Turn end: SYNC -- walk the scratch dir and PUT any file that is new or
+//     has changed since the last successful hydrate/sync of that same path
+//     (compared via size+mtime, falling back to a content hash only when
+//     size+mtime alone is ambiguous -- see syncWorkspace). A hash manifest
+//     file kept in the scratch dir (never itself synced) is what lets a
+//     second turn on the SAME warm pod skip re-uploading anything unchanged.
+// This is what makes a file exec'd code writes survive a pod respecialize:
+// the scratch dir itself is pod-local and gone the moment the pod is, but
+// the workspace copy persists in storagesvc and rehydrates onto whichever
+// pod serves the session's next turn.
+//
+// Sync is ADDITIVE ONLY: a file deleted locally is never DELETEd from the
+// workspace (workspace.go's DELETE stays an explicit app-level call your own
+// code would have to make) -- this mirrors the shipped design's own
+// "workspace is additive" stance. A failed hydrate or sync (network error,
+// a 413 over one of the shipped quotas -- 32MiB/artifact, 256MiB + 1000
+// artifacts/session) is never silently dropped: it is collected into the
+// turn's `workspaceWarnings` reply field instead (capped so a runaway
+// directory full of failures cannot blow the reply up the same way
+// MAX_OUTPUT_BYTES caps stdout/stderr).
+//
+// Security note (restated from the shipped design, workspace.go): the
+// identity token's boundary is per-(namespace, agent), not per-session -- a
+// session can read a SIBLING session's artifacts of this same agent. Hydrate
+// is scoped to THIS session's own workspace by convention (the session id in
+// the URL), not by any server-side enforcement narrower than the agent
+// itself; per-session tokens remain a documented future slice, not something
+// this template can provide on its own.
+//
+// MAX_TIMEOUT_SECONDS (below) doubles as this scaffold's FunctionTimeout
+// (see `fission agent create`'s next-steps output) -- a turn whose exec runs
+// the full 300s ceiling leaves NO headroom for the sync step that follows
+// it. A long-running exec workload should lower its own timeoutSeconds well
+// under the ceiling if it also wants sync to reliably complete inside the
+// same request.
+
+const { spawn } = require('child_process');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// The dispatcher stamps the session header on every forwarded call (see
+// pkg/agentruntime/dispatcher.go); this template reads it only to name the
+// per-session scratch directory, and always answers with the default
+// yield (below) so a session-scoped call never self-re-invokes. Node
+// lower-cases incoming header names.
+const SESSION_HEADER = 'x-fission-session';
+const YIELD_HEADER = 'X-Fission-Agent-Yield';
+
+// DEFAULT_TIMEOUT_SECONDS / MAX_TIMEOUT_SECONDS -- the request-carried
+// timeoutSeconds is clamped into (0, MAX_TIMEOUT_SECONDS]; a request that
+// omits it (or sends a non-positive value) gets DEFAULT_TIMEOUT_SECONDS.
+// MAX_TIMEOUT_SECONDS is also this scaffold's own FunctionTimeout (see
+// `fission agent create`'s next-steps output), so a full-length exec call
+// is never killed by the platform's own request timeout first.
+const DEFAULT_TIMEOUT_SECONDS = 60;
+const MAX_TIMEOUT_SECONDS = {{.MaxTimeoutSeconds}};
+
+// MAX_OUTPUT_BYTES caps stdout/stderr EACH (aligns with the state API's
+// MaxValueBytes default, DefaultStateMaxValueBytes, pkg/apis/core/v1/const.go)
+// -- overflow sets truncated:true, it never turns into an error response.
+const MAX_OUTPUT_BYTES = 256 * 1024;
+
+// ALLOWED_ENV_VARS: see the trust-boundary note above -- this is the
+// complete list of names copied into the child's environment. Nothing
+// outside it reaches the subprocess, however this pod's own environment
+// grows in the future.
+const ALLOWED_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ'];
+
+function allowedEnv() {
+  const env = {};
+  for (const key of ALLOWED_ENV_VARS) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+  return env;
+}
+
+{{template "workspaceHelper" .}}
+
+// outputBuffer accumulates chunks up to MAX_OUTPUT_BYTES; further bytes are
+// dropped at push time (not merely trimmed once collection ends), so a
+// runaway process cannot hold arbitrarily large buffers in memory before
+// the cap is applied.
+function outputBuffer() {
+  let bytes = 0;
+  let truncated = false;
+  const chunks = [];
+  return {
+    push(chunk) {
+      if (truncated) {
+        return;
+      }
+      const remaining = MAX_OUTPUT_BYTES - bytes;
+      if (chunk.length > remaining) {
+        chunks.push(chunk.subarray(0, remaining));
+        bytes += remaining;
+        truncated = true;
+        return;
+      }
+      chunks.push(chunk);
+      bytes += chunk.length;
+    },
+    text() {
+      return Buffer.concat(chunks).toString('utf8');
+    },
+    truncated() {
+      return truncated;
+    },
+  };
+}
+
+// runExec spawns argv[0](...argv[1:]) in cwd with the allow-listed
+// environment, killing the WHOLE process group (detached: true + a
+// negative pid to process.kill) if it outlives timeoutSeconds -- a shell
+// running `command` can fork children of its own, and only killing the
+// direct child would leave those running.
+function runExec(argv, cwd, timeoutSeconds) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const stdout = outputBuffer();
+    const stderr = outputBuffer();
+    let timedOut = false;
+    let settled = false;
+    let timer = null;
+    let forceTimer = null;
+
+    // finish is the ONLY way out of this promise: 'close' and 'error' race
+    // the post-kill force timer below, and whichever fires first wins --
+    // the settled flag makes the losers no-ops instead of double-resolves.
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(forceTimer);
+      resolve(result);
+    };
+
+    const timeoutResult = () => ({
+      stdoutText: stdout.text(),
+      stderrText: stderr.text() + '\n[exec: killed after exceeding ' + timeoutSeconds + 's timeout]',
+      truncated: stdout.truncated() || stderr.truncated(),
+      exitCode: -1,
+      durationMs: Date.now() - start,
+    });
+
+    const child = spawn(argv[0], argv.slice(1), {
+      cwd,
+      env: allowedEnv(),
+      detached: true,
+    });
+
+    timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (err) {
+        // Process already exited between the timer firing and the kill --
+        // nothing left to clean up.
+      }
+      // 'close' only fires once the stdio pipes shut, and a child that
+      // escaped the process group (setsid) survives the group kill while
+      // still holding the inherited pipes -- without this, such a child
+      // wedges the turn until the platform's own request timeout, exactly
+      // the class the Python template's post-kill join(timeout=5) grace
+      // bounds. Force-resolve with whatever output was collected; the late
+      // 'close' (if it ever comes) is a no-op via the settled flag.
+      forceTimer = setTimeout(() => finish(timeoutResult()), 5000);
+    }, timeoutSeconds * 1000);
+
+    child.stdout.on('data', (chunk) => stdout.push(chunk));
+    child.stderr.on('data', (chunk) => stderr.push(chunk));
+
+    child.on('error', (err) => {
+      finish({
+        stdoutText: stdout.text(),
+        stderrText: stderr.text() + '\n[exec: failed to start: ' + err.message + ']',
+        truncated: stdout.truncated() || stderr.truncated(),
+        exitCode: -1,
+        durationMs: Date.now() - start,
+      });
+    });
+
+    child.on('close', (code) => {
+      if (timedOut) {
+        finish(timeoutResult());
+        return;
+      }
+      finish({
+        stdoutText: stdout.text(),
+        stderrText: stderr.text(),
+        truncated: stdout.truncated() || stderr.truncated(),
+        exitCode: code === null ? -1 : code,
+        durationMs: Date.now() - start,
+      });
+    });
+  });
+}
+
+function parseBody(raw) {
+  if (raw && typeof raw === 'object') {
+    return raw;
+  }
+  if (typeof raw === 'string' && raw.length > 0) {
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      return {};
+    }
+  }
+  return {};
+}
+
+// SESSION_ID_CHARSET_RE mirrors the dispatcher's own sessionIDPattern
+// (pkg/agentruntime/dispatcher.go) exactly. This template is reached two
+// ways: through the dispatcher, which already validates X-Fission-Session
+// against that pattern before forwarding it, but ALSO directly against the
+// router internal listener (a bare `fission function test`/curl, or the MCP
+// fast lane) -- a path with no dispatcher in front of it at all, where the
+// header is whatever the caller sent, unconstrained by any pattern.
+// Re-validating here is what makes safeScratchName's guard hold on BOTH
+// paths rather than only the one that happens to enforce it upstream.
+const SESSION_ID_CHARSET_RE = /^[A-Za-z0-9._-]{1,128}$/;
+
+// safeScratchName mirrors pkg/agentruntime/workspace.go's
+// validateWorkspaceSegment. This template turns sessionID into a path
+// SEGMENT (path.join(os.tmpdir(), 'exec', scratchName)), so a value of "."
+// resolves to $TMPDIR/exec itself, ".." resolves to $TMPDIR itself, and
+// anything containing "/" (never possible through the dispatcher, but
+// possible on the direct path above) can walk arbitrarily far outside
+// $TMPDIR/exec -- a STATELESS scratch dir (this function returned a fresh
+// fallback name rather than sessionID itself) still gets
+// fs.rmSync({recursive:true})'d at the start and end of every call; a
+// SESSIONFUL one is no longer wiped at all (see module.exports below), so an
+// unguarded traversal there would instead silently and repeatedly
+// hydrate/sync through a sibling session's or the pod's own unrelated
+// directory on every future turn. Falls back to a fresh uniquely-named
+// scratch dir instead of erroring the turn.
+function safeScratchName(sessionID) {
+  if (sessionID === '.' || sessionID === '..' || !SESSION_ID_CHARSET_RE.test(sessionID)) {
+    return 'stateless-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
+  return sessionID;
+}
+
+function clampTimeout(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return DEFAULT_TIMEOUT_SECONDS;
+  }
+  return Math.min(n, MAX_TIMEOUT_SECONDS);
+}
+
+// --- The turn --------------------------------------------------------------
+module.exports = async function (context) {
+  const req = context.request;
+  const sessionID = (req.headers[SESSION_HEADER] || '').trim();
+  // A call with no session header (the MCP fast lane -- tools/call goes
+  // straight to the router internal listener, bypassing the dispatcher --
+  // or a bare direct invocation) is stateless exec: a fresh, uniquely-named
+  // scratch dir per call rather than one keyed on a session that does not
+  // exist here. isSession additionally requires safeScratchName to have
+  // returned sessionID UNCHANGED -- its fallback branch means sessionID
+  // failed validation (the direct-invocation path has no dispatcher
+  // enforcing sessionIDPattern upstream), and a scratch dir named after a
+  // fabricated fallback id is not a real session's workspace to hydrate from
+  // or sync to.
+  const scratchName = safeScratchName(sessionID);
+  const isSession = Boolean(sessionID) && scratchName === sessionID;
+  const scratchDir = path.join(os.tmpdir(), 'exec', scratchName);
+
+  const headers = { 'Content-Type': 'application/json', [YIELD_HEADER]: 'waiting' };
+
+  const body = parseBody(req.body);
+  const hasCode = typeof body.code === 'string';
+  const hasCommand = typeof body.command === 'string';
+  if (hasCode === hasCommand) {
+    return {
+      status: 400,
+      headers,
+      body: JSON.stringify({ error: 'exactly one of "code" or "command" is required' }),
+    };
+  }
+
+  const timeoutSeconds = clampTimeout(body.timeoutSeconds);
+
+  let workspaceWarnings = [];
+  let manifest = {};
+  if (isSession) {
+    // SESSIONFUL: the scratch dir is deliberately NOT wiped -- see the
+    // "Workspace hydration/sync" comment at the top of this file. It may
+    // already exist (a later turn on the same warm pod) or not (the
+    // session's very first turn, or a fresh pod after respecialize).
+    fs.mkdirSync(scratchDir, { recursive: true });
+    manifest = loadWorkspaceManifest(scratchDir);
+    workspaceWarnings = workspaceWarnings.concat(await hydrateWorkspace(scratchDir, sessionID, manifest));
+  } else {
+    // STATELESS: unchanged from PR-1 -- fresh scratch dir, best-effort
+    // removed after the call, no workspace involvement at all.
+    try {
+      fs.rmSync(scratchDir, { recursive: true, force: true });
+    } catch (err) {
+      // Nothing to clean up yet -- fine.
+    }
+    fs.mkdirSync(scratchDir, { recursive: true });
+  }
+
+  let result;
+  try {
+    if (hasCode) {
+      result = await runExec([process.execPath, '-e', body.code], scratchDir, timeoutSeconds);
+    } else {
+      result = await runExec(['/bin/sh', '-c', body.command], scratchDir, timeoutSeconds);
+    }
+  } finally {
+    if (!isSession) {
+      try {
+        fs.rmSync(scratchDir, { recursive: true, force: true });
+      } catch (err) {
+        // Best-effort cleanup -- a leftover scratch dir is not worth
+        // failing the turn over.
+      }
+    }
+  }
+
+  if (isSession) {
+    workspaceWarnings = workspaceWarnings.concat(await syncWorkspace(scratchDir, sessionID, manifest));
+    saveWorkspaceManifest(scratchDir, manifest);
+  }
+
+  const reply = {
+    stdout: result.stdoutText,
+    stderr: result.stderrText,
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    truncated: result.truncated,
+    workspaceWarnings: workspaceWarnings,
+  };
+
+  return {
+    status: 200,
+    headers,
+    body: JSON.stringify(reply),
+  };
+};

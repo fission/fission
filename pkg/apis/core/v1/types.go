@@ -30,6 +30,16 @@ const (
 	RouteProviderGateway RouteProviderType = "gateway"
 )
 
+// Agent-runtime session-source consts and defaults.
+const (
+	SessionSourceHeader     SessionSource = "header"
+	SessionSourceQueryParam SessionSource = "queryparam"
+
+	// DefaultAgentSessionHeader is the session-id header used when
+	// AgentConfig.Session is nil.
+	DefaultAgentSessionHeader = "X-Fission-Session"
+)
+
 // Workflow state kinds (RFC-0022). The enum marker on WorkflowStateType must
 // list exactly these values; both grow together as later phases add
 // Parallel/Map/Wait.
@@ -1334,6 +1344,15 @@ type (
 		// +optional
 		Versioning *VersioningConfig `json:"versioning,omitempty"`
 
+		// Agent, when non-nil, declares this function as an agent: its
+		// invocations are session-scoped, dispatched and lifecycle-tracked by
+		// the fission-bundle --agentPort subsystem, with session records kept
+		// in the statestore (never CRDs). Presence is the on switch (like
+		// Streaming, Tool and State): nil (the default) means exactly today's
+		// behavior. Additive and backward compatible.
+		// +optional
+		Agent *AgentConfig `json:"agent,omitempty"`
+
 		// Podspec specifies podspec to use for executor type container based functions
 		// Different arguments mentioned for container based function are populated inside a pod.
 		// +optional
@@ -1472,6 +1491,71 @@ type (
 		// Name is the header or query-parameter name holding the key,
 		// e.g. "X-Session-Id".
 		Name string `json:"name"`
+	}
+
+	// SessionSource selects where the agent dispatcher extracts the session id
+	// from an incoming request.
+	// +kubebuilder:validation:Enum=header;queryparam
+	SessionSource string
+
+	// AgentSessionConfig declares how the session id is derived from a request.
+	// Requests missing the id get a runtime-minted UUID, returned in the
+	// X-Fission-Session response header.
+	AgentSessionConfig struct {
+		// Source is where to look for the session id.
+		Source SessionSource `json:"source"`
+
+		// Name is the header or query-parameter name holding the session id,
+		// e.g. "X-Session-Id". It must not be a reserved runtime header name
+		// ("Authorization" or the "X-Fission-" prefix, which the runtime owns):
+		// to use the platform default header (X-Fission-Session), leave the
+		// enclosing Session nil rather than naming it here.
+		Name string `json:"name"`
+	}
+
+	// AgentConfig declares a function's agent behavior: session identity,
+	// idle/archive lifecycle policy, and the live-session quota. Presence of
+	// the enclosing FunctionSpec.Agent is the on switch — there is no separate
+	// enabled flag, so the in-memory zero value and the stored object never
+	// disagree (the same rationale as StreamingConfig).
+	AgentConfig struct {
+		// Session, when non-nil, overrides where the session id comes from.
+		// nil (the default) means the X-Fission-Session request header.
+		// +optional
+		Session *AgentSessionConfig `json:"session,omitempty"`
+
+		// IdleAfter is how long a session stays "active" after its last turn
+		// before the sweeper marks it idle (a status transition, not a pod
+		// operation — pods are released after every turn regardless). Must be
+		// >= 0; zero (or nil) means the platform default (5m).
+		// +optional
+		IdleAfter *metav1.Duration `json:"idleAfter,omitempty"`
+
+		// ArchiveAfter is how long an idle session is kept listed, measured from
+		// its LastActiveAt, before it is archived (delisted; record retained on
+		// a retention TTL). Must be >= IdleAfter when both are set; zero (or
+		// nil) means the platform default (24h). The resolved value is always
+		// clamped up to at least the resolved IdleAfter, so no combination of
+		// defaults can archive a session while it is still within its idle
+		// window.
+		// +optional
+		ArchiveAfter *metav1.Duration `json:"archiveAfter,omitempty"`
+
+		// MaxSessions caps live (active or idle) sessions for this agent,
+		// enforced atomically on session creation with the statestore's
+		// counted-write (the same quota mechanism as StateConfig.MaxKeys).
+		// Archived sessions live in a sibling keyspace and never count
+		// against this cap. 0 means unlimited.
+		// +optional
+		// +kubebuilder:validation:Minimum=0
+		MaxSessions int64 `json:"maxSessions,omitempty"`
+
+		// HistoryTrimBelowCheckpoint, when true, lets the agent runtime's sweeper
+		// trim this agent's session fact logs below each session's committed
+		// checkpoint coverage boundary (G13). Requires State: a knob that can
+		// never act (no state keyspace means no history) is rejected at admission.
+		// +optional
+		HistoryTrimBelowCheckpoint bool `json:"historyTrimBelowCheckpoint,omitempty"`
 	}
 
 	// InvocationConfig tunes RFC-0024 asynchronous invocation for a function.
@@ -1851,6 +1935,7 @@ type (
 	}
 
 	// EnvironmentSpec contains with builder, runtime and some other related environment settings.
+	// +kubebuilder:validation:XValidation:rule="!has(self.runtimeClassName) || (size(self.runtimeClassName) <= 253 && self.runtimeClassName.matches('^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'))",message="spec.runtimeClassName must be lowercase alphanumeric or '-', start and end alphanumeric, at most 253 characters"
 	EnvironmentSpec struct {
 		// Version is the Environment API version
 		//
@@ -1939,6 +2024,29 @@ type (
 		// private registry.
 		// +optional
 		ImagePullSecret string `json:"imagepullsecret"`
+
+		// (Optional) RuntimeClassName opts this environment's pods into a
+		// syscall-isolating RuntimeClass — for example gVisor's "gvisor" or
+		// Kata Containers' "kata" — instead of the node's default
+		// (typically runc) container runtime. It applies to BOTH this
+		// environment's runtime (warm pool / specialized) pods AND its
+		// builder pods: an author opting into isolation means "this env's
+		// workloads," and builder pods run user build commands, arguably
+		// more arbitrary-code-shaped than the runtime pods.
+		//
+		// This is fill-if-nil only: a RuntimeClassName set directly on
+		// Runtime.PodSpec (or Builder.PodSpec) is the documented full
+		// override escape hatch and always takes precedence over this
+		// field when both are set.
+		//
+		// NOT applied to container-executor functions (Tier C) — there is
+		// no Environment in scope on that path today, consistent with how
+		// Runtime.PodSpec/Builder.PodSpec are already handled.
+		//
+		// The referenced RuntimeClass object is not required to exist at
+		// admission time; an absent one fails at pod scheduling, not here.
+		// +optional
+		RuntimeClassName *string `json:"runtimeClassName,omitempty"`
 	}
 	// AllowedFunctionsPerContainer defaults to 'single'. Related to Fission Workflows
 	AllowedFunctionsPerContainer string

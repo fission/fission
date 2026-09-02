@@ -375,6 +375,14 @@ pkg/svcinfo.PortMCP.
 {{- end -}}
 
 {{/*
+fission.agentRuntimePort is the agent runtime dispatcher's port. Mirrored by
+pkg/svcinfo.PortAgentRuntime.
+*/}}
+{{- define "fission.agentRuntimePort" -}}
+{{ (.Values.agentRuntime | default dict).port | default 8894 }}
+{{- end -}}
+
+{{/*
 fission.statestorePort is the embedded statestore's capability API port.
 Mirrored by pkg/svcinfo.PortStatestore (RFC-0021).
 */}}
@@ -542,6 +550,34 @@ annotation would fight that design — hence the same tenancy gate.
 {{- end -}}
 
 {{/*
+fission.functionNamespaces is the deduped namespace set function workloads
+render into: .Values.functionNamespace when set (else .Values.defaultNamespace),
+plus every .Values.additionalFissionNamespaces entry. Mirrors pkg/utils
+NamespaceResolver.FunctionNamespaces (each resource namespace resolved through
+GetFunctionNS): functionNamespace replaces only the DEFAULT namespace when set;
+additionalFissionNamespaces entries always map to themselves. This is the exact
+range router/role-dataplane.yaml and executor/networkpolicy-environment-egress.yaml
+each recomputed inline before switching to this helper.
+
+Space-joined like fission.adoptSecretNamespaces above; split with
+`splitList " "` at the call site, e.g.:
+
+  {{- range $ns := splitList " " (include "fission.functionNamespaces" $) }}
+*/}}
+{{- define "fission.functionNamespaces" -}}
+{{- $namespaces := list -}}
+{{- if .Values.functionNamespace -}}
+{{-   $namespaces = append $namespaces .Values.functionNamespace -}}
+{{- else -}}
+{{-   $namespaces = append $namespaces .Values.defaultNamespace -}}
+{{- end -}}
+{{- range $ns := .Values.additionalFissionNamespaces -}}
+{{-   $namespaces = append $namespaces $ns -}}
+{{- end -}}
+{{- join " " ($namespaces | uniq) -}}
+{{- end -}}
+
+{{/*
 fission.saMetadata renders the annotations and labels a ServiceAccount inherits
 from the `serviceAccounts` values block, as complete metadata sub-blocks.
 
@@ -653,7 +689,7 @@ the chart test proves every key on it annotates exactly one rendered account.
 Keep it sorted, and add to it in the same commit that adds a ServiceAccount.
 */}}
 {{- define "fission.saComponents" -}}
-builder buildermgr canaryconfig executor fetcher kafka kubewatcher mcp mqtKeda preupgrade router statestore statestoreMqt statesvc storagesvc tenantController timer webhook workflow
+agentruntime builder buildermgr canaryconfig executor fetcher kafka kubewatcher mcp mqtKeda preupgrade router statestore statestoreMqt statesvc storagesvc tenantController timer webhook workflow
 {{- end -}}
 
 {{/*

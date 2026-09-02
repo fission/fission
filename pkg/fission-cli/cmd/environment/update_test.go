@@ -112,4 +112,45 @@ func TestUpdateExistingEnvironmentWithCmd(t *testing.T) {
 		_, err := updateExistingEnvironmentWithCmd(env, in)
 		require.Error(t, err)
 	})
+
+	t.Run("runtime class set when flag given", func(t *testing.T) {
+		t.Parallel()
+		in := dummy.TestFlagSet()
+		in.SetString(flagkey.EnvRuntimeClass, "kata")
+
+		got, err := updateExistingEnvironmentWithCmd(baseEnv(), in)
+		require.NoError(t, err)
+		require.NotNil(t, got.Spec.RuntimeClassName)
+		assert.Equal(t, "kata", *got.Spec.RuntimeClassName)
+	})
+
+	t.Run("runtime class empty string clears an existing value", func(t *testing.T) {
+		t.Parallel()
+		env := baseEnv()
+		existing := "gvisor"
+		env.Spec.RuntimeClassName = &existing
+
+		in := dummy.TestFlagSet()
+		in.SetString(flagkey.EnvRuntimeClass, "")
+
+		got, err := updateExistingEnvironmentWithCmd(env, in)
+		require.NoError(t, err)
+		assert.Nil(t, got.Spec.RuntimeClassName,
+			"empty string is the un-opt path and must clear the field, not leave it untouched")
+	})
+
+	t.Run("runtime class untouched when the flag is not set", func(t *testing.T) {
+		t.Parallel()
+		env := baseEnv()
+		existing := "gvisor"
+		env.Spec.RuntimeClassName = &existing
+
+		in := dummy.TestFlagSet()
+		in.SetString(flagkey.EnvImage, "new-image")
+
+		got, err := updateExistingEnvironmentWithCmd(env, in)
+		require.NoError(t, err)
+		require.NotNil(t, got.Spec.RuntimeClassName)
+		assert.Equal(t, "gvisor", *got.Spec.RuntimeClassName)
+	})
 }

@@ -1,0 +1,105 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if .Values.environmentNetworkPolicy.enabled }}
+# Egress isolation for environment/function pods (abstraction E of the
+# agent-runtime abstraction stack; doc 13 §E). Every poolmgr generic and
+# specialized pod, and every newdeploy pod, carries the `environmentName`
+# label (fv1.ENVIRONMENT_NAME — see pkg/executor/executortype/poolmgr/gp_pod.go
+# and pkg/executor/executortype/newdeploy/newdeploymgr.go); this policy
+# selects on the label's presence, so it covers every environment
+# regardless of name. Container-executortype pods don't carry this label
+# and fall outside this policy.
+#
+# Default posture copies Agent Sandbox's SandboxTemplate-managed
+# NetworkPolicy default: allow general internet egress, deny RFC1918
+# (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), RFC6598/CGNAT
+# (100.64.0.0/10 — used as pod/Service CIDRs by EKS clusters running VPC
+# custom networking) and link-local (169.254.0.0/16, which also covers the
+# 169.254.169.254 cloud metadata endpoint) destinations. Cluster DNS
+# (kube-system/kube-dns, port 53) is
+# allowed by default so hostname-based egress destinations resolve;
+# environmentNetworkPolicy.allowClusterDNS=false drops that rule for a
+# stricter numeric-IP-only posture.
+#
+# NetworkPolicy podSelector only matches pods in the policy's own
+# namespace, so a single copy in `fission-function-ns` would silently
+# no-op for function pods living in any other namespace. This renders
+# one copy per namespace in the STATIC-tenancy function-namespace set —
+# same range this chart already does in router/role-dataplane.yaml, and
+# mirroring pkg/utils NamespaceResolver.FunctionNamespaces: functionNamespace
+# (or defaultNamespace when unset) plus every additionalFissionNamespaces
+# entry. Rendering into the release namespace would also be a no-op
+# whenever functionNamespace/defaultNamespace differs from it.
+#
+# LIMITATION — dynamic/cluster tenancy: namespaces onboarded at runtime by
+# the tenant controller (tenancy.mode: dynamic|cluster) are not listed in
+# additionalFissionNamespaces and so are unknown at chart render time.
+# This knob does NOT enforce egress isolation for function pods in those
+# namespaces — see the environmentNetworkPolicy comment in values.yaml.
+#
+# WARNING: the RFC1918/CGNAT deny-list also blocks in-cluster control-plane
+# traffic (pod/Service CIDRs are themselves RFC1918 in most clusters, and
+# 100.64.0.0/10 on an EKS cluster running VPC custom networking) —
+# fetcher->storagesvc (package fetch), function->statesvc, and
+# agent->agentruntime (workspace sync) all cross it. See the
+# environmentNetworkPolicy comment in values.yaml for the extraEgress
+# allow-list an operator needs before enabling this in a cluster that
+# uses those features.
+{{- range $ns := splitList " " (include "fission.functionNamespaces" $) }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: environment-egress
+  namespace: {{ $ns | quote }}
+  labels:
+    chart: "{{ $.Chart.Name }}-{{ $.Chart.Version }}"
+    svc: executor
+spec:
+  podSelector:
+    matchExpressions:
+      - key: environmentName
+        operator: Exists
+  policyTypes:
+    - Egress
+  egress:
+    {{- if $.Values.environmentNetworkPolicy.allowClusterDNS }}
+    # Cluster DNS. Scoped to kube-system/kube-dns (the kubeadm/kOps/GKE/EKS
+    # convention) rather than an unscoped `namespaceSelector: {}`, which
+    # would admit any in-cluster listener on port 53 and undercut the
+    # RFC1918 deny-list below. A cluster running CoreDNS under a different
+    # label needs an extraEgress override.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    # General egress: the whole internet except RFC1918 private ranges,
+    # RFC6598/CGNAT (100.64.0.0/10 — EKS custom-networking clusters use this
+    # for pod/Service CIDRs, so omitting it would silently fail the
+    # deny-in-cluster posture on those clusters) and link-local (which
+    # subsumes the 169.254.169.254 cloud metadata IP).
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+    {{- with $.Values.environmentNetworkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}
+{{- end }}

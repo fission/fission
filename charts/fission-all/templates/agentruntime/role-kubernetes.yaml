@@ -1,0 +1,22 @@
+{{- if .Values.agentRuntime.enabled }}
+{{- /*
+Namespaced kube-resource Role (pods + endpointslices, agentruntime-kuberules) for
+pool introspection. poolCacheOptions (pkg/agentruntime/main.go) scopes the
+EndpointSlice/Pod informer to FunctionNamespaces() in every non-cluster tenancy
+mode, so the grant belongs in a per-namespace Role here — NOT in the fission.io
+cluster-role generator (see the note on "agentruntime-rules"). Cluster tenancy
+watches cluster-wide and is granted separately in cluster-mode-bindings.yaml.
+Coverage mirrors FunctionNamespaces(): defaultNamespace + additionalFissionNamespaces
++ functionNamespace (the last also covers split functionNamespace installs).
+*/ -}}
+{{- include "kubernetes-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "agentruntime") .) }}
+
+{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+{{ include "kubernetes-role-generator" (merge (dict "namespace" $namespace "component" "agentruntime") $) }}
+{{- end }}
+{{- end }}
+{{- if .Values.functionNamespace -}}
+{{ include "kubernetes-role-generator" (merge (dict "namespace" .Values.functionNamespace "component" "agentruntime") $) }}
+{{- end }}
+{{- end }}

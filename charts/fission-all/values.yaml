@@ -871,6 +871,62 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## The agent runtime dispatches durable, multi-turn agent sessions to
+## Tool-exposed functions. Off by default. When enabled it runs
+## fission-bundle --agentPort as a ClusterIP-only Service, keeps session
+## records in the statestore (requires statestore.enabled, render-validated),
+## and dispatches turns to the router internal listener like the other
+## internal publishers. Agents authenticate with a bearer JWT when
+## authentication.enabled is set. With authentication disabled the dispatcher
+## can only run unauthenticated if you explicitly set allowInsecure below;
+## otherwise enabling the agent runtime without authentication fails the
+## chart render.
+##
+agentRuntime:
+  enabled: false
+  ## Port the agent runtime listens on (ClusterIP Service of the same port).
+  ## 8891-8893 belong to statestore/workflow/statesvc.
+  ##
+  port: 8894
+  ## allowInsecure permits running the dispatcher UNAUTHENTICATED when
+  ## authentication.enabled is false (dev/test only). Leave false in
+  ## production; enable authentication instead so callers are scoped by a
+  ## signed JWT.
+  ##
+  allowInsecure: false
+  ## replicas: the dispatcher is stateless (session truth is the statestore)
+  ## and the sweeper is CAS-idempotent, so replicas need no leader election.
+  ##
+  replicas: 1
+  ## Sweep cadence and archived-record retention.
+  ##
+  sweepInterval: 30s
+  archiveRetention: 168h
+  ## Caps yield=continue self-chaining per session (0 = unlimited). Guards a
+  ## misbehaving agent from chaining forever on the agent-wake queue.
+  ##
+  maxContinuations: 1000
+  ## Platform-wide live-session ceiling applied to any agent whose spec sets
+  ## no MaxSessions of its own (0 = no default, unbounded). Bounds unqualified
+  ## session creation without requiring a per-agent quota.
+  ##
+  maxSessions: 1000
+  ## Pod resources.
+  ##
+  resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: true
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## Statestore — the durable-state substrate (RFC-0021) consumed by workflows
 ## (RFC-0022), stateful functions (RFC-0023), and async invocation (RFC-0024).
 ##
@@ -1457,6 +1513,7 @@ serviceAccounts:
   ## Per-account overrides. Every account this chart can create is listed, so
   ## the set is discoverable without reading the templates; an account only
   ## renders when its component is enabled.
+  agentruntime: {}
   builder: {}
   buildermgr: {}
   canaryconfig: {}
@@ -1680,9 +1737,95 @@ grafana:
 ## that don't already restrict pod-to-pod traffic.
 ##
 ## Requires a NetworkPolicy-aware CNI (Calico, Cilium, Weave, etc.).
-## Egress rules are intentionally not added in this round.
+## Egress rules are intentionally not added here — see the separate
+## `environmentNetworkPolicy` knob below for environment-pod egress.
 networkPolicy:
   enabled: false
+
+
+## environmentNetworkPolicy: egress isolation for environment/function pods.
+## When enabled, the chart renders one Egress-only NetworkPolicy per function
+## namespace, each selecting every pod in that namespace that carries the
+## `environmentName` label — poolmgr generic and specialized pods, and
+## newdeploy pods (see pkg/apis/core/v1/const.go ENVIRONMENT_NAME and
+## pkg/executor/executortype/{poolmgr/gp_pod.go, newdeploy/newdeploymgr.go}).
+## Container-executortype pods don't carry this label and are unaffected by
+## this knob.
+##
+## Namespace coverage: functionNamespace (or defaultNamespace when unset)
+## plus every additionalFissionNamespaces entry — the STATIC-tenancy
+## function-namespace set, mirrored from pkg/utils
+## NamespaceResolver.FunctionNamespaces. Under tenancy.mode: dynamic or
+## cluster, namespaces the tenant controller onboards at runtime are NOT in
+## that list and so are unknown at chart render time — this knob does not
+## enforce egress isolation for function pods in those namespaces. There is
+## no chart-level fix for that gap; a dynamic/cluster-tenancy install needs
+## an out-of-band mechanism (e.g. a controller that stamps the same policy
+## into each onboarded namespace) to get equivalent coverage.
+##
+## Default posture mirrors Agent Sandbox's SandboxTemplate managed
+## NetworkPolicy default (their "good default" for agent pods): allow general
+## internet egress, deny RFC1918 (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+## RFC6598/CGNAT (100.64.0.0/10) and link-local (169.254.0.0/16 — which also
+## covers the 169.254.169.254 cloud metadata endpoint) destinations.
+##
+## CGNAT (100.64.0.0/10): included in the deny-list alongside RFC1918
+## because EKS clusters running VPC CNI custom networking use this range for
+## pod and/or Service CIDRs — without it, the deny-in-cluster posture
+## silently fails to cover in-cluster traffic on those clusters (identical
+## failure mode to the RFC1918 case below, just for a range the classic
+## "private ranges" mental model omits).
+##
+## Independent of the ingress-only `networkPolicy` knob above — enable
+## either or both. Requires a NetworkPolicy-aware CNI (Calico, Cilium,
+## Weave, etc.).
+##
+## Pod-level egress only. Per-agent egress policy (finer than per-pod) is
+## out of scope here — it is CNI-specific (e.g. Cilium identity-based
+## policy) and not something a portable Helm chart can author.
+##
+## IPv4-only allow rule: the default posture's "allow general internet
+## egress" rule is `ipBlock: 0.0.0.0/0` only — there is no `::/0` rule. On a
+## dual-stack cluster this is still fail-closed (no accidental IPv6 egress
+## opens up) but it means IPv6 destinations are unreachable even where an
+## IPv4 destination would be allowed. Add an `::/0` ipBlock (with your
+## cluster's IPv6 pod/Service CIDRs excepted) via extraEgress if your
+## environment pods need outbound IPv6.
+##
+## NodeLocal DNSCache: the well-known NodeLocal DNSCache listener address
+## (169.254.20.10) falls inside the 169.254.0.0/16 link-local deny range,
+## so on a cluster running it, allowClusterDNS=true's kube-system/kube-dns
+## rule does not cover it — DNS resolution breaks even with the DNS knob on.
+## Add an extraEgress ipBlock allow for 169.254.20.10/32 port 53 (UDP+TCP)
+## if your cluster uses NodeLocal DNSCache.
+##
+## THE RFC1918/CGNAT DENY-LIST BLOCKS IN-CLUSTER CONTROL-PLANE TRAFFIC TOO —
+## pod and Service CIDRs are themselves RFC1918 ranges in most clusters (or
+## 100.64.0.0/10 CGNAT on an EKS cluster running VPC custom networking). If
+## your environment pods also need any of the following, allow-list the
+## destination via extraEgress before enabling this knob:
+##   - fetcher sidecar -> storagesvc (port 8000): package fetch at
+##     specialization time; without it, cold starts fail for every
+##     packaged (non-image-volume) function.
+##   - function pod -> statesvc (functionState.enabled): keyed state
+##     reads/writes.
+##   - agent pod -> agentruntime (agentRuntime.enabled): dispatch,
+##     workspace hydration/sync (abstraction C).
+## router -> function pod (port 8888) and executor -> fetcher (port 8000)
+## are unaffected: this policy governs EGRESS from environment pods, not
+## ingress to them.
+environmentNetworkPolicy:
+  enabled: false
+  ## Allow egress to cluster DNS (kube-system/kube-dns, port 53 TCP+UDP).
+  ## Needed to resolve hostname-based egress destinations. Set false for a
+  ## stricter numeric-IP-only posture (mirrors the "DNS blocked" half of
+  ## Agent Sandbox's default posture).
+  allowClusterDNS: true
+  ## Extra raw NetworkPolicy egress rule entries (networking.k8s.io/v1
+  ## NetworkPolicyEgressRule shape), appended verbatim after the default
+  ## deny-list rule — e.g. to allow-list a specific in-cluster or RFC1918
+  ## destination the deny rule above would otherwise block.
+  extraEgress: []
 
 
 ## InternalAuth: HMAC-SHA256 application-layer authentication for the
