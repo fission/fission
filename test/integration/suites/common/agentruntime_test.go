@@ -616,6 +616,52 @@ func TestAgentRuntimeHistory(t *testing.T) {
 	}, 180*time.Second, 2*time.Second)
 	require.NotEmpty(t, sessionID, "first turn never minted a session id")
 
+	// Turn 1 answering 200 does NOT mean turn 1 has settled: the
+	// dispatcher's Stats.Turns++ is POST-response bookkeeping on bgCtx
+	// (dispatcher.go step 5, deliberately so a caller disconnect cannot lose
+	// the meter). A second turn fired the instant the first returns can
+	// therefore read the record BEFORE that increment lands and be handed
+	// HeaderTurns=0 a second time. The fixture keys its events on that
+	// header and drops {turn,step} pairs already in the stream as an
+	// at-least-once redelivery (agenthistory/history.js's
+	// dropAlreadyWrittenSteps), so that second turn writes NOTHING and the
+	// history stays at 2 events -- which no later poll can repair, since the
+	// events were never appended at all. Wait for the counter that the next
+	// turn's header is derived from before firing it. (Observed on the
+	// v1.34.8 leg: "should have at least 4 history events ... got 2".)
+	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
+		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", sessionsURL, body) {
+			return
+		}
+		var payload struct {
+			Sessions []struct {
+				ID    string `json:"id"`
+				Stats struct {
+					Turns int64 `json:"turns"`
+				} `json:"stats"`
+			} `json:"sessions"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", sessionsURL, body) {
+			return
+		}
+		for _, s := range payload.Sessions {
+			if s.ID == sessionID {
+				assert.GreaterOrEqualf(c, s.Stats.Turns, int64(1),
+					"session %s: turn 1 has not settled (stats.turns=%d), so the next turn would reuse HeaderTurns=0",
+					sessionID, s.Stats.Turns)
+				return
+			}
+		}
+		assert.Failf(c, "session not listed yet", "session %s must appear in %s", sessionID, sessionsURL)
+	}, 120*time.Second, 2*time.Second)
+
 	// Second turn: same session id explicitly (0-based turn 1). This is the
 	// turn the fixture checkpoints on (CHECKPOINT_EVERY=2).
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -759,7 +805,7 @@ func postAgentTurn(ctx context.Context, f *framework.Framework, turnURL, session
 //     against the fixture's own reported "spawned" id, so a derivation drift
 //     on either side (hash, prefix, truncation length) fails with a message
 //     naming which side disagreed, not just a registry 404.
-//  1b. Token injection (Task 6 of the parent-graph plan, G16), checked
+//     1b. Token injection (Task 6 of the parent-graph plan, G16), checked
 //     INSIDE the spawn-turn retry loop (a pod specialized off a stale
 //     pre-`--agent` view of the Function never gets a credential file at
 //     all, so this needs the same retry runway as 1's cross-language
