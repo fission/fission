@@ -512,12 +512,7 @@ func TestHandlerEventLogReadLimitClamped(t *testing.T) {
 // asserts a page requested with an over-cap limit returns exactly 500.
 func TestHandlerEventLogReadLimitHardCapAt500(t *testing.T) {
 	t.Parallel()
-	srv, _ := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
-		// A small per-value cap so the byte budget (MaxReadPayloadBytes / cap)
-		// sits far above MaxReadLimit and the count cap is the binding bound;
-		// TestHandlerEventLogReadPageClampedByBytes covers the other regime.
-		fnA: {MaxValueBytes: 1024},
-	})
+	srv, _ := newTestServer(t, twoFns())
 	tok := stateToken("ns-a", "fn-a")
 
 	const total = stateapi.MaxReadLimit + 50
@@ -630,38 +625,63 @@ func TestHandlerEventLogAppendBudget(t *testing.T) {
 	assert.EqualValues(t, 1, headResp.Head)
 }
 
-// TestHandlerEventLogReadPageClampedByBytes: a keyspace at the per-value
-// ceiling gets its read page clamped to MaxReadPayloadBytes / ceiling events
-// regardless of the requested count, so the worst-case page a read can
-// materialize is bounded in bytes, not only in events.
-func TestHandlerEventLogReadPageClampedByBytes(t *testing.T) {
+// TestHandlerEventLogReadPageBoundedByBytes: a read page ends at
+// MaxReadPayloadBytes of actual stored payload, whatever the requested count
+// and whatever the keyspace's CURRENT quota says — the quota is lowered here
+// after the large events were appended, which is exactly the case a
+// quota-derived count cannot bound. The remainder is reachable on the next
+// page.
+func TestHandlerEventLogReadPageBoundedByBytes(t *testing.T) {
 	t.Parallel()
-	srv, _ := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
+	srv, ix := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
 		fnA: {MaxValueBytes: fv1.MaxStateMaxValueBytes},
 	})
 	tok := stateToken("ns-a", "fn-a")
+
+	// Fill the stream past the read budget with maximum-sized events, one per
+	// append (each append is itself bounded by MaxAppendPayloadBytes).
 	perPage := int(stateapi.MaxReadPayloadBytes / fv1.MaxStateMaxValueBytes)
 	require.Greater(t, perPage, 1)
-
-	events := make([]stateapi.EventInput, perPage+2)
-	for i := range events {
-		events[i] = stateapi.EventInput{Type: "t", Payload: []byte{byte(i)}}
+	full := bytes.Repeat([]byte("x"), int(fv1.MaxStateMaxValueBytes))
+	for i := range perPage + 2 {
+		resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+			Stream: "s", ExpectedSeq: int64(i), Events: []stateapi.EventInput{{Type: "t", Payload: full}},
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		_ = resp.Body.Close()
 	}
-	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: 0, Events: events})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	// Lower the quota AFTER the data exists: the stored events are now 16x
+	// the keyspace's per-event cap.
+	ix.Upsert(fnA, &fv1.StateConfig{})
 
-	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: stateapi.MaxReadLimit})
+	resp := postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: stateapi.MaxReadLimit})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var page stateapi.EventReadResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
-	assert.Len(t, page.Events, perPage, "page clamped to the byte budget at the ceiling cap")
+	require.Len(t, page.Events, perPage, "page ends at the byte budget of actual stored payload")
 
-	// The remainder is reachable on the next page: clamping is paging, not loss.
-	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: int64(perPage), Limit: stateapi.MaxReadLimit})
+	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: page.Events[len(page.Events)-1].Seq, Limit: stateapi.MaxReadLimit})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	page = stateapi.EventReadResponse{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
-	assert.Len(t, page.Events, 2)
+	assert.Len(t, page.Events, 2, "bounding is paging, not loss")
+}
+
+// TestHandlerEventLogSmallBodyOverCapIs413: the read/head bodies are bounded
+// by an http.MaxBytesReader, so a valid document padded past the cap is
+// refused instead of silently truncated to a prefix that still parses.
+func TestHandlerEventLogSmallBodyOverCapIs413(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+	padded := append([]byte(`{"stream":"s"}`), bytes.Repeat([]byte(" "), eventLogSmallBodyCap)...)
+	for _, route := range []string{"read", "head"} {
+		resp := doState(t, srv, http.MethodPost, "/v1/eventlog/"+route, "ns-a", "fn-a", tok, padded, nil)
+		require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode, route)
+		var e stateapi.Error
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+		assert.Equal(t, stateapi.CodeRequestTooLarge, e.Code, route)
+	}
 }
 
 func TestHandlerEventLogTooManyEventsRejected(t *testing.T) {

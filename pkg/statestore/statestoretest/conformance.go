@@ -254,6 +254,39 @@ func runEventLog(t *testing.T, newCaps Factory) {
 		require.EqualValues(t, 2, evs[0].Seq)
 	})
 
+	t.Run("ReadBounded", func(t *testing.T) {
+		el := eventLogOrSkip(t, newCaps)
+		bel, ok := el.(statestore.BoundedEventLog)
+		if !ok {
+			t.Skip("driver does not implement BoundedEventLog")
+		}
+		ctx := t.Context()
+		three := []byte("abc")
+		_, err := el.Append(ctx, "bounded", 0, []statestore.Event{
+			{Type: "e", Payload: three}, {Type: "e", Payload: three}, {Type: "e", Payload: three}, {Type: "e", Payload: three},
+		})
+		require.NoError(t, err)
+
+		// Budget for two payloads: the third would overflow it.
+		evs, err := bel.ReadBounded(ctx, "bounded", 0, 10, 6)
+		require.NoError(t, err)
+		require.Len(t, evs, 2)
+		require.EqualValues(t, 1, evs[0].Seq)
+		// A budget smaller than any single event still yields that event, so
+		// a reader paging by Seq never stalls.
+		evs, err = bel.ReadBounded(ctx, "bounded", 2, 10, 1)
+		require.NoError(t, err)
+		require.Len(t, evs, 1)
+		require.EqualValues(t, 3, evs[0].Seq)
+		// limit still binds under a generous budget; 0 budget = unbounded.
+		evs, err = bel.ReadBounded(ctx, "bounded", 0, 3, 1<<20)
+		require.NoError(t, err)
+		require.Len(t, evs, 3)
+		evs, err = bel.ReadBounded(ctx, "bounded", 0, 0, 0)
+		require.NoError(t, err)
+		require.Len(t, evs, 4)
+	})
+
 	t.Run("E1_ConcurrentAppendOneWinner", func(t *testing.T) {
 		el := eventLogOrSkip(t, newCaps)
 		ctx := t.Context()

@@ -170,6 +170,9 @@ type EventReadReq struct {
 	Stream  string `json:"stream"`
 	FromSeq int64  `json:"fromSeq"`
 	Limit   int    `json:"limit"`
+	// MaxBytes is the optional payload-byte budget (statestore.BoundedEventLog);
+	// 0 means unbounded.
+	MaxBytes int64 `json:"maxBytes,omitempty"`
 }
 type EventReadResp struct {
 	Events []statestore.Event `json:"events"`

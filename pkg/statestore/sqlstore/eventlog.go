@@ -113,6 +113,14 @@ func (e *eventLog) Head(ctx context.Context, stream string) (int64, error) {
 // Read implements statestore.EventLog: up to limit events with seq > fromSeq, in
 // order. limit <= 0 returns all matching events (parity with the memory driver).
 func (e *eventLog) Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]statestore.Event, error) {
+	return e.ReadBounded(ctx, stream, fromSeq, limit, 0)
+}
+
+// ReadBounded implements statestore.BoundedEventLog. Rows are scanned one at
+// a time and the cursor is closed as soon as the budget is spent, so the
+// store-side bound holds without a byte-aware SQL predicate: at most one
+// event beyond the budget is ever scanned.
+func (e *eventLog) ReadBounded(ctx context.Context, stream string, fromSeq int64, limit int, maxBytes int64) ([]statestore.Event, error) {
 	query := `SELECT seq, type, payload, at FROM state_events WHERE stream = ? AND seq > ? ORDER BY seq`
 	args := []any{stream, fromSeq}
 	if limit > 0 {
@@ -125,7 +133,10 @@ func (e *eventLog) Read(ctx context.Context, stream string, fromSeq int64, limit
 	}
 	defer func() { _ = rows.Close() }()
 
-	var out []statestore.Event
+	var (
+		out   []statestore.Event
+		total int64
+	)
 	for rows.Next() {
 		var (
 			ev  statestore.Event
@@ -134,6 +145,10 @@ func (e *eventLog) Read(ctx context.Context, stream string, fromSeq int64, limit
 		)
 		if err := rows.Scan(&ev.Seq, &ev.Type, &pay, &at); err != nil {
 			return nil, err
+		}
+		total += int64(len(pay))
+		if maxBytes > 0 && total > maxBytes && len(out) > 0 {
+			break
 		}
 		ev.Payload = pay
 		ev.At = unixNanos(at)

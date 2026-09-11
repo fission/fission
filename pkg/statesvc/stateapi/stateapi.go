@@ -67,12 +67,12 @@ const (
 //   - MaxAppendPayloadBytes bounds the SUM of event payloads in one append.
 //     It equals the per-value ceiling so a single maximum-sized event always
 //     fits.
-//   - MaxReadPayloadBytes bounds the worst-case payload bytes one read page
-//     can materialize: the handler clamps the page count to
-//     MaxReadPayloadBytes / <keyspace per-event cap> before it asks the
-//     store, so the bound holds in the store and in the encoder, not only on
-//     the wire. Sized so a keyspace at the default per-value cap keeps its
-//     full DefaultReadLimit page (32MiB / 256KiB = 128).
+//   - MaxReadPayloadBytes bounds the payload bytes one read page returns.
+//     The store enforces it while scanning (statestore.BoundedEventLog), so
+//     the bound holds in the store and in the encoder, not only on the wire,
+//     and it accounts actual stored sizes rather than the keyspace's current
+//     quota. A page that hits the budget ends early; the caller continues
+//     from the last Seq.
 //   - MaxRequestBodyBytes is the wire-level request cap derived from the
 //     above: the append envelope at the payload budget, base64-inflated
 //     (4/3), plus per-event and envelope overhead. It is also what the

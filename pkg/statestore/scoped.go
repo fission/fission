@@ -168,6 +168,14 @@ func (e *meteredEventLog) Read(ctx context.Context, stream string, fromSeq int64
 	return evs, err
 }
 
+// ReadBounded implements BoundedEventLog for every driver: natively when the
+// inner store has it, through ReadBoundedFallback otherwise.
+func (e *meteredEventLog) ReadBounded(ctx context.Context, stream string, fromSeq int64, limit int, maxBytes int64) ([]Event, error) {
+	evs, err := ReadBounded(ctx, e.inner, stream, fromSeq, limit, maxBytes)
+	observe(ctx, "eventlog", "read", err)
+	return evs, err
+}
+
 func (e *meteredEventLog) Head(ctx context.Context, stream string) (int64, error) {
 	head, err := e.inner.Head(ctx, stream)
 	observe(ctx, "eventlog", "head", err)

@@ -285,11 +285,30 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 // admission ceiling. MaxValueBytes is a tenant-owned field, and although
 // admission now bounds it (fv1.MaxStateMaxValueBytes, mirrored by the CRD's
 // Maximum marker), a keyspace stored before that bound existed could still
-// carry a larger value. Clamping here keeps every derived bound (append
-// budget arithmetic, read page clamp) overflow-safe regardless of what a
-// stored config claims.
+// carry a larger value. Clamping here keeps the append budget arithmetic
+// overflow-safe regardless of what a stored config claims.
 func (h *handler) eventValueCap(sc authedScope) int64 {
 	return min(h.index.Resolve(sc.scope).MaxValueBytes, fv1.MaxStateMaxValueBytes)
+}
+
+// readJSONBody decodes r.Body into dst under capBytes. The reader is an
+// http.MaxBytesReader, not an io.LimitReader: a body over the cap is reported
+// as 413 request_too_large rather than silently truncated to a prefix that
+// might still parse as a complete value (a valid document followed by
+// trailing bytes). Malformed JSON is a 400. Returns false after writing the
+// error.
+func readJSONBody[T any](w http.ResponseWriter, r *http.Request, capBytes int64, dst *T, what string) bool {
+	body := http.MaxBytesReader(w, r.Body, capBytes)
+	if err := json.UnmarshalRead(body, dst); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeRequestTooLarge, what+" body exceeds the per-request cap")
+			return false
+		}
+		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid "+what+" body: "+err.Error())
+		return false
+	}
+	return true
 }
 
 // eventAppend serves POST /v1/eventlog/append. expectedSeq < 0 (the wire form
@@ -303,15 +322,8 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 	// bound never depends on a tenant-owned field. Deliberately NOT the KV
 	// route's maxBytes*2+4096 formula (handler.go's cas), which sizes for a
 	// single value and would truncate a legitimate batch.
-	body := http.MaxBytesReader(w, r.Body, stateapi.MaxRequestBodyBytes)
 	var req stateapi.EventAppendRequest
-	if err := json.UnmarshalRead(body, &req); err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeRequestTooLarge, "append body exceeds the per-request cap")
-			return
-		}
-		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid append body: "+err.Error())
+	if !readJSONBody(w, r, stateapi.MaxRequestBodyBytes, &req, "append") {
 		return
 	}
 	if req.ExpectedSeq < 0 {
@@ -368,10 +380,8 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 // eventRead serves POST /v1/eventlog/read.
 func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
-	body := io.LimitReader(r.Body, eventLogSmallBodyCap)
 	var req stateapi.EventReadRequest
-	if err := json.UnmarshalRead(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid read body: "+err.Error())
+	if !readJSONBody(w, r, eventLogSmallBodyCap, &req, "read") {
 		return
 	}
 	if !stateapi.ValidStream(req.Stream) {
@@ -383,20 +393,16 @@ func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 		limit = stateapi.DefaultReadLimit
 	}
 	limit = min(limit, stateapi.MaxReadLimit)
-	// Byte-aware page clamp: append bounds every stored payload by the
-	// keyspace's per-event cap, so count * cap bounds what one page can
-	// materialize. Clamp the count to the read budget BEFORE asking the store,
-	// so a tenant that filled a stream with maximum-sized events cannot make
-	// one read build a multi-gigabyte page in the store, the out slice, and
-	// the encoder. At the 256KiB default cap the budget still admits the full
-	// default page (128 >= DefaultReadLimit); only keyspaces that raise their
-	// cap trade page length for it.
-	if cap := h.eventValueCap(sc); cap > 0 {
-		limit = min(limit, max(1, int(stateapi.MaxReadPayloadBytes/cap)))
-	}
 
 	stream := stateapi.StreamName(sc.scope.Namespace, sc.scope.Keyspace, req.Stream)
-	events, err := h.el.Read(r.Context(), stream, req.FromSeq, limit)
+	// The page is bounded in BYTES by the store (statestore.BoundedEventLog),
+	// not by a count derived from the keyspace's current quota: the quota is
+	// mutable and lowering it does not rewrite events appended under a larger
+	// one, so only accounting the actual stored sizes can hold the budget. A
+	// page ends early at the budget and the caller continues from the last
+	// Seq; a single event over the budget is still delivered so paging never
+	// stalls. A stream of small events keeps its full page.
+	events, err := statestore.ReadBounded(r.Context(), h.el, stream, req.FromSeq, limit, stateapi.MaxReadPayloadBytes)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -411,10 +417,8 @@ func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 // eventHead serves POST /v1/eventlog/head.
 func (h *handler) eventHead(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
-	body := io.LimitReader(r.Body, eventLogSmallBodyCap)
 	var req stateapi.EventHeadRequest
-	if err := json.UnmarshalRead(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid head body: "+err.Error())
+	if !readJSONBody(w, r, eventLogSmallBodyCap, &req, "head") {
 		return
 	}
 	if !stateapi.ValidStream(req.Stream) {
