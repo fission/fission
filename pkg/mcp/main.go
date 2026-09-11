@@ -176,8 +176,8 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	// Server spans on the /mcp mount only -- NOT the whole mux (/healthz and
 	// /readyz stay unspanned, kubelet-probe-noise-free, by simply never being
 	// wrapped, no filter list needed). otel wraps OUTSIDE authz.HTTPMiddleware
-	// (already inside server.HTTPHandler()), matching the router-public /
-	// agentruntime precedent (otelUtils.GetHandlerWithOTEL wraps outside the
+	// (already inside server.HTTPHandler()), matching the router-public
+	// precedent (otelUtils.GetHandlerWithOTEL wraps outside the
 	// per-route auth wrapper so an unauthenticated 401/403 still gets a
 	// span). No filter is needed here: the MCP transport has no
 	// infinite-lifetime SSE route -- streaming tool calls ride the POST

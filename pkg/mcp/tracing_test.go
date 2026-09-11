@@ -7,7 +7,7 @@
 // (main.go's otelUtils.GetHandlerWithOTEL wrap, exercised here directly
 // against a hand-built handler mirroring that wiring).
 //
-// Test seams (Global Constraints, mirroring pkg/agentruntime/tracing_test.go):
+// Test seams:
 // the package-wide W3C composite propagator is installed EXACTLY ONCE in
 // TestMain below -- the process default is a no-op TextMapPropagator, so any
 // test relying on it would pass vacuously (Extract/Inject would silently
@@ -129,8 +129,7 @@ func okUpstream(t *testing.T) *httptest.Server {
 
 // callToolReq builds a *mcp.CallToolRequest with the given raw _meta map
 // (nil for "no _meta at all"), bypassing the scopeMiddleware/HTTP transport
-// so callTool's extraction+span logic is exercised directly (mirrors
-// pkg/agentruntime/tracing_test.go's direct DispatchTurn calls).
+// so callTool's extraction+span logic is exercised directly.
 func callToolReq(tool string, meta mcp.Meta) *mcp.CallToolRequest {
 	return &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Name: tool, Meta: meta},

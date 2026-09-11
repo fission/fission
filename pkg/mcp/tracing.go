@@ -5,8 +5,7 @@
 // tracing.go implements the execute_tool span (GenAI semantic conventions,
 // pre-stable) and _meta trace-context extraction for callTool (server.go).
 //
-// Blast-radius note (see the plan's Global Constraints): pkg/mcp ships
-// independently of agentRuntime.enabled and serves non-agent MCP clients, so
+// Blast-radius note: pkg/mcp serves every MCP client, agentic or not, so
 // everything here is ADDITIVE-ONLY. _meta is UNTRUSTED caller input: a
 // missing or malformed traceparent/tracestate/baggage never errors and never
 // logs above V(1) -- the call proceeds exactly as it would if _meta were
@@ -81,9 +80,7 @@ func traceContextFromMeta(ctx context.Context, meta mcp.Meta) context.Context {
 }
 
 // SetTracerProvider wires the execute_tool span's TracerProvider seam
-// post-construction, mirroring agentruntime's Dispatcher.SetTracerProvider
-// (pkg/agentruntime/dispatcher.go) -- same construction-cycle rationale:
-// NewServer's signature is the stable production wiring call sites use, and
+// post-construction. Construction-cycle rationale: NewServer's signature is the stable production wiring call sites use, and
 // unit tests need a hermetic sdktrace.NewTracerProvider + tracetest.
 // SpanRecorder instead of process-wide global state. nil (the zero value,
 // production's default) makes tracer() fall back to otel.GetTracerProvider()
@@ -98,8 +95,7 @@ func (s *Server) SetTracerProvider(tp trace.TracerProvider) {
 // GenAI semantic conventions are PRE-STABLE (experimental) as of this pin:
 // go.opentelemetry.io/otel/semconv/v1.37.0 supplies the gen_ai.* attribute
 // keys used in callTool (GenAIOperationNameExecuteTool = "execute_tool",
-// GenAIToolName = "gen_ai.tool.name") -- the same version pin
-// pkg/agentruntime/dispatcher.go uses for invoke_agent. Re-verify attribute
+// GenAIToolName = "gen_ai.tool.name"). Re-verify attribute
 // names against the semconv package on any future bump; the spec has moved
 // these before.
 func (s *Server) tracer() trace.Tracer {
@@ -111,8 +107,7 @@ func (s *Server) tracer() trace.Tracer {
 }
 
 // endToolSpan records the outcome on span -- Error status (+ RecordError)
-// for a protocol-level error, Ok otherwise -- mirroring the invoke_agent
-// span's status discipline (pkg/agentruntime/dispatcher.go's DispatchTurn).
+// for a protocol-level error, Ok otherwise.
 // A tool-level failure (function 4xx/5xx, timeout, oversized body) is NOT a
 // protocol-level error here: Proxy.Invoke/InvokeStreaming map those into a
 // CallToolResult with IsError set and a nil error (see proxy.go's doc

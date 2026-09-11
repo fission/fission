@@ -98,8 +98,9 @@ func TestEnvRuntimeClassCELRoundTrip(t *testing.T) {
 // RuntimeClass installed, so a "wait until pod Running" assertion would hang
 // forever (kind's scheduler leaves such pods Pending). Reading the created
 // Deployment's pod template via the API is sufficient to prove the field
-// reached the pod spec; Task 1's controller-level tests already cover the
-// fill-if-nil / precedence logic in isolation.
+// reached the pod spec; the unit tests in pkg/executor/util and
+// pkg/buildermgr already cover the fill-if-nil / precedence logic in
+// isolation.
 func TestEnvRuntimeClassReachesPoolDeployment(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

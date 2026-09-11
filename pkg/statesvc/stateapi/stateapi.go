@@ -50,7 +50,7 @@ const (
 	CodeBadStream       = "bad_stream"
 )
 
-// EventLog request/response limits (RFC-0027 §G13): the append batch and read
+// EventLog request/response limits (RFC-0027): the append batch and read
 // page caps, plus the read page default.
 const (
 	MaxAppendEvents  = 64
@@ -113,8 +113,8 @@ func ValidStream(s string) bool {
 // StreamName maps a caller-visible stream to the internal, scope-qualified
 // EventLog stream. It is the single source of the fnstate/ naming shape: the
 // EventLog capability has no Scope parameter, so the NAME is the scope —
-// every caller (statesvc handlers, and later the agentruntime-side
-// consumers) must derive the internal stream through this function, never by
+// every caller (the statesvc handlers today, any future consumer) must
+// derive the internal stream through this function, never by
 // hand-concatenating the prefix.
 func StreamName(ns, keyspace, clientStream string) string {
 	return "fnstate/" + ns + "/" + keyspace + "/" + clientStream

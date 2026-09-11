@@ -3,8 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 {{- if .Values.environmentNetworkPolicy.enabled }}
-# Egress isolation for environment/function pods (abstraction E of the
-# agent-runtime abstraction stack; doc 13 §E). Every poolmgr generic and
+# Egress isolation for environment/function pods. Every poolmgr generic and
 # specialized pod, and every newdeploy pod, carries the `environmentName`
 # label (fv1.ENVIRONMENT_NAME — see pkg/executor/executortype/poolmgr/gp_pod.go
 # and pkg/executor/executortype/newdeploy/newdeploymgr.go); this policy
@@ -42,8 +41,8 @@
 # WARNING: the RFC1918/CGNAT deny-list also blocks in-cluster control-plane
 # traffic (pod/Service CIDRs are themselves RFC1918 in most clusters, and
 # 100.64.0.0/10 on an EKS cluster running VPC custom networking) —
-# fetcher->storagesvc (package fetch), function->statesvc, and
-# agent->agentruntime (workspace sync) all cross it. See the
+# fetcher->storagesvc (package fetch) and function->statesvc both cross
+# it. See the
 # environmentNetworkPolicy comment in values.yaml for the extraEgress
 # allow-list an operator needs before enabling this in a cluster that
 # uses those features.
