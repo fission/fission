@@ -381,6 +381,15 @@ func TestEnvRuntimeHashIgnoresNonTemplateSpec(t *testing.T) {
 	reclassed.Spec.RuntimeClassName = new("kata")
 	assert.NotEqual(t, envRuntimeHash(classed), envRuntimeHash(reclassed),
 		"switching RuntimeClass must recycle warm pods")
+	// A Runtime.PodSpec override wins over the dedicated field, so changing
+	// only the dedicated field under an override leaves the template — and
+	// the hash — unchanged.
+	overridden := classed.DeepCopy()
+	overridden.Spec.Runtime.PodSpec = &corev1.PodSpec{RuntimeClassName: new("kata")}
+	retagged := overridden.DeepCopy()
+	retagged.Spec.RuntimeClassName = new("runc")
+	assert.Equal(t, envRuntimeHash(overridden), envRuntimeHash(retagged),
+		"the dedicated field is shadowed by the PodSpec override; no recycle")
 
 	instantKill := base.DeepCopy()
 	instantKill.Spec.TerminationGracePeriod = new(int64(0))

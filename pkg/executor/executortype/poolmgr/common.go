@@ -44,11 +44,13 @@ func envRuntimeHash(env *fv1.Environment) string {
 		ExtNet      bool                       `json:"extNet"`
 		Labels      map[string]string          `json:"labels"`
 		Annotations map[string]string          `json:"annotations"`
-		// omitempty keeps the hash byte-identical for every environment that
-		// does not set RuntimeClassName (no pool roll on the release that
-		// shipped the field); an environment that sets or changes it moves
-		// the hash, because the value lands in the pod template and a warm
-		// pod born under the old RuntimeClass no longer matches the spec.
+		// The EFFECTIVE RuntimeClass of the pod template (a Runtime.PodSpec
+		// override wins over the dedicated field, mirroring
+		// util.ApplyEnvRuntimeClass), so changing the dedicated field while an
+		// override is in place does not recycle a pool whose template is
+		// unchanged. omitempty keeps the hash byte-identical for every
+		// environment that sets neither (no pool roll on the release that
+		// shipped the field).
 		RuntimeClass string `json:"runtimeClass,omitempty"`
 	}{
 		Runtime:   env.Spec.Runtime,
@@ -62,7 +64,7 @@ func envRuntimeHash(env *fv1.Environment) string {
 		ExtNet:       env.Spec.AllowAccessToExternalNetwork,
 		Labels:       env.Labels,
 		Annotations:  env.Annotations,
-		RuntimeClass: ptrString(env.Spec.RuntimeClassName),
+		RuntimeClass: effectiveRuntimeClass(env),
 	}
 	b, err := json.Marshal(in)
 	if err != nil {
@@ -74,12 +76,17 @@ func envRuntimeHash(env *fv1.Environment) string {
 	return hex.EncodeToString(sum[:])[:16]
 }
 
-// ptrString derefs an optional string ("" when unset) for hashing.
-func ptrString(p *string) string {
-	if p == nil {
-		return ""
+// effectiveRuntimeClass returns the RuntimeClass the pod template ends up
+// with: the Runtime.PodSpec override when it names one, else the dedicated
+// spec field, else "". Same precedence as util.ApplyEnvRuntimeClass.
+func effectiveRuntimeClass(env *fv1.Environment) string {
+	if ps := env.Spec.Runtime.PodSpec; ps != nil && ps.RuntimeClassName != nil {
+		return *ps.RuntimeClassName
 	}
-	return *p
+	if env.Spec.RuntimeClassName != nil {
+		return *env.Spec.RuntimeClassName
+	}
+	return ""
 }
 
 // envLabelsMatchLiveEnv reports whether the ENVIRONMENT_UID /
