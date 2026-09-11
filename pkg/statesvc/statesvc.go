@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -112,8 +113,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 	auth := newAuthenticator(master, masterOld, hmacauth.VerifierOpts{
-		SkewSec:      60,
-		MaxBodyBytes: fv1.DefaultStateMaxValueBytes * 2,
+		SkewSec: 60,
+		// The admin (HMAC) path buffers the body to verify the signature, so
+		// its cap must admit every request the handlers accept: a KV value or
+		// EventLog append at the payload budget, base64-inflated. Shared with
+		// the append handler's own reader bound so the two paths never
+		// disagree on what a valid request is.
+		MaxBodyBytes: stateapi.MaxRequestBodyBytes,
 		Logger:       logger,
 	})
 	if auth.passThrough() {

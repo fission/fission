@@ -281,29 +281,36 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
 }
 
+// eventValueCap returns the keyspace's per-event payload cap, clamped to the
+// admission ceiling. MaxValueBytes is a tenant-owned field, and although
+// admission now bounds it (fv1.MaxStateMaxValueBytes, mirrored by the CRD's
+// Maximum marker), a keyspace stored before that bound existed could still
+// carry a larger value. Clamping here keeps every derived bound (append
+// budget arithmetic, read page clamp) overflow-safe regardless of what a
+// stored config claims.
+func (h *handler) eventValueCap(sc authedScope) int64 {
+	return min(h.index.Resolve(sc.scope).MaxValueBytes, fv1.MaxStateMaxValueBytes)
+}
+
 // eventAppend serves POST /v1/eventlog/append. expectedSeq < 0 (the wire form
 // of statestore.AppendAny) is rejected here: this API is CAS-only, so
 // AppendAny is never reachable through statesvc.
 func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 	sc, _ := scopeFrom(r.Context())
-	maxValueBytes := h.index.Resolve(sc.scope).MaxValueBytes
-	// Clamp the resolved per-value cap to the admission ceiling before deriving
-	// the body cap: MaxValueBytes is a tenant-owned field, and although admission
-	// now bounds it (fv1.MaxStateMaxValueBytes), a keyspace stored before that
-	// bound existed could still carry a larger value. Clamping here keeps the
-	// body cap bounded and overflow-safe for the shared statesvc regardless of
-	// what a stored config claims.
-	if maxValueBytes > fv1.MaxStateMaxValueBytes {
-		maxValueBytes = fv1.MaxStateMaxValueBytes
-	}
-	// Envelope cap: MaxAppendEvents payloads at the (clamped) MaxValueBytes cap,
-	// base64-inflated (4/3), plus field/envelope overhead. Deliberately NOT the
-	// KV route's maxBytes*2+4096 formula (handler.go's cas), which sizes for a
-	// single value and would truncate a legitimate full batch.
-	bodyCap := int64(stateapi.MaxAppendEvents)*maxValueBytes*4/3 + 64<<10
-	body := io.LimitReader(r.Body, bodyCap)
+	maxValueBytes := h.eventValueCap(sc)
+	// Wire cap: the append payload budget base64-inflated plus envelope
+	// overhead (stateapi.MaxRequestBodyBytes) — a constant, so the reader
+	// bound never depends on a tenant-owned field. Deliberately NOT the KV
+	// route's maxBytes*2+4096 formula (handler.go's cas), which sizes for a
+	// single value and would truncate a legitimate batch.
+	body := http.MaxBytesReader(w, r.Body, stateapi.MaxRequestBodyBytes)
 	var req stateapi.EventAppendRequest
 	if err := json.UnmarshalRead(body, &req); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeRequestTooLarge, "append body exceeds the per-request cap")
+			return
+		}
 		writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "invalid append body: "+err.Error())
 		return
 	}
@@ -324,6 +331,7 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	events := make([]statestore.Event, len(req.Events))
+	var totalPayload int64
 	for i, ev := range req.Events {
 		if ev.Type == "" || len(ev.Type) > maxEventTypeBytes {
 			writeError(w, http.StatusBadRequest, stateapi.CodeBadRequest, "event type must be 1-128 bytes")
@@ -331,6 +339,14 @@ func (h *handler) eventAppend(w http.ResponseWriter, r *http.Request) {
 		}
 		if int64(len(ev.Payload)) > maxValueBytes {
 			writeValueTooLarge(w)
+			return
+		}
+		// Per-event quota and per-request budget are separate bounds: 64
+		// events each just under a 4MiB quota is 256MiB, which no single
+		// request may hand the shared store.
+		totalPayload += int64(len(ev.Payload))
+		if totalPayload > stateapi.MaxAppendPayloadBytes {
+			writeError(w, http.StatusRequestEntityTooLarge, stateapi.CodeRequestTooLarge, "summed event payloads exceed the per-append budget")
 			return
 		}
 		events[i] = statestore.Event{Type: ev.Type, Payload: ev.Payload}
@@ -367,6 +383,17 @@ func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 		limit = stateapi.DefaultReadLimit
 	}
 	limit = min(limit, stateapi.MaxReadLimit)
+	// Byte-aware page clamp: append bounds every stored payload by the
+	// keyspace's per-event cap, so count * cap bounds what one page can
+	// materialize. Clamp the count to the read budget BEFORE asking the store,
+	// so a tenant that filled a stream with maximum-sized events cannot make
+	// one read build a multi-gigabyte page in the store, the out slice, and
+	// the encoder. At the 256KiB default cap the budget still admits the full
+	// default page (128 >= DefaultReadLimit); only keyspaces that raise their
+	// cap trade page length for it.
+	if cap := h.eventValueCap(sc); cap > 0 {
+		limit = min(limit, max(1, int(stateapi.MaxReadPayloadBytes/cap)))
+	}
 
 	stream := stateapi.StreamName(sc.scope.Namespace, sc.scope.Keyspace, req.Stream)
 	events, err := h.el.Read(r.Context(), stream, req.FromSeq, limit)

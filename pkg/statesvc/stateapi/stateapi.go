@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
 
 // Scope-claim request headers (bearer/function path). The namespace and
@@ -48,14 +50,41 @@ const (
 	CodeUnavailable     = "capability_unavailable"
 	CodeInternal        = "internal"
 	CodeBadStream       = "bad_stream"
+	// CodeRequestTooLarge answers an append whose summed payloads exceed
+	// MaxAppendPayloadBytes even though every single event is within the
+	// keyspace's MaxValueBytes quota (413).
+	CodeRequestTooLarge = "request_too_large"
 )
 
 // EventLog request/response limits (RFC-0027): the append batch and read
 // page caps, plus the read page default.
+//
+// Counts alone do not bound memory — each event may carry up to the
+// keyspace's MaxValueBytes (at most fv1.MaxStateMaxValueBytes), so the byte
+// budgets below are what keep one request from materializing hundreds of
+// megabytes in the shared statesvc:
+//
+//   - MaxAppendPayloadBytes bounds the SUM of event payloads in one append.
+//     It equals the per-value ceiling so a single maximum-sized event always
+//     fits.
+//   - MaxReadPayloadBytes bounds the worst-case payload bytes one read page
+//     can materialize: the handler clamps the page count to
+//     MaxReadPayloadBytes / <keyspace per-event cap> before it asks the
+//     store, so the bound holds in the store and in the encoder, not only on
+//     the wire. Sized so a keyspace at the default per-value cap keeps its
+//     full DefaultReadLimit page (32MiB / 256KiB = 128).
+//   - MaxRequestBodyBytes is the wire-level request cap derived from the
+//     above: the append envelope at the payload budget, base64-inflated
+//     (4/3), plus per-event and envelope overhead. It is also what the
+//     admin-path HMAC verifier buffers, so an operator append over HMAC and a
+//     function-pod append over a bearer token share one limit.
 const (
-	MaxAppendEvents  = 64
-	MaxReadLimit     = 500
-	DefaultReadLimit = 100
+	MaxAppendEvents       = 64
+	MaxReadLimit          = 500
+	DefaultReadLimit      = 100
+	MaxAppendPayloadBytes = fv1.MaxStateMaxValueBytes
+	MaxReadPayloadBytes   = 8 * fv1.MaxStateMaxValueBytes
+	MaxRequestBodyBytes   = MaxAppendPayloadBytes*4/3 + MaxAppendEvents*512 + 64<<10
 )
 
 // Error is the JSON body of any non-2xx response. Head is set only on a

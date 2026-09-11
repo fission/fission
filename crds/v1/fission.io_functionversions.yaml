@@ -10077,8 +10077,10 @@ spec:
                       maxValueBytes:
                         description: |-
                           MaxValueBytes caps a single value's size. 0 means the platform default
-                          (DefaultStateMaxValueBytes, 256KiB). Blobs belong in object storage.
+                          (DefaultStateMaxValueBytes, 256KiB); the ceiling is
+                          MaxStateMaxValueBytes (4MiB). Blobs belong in object storage.
                         format: int64
+                        maximum: 4194304
                         minimum: 0
                         type: integer
                       sticky:
