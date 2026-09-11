@@ -684,6 +684,21 @@ func TestHandlerEventLogSmallBodyOverCapIs413(t *testing.T) {
 	}
 }
 
+// TestFunctionIndexClampsLegacyQuota: a Function stored before the
+// MaxValueBytes ceiling existed resolves to the ceiling, not to what it
+// claims, so KV and EventLog routes (and the caps derived from the quota)
+// enforce one contract on both auth paths.
+func TestFunctionIndexClampsLegacyQuota(t *testing.T) {
+	t.Parallel()
+	ix := NewFunctionIndex()
+	ix.Upsert(fnA, &fv1.StateConfig{MaxValueBytes: 64 * fv1.MaxStateMaxValueBytes})
+	q := ix.Resolve(statestore.Scope{Namespace: fnA.Namespace, Keyspace: fnA.Name})
+	assert.Equal(t, fv1.MaxStateMaxValueBytes, q.MaxValueBytes)
+	ix.Upsert(fnA, &fv1.StateConfig{MaxValueBytes: 1024})
+	q = ix.Resolve(statestore.Scope{Namespace: fnA.Namespace, Keyspace: fnA.Name})
+	assert.EqualValues(t, 1024, q.MaxValueBytes, "a value under the ceiling is untouched")
+}
+
 func TestHandlerEventLogTooManyEventsRejected(t *testing.T) {
 	t.Parallel()
 	srv, _ := newTestServer(t, twoFns())

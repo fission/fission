@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 	"github.com/fission/fission/pkg/statesvc/stateapi"
 	"github.com/fission/fission/pkg/utils/httpx"
@@ -281,14 +280,11 @@ func (h *handler) list(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteJSON(w, http.StatusOK, stateapi.ListResponse{Keys: kp.Keys, Cursor: kp.Next})
 }
 
-// eventValueCap returns the keyspace's per-event payload cap, clamped to the
-// admission ceiling. MaxValueBytes is a tenant-owned field, and although
-// admission now bounds it (fv1.MaxStateMaxValueBytes, mirrored by the CRD's
-// Maximum marker), a keyspace stored before that bound existed could still
-// carry a larger value. Clamping here keeps the append budget arithmetic
-// overflow-safe regardless of what a stored config claims.
+// eventValueCap returns the keyspace's per-event payload cap. The index
+// already clamps a stored MaxValueBytes to the admission ceiling
+// (FunctionIndex.Upsert), so this is the same bound the KV routes apply.
 func (h *handler) eventValueCap(sc authedScope) int64 {
-	return min(h.index.Resolve(sc.scope).MaxValueBytes, fv1.MaxStateMaxValueBytes)
+	return h.index.Resolve(sc.scope).MaxValueBytes
 }
 
 // readJSONBody decodes r.Body into dst under capBytes. The reader is an

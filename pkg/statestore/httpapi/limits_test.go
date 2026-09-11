@@ -20,5 +20,5 @@ import (
 // append or KV write it already admitted.
 func TestMaxRequestBytesCoversStatesvc(t *testing.T) {
 	t.Parallel()
-	assert.GreaterOrEqual(t, int64(httpapi.MaxRequestBytes), int64(stateapi.MaxRequestBodyBytes))
+	assert.GreaterOrEqual(t, httpapi.MaxRequestBytes, stateapi.MaxRequestBodyBytes)
 }

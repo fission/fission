@@ -51,8 +51,15 @@ func NewFunctionIndex() *FunctionIndex {
 // Upsert records fn's StateConfig (which must be non-nil).
 func (ix *FunctionIndex) Upsert(fn types.NamespacedName, sc *fv1.StateConfig) {
 	st := fnState{
-		ref:           keyspaceRef{namespace: fn.Namespace, keyspace: sc.EffectiveKeyspace(fn.Name)},
-		maxValueBytes: sc.EffectiveMaxValueBytes(),
+		ref: keyspaceRef{namespace: fn.Namespace, keyspace: sc.EffectiveKeyspace(fn.Name)},
+		// Clamp to the admission ceiling here, once, so every consumer of the
+		// resolved quota (KV PUT/CAS, EventLog append, and the body caps
+		// derived from it) sees the same bound: admission now rejects a
+		// larger MaxValueBytes (fv1.MaxStateMaxValueBytes, Go validator + CRD
+		// maximum), but a Function stored before that bound existed can still
+		// carry one, and the bearer and admin paths must not disagree on
+		// what a valid value is.
+		maxValueBytes: min(sc.EffectiveMaxValueBytes(), fv1.MaxStateMaxValueBytes),
 		maxKeys:       sc.EffectiveMaxKeys(),
 	}
 	if sc.DefaultTTL != nil {
