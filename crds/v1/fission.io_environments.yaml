@@ -20286,8 +20286,8 @@ spec:
             - version
             type: object
             x-kubernetes-validations:
-            - message: spec.runtimeClassName must be a valid DNS1123 label (lowercase
-                alphanumeric or '-', start/end alphanumeric, max 253 chars)
+            - message: spec.runtimeClassName must be lowercase alphanumeric or '-',
+                start and end alphanumeric, at most 253 characters
               rule: '!has(self.runtimeClassName) || (size(self.runtimeClassName) <=
                 253 && self.runtimeClassName.matches(''^[a-z0-9]([-a-z0-9]*[a-z0-9])?$''))'
           status:

@@ -187,8 +187,11 @@ func createEnvironmentFromCmd(input cli.Input) (*fv1.Environment, error) {
 	}
 
 	if input.IsSet(flagkey.EnvRuntimeClass) {
-		rc := input.String(flagkey.EnvRuntimeClass)
-		env.Spec.RuntimeClassName = &rc
+		// An explicit empty value leaves the field unset (same as `env update`),
+		// rather than setting &"" which server-side validation would then reject.
+		if rc := input.String(flagkey.EnvRuntimeClass); rc != "" {
+			env.Spec.RuntimeClassName = &rc
+		}
 	}
 
 	err = util.ApplyLabelsAndAnnotations(input, &env.ObjectMeta)

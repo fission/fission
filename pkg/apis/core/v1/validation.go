@@ -697,10 +697,13 @@ func (tc *ToolConfig) Validate() error {
 var stateKeyspaceRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 
 // runtimeClassNameRegexp mirrors the EnvironmentSpec.RuntimeClassName
-// struct-level CEL marker. It is deliberately NOT validation.IsDNS1123Label
-// (max 63 chars) — the CEL rule accepts up to 253 chars with a DNS1123-label
-// charset, and this must agree with the apiserver so the CLI's pre-flight
-// Validate() never rejects a value the API server would admit.
+// struct-level CEL marker. It is deliberately a DNS1123-label CHARSET but with
+// the subdomain LENGTH bound (253, not a label's 63): the RuntimeClasses Fission
+// targets (gvisor, kata, runc) are labels, so dots are intentionally excluded,
+// while the generous length keeps this from ever being the tighter of the two
+// bounds. It must agree with the apiserver CEL rule so the CLI's pre-flight
+// Validate() never rejects a value the API server would admit — hence not
+// validation.IsDNS1123Label (which would cap at 63) nor IsDNS1123Subdomain.
 var runtimeClassNameRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 // Validate checks the keyed-state config (only reached when FunctionSpec.State
@@ -950,7 +953,7 @@ func (spec EnvironmentSpec) Validate() error {
 		val := *spec.RuntimeClassName
 		if len(val) > 253 || !runtimeClassNameRegexp.MatchString(val) {
 			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.RuntimeClassName", val,
-				"must be a valid DNS1123 label (lowercase alphanumeric or '-', start/end alphanumeric, max 253 chars)"))
+				"must be lowercase alphanumeric or '-', start and end alphanumeric, at most 253 characters"))
 		}
 	}
 
