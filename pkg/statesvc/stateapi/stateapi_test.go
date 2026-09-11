@@ -31,6 +31,7 @@ func TestValidStream(t *testing.T) {
 		{"leading slash", "/agentlog", false},
 		{"trailing slash", "agentlog/", false},
 		{"double slash", "a//b", false},
+		{"embedded dots valid", "a..b", true},
 		{"dot-dot segment", "../x", false},
 		{"dot-dot in middle", "a/../b", false},
 		{"dot-dot trailing", "a/..", false},
