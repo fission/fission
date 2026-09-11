@@ -44,6 +44,12 @@ func envRuntimeHash(env *fv1.Environment) string {
 		ExtNet      bool                       `json:"extNet"`
 		Labels      map[string]string          `json:"labels"`
 		Annotations map[string]string          `json:"annotations"`
+		// omitempty keeps the hash byte-identical for every environment that
+		// does not set RuntimeClassName (no pool roll on the release that
+		// shipped the field); an environment that sets or changes it moves
+		// the hash, because the value lands in the pod template and a warm
+		// pod born under the old RuntimeClass no longer matches the spec.
+		RuntimeClass string `json:"runtimeClass,omitempty"`
 	}{
 		Runtime:   env.Spec.Runtime,
 		Resources: env.Spec.Resources,
@@ -51,11 +57,12 @@ func envRuntimeHash(env *fv1.Environment) string {
 		// the same template, so they must hash alike — which also kept the
 		// hash byte-identical across the int64 -> *int64 field migration
 		// (no pool roll on the release that shipped it).
-		Grace:       env.Spec.EffectiveTerminationGracePeriod(),
-		PullSecret:  env.Spec.ImagePullSecret,
-		ExtNet:      env.Spec.AllowAccessToExternalNetwork,
-		Labels:      env.Labels,
-		Annotations: env.Annotations,
+		Grace:        env.Spec.EffectiveTerminationGracePeriod(),
+		PullSecret:   env.Spec.ImagePullSecret,
+		ExtNet:       env.Spec.AllowAccessToExternalNetwork,
+		Labels:       env.Labels,
+		Annotations:  env.Annotations,
+		RuntimeClass: ptrString(env.Spec.RuntimeClassName),
 	}
 	b, err := json.Marshal(in)
 	if err != nil {
@@ -65,6 +72,14 @@ func envRuntimeHash(env *fv1.Environment) string {
 	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])[:16]
+}
+
+// ptrString derefs an optional string ("" when unset) for hashing.
+func ptrString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // envLabelsMatchLiveEnv reports whether the ENVIRONMENT_UID /
