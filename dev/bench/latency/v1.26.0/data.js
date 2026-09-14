@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787561867719,
+  "lastUpdate": 1789377775404,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission latency (v1.26.0)": [
@@ -2000,6 +2000,683 @@ window.BENCHMARK_DATA = {
           {
             "name": "route-churn/apiserver_calls",
             "value": 1525,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "89dc34df8852b5e15ae116bdb132e9e7e3f3af63",
+          "message": "hack/run-tlc: bump the tla2tools pin for the 2026-09-10 rebuild (#3723)\n\nThe tlaplus project re-uploaded the v1.8.0 tla2tools.jar release asset on\n2026-09-10 (manifest Implementation-Version \"2.0 2026-09-10\", X-Git-Revision\nc3af5e2dcc6e54860e96b8e7adf7509d3f685d25), so the pinned SHA256 no longer\nmatches and the tlc job fails at the checksum step on every PR. Verified the\nnew jar per the note in the script (Main-class tlc2.TLC, Implementation-Vendor\nMicrosoft Corp., tlc2/TLC.class present, size matches the release asset) and\nbumped the pin.",
+          "timestamp": "2026-09-11T16:37:35Z",
+          "url": "https://github.com/fission/fission/commit/89dc34df8852b5e15ae116bdb132e9e7e3f3af63"
+        },
+        "date": 1789377774098,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/cold_p50",
+            "value": 82.043,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_p95",
+            "value": 269.457,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_max",
+            "value": 600.832,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr/apiserver_calls",
+            "value": 292,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p50",
+            "value": 2834.622,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p95",
+            "value": 3843.264,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_max",
+            "value": 5142.094,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/apiserver_calls",
+            "value": 633,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p50",
+            "value": 100.706,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p95",
+            "value": 251.503,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_max",
+            "value": 290.455,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/apiserver_calls",
+            "value": 509,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p50",
+            "value": 2411.935,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p95",
+            "value": 4487.133,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_max",
+            "value": 5451.595,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/apiserver_calls",
+            "value": 85,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p50",
+            "value": 2683.468,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p95",
+            "value": 5123.944,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_max",
+            "value": 7095.624,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/apiserver_calls",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/p50",
+            "value": 10.631,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p95",
+            "value": 24.287,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99",
+            "value": 32.655,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99.9",
+            "value": 47.647,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/max",
+            "value": 93.055,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path/apiserver_calls",
+            "value": 399,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path-newdeploy/p50",
+            "value": 11.919,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p95",
+            "value": 29.535,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99",
+            "value": 42.463,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99.9",
+            "value": 61.279,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/max",
+            "value": 96.191,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/apiserver_calls",
+            "value": 75,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/c10_p50",
+            "value": 2.897,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p95",
+            "value": 5.843,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99",
+            "value": 8.311,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99.9",
+            "value": 13.383,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_max",
+            "value": 79.231,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c50_p50",
+            "value": 11.063,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p95",
+            "value": 26.415,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99",
+            "value": 36.159,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99.9",
+            "value": 56.351,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_max",
+            "value": 107.583,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c100_p50",
+            "value": 24.975,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p95",
+            "value": 77.183,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99",
+            "value": 109.119,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99.9",
+            "value": 147.839,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_max",
+            "value": 239.871,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c250_p50",
+            "value": 39.967,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p95",
+            "value": 273.663,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99",
+            "value": 587.263,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99.9",
+            "value": 14024.703,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_max",
+            "value": 59539.455,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_error_rate",
+            "value": 0.00340040730153392,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c500_p50",
+            "value": 236.799,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p95",
+            "value": 573.439,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99",
+            "value": 763.391,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99.9",
+            "value": 992.767,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_max",
+            "value": 1221.631,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/specializations",
+            "value": 70,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/apiserver_calls",
+            "value": 414,
+            "unit": "count"
+          },
+          {
+            "name": "rps-sweep/rps100_p50",
+            "value": 1.623,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p95",
+            "value": 2.425,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99",
+            "value": 3.587,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99.9",
+            "value": 8.295,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_max",
+            "value": 37.951,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps250_p50",
+            "value": 5.455,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p95",
+            "value": 402.431,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99",
+            "value": 1359.871,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99.9",
+            "value": 49610.751,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_max",
+            "value": 59604.991,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_error_rate",
+            "value": 0.0006050420168067227,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps500_p50",
+            "value": 1.443,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p95",
+            "value": 2.473,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99",
+            "value": 5.831,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99.9",
+            "value": 50.431,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_max",
+            "value": 101.951,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps1000_p50",
+            "value": 1.493,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p95",
+            "value": 3.973,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99",
+            "value": 14.407,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99.9",
+            "value": 59.807,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_max",
+            "value": 154.879,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/apiserver_calls",
+            "value": 413,
+            "unit": "count"
+          },
+          {
+            "name": "payload-sweep/1KiB_p50",
+            "value": 16.831,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p95",
+            "value": 42.079,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99",
+            "value": 58.047,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99.9",
+            "value": 85.439,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_max",
+            "value": 148.095,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/10KiB_p50",
+            "value": 21.999,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p95",
+            "value": 110.143,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99",
+            "value": 243.839,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99.9",
+            "value": 14188.543,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_max",
+            "value": 53477.375,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/100KiB_p50",
+            "value": 50.367,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p95",
+            "value": 105.407,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99",
+            "value": 149.631,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99.9",
+            "value": 288.767,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_max",
+            "value": 450.559,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1MiB_p50",
+            "value": 275.455,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p95",
+            "value": 403.711,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99",
+            "value": 541.183,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99.9",
+            "value": 675.327,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_max",
+            "value": 791.551,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/apiserver_calls",
+            "value": 400,
+            "unit": "count"
+          },
+          {
+            "name": "autoscale-newdeploy/scale_up_seconds",
+            "value": 35.101908371,
+            "unit": "s"
+          },
+          {
+            "name": "autoscale-newdeploy/apiserver_calls",
+            "value": 206,
+            "unit": "count"
+          },
+          {
+            "name": "build-time-python/build_seconds",
+            "value": 12.02380187,
+            "unit": "s"
+          },
+          {
+            "name": "build-time-python/apiserver_calls",
+            "value": 49,
+            "unit": "count"
+          },
+          {
+            "name": "router-index-scale/create_seconds",
+            "value": 4.540427984,
+            "unit": "s"
+          },
+          {
+            "name": "router-index-scale/router_rss_mb",
+            "value": 83.3828125,
+            "unit": "MiB"
+          },
+          {
+            "name": "router-index-scale/apiserver_calls",
+            "value": 16,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/create_seconds",
+            "value": 2.512167777,
+            "unit": "s"
+          },
+          {
+            "name": "route-churn/route_table_applies_total",
+            "value": 255,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/apiserver_calls",
+            "value": 0,
             "unit": "count"
           }
         ]
