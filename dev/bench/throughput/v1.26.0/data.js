@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787561871853,
+  "lastUpdate": 1789377780869,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission throughput (v1.26.0)": [
@@ -400,6 +400,153 @@ window.BENCHMARK_DATA = {
           {
             "name": "payload-sweep/1MiB_throughput",
             "value": 118.96666666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "autoscale-newdeploy/max_replicas",
+            "value": 5,
+            "unit": "count"
+          },
+          {
+            "name": "autoscale-newdeploy/scaled",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "router-index-scale/objects",
+            "value": 1000,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/routes",
+            "value": 500,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "89dc34df8852b5e15ae116bdb132e9e7e3f3af63",
+          "message": "hack/run-tlc: bump the tla2tools pin for the 2026-09-10 rebuild (#3723)\n\nThe tlaplus project re-uploaded the v1.8.0 tla2tools.jar release asset on\n2026-09-10 (manifest Implementation-Version \"2.0 2026-09-10\", X-Git-Revision\nc3af5e2dcc6e54860e96b8e7adf7509d3f685d25), so the pinned SHA256 no longer\nmatches and the tlc job fails at the checksum step on every PR. Verified the\nnew jar per the note in the script (Main-class tlc2.TLC, Implementation-Vendor\nMicrosoft Corp., tlc2/TLC.class present, size matches the release asset) and\nbumped the pin.",
+          "timestamp": "2026-09-11T16:37:35Z",
+          "url": "https://github.com/fission/fission/commit/89dc34df8852b5e15ae116bdb132e9e7e3f3af63"
+        },
+        "date": 1789377780195,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/throughput",
+            "value": 4140.183333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "warm-path/endpointcache_hit_ratio",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/throughput",
+            "value": 3592.016666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c10_throughput",
+            "value": 3099.233333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c50_throughput",
+            "value": 3928.766666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c100_throughput",
+            "value": 3201.733333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c250_throughput",
+            "value": 889.0166666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c500_throughput",
+            "value": 1898.65,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps100_throughput",
+            "value": 100,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps250_throughput",
+            "value": 247.76666666666668,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps500_throughput",
+            "value": 499.8833333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps1000_throughput",
+            "value": 951.3833333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1KiB_throughput",
+            "value": 2565.05,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/10KiB_throughput",
+            "value": 719.1666666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/100KiB_throughput",
+            "value": 898.95,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1MiB_throughput",
+            "value": 180.11666666666667,
             "unit": "rps"
           },
           {
