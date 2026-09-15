@@ -100,6 +100,12 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 		switch act.kind {
 		case actNone:
 			e.saveCheckpoint(ctx, run, s)
+			if s.Terminal != "" {
+				// Nothing of a terminal run is ever dispatched again; release
+				// the invoker's completed-attempt memory for it (idempotent —
+				// the reconciler keeps reconciling terminal runs for status).
+				e.invoker.Forget(string(run.UID))
+			}
 			return s, nil
 
 		case actInvoke, actArmTimer:

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 )
@@ -130,6 +131,46 @@ func TestEngineMap(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	assert.LessOrEqual(t, maxInflight, 2, "MaxConcurrency throttles branch dispatch")
+}
+
+// TestInvokerSkipsCompletedAttemptInProcess pins the stale-snapshot guard:
+// a dispatch for an attempt whose result this process already recorded is a
+// no-op (no second delivery), and Forget releases that memory so a genuinely
+// fresh replay (a restart, modeled by a forgotten run) invokes again. Without
+// the guard, TestEngineMap's throttle overshoots: the reconcile folds the log,
+// the attempt completes and releases its inflight key, then the dispatch
+// computed from the older snapshot fires a duplicate alongside the branches
+// opened by the completion.
+func TestInvokerSkipsCompletedAttemptInProcess(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, pipelineSpec())
+	s := h.drive(t, h.engine, 10*time.Second)
+	require.Equal(t, fv1.WorkflowRunSucceeded, s.Terminal)
+	before := h.callCount("fn-a")
+	require.Equal(t, 1, before, "one delivery for the single attempt")
+
+	// A dispatch computed from a snapshot that predates the result: the
+	// attempt is complete in the log, so the invoker must not deliver again.
+	inv := invocation{
+		runKey: types.NamespacedName{Namespace: h.run.Namespace, Name: h.run.Name},
+		runUID: string(h.run.UID), stream: streamName(h.run), namespace: h.run.Namespace,
+		state: "a", attempt: 1, stateSpec: s.Spec.States["a"], input: []byte(`{}`),
+		expectedSeq: 1,
+	}
+	// The terminal reconcile already called Forget; re-mark to model the
+	// window between the result append and terminal (the run is still live).
+	h.engine.invoker.markDone(inv.runUID, inv.runUID+"//"+stepKey("a", 1))
+	h.engine.invoker.Dispatch(inv)
+	require.Never(t, func() bool { return h.callCount("fn-a") > before }, 200*time.Millisecond, 20*time.Millisecond,
+		"a completed attempt must not be delivered again by the same process")
+
+	// Forget (terminal / cleanup) drops the memory: a replay after a restart
+	// is at-least-once by contract and delivers.
+	h.engine.invoker.Forget(inv.runUID)
+	h.engine.invoker.Dispatch(inv)
+	require.Eventually(t, func() bool { return h.callCount("fn-a") == before+1 }, 5*time.Second, 10*time.Millisecond,
+		"after Forget the attempt is deliverable again")
 }
 
 // TestEngineCrashPointResumeThroughRegion resumes a fresh engine mid-region
