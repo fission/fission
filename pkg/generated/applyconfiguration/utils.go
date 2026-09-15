@@ -20,6 +20,10 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=fission.io, Version=v1
+	case v1.SchemeGroupVersion.WithKind("AgentConfig"):
+		return &corev1.AgentConfigApplyConfiguration{}
+	case v1.SchemeGroupVersion.WithKind("AgentSessionConfig"):
+		return &corev1.AgentSessionConfigApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("AliasTargetRecord"):
 		return &corev1.AliasTargetRecordApplyConfiguration{}
 	case v1.SchemeGroupVersion.WithKind("Archive"):

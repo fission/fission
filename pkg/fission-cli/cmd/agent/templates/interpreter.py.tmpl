@@ -1,0 +1,384 @@
+# {{.Name}} -- an interpreter agent handler, scaffolded by
+# `fission agent create --template interpreter`.
+#
+# WHAT THIS FILE IS
+# ------------------
+# This implements the "exec" verb (abstraction A, PR-1): a turn's body is
+# {"code": "..."} (interpreted with `sys.executable -c`) or {"command": "..."}
+# (run through a shell) -- exactly one of the two -- and the reply is
+# {stdout, stderr, exitCode, durationMs, truncated}. It is an ordinary
+# Fission Python function (the environment calls main() with no arguments
+# for every request, github.com/fission/environments python/server.py)
+# that the agent runtime calls once per turn like any other agent handler,
+# so it runs through the normal dispatch path -- no new platform code, no
+# new environment image.
+#
+# TRUST BOUNDARY -- READ BEFORE USE
+# ----------------------------------
+# The subprocess environment below is an ALLOW-LIST, not a filtered copy:
+# the child starts with nothing and gets only PATH/HOME/LANG/etc, so
+# FISSION_* vars (state/agent token paths, runtime URLs) are never passed
+# through -- that keeps ACCIDENTAL credential leakage out of exec'd code.
+# It is NOT a sandbox: a process in the SAME CONTAINER can still read the
+# pod's token files directly, so exec'd code runs at the agent's own trust
+# level. That is fine for run-your-own-code tools (an analyst's own
+# interpreter, a calculator tool) -- it is NOT a boundary for adversarial
+# or multi-tenant code, which needs a dedicated pod per session (a Tier C
+# bare-Sandbox executor), not this template. Pair this environment with
+# `fission env create ... --runtime-class gvisor` for one more layer of
+# isolation before running code you did not write yourself. The same
+# accidental-leakage posture applies to workspace sync below: a symlink
+# written into the scratch dir pointing at, say, the pod's token file would
+# get its TARGET's bytes uploaded to a workspace sibling sessions of this
+# same agent can read (see the workspace hydration/sync section) -- that is
+# why the sync walk below skips symlinks outright rather than following them.
+#
+# WORKING DIRECTORY AND WORKSPACE HYDRATION/SYNC (PR-2, abstraction C)
+# ----------------------------------------------------------------------
+# For a STATELESS call (no session header -- the MCP fast lane or a bare
+# direct invocation), the working directory is still a fresh scratch dir,
+# wiped before and best-effort removed after every call: there is no session
+# to key a workspace on, so nothing here changes for that path.
+#
+# For a SESSIONFUL call, the scratch dir ($TMPDIR/exec/<session>) is no
+# longer wiped at the start or end of a turn. Instead:
+#   - Turn start: HYDRATE -- list the session's G12 workspace
+#     (pkg/agentruntime/workspace.go) and download any file that is missing
+#     locally or whose local size does not match the remote size. On a warm
+#     pod where nothing changed since the last turn this is one LIST call
+#     and no downloads (lazy).
+#   - Turn end: SYNC -- walk the scratch dir and PUT any file that is new or
+#     has changed since the last successful hydrate/sync of that same path
+#     (compared via size+mtime, falling back to a content hash only when
+#     size+mtime alone is ambiguous -- see _sync_workspace). A hash manifest
+#     file kept in the scratch dir (never itself synced) is what lets a
+#     second turn on the SAME warm pod skip re-uploading anything unchanged.
+# This is what makes a file exec'd code writes survive a pod respecialize:
+# the scratch dir itself is pod-local and gone the moment the pod is, but
+# the workspace copy persists in storagesvc and rehydrates onto whichever
+# pod serves the session's next turn.
+#
+# Sync is ADDITIVE ONLY: a file deleted locally is never DELETEd from the
+# workspace (workspace.go's DELETE stays an explicit app-level call your own
+# code would have to make) -- this mirrors the shipped design's own
+# "workspace is additive" stance. A failed hydrate or sync (network error,
+# a 413 over one of the shipped quotas -- 32MiB/artifact, 256MiB + 1000
+# artifacts/session) is never silently dropped: it is collected into the
+# turn's `workspaceWarnings` reply field instead (capped so a runaway
+# directory full of failures cannot blow the reply up the same way
+# MAX_OUTPUT_BYTES caps stdout/stderr).
+#
+# Security note (restated from the shipped design, workspace.go): the
+# identity token's boundary is per-(namespace, agent), not per-session -- a
+# session can read a SIBLING session's artifacts of this same agent. Hydrate
+# is scoped to THIS session's own workspace by convention (the session id in
+# the URL), not by any server-side enforcement narrower than the agent
+# itself; per-session tokens remain a documented future slice, not something
+# this template can provide on its own.
+#
+# MAX_TIMEOUT_SECONDS (below) doubles as this scaffold's FunctionTimeout
+# (see `fission agent create`'s next-steps output) -- a turn whose exec runs
+# the full 300s ceiling leaves NO headroom for the sync step that follows
+# it. A long-running exec workload should lower its own timeoutSeconds well
+# under the ceiling if it also wants sync to reliably complete inside the
+# same request.
+
+import hashlib
+import json
+import math
+import os
+import re
+import shutil
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import uuid
+
+from flask import request
+import requests
+
+# The dispatcher stamps the session header on every forwarded call (see
+# pkg/agentruntime/dispatcher.go); this template reads it only to name the
+# per-session scratch directory, and always answers with the default yield
+# (below) so a session-scoped call never self-re-invokes. flask.request.headers
+# is a case-insensitive mapping (Werkzeug EnvironHeaders).
+SESSION_HEADER = 'X-Fission-Session'
+YIELD_HEADER = 'X-Fission-Agent-Yield'
+
+# DEFAULT_TIMEOUT_SECONDS / MAX_TIMEOUT_SECONDS -- the request-carried
+# timeoutSeconds is clamped into (0, MAX_TIMEOUT_SECONDS]; a request that
+# omits it (or sends a non-positive value) gets DEFAULT_TIMEOUT_SECONDS.
+# MAX_TIMEOUT_SECONDS is also this scaffold's own FunctionTimeout (see
+# `fission agent create`'s next-steps output), so a full-length exec call
+# is never killed by the platform's own request timeout first.
+DEFAULT_TIMEOUT_SECONDS = 60
+MAX_TIMEOUT_SECONDS = {{.MaxTimeoutSeconds}}
+
+# MAX_OUTPUT_BYTES caps stdout/stderr EACH (aligns with the state API's
+# MaxValueBytes default, DefaultStateMaxValueBytes, pkg/apis/core/v1/const.go)
+# -- overflow sets truncated=True, it never turns into an error response.
+MAX_OUTPUT_BYTES = 256 * 1024
+
+# ALLOWED_ENV_VARS: see the trust-boundary note above -- this is the
+# complete list of names copied into the child's environment. Nothing
+# outside it reaches the subprocess, however this pod's own environment
+# grows in the future.
+ALLOWED_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ']
+
+
+def _allowed_env():
+    return {k: os.environ[k] for k in ALLOWED_ENV_VARS if k in os.environ}
+
+
+{{template "workspaceHelper" .}}
+
+
+class _OutputBuffer:
+    # Mirrors the JS template's outputBuffer: chunks are dropped at PUSH
+    # time once MAX_OUTPUT_BYTES is reached, not merely trimmed once
+    # collection ends -- so a runaway child cannot hold arbitrarily large
+    # stdout/stderr buffers in memory before the cap is applied (unlike
+    # subprocess.communicate(), which buffers the whole stream first).
+    def __init__(self):
+        self._chunks = []
+        self._bytes = 0
+        self.truncated = False
+
+    def push(self, chunk):
+        if self.truncated or not chunk:
+            return
+        remaining = MAX_OUTPUT_BYTES - self._bytes
+        if len(chunk) > remaining:
+            chunk = chunk[:remaining]
+            self.truncated = True
+        self._chunks.append(chunk)
+        self._bytes += len(chunk)
+
+    def text(self):
+        return b''.join(self._chunks).decode('utf-8', errors='replace')
+
+
+def _drain(pipe, buf):
+    # Keeps reading (and, past the cap, discarding) until the pipe closes,
+    # even after buf.truncated -- otherwise an unread pipe fills its OS
+    # buffer and blocks the child, which would hang the whole exec instead
+    # of honoring MAX_OUTPUT_BYTES.
+    try:
+        while True:
+            chunk = pipe.read(65536)
+            if not chunk:
+                break
+            buf.push(chunk)
+    finally:
+        pipe.close()
+
+
+def _run_exec(argv, cwd, timeout_seconds):
+    # start_new_session=True puts the child in its own process group so the
+    # WHOLE tree (a shell plus whatever it launches) can be killed on
+    # timeout via os.killpg, not just the direct child.
+    start = time.monotonic()
+    try:
+        proc = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            env=_allowed_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+    except OSError as err:
+        # argv[0] missing (e.g. no /bin/sh or python3 in the image) or not
+        # executable -- mirrors the JS template's spawn() 'error' handler:
+        # map the failure into the {stdout,stderr,exitCode,durationMs,
+        # truncated} reply instead of letting it raise past main() as an
+        # uncaught 500.
+        duration_ms = int((time.monotonic() - start) * 1000)
+        return '', '[exec: failed to start: %s]' % err, -1, duration_ms, False
+
+    stdout_buf = _OutputBuffer()
+    stderr_buf = _OutputBuffer()
+    stdout_thread = threading.Thread(target=_drain, args=(proc.stdout, stdout_buf))
+    stderr_thread = threading.Thread(target=_drain, args=(proc.stderr, stderr_buf))
+    stdout_thread.start()
+    stderr_thread.start()
+
+    timed_out = False
+
+    def _kill_group():
+        # The child's pgid == its pid (start_new_session), and the GROUP can
+        # outlive the direct child (a backgrounded grandchild keeps running
+        # after the shell exits), so signal by the saved pid -- os.getpgid on
+        # an already-reaped child raises before the kill ever happens.
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    deadline = start + timeout_seconds
+    try:
+        proc.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        _kill_group()
+        proc.wait()
+    # The direct child exiting is NOT the end of the turn: a backgrounded
+    # grandchild (sh -c 'daemon &' exits instantly) inherits the stdout/
+    # stderr pipes and keeps the drain threads reading past the deadline.
+    # Bound the drains by the SAME deadline and kill the whole group on
+    # overrun -- that is what "kill the whole process group on expiry"
+    # means, and it matches the JS template, whose 'close' event also waits
+    # for the pipes and whose timer kills the group regardless of the
+    # direct child's state.
+    for drain_thread in (stdout_thread, stderr_thread):
+        drain_thread.join(timeout=max(0.0, deadline - time.monotonic()))
+    if stdout_thread.is_alive() or stderr_thread.is_alive():
+        timed_out = True
+        _kill_group()
+        # Post-SIGKILL the pipe writers are gone and the drains see EOF; the
+        # short grace only covers a straggler thread being scheduled late.
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
+    duration_ms = int((time.monotonic() - start) * 1000)
+
+    stdout_text = stdout_buf.text()
+    stderr_text = stderr_buf.text()
+    if timed_out:
+        stderr_text += '\n[exec: killed after exceeding %gs timeout]' % timeout_seconds
+        exit_code = -1
+    else:
+        exit_code = proc.returncode
+
+    return stdout_text, stderr_text, exit_code, duration_ms, stdout_buf.truncated or stderr_buf.truncated
+
+
+# _SESSION_ID_CHARSET_RE mirrors the dispatcher's own sessionIDPattern
+# (pkg/agentruntime/dispatcher.go) exactly. This template is reached two
+# ways: through the dispatcher, which already validates X-Fission-Session
+# against that pattern before forwarding it, but ALSO directly against the
+# router internal listener (a bare `fission function test`/curl, or the MCP
+# fast lane) -- a path with no dispatcher in front of it at all, where the
+# header is whatever the caller sent, unconstrained by any pattern. Re-
+# validating here (fullmatch, not match+'$', since '$' also matches just
+# before a trailing newline) is what makes the guard below hold on BOTH
+# paths rather than only the one that happens to enforce it upstream.
+_SESSION_ID_CHARSET_RE = re.compile(r'[A-Za-z0-9._-]{1,128}')
+
+
+def _safe_scratch_name(session_id):
+    # This template turns session_id into a path SEGMENT
+    # ($TMPDIR/exec/<segment>), so a value of "." resolves to $TMPDIR/exec
+    # itself, ".." resolves to $TMPDIR itself, and anything containing "/"
+    # (never possible through the dispatcher, but possible on the direct
+    # path above) can walk arbitrarily far outside $TMPDIR/exec -- a
+    # STATELESS scratch dir (this function returned a fresh fallback name
+    # rather than session_id itself) still gets shutil.rmtree'd at the start
+    # and end of every call; a SESSIONFUL one is no longer wiped at all (see
+    # main()), so an unguarded traversal there would instead silently and
+    # repeatedly hydrate/sync through a sibling session's or the pod's own
+    # unrelated directory on every future turn.
+    # pkg/agentruntime/workspace.go's validateWorkspaceSegment applies the
+    # same charset + "."/".." rejection for the same reason on the
+    # platform's own workspace routes; mirrored here by falling back to a
+    # fresh uniquely-named scratch dir instead of erroring the turn.
+    if session_id in ('.', '..') or not _SESSION_ID_CHARSET_RE.fullmatch(session_id):
+        return 'stateless-%s' % uuid.uuid4().hex
+    return session_id
+
+
+def _clamp_timeout(value):
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_TIMEOUT_SECONDS
+    # math.isfinite rejects NaN and +/-inf -- float('nan') <= 0 is False, so
+    # a NaN would otherwise sail past a bare `seconds <= 0` guard and reach
+    # subprocess timeouts as-is, raising an uncaught ValueError instead of
+    # the {stdout,stderr,exitCode,durationMs,truncated} contract.
+    if not math.isfinite(seconds) or seconds <= 0:
+        return DEFAULT_TIMEOUT_SECONDS
+    return min(seconds, MAX_TIMEOUT_SECONDS)
+
+
+# --- The turn --------------------------------------------------------------
+#
+# Flask's documented view-return-value contract accepts (body, status,
+# headers) tuples -- see agent.py.tmpl's comment for the citation -- which
+# is what sets YIELD_HEADER on the response below.
+def main():
+    session_id = request.headers.get(SESSION_HEADER, '').strip()
+    # A call with no session header (the MCP fast lane -- tools/call goes
+    # straight to the router internal listener, bypassing the dispatcher --
+    # or a bare direct invocation) is stateless exec: a fresh, uniquely-named
+    # scratch dir per call rather than one keyed on a session that does not
+    # exist here. is_session additionally requires _safe_scratch_name to have
+    # returned session_id UNCHANGED -- its fallback branch means session_id
+    # failed validation (the direct-invocation path has no dispatcher
+    # enforcing sessionIDPattern upstream), and a scratch dir named after a
+    # fabricated fallback id is not a real session's workspace to hydrate
+    # from or sync to.
+    scratch_name = _safe_scratch_name(session_id)
+    is_session = bool(session_id) and scratch_name == session_id
+    scratch_dir = os.path.join(tempfile.gettempdir(), 'exec', scratch_name)
+
+    headers = {'Content-Type': 'application/json', YIELD_HEADER: 'waiting'}
+
+    payload = request.get_json(silent=True)
+    # A syntactically valid but non-object JSON body ([1,2], "x", 42) parses
+    # truthy; without this guard the payload.get(...) calls below raise an
+    # uncaught AttributeError (non-dicts have no .get), turning a malformed
+    # request into a 500 instead of the exactly-one-of contract's 400.
+    if not isinstance(payload, dict):
+        payload = {}
+    has_code = isinstance(payload.get('code'), str)
+    has_command = isinstance(payload.get('command'), str)
+    if has_code == has_command:
+        return json.dumps({'error': 'exactly one of "code" or "command" is required'}), 400, headers
+
+    timeout_seconds = _clamp_timeout(payload.get('timeoutSeconds'))
+
+    workspace_warnings = []
+    manifest = {}
+    if is_session:
+        # SESSIONFUL: the scratch dir is deliberately NOT wiped -- see the
+        # "Workspace hydration/sync" comment at the top of this file. It may
+        # already exist (a later turn on the same warm pod) or not (the
+        # session's very first turn, or a fresh pod after respecialize).
+        os.makedirs(scratch_dir, exist_ok=True)
+        manifest = _load_workspace_manifest(scratch_dir)
+        workspace_warnings += _hydrate_workspace(scratch_dir, session_id, manifest)
+    else:
+        # STATELESS: unchanged from PR-1 -- fresh scratch dir, best-effort
+        # removed after the call, no workspace involvement at all.
+        shutil.rmtree(scratch_dir, ignore_errors=True)
+        os.makedirs(scratch_dir, exist_ok=True)
+
+    try:
+        if has_code:
+            argv = [sys.executable, '-c', payload['code']]
+        else:
+            argv = ['/bin/sh', '-c', payload['command']]
+        stdout_text, stderr_text, exit_code, duration_ms, truncated = _run_exec(argv, scratch_dir, timeout_seconds)
+    finally:
+        if not is_session:
+            # Best-effort cleanup -- a leftover scratch dir is not worth
+            # failing the turn over.
+            shutil.rmtree(scratch_dir, ignore_errors=True)
+
+    if is_session:
+        workspace_warnings += _sync_workspace(scratch_dir, session_id, manifest)
+        _save_workspace_manifest(scratch_dir, manifest)
+
+    reply = {
+        'stdout': stdout_text,
+        'stderr': stderr_text,
+        'exitCode': exit_code,
+        'durationMs': duration_ms,
+        'truncated': truncated,
+        'workspaceWarnings': workspace_warnings,
+    }
+    return json.dumps(reply), 200, headers

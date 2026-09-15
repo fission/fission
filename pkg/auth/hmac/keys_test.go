@@ -119,6 +119,59 @@ func TestServiceVerifierEmptyMasterPasses(t *testing.T) {
 	assert.Equal(t, 200, rr.Code, "empty master must disable enforcement")
 }
 
+// TestDeriveAgentIdentityKeyDeterministic pins the basic HKDF contract for the
+// per-agent identity chain: same master + namespace + agent always derives the
+// same key, at the standard 32-byte length.
+func TestDeriveAgentIdentityKeyDeterministic(t *testing.T) {
+	master := []byte(testMaster)
+	a := DeriveAgentIdentityKey(master, "ns", "architect")
+	b := DeriveAgentIdentityKey(master, "ns", "architect")
+	require.Len(t, a, derivedKeyLength)
+	assert.Equal(t, a, b, "same master + namespace + agent must produce the same key")
+}
+
+// TestDeriveAgentIdentityKeyIsolation is the distinctness matrix for the
+// agentident chain: a token derived for one (namespace, agent) can never
+// collide with another scope, with a different master, or with the
+// DeriveStateKeyspaceKey chain fed the identical (namespace, agent) inputs —
+// the "agentident" tag alone must be what keeps the two channels apart.
+func TestDeriveAgentIdentityKeyIsolation(t *testing.T) {
+	master := []byte(testMaster)
+	base := DeriveAgentIdentityKey(master, "ns-a", "architect")
+
+	distinct := [][]byte{
+		DeriveAgentIdentityKey(master, "ns-b", "architect"),                 // other namespace
+		DeriveAgentIdentityKey(master, "ns-a", "support-desk"),              // other agent
+		DeriveAgentIdentityKey([]byte("other-master"), "ns-a", "architect"), // other master
+		DeriveStateKeyspaceKey(master, "ns-a", "architect"),                 // sibling chain, same inputs
+	}
+	for i, k := range distinct {
+		assert.NotEqual(t, base, k, "candidate %d must not collide with the base key", i)
+	}
+}
+
+func TestDeriveAgentIdentityKeyNoFieldSplice(t *testing.T) {
+	master := []byte(testMaster)
+	// DNS-label namespace/agent names cannot contain ':', so swapped fields
+	// spliced across the info-string boundary must not derive equal keys.
+	assert.NotEqual(t,
+		DeriveAgentIdentityKey(master, "a", "b"),
+		DeriveAgentIdentityKey(master, "b", "a"))
+}
+
+func TestDeriveAgentIdentityKeyEmptyMaster(t *testing.T) {
+	assert.Nil(t, DeriveAgentIdentityKey(nil, "ns", "architect"),
+		"empty master must return nil so callers can short-circuit")
+	assert.Nil(t, DeriveAgentIdentityKey([]byte{}, "ns", "architect"))
+}
+
+func TestDeriveAgentIdentityKeyEncodeDecodeRoundTrip(t *testing.T) {
+	key := DeriveAgentIdentityKey([]byte(testMaster), "ns", "architect")
+	require.NotEmpty(t, key)
+	enc := EncodeKeyForEnv(key)
+	assert.Equal(t, key, DecodeKeyFromEnv(enc), "encode->decode must round-trip the derived identity key")
+}
+
 // recordingTransport captures the signed request without dialing
 // over the network so we can replay it through the verifier.
 type recordingTransport struct {

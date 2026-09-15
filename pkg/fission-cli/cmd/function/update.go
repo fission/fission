@@ -119,7 +119,7 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// --expose-as-mcp toggles the MCP tool config; when off it clears it. The
 	// other --tool-* flags merge onto the existing config (only set fields change).
 	if input.IsSet(flagkey.FnExposeAsMCP) {
-		toolConfig, err := getToolConfig(input, function.Spec.Tool)
+		toolConfig, err := GetToolConfig(input, function.Spec.Tool)
 		if err != nil {
 			return err
 		}
@@ -130,7 +130,13 @@ func (opts *UpdateSubCommand) complete(input cli.Input) error {
 	// retains the keyspace data — see statesvc's reconciler). The other
 	// --state-* flags merge onto the existing config (only set fields change).
 	if input.IsSet(flagkey.FnState) {
-		function.Spec.State = getStateConfig(input, function.Spec.State)
+		function.Spec.State = GetStateConfig(input, function.Spec.State)
+	}
+
+	// --agent toggles the agent config; the other --agent-* flags merge onto
+	// the existing config (only set fields change).
+	if input.IsSet(flagkey.FnAgent) {
+		function.Spec.Agent = GetAgentConfig(input, function.Spec.Agent)
 	}
 
 	// The --async-* flags merge onto the existing InvocationConfig (only set fields

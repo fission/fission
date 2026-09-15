@@ -175,6 +175,30 @@ rules:
   - list
   - watch
 {{- end }}
+{{- define "agentruntime-rules" }}
+rules:
+# The agent runtime is read-only against Functions (it watches Spec.Agent to
+# build its per-replica AgentView and resolve dispatch targets). Unlike mcp it
+# writes no status condition in v1 (see pkg/agentruntime/reconciler.go).
+#
+# fission.io-ONLY on purpose: this define feeds BOTH the namespaced Role
+# (agentruntime/role-fission-cr.yaml) AND the shared cluster-role generator
+# (tenant-controller/dynamic-cluster-roles.yaml), and that generator's invariant
+# is "fission.io types only" (see _fission-role-generator.tpl). The pool
+# introspection core-resource reads (pods, endpointslices) therefore live in
+# "agentruntime-kuberules" (namespaced kube-role generator, static + dynamic
+# tenancy), and the cluster-tenancy cluster-wide variant is granted separately
+# and explicitly in tenant-controller/cluster-mode-bindings.yaml — mirroring how
+# the router keeps its own EndpointSlice/Service reads out of "router-rules".
+- apiGroups:
+  - fission.io
+  resources:
+  - functions
+  verbs:
+  - get
+  - list
+  - watch
+{{- end }}
 {{- define "statesvc-rules" }}
 rules:
 # statesvc watches Functions to index StateConfigs (quota/keyspace resolution,

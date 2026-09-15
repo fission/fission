@@ -61,6 +61,15 @@ type (
 		// (it appears in the pod-visible -specialize-request arg); the token
 		// itself never does.
 		StateKeyspace string `json:"stateKeyspace,omitempty"`
+
+		// AgentName, when non-empty, is this function's agent identity name
+		// (G16): before specializing, the fetcher derives the scoped agent
+		// identity token from its own master secret and writes it to
+		// AgentTokenFileName under the shared mount for the user container's
+		// SDK to read. Only the NON-SECRET agent name rides this request (it
+		// appears in the pod-visible -specialize-request arg); the token
+		// itself never does — it derives pod-locally.
+		AgentName string `json:"agentName,omitempty"`
 	}
 
 	// ArchiveUploadRequest send from builder manager describes which

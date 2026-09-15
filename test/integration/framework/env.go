@@ -72,6 +72,40 @@ func (ns *TestNamespace) CreateEnvObject(t *testing.T, ctx context.Context, env 
 	})
 }
 
+// InternalAuthMasterReachable reports whether the internal-auth master Secret
+// exists in THIS namespace — i.e. whether a fetcher/builder pod scheduled here
+// resolves FISSION_INTERNAL_AUTH_SECRET to the real master (and so derives a
+// real per-object token) or gets an empty value (and writes the
+// "dev-unauthenticated" placeholder instead). It answers the question a test
+// that asserts a fetcher-DERIVED agent-identity token must ask before choosing
+// its expected value.
+//
+// The answer is fixed by tenancy posture, not by timing:
+//   - static tenancy replicates the master into .Values.defaultNamespace, so a
+//     `default`-namespace pod sees it -> TRUE.
+//   - dynamic/cluster tenancy keeps the master in the control-plane namespace
+//     ONLY and hands tenant namespaces a derived-key Secret instead
+//     (fission-internal-auth-keys) -> FALSE
+//     (see charts/fission-all/templates/internal-auth-secret.yaml).
+//
+// Presence is decided at Helm-install time and a pool pod captures its env at
+// creation, so a single Get is deterministic — there is nothing to wait for. A
+// NotFound is the reachable=FALSE answer; any OTHER error fails the test rather
+// than being silently read as "not reachable" (which would mask a broken probe
+// as tenancy mode on the static leg).
+func (ns *TestNamespace) InternalAuthMasterReachable(t *testing.T, ctx context.Context) bool {
+	t.Helper()
+	if len(ns.f.InternalAuthSecret()) == 0 {
+		return false // pass-through install: no master anywhere
+	}
+	s, err := ns.f.kubeClient.CoreV1().Secrets(ns.Name).Get(ctx, fv1.InternalAuthSecretName(), metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+	require.NoErrorf(t, err, "probing internal-auth master secret in %s", ns.Name)
+	return len(s.Data["secret"]) > 0
+}
+
 // CreateEnv creates a Fission Environment via the CLI and registers its
 // deletion on the namespace's cleanup chain (which runs after the diagnostics
 // dump on failure).

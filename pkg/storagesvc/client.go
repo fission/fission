@@ -146,6 +146,16 @@ type filter func(objectInfo) bool
 
 // getItemIDsWithFilter returns the IDs of all items in the container that the
 // filter does not exclude.
+//
+// Workspace objects (under the reserved workspaceMarker root, see
+// pkg/storagesvc/workspace.go) are excluded UNCONDITIONALLY here, before the
+// caller-supplied filter runs — not composed into individual filter values —
+// so both call sites are sealed by construction: the archive list
+// (StorageService.listItems) never surfaces one, and the orphan pruner
+// (ArchivePruner.getOrphanArchives) never treats one as an orphaned archive
+// (it has its own lifecycle: session-archive purge). isWorkspaceID is
+// segment-based, so this is correct regardless of backend id shape — the
+// local backend's absolute container path or an S3 STORAGE_S3_SUB_DIR prefix.
 func (client *StorageClient) getItemIDsWithFilter(exclude filter) ([]string, error) {
 	items, err := client.backend.list(client.config.storage.getSubDir())
 	if err != nil {
@@ -154,6 +164,9 @@ func (client *StorageClient) getItemIDsWithFilter(exclude filter) ([]string, err
 
 	archiveIDList := make([]string, 0)
 	for _, item := range items {
+		if isWorkspaceID(item.id) {
+			continue
+		}
 		if exclude(item) {
 			continue
 		}

@@ -1,0 +1,1810 @@
+// SPDX-FileCopyrightText: The Fission Authors
+//
+// SPDX-License-Identifier: Apache-2.0
+
+//go:build integration
+
+package common_test
+
+import (
+	"bufio"
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/fission/fission/pkg/agentruntime"
+	hmacauth "github.com/fission/fission/pkg/auth/hmac"
+	"github.com/fission/fission/test/integration/framework"
+)
+
+// turnAttemptTimeout bounds a single POST /agents/... attempt.
+// f.HTTPClient() sets no client-wide timeout (per its own doc: dials block
+// until the backend accepts), so an unbounded per-request context would let
+// one hung attempt (a stuck dial, a pathological cold start) consume the
+// entire require.EventuallyWithT budget below as a single try, turning
+// "retry until it converges" into "one shot, then fail". 60s leaves ~3 real
+// attempts inside the 180s polling budget.
+const turnAttemptTimeout = 60 * time.Second
+
+// registryAttemptTimeout bounds a single GET /registry/... attempt inside
+// the registry EventuallyWithT loops below. Unlike a turn (which proxies
+// into a function and can legitimately take a while), a registry GET is a
+// cheap in-memory read off this replica's AgentView/session store — it
+// never needs turnAttemptTimeout's 60s allowance. A short per-attempt
+// timeout inside the same 60s overall polling budget instead buys several
+// real retries, so a single hung dial doesn't burn the whole budget as one
+// try.
+const registryAttemptTimeout = 10 * time.Second
+
+// TestAgentRuntimeSessionDispatch exercises the agent-runtime session
+// dispatch path end-to-end against a real Node.js runtime: a function
+// created with `--agent` (default header session source, X-Fission-Session)
+// is (1) reachable at POST /agents/<ns>/<fn>, (2) mints a session id on a
+// turn with no session header and returns it via X-Fission-Session, and (3)
+// echoes the SAME id back when the caller supplies it on a follow-up turn.
+// It also asserts the plain (non-yielding) fixture leaves
+// X-Fission-Agent-Yield unset on the response, since the dispatcher only
+// surfaces that header when the function itself sets it.
+//
+// The agent runtime is enabled in the kind/kind-ci skaffold profiles
+// (agentRuntime.enabled/allowInsecure, mirroring mcp.enabled/allowInsecure);
+// the framework reaches it through the agentruntime.fission route
+// (in-process port-forward, or the FISSION_AGENTRUNTIME_BASE_URL override).
+// The test skips when the endpoint is unreachable — same shape as
+// TestMCPToolsListAndCall's requireMCPReachable. In CI the server runs in
+// pass-through auth mode (AGENT_ALLOW_INSECURE=true), so no bearer token is
+// needed here; JWT namespace scoping is covered by the pkg/agentruntime unit
+// tests (authz_test.go).
+func TestAgentRuntimeSessionDispatch(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-hello-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		Code: framework.WriteTestData(t, "nodejs/hello/hello.js"),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+
+	// FunctionOptions has no Agent field yet (RFC agent-runtime slices 1-2
+	// added the CLI flag but this framework helper predates it); attach the
+	// Agent config with a follow-up `fn update --agent`. The bare flag (no
+	// --agent-session-*/--agent-idle-after/etc.) leaves Session/IdleAfter/
+	// ArchiveAfter/MaxSessions nil, which the agent runtime's AgentView
+	// resolves to its documented defaults: header source
+	// X-Fission-Session, 5m idle, 24h archive, unlimited sessions (see
+	// pkg/agentruntime/view.go's entryFromAgentConfig).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	turnURL := f.AgentRuntimeBaseURL() + "/agents/" + ns.Name + "/" + fnName
+
+	// First turn: no session header. The dispatcher mints one, and by the
+	// time this returns 200 the agentruntime replica's reconciler has also
+	// caught up with the Function admission — poll until 200 to absorb both
+	// that convergence and the function's cold start.
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, "")
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "first turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "first turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		assert.Empty(c, resp.Header.Get(agentruntime.HeaderYield),
+			"a plain function that never sets %s must not surface it on the response", agentruntime.HeaderYield)
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "first turn never minted a session id")
+
+	// Negative path (Task 7 step 2): this function was created WITHOUT
+	// State, so its AgentEntry.StateKeyspace is empty and GetHistory's
+	// early-return branch (registry_api.go) must answer 200 with an empty
+	// history — never touching the (nonexistent) statesvc-backed history
+	// store, and never a 404/500. One extra GET on this test's already-
+	// minted session is enough; it does not need its own function/skip
+	// setup (TestAgentRuntimeHistory below covers the WITH-State positive
+	// path against a separate function).
+	historyURL := f.AgentRuntimeBaseURL() + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/history"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, historyURL)
+		if !assert.NoErrorf(c, err, "GET %s", historyURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s", historyURL) {
+			return
+		}
+		var payload historyResponseDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", historyURL, body) {
+			return
+		}
+		assert.Equalf(c, int64(0), payload.Head, "a no-State agent's session must report head:0, got %d", payload.Head)
+		// assert.Empty alone would also pass for a nil slice (an "events":null
+		// wire body decodes to nil, not []) — NotNil plus an explicit length
+		// check is what actually pins the documented [] shape.
+		assert.NotNilf(c, payload.Events, "a no-State agent's session must report events as [], not null")
+		assert.Lenf(c, payload.Events, 0, "a no-State agent's session must report an empty events list, got %+v", payload.Events)
+	}, 60*time.Second, 2*time.Second)
+
+	// Second turn: supply the minted session id explicitly. The dispatcher
+	// must resolve (not mint a new) session and echo the same id back.
+	// Wrapped in the same EventuallyWithT/attempt-timeout shape as the first
+	// turn (symmetric with TestMCPToolsListAndCall's tools/list + tools/call
+	// subtests, both of which poll) rather than a single direct call.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "second turn to %s", turnURL) {
+			return
+		}
+		assert.Equal(c, sessionID, resp.Header.Get(agentruntime.HeaderSession),
+			"second turn must echo the caller-supplied session id, not mint a new one")
+		assert.Empty(c, resp.Header.Get(agentruntime.HeaderYield))
+	}, 180*time.Second, 2*time.Second)
+}
+
+// TestAgentRuntimeYieldContinue exercises the Task 14/15 yield=continue
+// self-continuation chain end-to-end: a session whose function replies
+// X-Fission-Agent-Yield: continue is re-dispatched by WakeService without
+// any further caller action. The fixture (nodejs/agentloop/loop.js) reads
+// the dispatcher's own X-Fission-Agent-Turns header and echoes it back as
+// {"turns": n}, continuing while n < 4 — so the test proves the chain
+// advanced purely from the wake queue by polling with fresh "peek" turns on
+// the SAME session id and watching the reported turn count climb, with no
+// introspection API to read session state directly.
+func TestAgentRuntimeYieldContinue(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agentloop-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-loop-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		Code: framework.WriteTestData(t, "nodejs/agentloop/loop.js"),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	turnURL := f.AgentRuntimeBaseURL() + "/agents/" + ns.Name + "/" + fnName
+
+	// First turn: no session header. The fixture sees turns=0 (< 4), so the
+	// response must carry the continue yield header and the dispatcher must
+	// have enqueued a wake to re-invoke this session on its own.
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, "")
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "first turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "first turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		assert.Equal(c, agentruntime.YieldContinue, resp.Header.Get(agentruntime.HeaderYield),
+			"first turn (turns=0 < 4) must ask for a continuation")
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "first turn never minted a session id")
+
+	// The wake service chains the session forward in the background (no
+	// further action from this test). Poll with fresh "peek" turns on the
+	// same session id until the fixture reports turns >= 5.
+	//
+	// Each peek is ITSELF a turn dispatch, so it also increments the
+	// session's turn counter — a peek that merely observed the raw counter
+	// reaching 5 would pass even with the wake service dead (5 peeks alone
+	// get there). To actually prove background chaining, track P = the
+	// number of turns THIS TEST has dispatched so far (the initial turn plus
+	// every peek attempt, counting timeouts/failures too, since a timed-out
+	// POST may still have landed server-side). A turn's reported count n is
+	// the session's turn tally from BEFORE that turn's own dispatch, so at
+	// most P-1 of it can be test-caused; the rest, W = n-(P-1), must be
+	// wake-driven. Requiring n >= P+2 (W >= 3) alongside n >= 5 is what
+	// actually falsifies on a dead wake service: e.g. peek 3 (P=4) would
+	// need n >= 6, but a dead chain only ever reaches n=3 by then.
+	peeks := 1 // the initial turn above already counts as one dispatch
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		peeks++
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
+		if !assert.NoErrorf(c, err, "POST %s (peek)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "peek turn to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading peek response body") {
+			return
+		}
+		var payload struct {
+			Turns int `json:"turns"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding peek response body %q", body) {
+			return
+		}
+		assert.GreaterOrEqualf(c, payload.Turns, 5,
+			"session %s should have chained past turns=4 via wake-driven continuations by now (got %d)",
+			sessionID, payload.Turns)
+		assert.GreaterOrEqualf(c, payload.Turns, peeks+2,
+			"session %s turns=%d after %d test-issued dispatches implies fewer than 3 wake-driven continuations; the wake service may not be chaining",
+			sessionID, payload.Turns, peeks)
+	}, 120*time.Second, 2*time.Second)
+}
+
+// TestAgentRuntimeRegistrySmoke exercises Task 18/20's read-only
+// introspection surface end-to-end: after one real turn against a plain
+// (non-yielding) agent function, the created function and its minted
+// session must be visible through GET /registry/agents and GET
+// /registry/agents/{ns}/{fn}/sessions, GET /registry/pool must answer with
+// either a populated pod list or a documented degraded 503 (never anything
+// else), and GET /registry/events must open an SSE stream whose first frame
+// is an `event:` line (the connect-time snapshot replay — see events.go's
+// ServeHTTP doc comment).
+//
+// Like the other two tests in this file, it skips when the agent runtime
+// endpoint isn't reachable, and needs no bearer token: the kind/kind-ci
+// skaffold profiles run the agent runtime with AGENT_ALLOW_INSECURE=true, and
+// Authorizer.ScopeFromBearer/ScopeFromTokenInfo both mirror that pass-through
+// stance when no signing key is configured (authz.go).
+func TestAgentRuntimeRegistrySmoke(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-registry-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-registry-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		Code: framework.WriteTestData(t, "nodejs/hello/hello.js"),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// One real turn, same shape as TestAgentRuntimeSessionDispatch's first
+	// turn: mints a session id this test then looks for through the
+	// registry API.
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, "")
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "turn never minted a session id")
+
+	// 1. GET /registry/agents: the created function must be listed by
+	// namespace+name. Wrapped in EventuallyWithT since this replica's
+	// AgentView reconciles the Function admission asynchronously.
+	agentsURL := base + "/registry/agents"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, agentsURL)
+		if !assert.NoErrorf(c, err, "GET %s", agentsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s", agentsURL) {
+			return
+		}
+		var payload struct {
+			Agents []struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"agents"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", agentsURL, body) {
+			return
+		}
+		found := false
+		for _, a := range payload.Agents {
+			if a.Namespace == ns.Name && a.Name == fnName {
+				found = true
+				break
+			}
+		}
+		assert.Truef(c, found, "function %s/%s must appear in %s (got %+v)", ns.Name, fnName, agentsURL, payload.Agents)
+	}, 60*time.Second, 2*time.Second)
+
+	// 2. GET /registry/agents/{ns}/{fn}/sessions: the session minted above
+	// must appear with at least one counted turn.
+	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
+		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s", sessionsURL) {
+			return
+		}
+		var payload struct {
+			Sessions []struct {
+				ID    string `json:"id"`
+				Stats struct {
+					Turns int64 `json:"turns"`
+				} `json:"stats"`
+			} `json:"sessions"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", sessionsURL, body) {
+			return
+		}
+		var found bool
+		for _, s := range payload.Sessions {
+			if s.ID == sessionID {
+				found = true
+				assert.GreaterOrEqualf(c, s.Stats.Turns, int64(1),
+					"session %s must show at least one counted turn", sessionID)
+				break
+			}
+		}
+		assert.Truef(c, found, "session %s must appear in %s (got %d sessions)", sessionID, sessionsURL, len(payload.Sessions))
+	}, 60*time.Second, 2*time.Second)
+
+	// 3. GET /registry/pool: the kind/kind-ci profiles run poolmgr warm
+	// pods, so a healthy replica should report at least one pod. A 503 is
+	// also acceptable — the pool cache/RBAC preflight can still be warming
+	// on a fresh cluster (pool.go's degraded/synced gates) — but is logged
+	// rather than silently accepted, and any OTHER status fails the test.
+	poolURL := base + "/registry/pool"
+	body, status, err := getRegistry(ctx, f, poolURL)
+	require.NoErrorf(t, err, "GET %s", poolURL)
+	switch status {
+	case http.StatusOK:
+		var payload struct {
+			Pods []json.RawMessage `json:"pods"`
+		}
+		require.NoErrorf(t, json.Unmarshal(body, &payload), "decoding %s body %q", poolURL, body)
+		assert.GreaterOrEqualf(t, len(payload.Pods), 1,
+			"expected at least one warm pool pod on the kind/kind-ci profile, got %s", body)
+	case http.StatusServiceUnavailable:
+		t.Logf("%s returned 503 (pool RBAC/cache still warming on this cluster): %s", poolURL, body)
+	default:
+		t.Fatalf("unexpected status from %s: %d body=%s", poolURL, status, body)
+	}
+
+	// 4. GET /registry/events: a plain GET (no EventSource — go's
+	// net/http can set arbitrary headers, unlike a browser EventSource,
+	// which is why the server also accepts ?token= for that client; see
+	// events.go's bearerFromRequest doc). The connect-time snapshot replay
+	// (ServeHTTP) writes any already-known session BEFORE the streaming
+	// loop starts, so the very first line off the wire must be an
+	// `event: ...` frame.
+	eventsURL := base + "/registry/events"
+	eventsCtx, eventsCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer eventsCancel()
+	req, err := http.NewRequestWithContext(eventsCtx, http.MethodGet, eventsURL, nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := f.HTTPClient().Do(req)
+	require.NoErrorf(t, err, "GET %s", eventsURL)
+	defer resp.Body.Close()
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "GET %s", eventsURL)
+	require.Equalf(t, "text/event-stream", resp.Header.Get("Content-Type"), "GET %s Content-Type", eventsURL)
+
+	reader := bufio.NewReader(resp.Body)
+	firstEvent, firstData, err := nextSSEFrame(reader)
+	require.NoErrorf(t, err, "reading first SSE frame from %s", eventsURL)
+	assert.NotEmptyf(t, firstEvent, "first SSE frame from %s must be an event: frame (connect-time snapshot), got event=%q data=%q", eventsURL, firstEvent, firstData)
+
+	// Strengthen beyond "a stream of the right shape opened": prove the
+	// connect-time snapshot actually replayed THIS test's session, which
+	// falsifies a broken snapshot replay (a missing or corrupted record)
+	// rather than just a dead endpoint. The FIRST frame is not assumed to be
+	// it: CI runs the agent runtime with AGENT_ALLOW_INSECURE=true, which
+	// gives every caller a wildcard scope, so the snapshot can also carry
+	// sessions from the OTHER agent-runtime tests running in parallel in
+	// this suite, and Poller.Snapshot's ordering is explicitly unspecified
+	// (events.go). So this scans every remaining "session" frame in the
+	// stream, bounded by eventsCtx's 10s deadline, for a record whose id
+	// matches the sessionID minted earlier in this same test.
+	foundSessionID := sseFrameMatchesSession(firstEvent, firstData, sessionID)
+	for !foundSessionID {
+		evt, data, ferr := nextSSEFrame(reader)
+		if ferr != nil {
+			break // eventsCtx's deadline was reached, or the stream ended
+		}
+		foundSessionID = sseFrameMatchesSession(evt, data, sessionID)
+	}
+	assert.Truef(t, foundSessionID,
+		"no session frame from %s carried the session id %s minted earlier in this test; the snapshot replay may be broken",
+		eventsURL, sessionID)
+}
+
+// historyEventDTO / historyResponseDTO / checkpointDTO decode the registry
+// history/checkpoint routes' wire shape (pkg/agentruntime/registry_api.go's
+// historyEvent/historyResponse, and pkg/agentruntime/history.go's
+// CheckpointRecord). Payload is Go []byte in both: encoding/json
+// base64-decodes a []byte field on Unmarshal automatically, the same
+// encoding the server used to marshal it, so no manual base64 step is needed
+// here beyond decoding the JSON envelope underneath.
+type historyEventDTO struct {
+	Seq     int64     `json:"seq"`
+	Type    string    `json:"type"`
+	Payload []byte    `json:"payload"`
+	At      time.Time `json:"at"`
+}
+
+type historyResponseDTO struct {
+	Head   int64             `json:"head"`
+	Events []historyEventDTO `json:"events"`
+}
+
+type checkpointDTO struct {
+	V                 int             `json:"v"`
+	CoveredThroughSeq int64           `json:"coveredThroughSeq"`
+	Kind              string          `json:"kind"`
+	Payload           json.RawMessage `json:"payload"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	Turn              int64           `json:"turn"`
+}
+
+// decodeEventTurn decodes e's payload (test/integration/testdata/nodejs/
+// agenthistory/history.js's {v,turn,step,kind,at} envelope, mirroring
+// demo/agent-boardroom/fixtures/support-desk.js's wire contract) and returns
+// its turn field.
+func decodeEventTurn(c *assert.CollectT, e historyEventDTO) (int, bool) {
+	var p struct {
+		Turn int `json:"turn"`
+	}
+	if !assert.NoErrorf(c, json.Unmarshal(e.Payload, &p), "decoding history event payload %s", e.Payload) {
+		return 0, false
+	}
+	return p.Turn, true
+}
+
+// TestAgentRuntimeHistory exercises RFC-0027 G13's session history and
+// checkpoint wire path end-to-end: a function created with `--agent`
+// (applied via the same CLI-update workaround as the other tests in this
+// file) and State: true (framework.FunctionOptions, the same pattern
+// TestFunctionState uses) writes real per-turn history events and a
+// mid-session checkpoint through statesvc's scoped EventLog/KV routes — see
+// test/integration/testdata/nodejs/agenthistory/history.js, which mirrors
+// demo/agent-boardroom/fixtures/support-desk.js's wire contract (the
+// committed Task 6 reference implementation of the append path) — and the
+// agent runtime's registry introspection surface (GET .../sessions/{id}/
+// history, GET .../sessions/{id}/checkpoint) must reflect those writes.
+//
+// Two turns on one session id suffice: the fixture writes turn_start+yield
+// per turn (4 events total across both turns) and a checkpoint on the
+// SECOND turn (0-based turn=1; the fixture's CHECKPOINT_EVERY=2, half the
+// demo's every-5th-turn cadence, since this is a wire-path test, not the
+// demo's density story).
+//
+// Like TestFunctionState, this needs the real statesvc-backed function-state
+// token, which only reaches function pods under static tenancy — skip
+// rather than assert a known-unsupported combination on the
+// dynamic/cluster-tenancy CI legs (same TenancyMode guard, same reasoning).
+func TestAgentRuntimeHistory(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+	stateSvcReachableOrSkip(t, ctx, f)
+	if mode := f.TenancyMode(t, ctx); mode != "static" {
+		t.Skipf("function state is static-tenancy only for now; tenancy mode is %q (per-namespace state key is a follow-up)", mode)
+	}
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-history-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-history-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name:  fnName,
+		Env:   envName,
+		Code:  framework.WriteTestData(t, "nodejs/agenthistory/history.js"),
+		State: true,
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// FunctionOptions has no Agent field (see TestAgentRuntimeSessionDispatch's
+	// comment on the same workaround); this leaves Spec.State intact
+	// (update.go passes the existing State config through when no
+	// --state* flags are given on the update).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// First turn: no session header. Mints a session id (0-based turn 0 on
+	// the dispatcher's HeaderTurns), same shape as
+	// TestAgentRuntimeSessionDispatch's first turn.
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, "")
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "first turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "first turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "first turn never minted a session id")
+
+	// Turn 1 answering 200 does NOT mean turn 1 has settled: the
+	// dispatcher's Stats.Turns++ is POST-response bookkeeping on bgCtx
+	// (dispatcher.go step 5, deliberately so a caller disconnect cannot lose
+	// the meter). A second turn fired the instant the first returns can
+	// therefore read the record BEFORE that increment lands and be handed
+	// HeaderTurns=0 a second time. The fixture keys its events on that
+	// header and drops {turn,step} pairs already in the stream as an
+	// at-least-once redelivery (agenthistory/history.js's
+	// dropAlreadyWrittenSteps), so that second turn writes NOTHING and the
+	// history stays at 2 events -- which no later poll can repair, since the
+	// events were never appended at all. Wait for the counter that the next
+	// turn's header is derived from before firing it. (Observed on the
+	// v1.34.8 leg: "should have at least 4 history events ... got 2".)
+	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
+		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", sessionsURL, body) {
+			return
+		}
+		var payload struct {
+			Sessions []struct {
+				ID    string `json:"id"`
+				Stats struct {
+					Turns int64 `json:"turns"`
+				} `json:"stats"`
+			} `json:"sessions"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", sessionsURL, body) {
+			return
+		}
+		for _, s := range payload.Sessions {
+			if s.ID == sessionID {
+				assert.GreaterOrEqualf(c, s.Stats.Turns, int64(1),
+					"session %s: turn 1 has not settled (stats.turns=%d), so the next turn would reuse HeaderTurns=0",
+					sessionID, s.Stats.Turns)
+				return
+			}
+		}
+		assert.Failf(c, "session not listed yet", "session %s must appear in %s", sessionID, sessionsURL)
+	}, 120*time.Second, 2*time.Second)
+
+	// Second turn: same session id explicitly (0-based turn 1). This is the
+	// turn the fixture checkpoints on (CHECKPOINT_EVERY=2).
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postTurn(attemptCtx, f, turnURL, sessionID)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "second turn to %s", turnURL) {
+			return
+		}
+		assert.Equal(c, sessionID, resp.Header.Get(agentruntime.HeaderSession),
+			"second turn must echo the caller-supplied session id, not mint a new one")
+	}, 180*time.Second, 2*time.Second)
+
+	// The registry history must reflect both turns' events: at least 4 (2
+	// per turn), the first event's payload carrying turn:0 and the last
+	// carrying turn:1, head advanced past 0, and both event kinds present.
+	historyURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/history"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, historyURL)
+		if !assert.NoErrorf(c, err, "GET %s", historyURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", historyURL, body) {
+			return
+		}
+		var payload historyResponseDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", historyURL, body) {
+			return
+		}
+		if !assert.GreaterOrEqualf(c, len(payload.Events), 4,
+			"session %s should have at least 4 history events (2 per turn x 2 turns), got %d", sessionID, len(payload.Events)) {
+			return
+		}
+		assert.Greaterf(c, payload.Head, int64(0), "history head must have advanced past 0, got %d", payload.Head)
+
+		// Both turns' events must be present in the history — but their
+		// relative ORDER is not asserted: the dispatcher makes no promise
+		// that turn 0's events are ordered strictly before turn 1's beyond
+		// what the EventLog's own append-order provides, so pinning "first
+		// event is turn:0, last is turn:1" would be asserting more than the
+		// contract guarantees. Presence of both turns is the real claim.
+		seenTurns := make(map[int]bool, len(payload.Events))
+		for _, e := range payload.Events {
+			turn, ok := decodeEventTurn(c, e)
+			if !ok {
+				return
+			}
+			seenTurns[turn] = true
+		}
+		assert.Truef(c, seenTurns[0], "history events must include a turn:0 event, got turns %+v", seenTurns)
+		assert.Truef(c, seenTurns[1], "history events must include a turn:1 event, got turns %+v", seenTurns)
+
+		kinds := make(map[string]bool, len(payload.Events))
+		for _, e := range payload.Events {
+			kinds[e.Type] = true
+		}
+		assert.Truef(c, kinds["turn_start"], "history events must include a turn_start event, got types %+v", kinds)
+		assert.Truef(c, kinds["yield"], "history events must include a yield event, got types %+v", kinds)
+	}, 60*time.Second, 2*time.Second)
+
+	// The checkpoint written on the second turn (0-based turn=1) must be
+	// visible through the registry checkpoint route.
+	checkpointURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + sessionID + "/checkpoint"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, checkpointURL)
+		if !assert.NoErrorf(c, err, "GET %s", checkpointURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", checkpointURL, body) {
+			return
+		}
+		var payload checkpointDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", checkpointURL, body) {
+			return
+		}
+		assert.Greaterf(c, payload.CoveredThroughSeq, int64(0), "checkpoint coveredThroughSeq must be > 0, got %d", payload.CoveredThroughSeq)
+		assert.Equalf(c, int64(1), payload.Turn, "checkpoint must have been written at 0-based turn 1 (fixture CHECKPOINT_EVERY=2), got %d", payload.Turn)
+	}, 60*time.Second, 2*time.Second)
+}
+
+// sessionsListDTO decodes ListSessions's response
+// (pkg/agentruntime/registry_api.go's unexported sessionsResponse) — Sessions
+// is typed as the real agentruntime.SessionRecord (exported, same package
+// this test already imports) rather than a hand-duplicated DTO, since its
+// wire shape (including the Parent/Depth fields this test asserts on) is
+// exactly what GetSession/ListSessions marshal.
+type sessionsListDTO struct {
+	Sessions []agentruntime.SessionRecord `json:"sessions"`
+	Next     string                       `json:"next,omitempty"`
+}
+
+// postAgentTurn POSTs one turn to turnURL carrying sessionID on
+// agentruntime.HeaderSession when non-empty, parentHeader on
+// agentruntime.HeaderParent when non-empty, and body as the raw JSON
+// request body. Generalizes postTurn (fixed "{}" body, no parent header) for
+// TestAgentRuntimeSpawnParentage's needs: turns that ask the fixture to spawn
+// ({"spawn":true}) and depth-chain turns dispatched directly by this test
+// with only a parent header, no fixture-side spawning involved at all.
+func postAgentTurn(ctx context.Context, f *framework.Framework, turnURL, sessionID, parentHeader, body string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, turnURL, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if sessionID != "" {
+		req.Header.Set(agentruntime.HeaderSession, sessionID)
+	}
+	if parentHeader != "" {
+		req.Header.Set(agentruntime.HeaderParent, parentHeader)
+	}
+	return f.HTTPClient().Do(req)
+}
+
+// TestAgentRuntimeSpawnParentage exercises RFC-0031 slice 5's session
+// parentage wire path end-to-end against a real cluster (Task 5 of the
+// parent-graph plan): pkg/agentruntime/dispatcher.go's X-Fission-Agent-Parent
+// creation-only header handling and session.go's ParentRef/SpawnSessionID
+// derivation, GetSession's parent/depth wire shape, and the live 400 the
+// spawn-depth cap returns.
+//
+// The fixture (test/integration/testdata/nodejs/agentspawn/spawn.js) is a
+// minimal cousin of demo/agent-boardroom/fixtures/architect.js: on a turn
+// whose body carries {"spawn":true} it spawns exactly ONE child session on
+// ITSELF for stepKey "expert-1", using a byte-identical JS twin of
+// SpawnSessionID.
+//
+// Five things are asserted, in order:
+//
+//  1. Cross-language id agreement (the load-bearing assertion): this test
+//     computes expected := agentruntime.SpawnSessionID(parentRef, "expert-1")
+//     in Go and GETs EXACTLY that id from the registry — 200, with parent
+//     equal to the parent's triple and depth == 1. It also compares expected
+//     against the fixture's own reported "spawned" id, so a derivation drift
+//     on either side (hash, prefix, truncation length) fails with a message
+//     naming which side disagreed, not just a registry 404.
+//     1b. Token injection (Task 6 of the parent-graph plan, G16), checked
+//     INSIDE the spawn-turn retry loop (a pod specialized off a stale
+//     pre-`--agent` view of the Function never gets a credential file at
+//     all, so this needs the same retry runway as 1's cross-language
+//     check): the fixture's pod carries a per-agent identity credential the
+//     fetcher wrote at specialize time (pkg/fetcher/agenttoken.go). The
+//     fixture echoes the credential file's claimed (namespace, agent) and
+//     the SHA-256 hex of its token — never the raw token — and this test
+//     asserts the claims equal the function's own (namespace, name) and
+//     independently re-derives the expected token via
+//     hmacauth.DeriveAgentIdentityKey/EncodeKeyForEnv from
+//     Framework.InternalAuthSecret(), comparing by hash. This is the
+//     injection-chain half of the identity proof (derivation agreement
+//     without a secured install); the verify half lives in
+//     pkg/agentruntime/identity_test.go's truth table.
+//  2. Idempotent spawn: re-dispatching the parent's spawn turn a second time
+//     must not mint a second child — ListSessions must still show exactly one
+//     session whose parent.id is the parent session.
+//  3. Root-degrade: a fresh session dispatched with a parent header naming a
+//     NONEXISTENT session must still succeed (200, root-admitted per
+//     resolveParentage's "parent claim dropped" fallback) and its registry
+//     record must carry no parent and depth 0.
+//  4. Depth cap: chaining sessions directly (this test dispatches turns to
+//     each derived id itself, carrying only a parent header — no fixture-side
+//     spawning needed, since resolveParentage runs entirely off the STORED
+//     parent record before the function is ever invoked) from the depth-0
+//     parent through depth 1, 2, 3 succeeds; the depth-4 attempt must return
+//     HTTP 400 (AGENT_MAX_SPAWN_DEPTH is unset in CI, so the default cap of 3
+//     makes depth 4 the first rejection).
+func TestAgentRuntimeSpawnParentage(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	// This test asserts the fetcher's injected agent-identity token below. That
+	// token is DERIVED from the internal-auth master only when the master is
+	// present in this function's namespace; under multi-namespace tenancy the
+	// master stays in the control-plane namespace and the fetcher writes the
+	// "dev-unauthenticated" placeholder instead. Probe once up front (the answer
+	// is fixed at install time) and pick the expected value accordingly below.
+	masterReachable := ns.InternalAuthMasterReachable(t, ctx)
+	envName := "nodejs-agent-spawn-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-spawn-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		// The fixture spawns children on ITSELF: it needs to know its own
+		// namespace and function name to build both the outbound dispatch
+		// URL and the ParentRef header it stamps on the child. This test
+		// already knows both before creating the function, so it TEMPLATES
+		// them into the fixture source — they can't be function env vars,
+		// which the vfunction webhook rejects on the poolmgr executor
+		// (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// Same CLI-update workaround as the other tests in this file
+	// (FunctionOptions has no Agent field yet).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// Turn 1: no session header, no spawn. Mints the parent (root, depth 0)
+	// session this whole test hangs off of.
+	var parentSessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, "", "", `{}`)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "root turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "root turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		parentSessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, parentSessionID, "root turn never minted a session id")
+
+	parentRef := agentruntime.ParentRef{Namespace: ns.Name, Agent: fnName, ID: parentSessionID}
+	expectedChildID := agentruntime.SpawnSessionID(parentRef, "expert-1")
+	childURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + expectedChildID
+
+	// expectedTokenSha256 is the Task 6 injection-chain proof's expected
+	// value, computed once (deterministic — it depends only on the master
+	// secret and this function's own (namespace, name), not on anything the
+	// fixture reports). Checked INSIDE the spawn-turn loop below, not after
+	// it: WaitForFunction only confirms the Function CR is visible, and the
+	// CLI's `fn update --agent` a few lines above returns before every
+	// watcher has necessarily observed Spec.Agent — a pod specialized off a
+	// stale pre-agent view never gets a credential file at all (the fetcher
+	// gates writeAgentTokenFile on the specialize request carrying an agent
+	// name) and the fixture reports "absent" forever for that pod's
+	// lifetime. Asserting outside the loop would capture whatever a single
+	// (possibly stale) success left behind with no further retries; asserting
+	// on `c` inside it gives the same generation-bump retry runway the
+	// cross-language check below already relies on.
+	master := f.InternalAuthSecret()
+	var expectedToken string
+	if !masterReachable {
+		// The fetcher had no FISSION_INTERNAL_AUTH_SECRET, so it wrote the
+		// placeholder token instead of a derived one — assert that placeholder
+		// explicitly (stronger than skipping the sha check, and it still pins the
+		// placeholder path). Two disjoint reasons the master is unreachable, kept
+		// apart only for the diagnostic log (InternalAuthMasterReachable already
+		// folds len(master)==0 into false):
+		if len(master) == 0 {
+			// Pass-through install (internalAuth disabled): the chart wires the
+			// SAME secret to both the framework's signing client and the fetcher,
+			// so neither has one.
+			t.Log("FISSION_INTERNAL_AUTH_SECRET is empty on the framework (pass-through install); " +
+				"asserting the fetcher's dev-unauthenticated placeholder token instead of a derived one")
+		} else {
+			// The runner HAS the master but it is NOT replicated into this
+			// function's namespace: under multi-namespace tenancy (tenancy.mode
+			// dynamic OR cluster) the chart keeps the master in the control-plane
+			// namespace only and hands tenant namespaces a derived-key Secret
+			// instead. Master-derived agent-identity is therefore STATIC-TENANCY-
+			// ONLY for now, and this branch PINS that: when identity moves to a
+			// per-namespace derived key (fission-internal-auth-keys via
+			// hmac.DeriveServiceKeyNS, mirroring the fetcher/builder/storage
+			// channels), the fetcher will inject a real token here and this
+			// assertion will fail loudly — forcing the expectation to become the
+			// ns-key-derived token rather than the placeholder.
+			t.Logf("internal-auth master is not replicated into namespace %s (multi-namespace tenancy); "+
+				"asserting the fetcher's dev-unauthenticated placeholder token -- master-derived "+
+				"agent-identity is static-tenancy-only", ns.Name)
+		}
+		expectedToken = "dev-unauthenticated"
+	} else {
+		expectedToken = hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, fnName))
+	}
+	expectedTokenSha256Sum := sha256.Sum256([]byte(expectedToken))
+	expectedTokenSha256 := hex.EncodeToString(expectedTokenSha256Sum[:])
+
+	// Turn 2 on the parent session: {"spawn":true} asks the fixture to spawn
+	// its one child. The fixture's inner dispatch to the child is a separate,
+	// best-effort network hop from inside the pod (spawn.js's spawnChild doc
+	// comment) that this outer turn's own 200 does not reflect the success
+	// of — so a transient failure there would otherwise strand a
+	// registry-only retry loop polling for a record that never arrives. This
+	// loop instead re-issues the WHOLE spawn turn on every attempt, giving a
+	// flaky inner dispatch further attempts to actually land.
+	var reportedSpawnID string
+	var childRec agentruntime.SessionRecord
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, parentSessionID, "", `{"spawn":true}`)
+		if !assert.NoErrorf(c, err, "POST %s (spawn turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "spawn turn to %s", turnURL) {
+			return
+		}
+		turnBody, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading spawn turn response body") {
+			return
+		}
+		var payload struct {
+			Spawned     string `json:"spawned"`
+			SpawnStatus int    `json:"spawnStatus"`
+			SpawnBody   string `json:"spawnBody"`
+			// AgentTokenSha256/AgentTokenNamespace/AgentTokenAgent are the
+			// Task 6 injection-chain proof: spawn.js reads its own
+			// fetcher-written credential file
+			// (pkg/fetcher/agenttoken.go) once at module load and echoes
+			// its sha256 hex plus claimed namespace/agent on every turn --
+			// never the raw token itself (see the in-loop assertions below
+			// for why they're checked here and not after the loop).
+			AgentTokenSha256    string `json:"agentTokenSha256"`
+			AgentTokenNamespace string `json:"agentTokenNamespace"`
+			AgentTokenAgent     string `json:"agentTokenAgent"`
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(turnBody, &payload), "decoding spawn turn response body %q", turnBody) {
+			return
+		}
+		reportedSpawnID = payload.Spawned
+
+		// TOKEN INJECTION, checked HERE (not after the loop): a pod
+		// specialized off a stale pre-`--agent` view of the Function never
+		// gets a credential file at all (see expectedTokenSha256's doc
+		// comment above), so asserting only after the loop exits would
+		// capture a possibly-stale single success with no further retries.
+		// Asserting on `c` here lets a generation bump (which routes a
+		// fresh specialize once the update propagates) actually resolve
+		// the staleness within this loop's normal retry budget.
+		if !assert.Equalf(c, ns.Name, payload.AgentTokenNamespace,
+			"credential file claimed namespace %q, want %q", payload.AgentTokenNamespace, ns.Name) {
+			return
+		}
+		if !assert.Equalf(c, fnName, payload.AgentTokenAgent,
+			"credential file claimed agent %q, want %q", payload.AgentTokenAgent, fnName) {
+			return
+		}
+		if !assert.Equalf(c, expectedTokenSha256, payload.AgentTokenSha256,
+			"derived-token sha256 mismatch for agent %s/%s: the fetcher's injected credential does not match "+
+				"hmacauth.DeriveAgentIdentityKey(master, ns, agent) computed by this test -- either a real "+
+				"derivation drift between the fetcher and this test, OR (on a secured cluster) this test "+
+				"runner's own env is missing FISSION_INTERNAL_AUTH_SECRET while the fetcher's is set, so the "+
+				"two sides compared a derived token against the wrong expectation (env mismatch, not a code "+
+				"bug -- see the expectedToken comment above)", ns.Name, fnName) {
+			return
+		}
+
+		// CROSS-LANGUAGE AGREEMENT, checked HERE (not just after the loop):
+		// if the JS twin ever derived a DIFFERENT id than Go's
+		// agentruntime.SpawnSessionID, the child would be created at that
+		// other id and the registry GET below for expectedChildID would
+		// 404 on every attempt — timing this whole loop out after 180s with
+		// an opaque 404 instead of pinpointing the actual mismatch. Failing
+		// (and returning) here on a real drift instead prints the mismatch
+		// on the very first attempt.
+		if !assert.Equalf(c, expectedChildID, reportedSpawnID,
+			"cross-language derivation mismatch: Go agentruntime.SpawnSessionID(%+v, %q) = %s, fixture spawnSessionID reported %s",
+			parentRef, "expert-1", expectedChildID, reportedSpawnID) {
+			return
+		}
+
+		registryCtx, registryCancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer registryCancel()
+		regBody, status, err := getRegistry(registryCtx, f, childURL)
+		if !assert.NoErrorf(c, err, "GET %s", childURL) {
+			return
+		}
+		// If the fixture's INNER dispatch (spawn.js's spawnChild, a separate
+		// best-effort network hop from inside the pod) keeps failing
+		// deterministically, the child record never gets created and this
+		// GET 404s on every attempt for the full 180s. Naming the inner
+		// dispatch's own last-observed status/body here (payload.SpawnStatus/
+		// SpawnBody, reported by the fixture on every turn -- see spawn.js's
+		// header comment) turns that into a pinpointed failure instead of an
+		// opaque registry 404.
+		if !assert.Equalf(c, http.StatusOK, status,
+			"GET %s (body=%s); the fixture's inner dispatch to the child last reported HTTP status=%d body=%q",
+			childURL, regBody, payload.SpawnStatus, payload.SpawnBody) {
+			return
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(regBody, &childRec), "decoding %s body %q", childURL, regBody) {
+			return
+		}
+	}, 180*time.Second, 3*time.Second)
+	require.NotEmptyf(t, reportedSpawnID, "spawn turn on session %s never reported a spawned id", parentSessionID)
+
+	// 1. CROSS-LANGUAGE AGREEMENT: already asserted inside the loop above
+	// (checked before the registry GET, so a real mismatch is pinpointed on
+	// the first attempt instead of surfacing as a 180s registry-404
+	// timeout). By this point Go's agentruntime.SpawnSessionID and the
+	// fixture's JS twin are known to agree on expectedChildID, and the
+	// registry shows a session record living at EXACTLY that id,
+	// admitted with the parent's triple and depth 1 — this is what actually
+	// proves the two independent derivations converged on a real admission
+	// row, not just matching strings.
+	if assert.NotNilf(t, childRec.Parent, "child session %s must carry a parent, got nil", expectedChildID) {
+		assert.Equalf(t, parentRef, *childRec.Parent, "child session %s parent mismatch", expectedChildID)
+	}
+	assert.Equalf(t, 1, childRec.Depth, "child session %s must be depth 1, got %d", expectedChildID, childRec.Depth)
+
+	// 1b. TOKEN INJECTION: already asserted INSIDE the spawn-turn loop above
+	// (checked on `c` before the cross-language id check, for the staleness
+	// reason documented at expectedTokenSha256's declaration). By this
+	// point the fixture's credential file is known to claim exactly this
+	// function's (namespace, name), and its sha256 is known to equal what
+	// this test independently re-derives via
+	// hmacauth.DeriveAgentIdentityKey/EncodeKeyForEnv from
+	// Framework.InternalAuthSecret() — the injection-chain proof, without a
+	// secured install and without a raw token ever touching test output.
+
+	// 2. IDEMPOTENT SPAWN: re-dispatch the parent's spawn turn. The fixture
+	// derives the SAME childID (same parent session, same stepKey) and
+	// spawns again — the dispatcher's Create(IfVersion=0) semantics on the
+	// child mean this resumes the existing child record rather than minting
+	// a second one. List the function's sessions and confirm exactly ONE
+	// carries this parent.
+	//
+	// This MUST run before part 4's depth chain: that chain's first hop
+	// (chainParent = parentRef, depth 0) is ALSO a direct child of
+	// parentSessionID, so counting "children of parentSessionID" after the
+	// chain exists would no longer isolate this assertion to the fixture's
+	// own spawn.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, parentSessionID, "", `{"spawn":true}`)
+		if !assert.NoErrorf(c, err, "POST %s (second spawn turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusOK, resp.StatusCode, "second spawn turn to %s", turnURL)
+	}, 180*time.Second, 2*time.Second)
+
+	sessionsURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, sessionsURL)
+		if !assert.NoErrorf(c, err, "GET %s", sessionsURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", sessionsURL, body) {
+			return
+		}
+		var payload sessionsListDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding %s body %q", sessionsURL, body) {
+			return
+		}
+		children := 0
+		for _, s := range payload.Sessions {
+			if s.Parent != nil && s.Parent.ID == parentSessionID {
+				children++
+			}
+		}
+		assert.Equalf(c, 1, children,
+			"session %s must have exactly one child after re-dispatching the spawn turn (idempotent spawn), got %d (sessions=%+v)",
+			parentSessionID, children, payload.Sessions)
+	}, 60*time.Second, 2*time.Second)
+
+	// 3. ROOT-DEGRADE: a fresh session dispatched with a parent header naming
+	// a session that does not exist must still be admitted (200), as a root
+	// (no parent, depth 0) — resolveParentage's "parent claim dropped,
+	// admitting as root" fallback, not an error surfaced to the caller.
+	rootDegradeSessionID := "root-degrade-" + ns.ID
+	fakeParentHeader := ns.Name + "/" + fnName + "/does-not-exist-xyz"
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, rootDegradeSessionID, fakeParentHeader, `{}`)
+		if !assert.NoErrorf(c, err, "POST %s (root-degrade turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusOK, resp.StatusCode,
+			"a turn naming a nonexistent parent must still be admitted as root (200), not rejected")
+	}, 180*time.Second, 2*time.Second)
+
+	rootDegradeURL := base + "/registry/agents/" + ns.Name + "/" + fnName + "/sessions/" + rootDegradeSessionID
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		body, status, err := getRegistry(attemptCtx, f, rootDegradeURL)
+		if !assert.NoErrorf(c, err, "GET %s", rootDegradeURL) {
+			return
+		}
+		if !assert.Equalf(c, http.StatusOK, status, "GET %s (body=%s)", rootDegradeURL, body) {
+			return
+		}
+		var rec agentruntime.SessionRecord
+		if !assert.NoErrorf(c, json.Unmarshal(body, &rec), "decoding %s body %q", rootDegradeURL, body) {
+			return
+		}
+		assert.Nilf(c, rec.Parent, "session %s named a nonexistent parent, so it must carry NO parent, got %+v", rootDegradeSessionID, rec.Parent)
+		assert.Equalf(c, 0, rec.Depth, "session %s named a nonexistent parent, so it must be depth 0, got %d", rootDegradeSessionID, rec.Depth)
+	}, 60*time.Second, 2*time.Second)
+
+	// 4. DEPTH CAP: chain sessions directly from the depth-0 parent —
+	// resolveParentage computes depth from the STORED parent record alone,
+	// before the function is ever invoked, so this test can dispatch each
+	// hop itself with just a parent header; no fixture-side spawning is
+	// needed for this part at all. AGENT_MAX_SPAWN_DEPTH is unset in CI, so
+	// the default cap (3) makes a would-be depth-4 session the first
+	// rejection.
+	chainStepKey := "chain"
+	chainParent := parentRef // depth 0
+	for depth := 1; depth <= 3; depth++ {
+		childID := agentruntime.SpawnSessionID(chainParent, chainStepKey)
+		parentHeader := chainParent.String()
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+			defer cancel()
+			resp, err := postAgentTurn(attemptCtx, f, turnURL, childID, parentHeader, `{}`)
+			if !assert.NoErrorf(c, err, "POST %s (depth-%d chain turn)", turnURL, depth) {
+				return
+			}
+			defer resp.Body.Close()
+			assert.Equalf(c, http.StatusOK, resp.StatusCode, "depth-%d chain turn (session %s, parent %s) must be admitted", depth, childID, parentHeader)
+		}, 180*time.Second, 2*time.Second)
+		chainParent = agentruntime.ParentRef{Namespace: ns.Name, Agent: fnName, ID: childID}
+	}
+
+	depth4ParentHeader := chainParent.String() // chainParent is now the depth-3 session
+	depth4ChildID := agentruntime.SpawnSessionID(chainParent, chainStepKey)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, depth4ChildID, depth4ParentHeader, `{}`)
+		if !assert.NoErrorf(c, err, "POST %s (depth-4 chain turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusBadRequest, resp.StatusCode,
+			"depth-4 spawn (session %s, parent %s) must be rejected — AGENT_MAX_SPAWN_DEPTH defaults to 3 in CI", depth4ChildID, depth4ParentHeader)
+	}, 60*time.Second, 2*time.Second)
+}
+
+// syntheticTraceparent mints a fresh, valid, REMOTE W3C trace-context
+// SpanContext (random trace-id and span-id, sampled flag set — the flag is
+// irrelevant to what this test asserts, see TestAgentRuntimeTraceContextPropagation's
+// doc comment) and returns its wire-encoded `traceparent` header value
+// alongside the trace-id/span-id strings the test sent, so the caller can
+// compare them against what the fixture echoes back. It goes through
+// go.opentelemetry.io/otel/propagation's own TraceContext.Inject rather than
+// hand-formatting the "00-<trace-id>-<span-id>-<flags>" string, so the
+// header this test sends is guaranteed well-formed by the same code the
+// production propagator uses.
+func syntheticTraceparent(t *testing.T) (header, traceID, spanID string) {
+	t.Helper()
+	var tid trace.TraceID
+	_, err := rand.Read(tid[:])
+	require.NoError(t, err, "generating synthetic trace-id")
+	var sid trace.SpanID
+	_, err = rand.Read(sid[:])
+	require.NoError(t, err, "generating synthetic span-id")
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    tid,
+		SpanID:     sid,
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	})
+	carrier := propagation.MapCarrier{}
+	propagation.TraceContext{}.Inject(trace.ContextWithRemoteSpanContext(context.Background(), sc), carrier)
+	return carrier.Get("traceparent"), tid.String(), sid.String()
+}
+
+// parseTraceparent decodes v as a W3C traceparent header value using
+// go.opentelemetry.io/otel/propagation's own extraction path — the same
+// parser the production TracerProvider uses on the inbound side — and
+// returns its trace-id/span-id as lowercase hex, plus whether v parsed as a
+// valid (non-zero) SpanContext at all.
+func parseTraceparent(v string) (traceID, spanID string, ok bool) {
+	carrier := propagation.MapCarrier{"traceparent": v}
+	sc := trace.SpanContextFromContext(propagation.TraceContext{}.Extract(context.Background(), carrier))
+	if !sc.IsValid() {
+		return "", "", false
+	}
+	return sc.TraceID().String(), sc.SpanID().String(), true
+}
+
+// TestAgentRuntimeTraceContextPropagation is Task 3 of the agent-runtime
+// observability plan
+// (docs/superpowers/plans/2026-08-25-agent-runtime-observability.md, in the
+// sibling `fission` checkout): the collectorless end-to-end propagation
+// proof for the invoke_agent spans + wake-envelope trace carriage Task 1
+// added to pkg/agentruntime/dispatcher.go.
+//
+// It reuses the agentspawn fixture (test/integration/testdata/nodejs/agentspawn/spawn.js),
+// which now echoes the raw `traceparent` request header it saw as
+// "traceparentSeen" on every turn's JSON response (or the literal "absent"
+// when none arrived — see that fixture's header comment). This test sends
+// ONE turn carrying a SYNTHETIC, valid traceparent header
+// (00-<random 32 hex>-<random 16 hex>-01, minted via syntheticTraceparent
+// above) and asserts:
+//
+//  1. traceparentSeen parses as a well-formed W3C traceparent at all (proves
+//     SOME traceparent — not just any header — reached the pod).
+//  2. Its trace-id EQUALS the one this test sent. This is the load-bearing
+//     assertion: it proves the header survived POST /agents/<ns>/<fn> -> the
+//     dispatcher's invoke_agent span (started from the inbound request ctx,
+//     dispatcher.go) -> the outbound otelhttp-instrumented client -> the
+//     router-internal hop -> this specialized pod, all with ZERO OTLP
+//     collector anywhere in the loop.
+//  3. Its span-id DIFFERS from the one this test sent — children re-span at
+//     every hop; an EQUAL span-id would mean the header passed through
+//     verbatim with no span ever created, which is not what this proves.
+//
+// It deliberately does NOT assert the sampled (01) flag on the echoed
+// value. With no collector configured, the installed TracerProvider samples
+// with an always-off sampler: trace-id is preserved and fresh span-ids are
+// minted at each hop, but the 01 flag is stripped on the way out (see
+// go.opentelemetry.io/otel/sdk/trace's Tracer.newSpan SpanContext
+// construction, roughly tracer.go:103-106 and :126 in the SDK version this
+// module pins — cited in the observability plan's Task 3, not re-verified
+// line-for-line here since the module is vendor-external and line numbers
+// drift across patch releases). Asserting the flag would fail in every CI
+// run, since CI runs this suite with no collector deployed either.
+//
+// If a future run of this test finds the trace-id does NOT survive the hop,
+// that is a REAL finding about the router-internal leg of the dispatch
+// chain (dispatcher -> router-internal -> pod) — the right response is to
+// investigate that leg, not to loosen or delete this assertion.
+func TestAgentRuntimeTraceContextPropagation(t *testing.T) {
+	t.Parallel()
+
+	// 6 minutes, matching TestAgentRuntimeSpawnParentage's sibling budget:
+	// setup (CreateEnv/CreateFunction/WaitForFunction/CLI update, cold
+	// specialize) runs before the EventuallyWithT loop below, whose own
+	// budget is turnAttemptTimeout*3 (180s) -- a tighter overall ctx would
+	// let CI setup eat most of that polling budget before the first attempt
+	// even starts.
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-trace-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-trace-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		// spawn.js needs its own namespace+name even for a plain
+		// (non-spawning) turn (it builds parentRef unconditionally);
+		// templated into the source because env vars are rejected on
+		// poolmgr by the vfunction webhook (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// Same CLI-update workaround as the other tests in this file
+	// (FunctionOptions has no Agent field yet).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	sentTraceparent, sentTraceID, sentSpanID := syntheticTraceparent(t)
+
+	var payload struct {
+		TraceparentSeen string `json:"traceparentSeen"`
+	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodPost, turnURL, strings.NewReader(`{}`))
+		if !assert.NoErrorf(c, err, "building trace-context turn request") {
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("traceparent", sentTraceparent)
+		resp, err := f.HTTPClient().Do(req)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "trace-context turn to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading trace-context turn response body") {
+			return
+		}
+		if !assert.NoErrorf(c, json.Unmarshal(body, &payload), "decoding trace-context turn response body %q", body) {
+			return
+		}
+	}, turnAttemptTimeout*3, 2*time.Second)
+
+	require.NotEqualf(t, "absent", payload.TraceparentSeen,
+		"fixture pod saw no traceparent header at all (sent %s on %s)", sentTraceparent, turnURL)
+
+	seenTraceID, seenSpanID, ok := parseTraceparent(payload.TraceparentSeen)
+	require.Truef(t, ok, "echoed traceparentSeen %q does not parse as a well-formed W3C traceparent", payload.TraceparentSeen)
+
+	assert.Equalf(t, sentTraceID, seenTraceID,
+		"trace-id did not survive the dispatch chain (sent %s, pod saw %s on echoed value %q) — "+
+			"this is a real finding about the router-internal hop, not a flaky assertion",
+		sentTraceID, seenTraceID, payload.TraceparentSeen)
+	assert.NotEqualf(t, sentSpanID, seenSpanID,
+		"span-id must differ from what this test sent (both %s) — an equal span-id would mean the "+
+			"request passed through with no invoke_agent span ever created, not that propagation works",
+		sentSpanID)
+}
+
+// artifactMinBytes mirrors the agentspawn fixture's ARTIFACT_MIN_BYTES
+// (test/integration/testdata/nodejs/agentspawn/spawn.js): the artifact beat
+// pads its generated content to AT LEAST this many bytes, so the workspace
+// list's reported size for it must be at least this large too.
+const artifactMinBytes = 3072
+
+// workspaceArtifactItemDTO is one entry of workspaceTurnDTO.ArtifactList
+// (workspace.go's workspaceListItemResp wire shape).
+type workspaceArtifactItemDTO struct {
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
+// workspaceTurnDTO decodes the artifact-beat fields the agentspawn fixture
+// (test/integration/testdata/nodejs/agentspawn/spawn.js) echoes on a turn
+// whose body carried {"artifact":true} — see that fixture's artifactBeat doc
+// comment for the wire contract, including the "error:<code>"
+// failure-reporting shape this test must recognize rather than treat as a
+// legitimate sha256/list value.
+type workspaceTurnDTO struct {
+	ArtifactSha256Put string                     `json:"artifactSha256Put"`
+	ArtifactSha256Got string                     `json:"artifactSha256Got"`
+	ArtifactList      []workspaceArtifactItemDTO `json:"artifactList"`
+}
+
+// TestAgentRuntimeWorkspace exercises the G12 session workspace API
+// (pkg/agentruntime/workspace.go) end-to-end against a real cluster: Task 4
+// of docs/superpowers/plans/2026-08-26-agent-runtime-workspace.md.
+//
+// It reuses the agentspawn fixture (test/integration/testdata/nodejs/
+// agentspawn/spawn.js), which now also answers a turn body carrying
+// {"artifact":true} by PUTting a generated few-KiB text artifact to its OWN
+// session workspace at "notes/summary.txt", GETting it straight back, and
+// listing the session — using the SAME fetcher-written identity credential
+// (readAgentCredentials/authHeaders) TestAgentRuntimeSpawnParentage's
+// injection-chain proof already covers, since workspace.go's
+// IdentityOrJWTOwnWorkspace consumes the identical claims headers a spawn
+// dispatch does.
+//
+// Auth-posture gate (checked FIRST, before any turn is ever dispatched): this
+// test framework has no way to mint or sign a JWT (JWT_SIGNING_KEY is not
+// exposed to the test env at all, and the identity-bearer HMAC token derived
+// via hmacauth.DeriveAgentIdentityKey below is a DIFFERENT credential the JWT
+// verifier does not accept), and identityOrJWT (identity.go) delegates
+// unconditionally to the JWT middleware whenever a request carries NEITHER
+// identity claim header — so on a cluster where authz IS enabled
+// (authentication.enabled, JWT_SIGNING_KEY set), EVERY route on this mux,
+// including the very first turn dispatch below, 401s outright and this test
+// cannot run at all. Rather than fail confusingly deep into the test the
+// moment that becomes true, the probe below detects it up front and skips
+// the whole test: secured-mode agent-runtime end-to-end coverage is the same
+// named follow-up docs/superpowers/plans/2026-08-25-agent-runtime-identity.md
+// already deferred ("no secured-mode e2e (serial-suite env-flip is a named
+// follow-up)"), not built here.
+//
+// On the (CI-default) pass-through posture this actually runs under, three
+// things are asserted, in order:
+//
+//  1. PUT/GET round-trip: the fixture's reported artifactSha256Put and
+//     artifactSha256Got are equal, non-empty, and neither is the fixture's
+//     "error:<code>" failure sentinel — proving the bytes this test's turn
+//     wrote actually came back unchanged through storagesvc.
+//  2. LIST reflects the write: the session's artifact list contains
+//     "notes/summary.txt" with size >= artifactMinBytes.
+//  3. Nonexistent session -> 404: a workspace list on a session id that was
+//     never dispatched must 404 (the GC-anchor existence check,
+//     requireSession in workspace.go).
+//
+// Cross-agent 403 (a DIFFERENT agent's own identity must not read this
+// agent's workspace) is NOT live-asserted here: the auth-posture gate above
+// means this test only ever runs on a cluster where authz is disabled, and on
+// that posture no request — with any headers, valid or forged — can ever be
+// rejected 403 by this deployment (asserting 403 there would flake; asserting
+// 200 there would wrongly pin "authorization is a no-op" as expected
+// behavior). The rule itself is proven unconditionally at the unit level by
+// pkg/agentruntime/workspace_test.go's TestWorkspaceRoutes_CrossAgentForbidden
+// and TestWorkspaceRoutes_CrossNamespaceForbidden, which exercise the
+// production mountWorkspaceRoutes wiring and a real IdentityVerifier against
+// a real *http.ServeMux; a live secured-cluster check is the same
+// "secured-mode serial e2e" follow-up named above.
+//
+// Archive-purge (the sweeper deleting a session's workspace objects at
+// record archive) is also NOT asserted here. A short-ArchiveAfter window can
+// be set on this test's own function (flag.FnAgentArchiveAfter, wired into
+// `fn update --agent`), so a live convergence path does technically exist —
+// but no test in this suite exercises that flag today, so there is no
+// established precedent here for how long that convergence actually takes
+// (and thus no basis for calling it "cheap" within this test's polling
+// budget). Given the plan explicitly grants discretion on this point, this
+// test relies on unit coverage instead
+// (pkg/agentruntime/sweeper_test.go's TestSweeperArchivePurgesWorkspace and
+// its siblings) rather than being the one to establish that precedent.
+func TestAgentRuntimeWorkspace(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	f := framework.Connect(t)
+	image := f.Images().RequireNode(t)
+
+	requireAgentRuntimeReachable(t, ctx, f)
+
+	ns := f.NewTestNamespace(t)
+	envName := "nodejs-agent-workspace-" + ns.ID
+	ns.CreateEnv(t, ctx, framework.EnvOptions{Name: envName, Image: image})
+
+	fnName := "agent-workspace-" + ns.ID
+	ns.CreateFunction(t, ctx, framework.FunctionOptions{
+		Name: fnName,
+		Env:  envName,
+		// spawn.js needs its own namespace+name even for a turn that never
+		// spawns (it builds parentRef unconditionally) — same as
+		// TestAgentRuntimeTraceContextPropagation's setup; templated in
+		// because env vars are rejected on poolmgr (RFC-0030 phase 2).
+		Code: framework.WriteTestDataReplacing(t, "nodejs/agentspawn/spawn.js", map[string]string{
+			"__SELF_NAMESPACE__":  ns.Name,
+			"__SELF_AGENT_NAME__": fnName,
+		}),
+	})
+	ns.WaitForFunction(t, ctx, fnName)
+	// Same CLI-update workaround as the other tests in this file
+	// (FunctionOptions has no Agent field yet).
+	ns.CLI(t, ctx, "fn", "update", "--name", fnName, "--agent")
+
+	base := f.AgentRuntimeBaseURL()
+	turnURL := base + "/agents/" + ns.Name + "/" + fnName
+
+	// EARLY auth-posture probe — BEFORE any turn is dispatched (see this
+	// test's doc comment for why). A plain, header-free GET against the
+	// workspace list route for a session id that has never been dispatched
+	// distinguishes exactly three outcomes:
+	//   - 401: authz is enabled (JWT required) and this framework cannot
+	//     authenticate — skip the whole test now.
+	//   - 503: STORAGESVC_URL is unset on this deployment (workspace routes
+	//     answer workspaceDisabledMsg, workspace.go) — skip the whole test;
+	//     this is not the chart's default (STORAGESVC_URL is always set,
+	//     storagesvc.go's deployment template has no enable/disable gate) but
+	//     is possible on a hand-managed install.
+	//   - 404: pass-through — auth was a no-op, and requireSession correctly
+	//     reports the probe's session id as never having existed. This is
+	//     the only outcome the rest of this test proceeds under.
+	// Any other status is a genuine, unexpected failure worth failing loudly
+	// on rather than silently skipping or silently proceeding.
+	probeSessionID := "workspace-posture-probe-" + ns.ID
+	probeURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + probeSessionID
+	probeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	require.NoErrorf(t, err, "building auth-posture probe request")
+	probeResp, err := f.HTTPClient().Do(probeReq)
+	require.NoErrorf(t, err, "GET %s (auth-posture probe)", probeURL)
+	_ = probeResp.Body.Close()
+	switch probeResp.StatusCode {
+	case http.StatusUnauthorized:
+		t.Skipf("agent runtime on this cluster requires a JWT (authz enabled) and this test framework has no "+
+			"way to mint or sign one, so it cannot dispatch even the first turn here (GET %s got 401); "+
+			"secured-mode agent-runtime end-to-end coverage is the named 'secured-mode serial e2e' follow-up "+
+			"(docs/superpowers/plans/2026-08-25-agent-runtime-identity.md), not built here", probeURL)
+	case http.StatusServiceUnavailable:
+		t.Skipf("agent runtime's session workspace routes are disabled on this cluster (STORAGESVC_URL unset, "+
+			"GET %s got 503); skipping", probeURL)
+	case http.StatusNotFound:
+		// Pass-through posture: proceed.
+	default:
+		t.Fatalf("auth-posture probe GET %s: want 401 (authz enabled), 404 (pass-through), or 503 "+
+			"(workspace disabled), got %d", probeURL, probeResp.StatusCode)
+	}
+
+	// Turn 1: no session header, no artifact flag. Mints the session this
+	// whole test hangs off of (mirrors TestAgentRuntimeSpawnParentage's own
+	// first turn).
+	var sessionID string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, "", "", `{}`)
+		if !assert.NoErrorf(c, err, "POST %s", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "root turn to %s", turnURL) {
+			return
+		}
+		sid := resp.Header.Get(agentruntime.HeaderSession)
+		if !assert.NotEmpty(c, sid, "root turn must mint a session id via %s", agentruntime.HeaderSession) {
+			return
+		}
+		sessionID = sid
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmpty(t, sessionID, "root turn never minted a session id")
+
+	// Turn 2 on the minted session: {"artifact":true} runs the fixture's
+	// PUT/GET/LIST beat against its OWN workspace. Re-issuing the WHOLE turn
+	// on every retry attempt (not just polling a read-only endpoint
+	// afterwards) mirrors TestAgentRuntimeSpawnParentage's spawn-turn loop —
+	// a transient storagesvc hiccup on one attempt gets a fresh attempt
+	// rather than stranding this loop on a single try.
+	var payload workspaceTurnDTO
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, turnAttemptTimeout)
+		defer cancel()
+		resp, err := postAgentTurn(attemptCtx, f, turnURL, sessionID, "", `{"artifact":true}`)
+		if !assert.NoErrorf(c, err, "POST %s (artifact turn)", turnURL) {
+			return
+		}
+		defer resp.Body.Close()
+		if !assert.Equalf(c, http.StatusOK, resp.StatusCode, "artifact turn to %s", turnURL) {
+			return
+		}
+		body, err := io.ReadAll(resp.Body)
+		if !assert.NoErrorf(c, err, "reading artifact turn response body") {
+			return
+		}
+		var p workspaceTurnDTO
+		if !assert.NoErrorf(c, json.Unmarshal(body, &p), "decoding artifact turn response body %q", body) {
+			return
+		}
+		if !assert.NotEmptyf(c, p.ArtifactSha256Put, "fixture reported no artifactSha256Put at all (body=%s)", body) {
+			return
+		}
+		if !assert.Falsef(c, strings.HasPrefix(p.ArtifactSha256Put, "error:"),
+			"artifact PUT failed: %s (body=%s)", p.ArtifactSha256Put, body) {
+			return
+		}
+		if !assert.Falsef(c, strings.HasPrefix(p.ArtifactSha256Got, "error:"),
+			"artifact GET failed: %s (body=%s)", p.ArtifactSha256Got, body) {
+			return
+		}
+		if !assert.Equalf(c, p.ArtifactSha256Put, p.ArtifactSha256Got,
+			"artifact PUT/GET sha256 mismatch: put=%s got=%s (body=%s)", p.ArtifactSha256Put, p.ArtifactSha256Got, body) {
+			return
+		}
+		found := false
+		for _, it := range p.ArtifactList {
+			// >= artifactMinBytes (not just >0): the fixture pads its content
+			// to AT LEAST ARTIFACT_MIN_BYTES (spawn.js), so this pins the
+			// actually-stored size rather than merely "something nonempty was
+			// written".
+			if it.Path == "notes/summary.txt" && it.Size >= artifactMinBytes {
+				found = true
+			}
+		}
+		if !assert.Truef(c, found, "artifact list must contain notes/summary.txt with size >= %d, got %+v (body=%s)", artifactMinBytes, p.ArtifactList, body) {
+			return
+		}
+		payload = p
+	}, 180*time.Second, 2*time.Second)
+	require.NotEmptyf(t, payload.ArtifactSha256Put, "artifact turn on session %s never completed the PUT/GET/LIST beat", sessionID)
+
+	// Cross-agent 403 is NOT live-asserted here — see this test's doc
+	// comment: the auth-posture probe above already proved this cluster is
+	// running without authz enabled, so no request can ever be rejected 403
+	// by this deployment. The rule itself is covered unconditionally by
+	// pkg/agentruntime/workspace_test.go's TestWorkspaceRoutes_CrossAgentForbidden
+	// and TestWorkspaceRoutes_CrossNamespaceForbidden.
+
+	// Nonexistent session -> 404. master is used only to ALSO send agent A's
+	// own (real, valid) identity headers when available — harmless and a
+	// slightly more realistic caller shape on pass-through, but not required
+	// for this assertion: requireSession (workspace.go) runs after auth
+	// succeeds either way, and the session id below was never dispatched, so
+	// the GC-anchor existence check must 404 it regardless.
+	master := f.InternalAuthSecret()
+	missingSessionID := "workspace-missing-" + ns.ID
+	missingURL := base + "/workspace/" + ns.Name + "/" + fnName + "/" + missingSessionID
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		attemptCtx, cancel := context.WithTimeout(ctx, registryAttemptTimeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, missingURL, nil)
+		if !assert.NoErrorf(c, err, "building nonexistent-session request") {
+			return
+		}
+		if len(master) > 0 {
+			selfToken := hmacauth.EncodeKeyForEnv(hmacauth.DeriveAgentIdentityKey(master, ns.Name, fnName))
+			req.Header.Set("Authorization", "Bearer "+selfToken)
+			req.Header.Set(agentruntime.HeaderIdentityNamespace, ns.Name)
+			req.Header.Set(agentruntime.HeaderIdentityName, fnName)
+		}
+		resp, err := f.HTTPClient().Do(req)
+		if !assert.NoErrorf(c, err, "GET %s (nonexistent session)", missingURL) {
+			return
+		}
+		defer resp.Body.Close()
+		assert.Equalf(c, http.StatusNotFound, resp.StatusCode,
+			"workspace list on a never-dispatched session must 404, got %d", resp.StatusCode)
+	}, 60*time.Second, 2*time.Second)
+}
+
+// nextSSEFrame reads one SSE message from r: comment lines (starting with
+// ':', e.g. the ": keepalive" lines events.go's ServeHTTP writes) are
+// skipped entirely, then an "event:" line and a "data:" line are read up to
+// the frame's terminating blank line, mirroring the exact
+// "event: %s\ndata: %s\n\n" shape writeSSEEvent (events.go) writes. It
+// returns the underlying read error (io.EOF at stream end, or a
+// context-deadline error once the request's context is done) when a full
+// frame cannot be read.
+func nextSSEFrame(r *bufio.Reader) (event, data string, err error) {
+	for {
+		line, rerr := r.ReadString('\n')
+		if rerr != nil {
+			return "", "", rerr
+		}
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+			continue // a stray blank line between frames
+		case strings.HasPrefix(trimmed, ":"):
+			// Comment/keepalive frame: it carries no event:/data: lines of
+			// its own, just its own terminating blank line — consume that
+			// and keep looking for the next real frame.
+			if _, rerr := r.ReadString('\n'); rerr != nil {
+				return "", "", rerr
+			}
+			continue
+		case strings.HasPrefix(trimmed, "event:"):
+			event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+		default:
+			continue
+		}
+		dataLine, rerr := r.ReadString('\n')
+		if rerr != nil {
+			return "", "", rerr
+		}
+		data = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(dataLine), "data:"))
+		// Consume the frame's terminating blank line; tolerate it being
+		// missing (e.g. the stream ends right after this frame) since the
+		// frame itself was already read successfully.
+		_, _ = r.ReadString('\n')
+		return event, data, nil
+	}
+}
+
+// sseFrameMatchesSession reports whether a "session" SSE frame's data
+// carries a record whose id equals wantSessionID (agentruntime.
+// sessionEvent's wire shape, events.go).
+func sseFrameMatchesSession(event, data, wantSessionID string) bool {
+	if event != "session" || data == "" {
+		return false
+	}
+	var payload struct {
+		Record struct {
+			ID string `json:"id"`
+		} `json:"record"`
+	}
+	return json.Unmarshal([]byte(data), &payload) == nil && payload.Record.ID == wantSessionID
+}
+
+// getRegistry issues a plain authenticated GET to url (via f.HTTPClient(),
+// same transport postTurn uses) and returns the response body and status
+// code. Mirrors postTurn's shape for the read-only registry routes.
+func getRegistry(ctx context.Context, f *framework.Framework, url string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	resp, err := f.HTTPClient().Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return body, resp.StatusCode, nil
+}
+
+// postTurn POSTs one turn to turnURL, carrying sessionID on
+// agentruntime.HeaderSession when non-empty. The caller is responsible for
+// closing the response body on a nil error.
+func postTurn(ctx context.Context, f *framework.Framework, turnURL, sessionID string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, turnURL, strings.NewReader(`{}`))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if sessionID != "" {
+		req.Header.Set(agentruntime.HeaderSession, sessionID)
+	}
+	return f.HTTPClient().Do(req)
+}
+
+// requireAgentRuntimeReachable skips the test when the agent runtime endpoint
+// isn't serving (agent runtime disabled in this install). Mirrors
+// requireMCPReachable in mcp_test.go: a short first probe distinguishes "not
+// installed" (typed target-not-found — skip fast) from "warming" (earns the
+// generous deadline a cold in-process port-forward needs).
+func requireAgentRuntimeReachable(t *testing.T, ctx context.Context, f *framework.Framework) {
+	t.Helper()
+	base := f.AgentRuntimeBaseURL()
+	probe := func(timeout time.Duration) (int, error) {
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/healthz", nil)
+		require.NoError(t, err)
+		resp, err := f.HTTPClient().Do(req)
+		if err != nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	status, err := probe(5 * time.Second)
+	if framework.IsTargetMissing(err) {
+		t.Skipf("agent runtime not installed (svc/agentruntime absent); skipping: %v", err)
+	}
+	if err != nil {
+		status, err = probe(30 * time.Second)
+	}
+	if err != nil {
+		t.Skipf("agent runtime endpoint %s not reachable (%v); skipping", base, err)
+	}
+	if status != http.StatusOK {
+		t.Skipf("agent runtime endpoint %s returned %d; skipping", base, status)
+	}
+}

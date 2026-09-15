@@ -1,0 +1,63 @@
+include:
+  - fixtures/order-lookup.js
+kind: ArchiveUploadSpec
+name: order-lookup-src
+
+---
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  name: order-lookup
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  deployment:
+    type: url
+    url: archive://order-lookup-src
+    checksum: {}
+  source:
+    checksum: {}
+status:
+  buildstatus: none
+
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  name: order-lookup
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  package:
+    packageref:
+      name: order-lookup
+      namespace: default
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 0
+      MinScale: 0
+      SpecializationTimeout: 0
+      TargetCPUPercent: 0
+    StrategyType: execution
+  functionTimeout: 60
+  resources: {}
+  # MCP tool exposure (fission-bundle --mcpPort): a real agent would call
+  # this mid-conversation; the boardroom loadgen does not (see
+  # fixtures/order-lookup.js's header comment) — it stays independent so the
+  # density/teleport story isn't coupled to MCP being deployed.
+  tool:
+    description: Look up a customer's order by id.
+    toolName: order-lookup
+    inputSchema:
+      type: object
+      properties:
+        orderId:
+          type: string
+          description: 'Order id to look up, e.g. "1001"'
+      required:
+        - orderId

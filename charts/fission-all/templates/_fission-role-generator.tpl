@@ -26,6 +26,9 @@ metadata:
 {{- if eq "mcp" .component }}
 {{- include "mcp-rules" . }}
 {{- end }}
+{{- if eq "agentruntime" .component }}
+{{- include "agentruntime-rules" . }}
+{{- end }}
 {{- if eq "workflow" .component }}
 {{- include "workflow-rules" . }}
 {{- end }}
@@ -103,6 +106,9 @@ metadata:
 {{- end }}
 {{- if eq "mcp" .component }}
 {{- include "mcp-rules" . }}
+{{- end }}
+{{- if eq "agentruntime" .component }}
+{{- include "agentruntime-rules" . }}
 {{- end }}
 {{- if eq "workflow" .component }}
 {{- include "workflow-rules" . }}

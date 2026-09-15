@@ -63,6 +63,18 @@ spec:
       ports:
         - port: 8000
           protocol: TCP
+    # The agent runtime dispatcher proxies the session artifact workspace API
+    # (PUT/GET/DELETE/LIST under /v1/workspace) and the sweeper's archive-time
+    # prefix purge to storagesvc. agentruntime and storagesvc share the chart
+    # release namespace (no namespaceSelector needed), mirroring the router
+    # netpol's own `svc: agentruntime` entry (router/networkpolicy.yaml).
+    - from:
+        - podSelector:
+            matchLabels:
+              svc: agentruntime
+      ports:
+        - port: 8000
+          protocol: TCP
     # Allow the metrics endpoint from any source so Prometheus / podMonitor
     # scraping works regardless of where the operator is deployed. Metrics
     # contain no archive content, only counts.

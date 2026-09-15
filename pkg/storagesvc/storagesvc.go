@@ -234,6 +234,10 @@ func (ss *StorageService) deleteHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if rejectWorkspaceID(w, fileId, "Error deleting item: not found") {
+		return
+	}
+
 	// A namespace-scoped caller may only delete its own (or legacy) archives.
 	// 404, not 403, so it cannot probe whether another tenant's archive exists.
 	if !ss.authorizedFor(r, fileId) {
@@ -269,6 +273,10 @@ func (ss *StorageService) downloadHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if rejectWorkspaceID(w, fileId, "Error retrieving item: not found") {
+		return
+	}
+
 	// A namespace-scoped caller may only download its own (or legacy) archives.
 	// 404, not 403, so it cannot probe whether another tenant's archive exists.
 	if !ss.authorizedFor(r, fileId) {
@@ -297,6 +305,10 @@ func (ss *StorageService) infoHandler(w http.ResponseWriter, r *http.Request) {
 	fileID, err := ss.getIdFromRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if rejectWorkspaceID(w, fileID, "not found") {
 		return
 	}
 
@@ -390,6 +402,19 @@ func (ss *StorageService) makeHandler() http.Handler {
 	m.HandleFunc("/v1/archive", ss.deleteHandler).Methods("DELETE")
 	m.HandleFunc("/v1/archive", ss.infoHandler).Methods("HEAD")
 	m.HandleFunc("/healthz", ss.healthHandler).Methods("GET")
+
+	// Internal-only session artifact workspace API (see workspace.go): mounted
+	// on the SAME mux, so it inherits the HMAC verifier (when configured) and
+	// its spool machinery exactly like every archive route above — no separate
+	// wiring. It is additionally master-signer-only (workspace.go rejects a
+	// non-empty AuthenticatedNamespace itself, on every route) because
+	// agentruntime — not any tenant fetcher/builder — is the sole legitimate
+	// caller.
+	m.HandleFunc("/v1/workspace", ss.workspacePutHandler).Methods("PUT")
+	m.HandleFunc("/v1/workspace", ss.workspaceGetHandler).Methods("GET")
+	m.HandleFunc("/v1/workspace", ss.workspaceDeleteHandler).Methods("DELETE")
+	m.HandleFunc("/v1/workspace/list", ss.workspaceListHandler).Methods("GET")
+	m.HandleFunc("/v1/workspace/prefix", ss.workspaceDeletePrefixHandler).Methods("DELETE")
 
 	// Storagesvc is router/builder/function-pod internal per
 	// charts/fission-all/templates/storagesvc/networkpolicy.yaml.

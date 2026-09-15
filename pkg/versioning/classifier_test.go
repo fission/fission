@@ -44,6 +44,9 @@ var affectingFields = map[string]struct{}{
 	"RequestsPerPod":  {},
 	"OnceOnly":        {},
 	"PodSpec":         {},
+	// Agent: switches invocation dispatch to the --agentPort subsystem
+	// (session-scoped routing) — invocation-observable.
+	"Agent": {},
 }
 
 var notAffectingFields = map[string]struct{}{
@@ -144,6 +147,12 @@ func baseSpec() fv1.FunctionSpec {
 		PodSpec: &apiv1.PodSpec{
 			Containers: []apiv1.Container{{Name: "user", Image: "alpine:3.19"}},
 		},
+		Agent: &fv1.AgentConfig{
+			Session: &fv1.AgentSessionConfig{
+				Source: fv1.SessionSource("header"),
+				Name:   "X-Fission-Session",
+			},
+		},
 	}
 }
 
@@ -217,6 +226,8 @@ func goldenTableCases() []goldenTableCase {
 			s.PodSpec.Containers[0].Image = "alpine:3.20"
 		}, true},
 		{"PodSpec nil->set", func(s *fv1.FunctionSpec) { s.PodSpec = nil }, true},
+		{"Agent", func(s *fv1.FunctionSpec) { s.Agent.Session.Name = "X-Other-Session" }, true},
+		{"Agent nil->set", func(s *fv1.FunctionSpec) { s.Agent = nil }, true},
 
 		{"IdleTimeout", func(s *fv1.FunctionSpec) { v := 999; s.IdleTimeout = &v }, false},
 		{"RetainPods", func(s *fv1.FunctionSpec) { s.RetainPods = 3 }, false},
