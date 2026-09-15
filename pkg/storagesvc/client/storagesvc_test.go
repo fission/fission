@@ -53,8 +53,12 @@ func MakeTestFile(size int) (*os.File, error) {
 
 func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
 	options := &dockertest.RunOptions{
-		Repository: "minio/minio",
-		Tag:        "latest",
+		// quay.io is MinIO's official registry; the Docker Hub mirror
+		// (minio/minio) was removed in 2026-09 and now answers "pull access
+		// denied", which log.Fatal'd this test on every CI run. A release tag,
+		// not "latest", so the fixture is reproducible.
+		Repository: "quay.io/minio/minio",
+		Tag:        "RELEASE.2025-09-07T16-13-09Z",
 		Cmd:        []string{"server", "/data"},
 		PortBindings: map[dc.Port][]dc.PortBinding{
 			"9000/tcp": {{HostIP: "", HostPort: "9000"}},
