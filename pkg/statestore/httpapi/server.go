@@ -217,7 +217,7 @@ func (h *handler) eventRead(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	evs, err := el.Read(r.Context(), req.Stream, req.FromSeq, req.Limit)
+	evs, err := statestore.ReadBounded(r.Context(), el, req.Stream, req.FromSeq, req.Limit, req.MaxBytes)
 	if err != nil {
 		writeErr(w, err)
 		return

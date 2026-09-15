@@ -58,7 +58,14 @@ func (s *Store) Append(_ context.Context, stream string, expectedSeq int64, even
 
 // Read implements statestore.EventLog: up to limit events with Seq > fromSeq, in
 // order. limit <= 0 returns all matching events.
-func (s *Store) Read(_ context.Context, stream string, fromSeq int64, limit int) ([]statestore.Event, error) {
+func (s *Store) Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]statestore.Event, error) {
+	return s.ReadBounded(ctx, stream, fromSeq, limit, 0)
+}
+
+// ReadBounded implements statestore.BoundedEventLog: Read under a payload-byte
+// budget (maxBytes <= 0 = unbounded); the first matching event is always
+// returned.
+func (s *Store) ReadBounded(_ context.Context, stream string, fromSeq int64, limit int, maxBytes int64) ([]statestore.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -68,10 +75,17 @@ func (s *Store) Read(_ context.Context, stream string, fromSeq int64, limit int)
 	if st == nil {
 		return nil, nil
 	}
-	var out []statestore.Event
+	var (
+		out   []statestore.Event
+		total int64
+	)
 	for _, e := range st.events {
 		if e.Seq <= fromSeq {
 			continue
+		}
+		total += int64(len(e.Payload))
+		if maxBytes > 0 && total > maxBytes && len(out) > 0 {
+			break
 		}
 		out = append(out, cloneEvent(e))
 		if limit > 0 && len(out) == limit {

@@ -254,6 +254,12 @@ func (gp *GenericPool) genDeploymentSpec(env *fv1.Environment) (*appsv1.Deployme
 		deploymentSpec.Template.Spec.AutomountServiceAccountToken = new(false)
 	}
 
+	// Fill-if-nil: applies env.Spec.RuntimeClassName only when the merge
+	// above (or the base spec) left RuntimeClassName unset, so a
+	// Runtime.PodSpec override always wins. Unconditional — an env can set
+	// RuntimeClassName with no Runtime.PodSpec at all.
+	util.ApplyEnvRuntimeClass(&deploymentSpec.Template.Spec, env)
+
 	if gp.oci != nil {
 		// Path B: mount the package image read-only at the fetcher's store
 		// path — the path the load request names (LoadReq.FilePath =

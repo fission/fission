@@ -56,6 +56,9 @@ are **expected to fail** — each documents why a guard exists:
 - The specs check **safety** on small bounds (1–2 messages, 2 dispatchers/reconcilers, 2 steps, 2 attempts, short clocks); protocol bugs of this shape almost always show up at tiny sizes.
 - Liveness (every message eventually settles, every run eventually terminates) is deliberately left to the deterministic-simulation and `testing/synctest` layers described in each RFC's "Invariants & verification" section — bounded-clock TLC liveness adds noise for little insight here.
 - The models simplify: single queue, linear workflows (no parallel/map), no MaxAge expiry, integer backoff of one tick; `eventlogsub` collapses a poison event's retry loop into its terminal ErrorTopic handling, models one subscription (per-subscription cursors are independent; min-cursor across subscriptions only tightens the trim bound), and leaves the age/size retention backstop out of the green model (it is documented loss by design).
+- Read-page shape is not modeled: `eventlogsub` delivers per event, so a consumer's `Read` batch size — and the byte-bounded page of the optional `statestore.BoundedEventLog` (`ReadBounded`, used by the `statesvc` eventlog read route) — is a batching detail.
+  The contract that keeps this honest is functional, not concurrent, and lives in the driver conformance suite: every non-empty page carries at least one event, and consumers stop on an empty page, never on a short one, so paging by `Seq` always makes progress and skips nothing.
+- Per-request byte limits (`MaxValueBytes` and its admission ceiling, the eventlog append payload budget, the read page budget) are per-write or per-request checks with no shared counter, so `quota.tla` does not model them; only the `MaxKeys` counter race is a concurrency claim.
   Extend the model first when implementing the features that break these simplifications (e.g. parallel branches in RFC-0022 phase 2).
 
 ## CI

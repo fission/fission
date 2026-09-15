@@ -78,12 +78,18 @@ PUT    /v1/state/{key}          body=value; If-Match: <version> → Set with IfV
 DELETE /v1/state/{key}          If-Match → Delete with ifVersion
 POST   /v1/state/{key}/cas      {expectVersion, value} — explicit CAS for clients without If-Match plumbing
 GET    /v1/state?prefix=&cursor= → paged key listing (List)
+POST   /v1/eventlog/append      {stream, expectedSeq, events[]} → CAS-only Append (409 carries the current head); at most 64 events, each payload within MaxValueBytes, summed payloads within 4 MiB
+POST   /v1/eventlog/read        {stream, fromSeq, limit} → up to min(limit, 500) events (default 100) and at most 32 MiB of stored payload per page (BoundedEventLog); a short page is not end-of-stream, an empty one is
+POST   /v1/eventlog/head        {stream} → the stream's head sequence
 ```
+
+The eventlog routes scope the caller-visible stream under `fnstate/<ns>/<keyspace>/` (`stateapi.StreamName`), so a token reaches only its own keyspace's streams; `expectedSeq < 0` (`AppendAny`) is not reachable through this surface.
 
 Note the KV surface: `statestore.KVStore` is `Get`/`Set`/`Delete`/`List` — **there is no separate `CAS` method**. Compare-and-swap is `Set` with `SetOptions.IfVersion` (`nil` = unconditional, `0` = create-only, `>0` = CAS on that version) and `Delete(..., ifVersion)`. `If-Match: <version>` maps to `IfVersion`; a missing/mismatched version is the 412.
 
 The scope is **not** client-supplied: it is the `scopedKV` `Scope{Namespace, Owner, Keyspace}` derived entirely from the verified token (below), so a function cannot name another function's keyspace.
 Quota (`MaxValueBytes`, `MaxKeys`, namespace byte budget) is enforced by `scopedKV.Set` via a live `countKeys`; violations are 413/429 with machine-readable bodies.
+`MaxValueBytes` has an admission ceiling (`MaxStateMaxValueBytes`, 4 MiB, in the Go validator and as the CRD `maximum`); a Function stored before the ceiling existed is clamped to it when indexed, so every route and every derived body cap (the bearer path's reader bound, the admin path's HMAC verifier buffer, the embedded transport) enforces one contract.
 
 **Quota-race pin (S3).** `scopedKV.Set`'s current shape — `countKeys` then `Set` — is a check-then-act: two concurrent writers can both read `count = MaxKeys-1`, both pass, and both write, overshooting the budget. `quota.tla` models exactly this and its negative config (`AtomicQuota = FALSE`) produces the trace. The design requirement (and a fix to audit in the shipped `scopedKV`): `MaxKeys` / namespace-byte enforcement must be **atomic with the write** — a KV CAS on a counter key, or the value write conditioned on a counted transaction — never a plain read-check-then-write. This is the same class of guard as the queue's epoch column and the cursor's version-CAS.
 

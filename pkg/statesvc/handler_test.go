@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,9 +45,11 @@ func newTestServer(t *testing.T, fns map[types.NamespacedName]*fv1.StateConfig) 
 	scoped := statestore.NewScoped(inner, index)
 	kv, err := scoped.KV()
 	require.NoError(t, err)
+	el, err := scoped.EventLog()
+	require.NoError(t, err)
 
 	auth := newAuthenticator(testMaster, nil, hmacauth.VerifierOpts{SkewSec: 60, MaxBodyBytes: 1 << 20})
-	h := newHandler(kv, index, auth, func() bool { return true }, logr.Discard())
+	h := newHandler(kv, el, index, auth, func() bool { return true }, logr.Discard())
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv, index
@@ -287,8 +290,10 @@ func TestHandlerDevPassThroughMode(t *testing.T) {
 	scoped := statestore.NewScoped(inner, index)
 	kv, err := scoped.KV()
 	require.NoError(t, err)
+	el, err := scoped.EventLog()
+	require.NoError(t, err)
 	auth := newAuthenticator(nil, nil, hmacauth.VerifierOpts{}) // no master secret
-	srv := httptest.NewServer(newHandler(kv, index, auth, func() bool { return true }, logr.Discard()))
+	srv := httptest.NewServer(newHandler(kv, el, index, auth, func() bool { return true }, logr.Discard()))
 	t.Cleanup(srv.Close)
 
 	// Bearer accepted on claims alone (any token), for a claimed keyspace.
@@ -318,6 +323,458 @@ func TestHandlerHealthEndpointsUnauthenticated(t *testing.T) {
 		_ = resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode, path)
 	}
+}
+
+// postEventLog fires an authenticated POST /v1/eventlog/{route} request with a
+// JSON-marshaled body. Generic (rather than body any) so each call site's
+// concrete request type (stateapi.EventAppendRequest/EventReadRequest/
+// EventHeadRequest) stays visible instead of being erased at this boundary.
+func postEventLog[T any](t *testing.T, srv *httptest.Server, route, ns, keyspace, token string, body T) *http.Response {
+	t.Helper()
+	b, err := json.Marshal(body)
+	require.NoError(t, err)
+	return doState(t, srv, http.MethodPost, "/v1/eventlog/"+route, ns, keyspace, token, b, nil)
+}
+
+func TestHandlerEventLogAppendReadHeadRoundTrip(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	resp := postEventLog(t, srv, "head", "ns-a", "fn-a", tok, stateapi.EventHeadRequest{Stream: "agentlog/s-1"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var headResp stateapi.EventHeadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&headResp))
+	assert.EqualValues(t, 0, headResp.Head, "absent stream has head 0")
+
+	resp = postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream:      "agentlog/s-1",
+		ExpectedSeq: 0,
+		Events: []stateapi.EventInput{
+			{Type: "tool_call", Payload: []byte("e1")},
+			{Type: "tool_call", Payload: []byte("e2")},
+		},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var appendResp stateapi.EventAppendResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&appendResp))
+	assert.EqualValues(t, 2, appendResp.Head)
+
+	resp = postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream:      "agentlog/s-1",
+		ExpectedSeq: 2,
+		Events:      []stateapi.EventInput{{Type: "tool_result", Payload: []byte("e3")}},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	appendResp = stateapi.EventAppendResponse{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&appendResp))
+	assert.EqualValues(t, 3, appendResp.Head)
+
+	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "agentlog/s-1", FromSeq: 0, Limit: 100})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var readResp stateapi.EventReadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&readResp))
+	require.Len(t, readResp.Events, 3)
+	assert.EqualValues(t, 1, readResp.Events[0].Seq)
+	assert.Equal(t, "tool_call", readResp.Events[0].Type)
+	assert.Equal(t, []byte("e1"), readResp.Events[0].Payload)
+	assert.EqualValues(t, 3, readResp.Events[2].Seq)
+	assert.Equal(t, "tool_result", readResp.Events[2].Type)
+	assert.False(t, readResp.Events[0].At.IsZero())
+
+	resp = postEventLog(t, srv, "head", "ns-a", "fn-a", tok, stateapi.EventHeadRequest{Stream: "agentlog/s-1"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	headResp = stateapi.EventHeadResponse{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&headResp))
+	assert.EqualValues(t, 3, headResp.Head)
+}
+
+func TestHandlerEventLogCASConflictReturns412WithHead(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "agentlog/s-1", ExpectedSeq: 0,
+		Events: []stateapi.EventInput{{Type: "t", Payload: []byte("e1")}},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Stale expectedSeq: the real head is 1, not 0.
+	resp = postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "agentlog/s-1", ExpectedSeq: 0,
+		Events: []stateapi.EventInput{{Type: "t", Payload: []byte("e2")}},
+	})
+	require.Equal(t, http.StatusPreconditionFailed, resp.StatusCode)
+	var e stateapi.Error
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+	assert.Equal(t, stateapi.CodeVersionConflict, e.Code)
+	require.NotNil(t, e.Head, "conflict envelope must carry the current head")
+	assert.EqualValues(t, 1, *e.Head)
+}
+
+func TestHandlerEventLogNegativeExpectedSeqRejected(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	// expectedSeq < 0 (statestore.AppendAny) must never be reachable through
+	// this API: CAS is mandatory on the wire.
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "agentlog/s-1", ExpectedSeq: -1,
+		Events: []stateapi.EventInput{{Type: "t", Payload: []byte("e1")}},
+	})
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestHandlerEventLogCrossScopeIsolation(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tokA := stateToken("ns-a", "fn-a")
+	tokB := stateToken("ns-b", "fn-b")
+
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tokA, stateapi.EventAppendRequest{
+		Stream: "agentlog/s-1", ExpectedSeq: 0,
+		Events: []stateapi.EventInput{{Type: "t", Payload: []byte("a1")}, {Type: "t", Payload: []byte("a2")}},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Same client-visible stream name, different keyspace: independent stream,
+	// still at head 0.
+	resp = postEventLog(t, srv, "head", "ns-b", "fn-b", tokB, stateapi.EventHeadRequest{Stream: "agentlog/s-1"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var headResp stateapi.EventHeadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&headResp))
+	assert.EqualValues(t, 0, headResp.Head)
+
+	resp = postEventLog(t, srv, "head", "ns-a", "fn-a", tokA, stateapi.EventHeadRequest{Stream: "agentlog/s-1"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	headResp = stateapi.EventHeadResponse{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&headResp))
+	assert.EqualValues(t, 2, headResp.Head)
+}
+
+// TestHandlerEventLogAuth mirrors TestHandlerScopeForgery's KV-route auth
+// matrix on the eventlog routes: a malformed Authorization scheme is
+// rejected at the middleware (401, before any scope is derived), and a
+// correctly-derived token for an unclaimed keyspace is rejected by the
+// requireKnownKeyspace defense-in-depth guard (403).
+func TestHandlerEventLogAuth(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+
+	// Bad token: unsupported Authorization scheme -> 401 from the middleware.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v1/eventlog/head", bytes.NewReader([]byte(`{"stream":"agentlog/s-1"}`)))
+	require.NoError(t, err)
+	req.Header.Set(stateapi.HeaderNamespace, "ns-a")
+	req.Header.Set(stateapi.HeaderKeyspace, "fn-a")
+	req.Header.Set("Authorization", "Basic deadbeef")
+	resp, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// Unclaimed keyspace: a correctly-derived token still fails the
+	// known-keyspace guard -> 403.
+	resp = postEventLog(t, srv, "head", "ns-a", "ghost", stateToken("ns-a", "ghost"), stateapi.EventHeadRequest{Stream: "agentlog/s-1"})
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func TestHandlerEventLogReadLimitClamped(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	events := make([]stateapi.EventInput, 3)
+	for i := range events {
+		events[i] = stateapi.EventInput{Type: "t", Payload: []byte{byte(i)}}
+	}
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: 0, Events: events})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// A limit far above MaxReadLimit is clamped, not rejected.
+	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: 100000})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var readResp stateapi.EventReadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&readResp))
+	assert.Len(t, readResp.Events, 3)
+
+	// limit <= 0 defaults rather than erroring or returning nothing.
+	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: 0})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	readResp = stateapi.EventReadResponse{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&readResp))
+	assert.Len(t, readResp.Events, 3)
+}
+
+// TestHandlerEventLogReadLimitHardCapAt500 proves the clamp lands exactly on
+// MaxReadLimit, not just "doesn't error": appends more than 500 events, then
+// asserts a page requested with an over-cap limit returns exactly 500.
+func TestHandlerEventLogReadLimitHardCapAt500(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	const total = stateapi.MaxReadLimit + 50
+	var seq int64
+	for seq < total {
+		batch := min(int64(stateapi.MaxAppendEvents), total-seq)
+		events := make([]stateapi.EventInput, batch)
+		for i := range events {
+			events[i] = stateapi.EventInput{Type: "t", Payload: []byte("x")}
+		}
+		resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: seq, Events: events})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		seq += batch
+	}
+
+	resp := postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: 100000})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var readResp stateapi.EventReadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&readResp))
+	assert.Len(t, readResp.Events, stateapi.MaxReadLimit)
+}
+
+func TestHandlerEventLogPayloadOverMaxValueBytesCap(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
+		fnA: {MaxValueBytes: 8},
+	})
+	tok := stateToken("ns-a", "fn-a")
+
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "s", ExpectedSeq: 0,
+		Events: []stateapi.EventInput{{Type: "t", Payload: []byte("123456789")}}, // 9 > 8
+	})
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	var e stateapi.Error
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+	assert.Equal(t, stateapi.CodeQuotaValueBytes, e.Code)
+}
+
+func TestHandlerEventLogTypeOverMaxBytesRejected(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	tests := []struct {
+		name string
+		typ  string
+	}{
+		{"empty", ""},
+		{"129 chars", strings.Repeat("t", 129)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+				Stream: "s", ExpectedSeq: 0,
+				Events: []stateapi.EventInput{{Type: tt.typ, Payload: []byte("x")}},
+			})
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			var e stateapi.Error
+			require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+			assert.Equal(t, stateapi.CodeBadRequest, e.Code)
+		})
+	}
+}
+
+// TestHandlerEventLogAppendBudget pins the two byte bounds that sit beside
+// the per-event MaxValueBytes quota: a batch whose summed payloads exceed
+// MaxAppendPayloadBytes is refused even though every single event is within
+// quota, and a body over the wire cap is a 413 (not a truncated-JSON 400).
+func TestHandlerEventLogAppendBudget(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
+		fnA: {MaxValueBytes: fv1.MaxStateMaxValueBytes},
+	})
+	tok := stateToken("ns-a", "fn-a")
+
+	// One max-sized event is fine on its own.
+	full := bytes.Repeat([]byte("x"), int(fv1.MaxStateMaxValueBytes))
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "s", ExpectedSeq: 0, Events: []stateapi.EventInput{{Type: "t", Payload: full}},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// The same event plus one byte more: each event is within quota, the sum
+	// is over the per-append budget, and the wire size still fits the cap —
+	// so this is the aggregate check answering, not the reader bound.
+	resp = postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "s", ExpectedSeq: 1, Events: []stateapi.EventInput{{Type: "t", Payload: full}, {Type: "t", Payload: []byte("y")}},
+	})
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	var e stateapi.Error
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+	assert.Equal(t, stateapi.CodeRequestTooLarge, e.Code)
+
+	// Two max-sized events overflow the wire cap before the decoder finishes.
+	resp = postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+		Stream: "s", ExpectedSeq: 1, Events: []stateapi.EventInput{{Type: "t", Payload: full}, {Type: "t", Payload: full}},
+	})
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	e = stateapi.Error{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+	assert.Equal(t, stateapi.CodeRequestTooLarge, e.Code)
+
+	// Nothing from the refused batches landed.
+	resp = postEventLog(t, srv, "head", "ns-a", "fn-a", tok, stateapi.EventHeadRequest{Stream: "s"})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var headResp stateapi.EventHeadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&headResp))
+	assert.EqualValues(t, 1, headResp.Head)
+}
+
+// TestHandlerEventLogReadPageBoundedByBytes: a read page ends at
+// MaxReadPayloadBytes of actual stored payload, whatever the requested count
+// and whatever the keyspace's CURRENT quota says — the quota is lowered here
+// after the large events were appended, which is exactly the case a
+// quota-derived count cannot bound. The remainder is reachable on the next
+// page.
+func TestHandlerEventLogReadPageBoundedByBytes(t *testing.T) {
+	t.Parallel()
+	srv, ix := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
+		fnA: {MaxValueBytes: fv1.MaxStateMaxValueBytes},
+	})
+	tok := stateToken("ns-a", "fn-a")
+
+	// Fill the stream past the read budget with maximum-sized events, one per
+	// append (each append is itself bounded by MaxAppendPayloadBytes).
+	perPage := int(stateapi.MaxReadPayloadBytes / fv1.MaxStateMaxValueBytes)
+	require.Greater(t, perPage, 1)
+	full := bytes.Repeat([]byte("x"), int(fv1.MaxStateMaxValueBytes))
+	for i := range perPage + 2 {
+		resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+			Stream: "s", ExpectedSeq: int64(i), Events: []stateapi.EventInput{{Type: "t", Payload: full}},
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		_ = resp.Body.Close()
+	}
+	// Lower the quota AFTER the data exists: the stored events are now 16x
+	// the keyspace's per-event cap.
+	ix.Upsert(fnA, &fv1.StateConfig{})
+
+	resp := postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: 0, Limit: stateapi.MaxReadLimit})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var page stateapi.EventReadResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
+	require.Len(t, page.Events, perPage, "page ends at the byte budget of actual stored payload")
+
+	resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: "s", FromSeq: page.Events[len(page.Events)-1].Seq, Limit: stateapi.MaxReadLimit})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	page = stateapi.EventReadResponse{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
+	assert.Len(t, page.Events, 2, "bounding is paging, not loss")
+}
+
+// TestHandlerEventLogSmallBodyOverCapIs413: the read/head bodies are bounded
+// by an http.MaxBytesReader, so a valid document padded past the cap is
+// refused instead of silently truncated to a prefix that still parses.
+func TestHandlerEventLogSmallBodyOverCapIs413(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+	padded := append([]byte(`{"stream":"s"}`), bytes.Repeat([]byte(" "), eventLogSmallBodyCap)...)
+	for _, route := range []string{"read", "head"} {
+		resp := doState(t, srv, http.MethodPost, "/v1/eventlog/"+route, "ns-a", "fn-a", tok, padded, nil)
+		require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode, route)
+		var e stateapi.Error
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&e))
+		assert.Equal(t, stateapi.CodeRequestTooLarge, e.Code, route)
+	}
+}
+
+// TestFunctionIndexClampsLegacyQuota: a Function stored before the
+// MaxValueBytes ceiling existed resolves to the ceiling, not to what it
+// claims, so KV and EventLog routes (and the caps derived from the quota)
+// enforce one contract on both auth paths.
+func TestFunctionIndexClampsLegacyQuota(t *testing.T) {
+	t.Parallel()
+	ix := NewFunctionIndex()
+	ix.Upsert(fnA, &fv1.StateConfig{MaxValueBytes: 64 * fv1.MaxStateMaxValueBytes})
+	q := ix.Resolve(statestore.Scope{Namespace: fnA.Namespace, Keyspace: fnA.Name})
+	assert.Equal(t, fv1.MaxStateMaxValueBytes, q.MaxValueBytes)
+	ix.Upsert(fnA, &fv1.StateConfig{MaxValueBytes: 1024})
+	q = ix.Resolve(statestore.Scope{Namespace: fnA.Namespace, Keyspace: fnA.Name})
+	assert.EqualValues(t, 1024, q.MaxValueBytes, "a value under the ceiling is untouched")
+}
+
+func TestHandlerEventLogTooManyEventsRejected(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	events := make([]stateapi.EventInput, stateapi.MaxAppendEvents+1)
+	for i := range events {
+		events[i] = stateapi.EventInput{Type: "t", Payload: []byte("x")}
+	}
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: 0, Events: events})
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestHandlerEventLogEmptyEventsRejected(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: 0, Events: nil})
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestHandlerEventLogBadStreamRejected(t *testing.T) {
+	t.Parallel()
+	srv, _ := newTestServer(t, twoFns())
+	tok := stateToken("ns-a", "fn-a")
+
+	tests := []struct {
+		name   string
+		stream string
+	}{
+		{"dot-dot traversal", "../x"},
+		{"leading slash", "/agentlog"},
+		{"201 chars", strings.Repeat("a", 201)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{
+				Stream: tt.stream, ExpectedSeq: 0,
+				Events: []stateapi.EventInput{{Type: "t", Payload: []byte("x")}},
+			})
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "append")
+
+			resp = postEventLog(t, srv, "head", "ns-a", "fn-a", tok, stateapi.EventHeadRequest{Stream: tt.stream})
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "head")
+
+			resp = postEventLog(t, srv, "read", "ns-a", "fn-a", tok, stateapi.EventReadRequest{Stream: tt.stream})
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "read")
+		})
+	}
+}
+
+// TestHandlerEventLogFullBatchAtCapSucceeds is the body-cap formula
+// regression test: MaxAppendEvents events, each exactly at the keyspace's
+// MaxValueBytes ceiling, must fit under the append route's LimitReader
+// (MaxAppendEvents*maxValueBytes*4/3 + 64<<10) — the KV route's
+// maxBytes*2+4096 formula would truncate this legitimate request.
+func TestHandlerEventLogFullBatchAtCapSucceeds(t *testing.T) {
+	t.Parallel()
+	const maxValueBytes = 4096
+	srv, _ := newTestServer(t, map[types.NamespacedName]*fv1.StateConfig{
+		fnA: {MaxValueBytes: maxValueBytes},
+	})
+	tok := stateToken("ns-a", "fn-a")
+
+	events := make([]stateapi.EventInput, stateapi.MaxAppendEvents)
+	payload := bytes.Repeat([]byte("x"), maxValueBytes)
+	for i := range events {
+		events[i] = stateapi.EventInput{Type: "t", Payload: payload}
+	}
+	resp := postEventLog(t, srv, "append", "ns-a", "fn-a", tok, stateapi.EventAppendRequest{Stream: "s", ExpectedSeq: 0, Events: events})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var appendResp stateapi.EventAppendResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&appendResp))
+	assert.EqualValues(t, stateapi.MaxAppendEvents, appendResp.Head)
 }
 
 func TestFunctionIndexMinQuotaAcrossClaimants(t *testing.T) {

@@ -696,6 +696,16 @@ func (tc *ToolConfig) Validate() error {
 // separator) and '#' (the platform-reserved "<keyspace>#meta" quota sibling).
 var stateKeyspaceRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 
+// runtimeClassNameRegexp mirrors the EnvironmentSpec.RuntimeClassName
+// struct-level CEL marker. It is deliberately a DNS1123-label CHARSET but with
+// the subdomain LENGTH bound (253, not a label's 63): the RuntimeClasses Fission
+// targets (gvisor, kata, runc) are labels, so dots are intentionally excluded,
+// while the generous length keeps this from ever being the tighter of the two
+// bounds. It must agree with the apiserver CEL rule so the CLI's pre-flight
+// Validate() never rejects a value the API server would admit — hence not
+// validation.IsDNS1123Label (which would cap at 63) nor IsDNS1123Subdomain.
+var runtimeClassNameRegexp = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+
 // Validate checks the keyed-state config (only reached when FunctionSpec.State
 // is non-nil): keyspace charset/length, non-negative quotas and TTL, and a
 // well-formed sticky declaration. Re-checked in Go so the CLI validates
@@ -706,8 +716,8 @@ func (sc *StateConfig) Validate() error {
 	if sc.Keyspace != "" && (len(sc.Keyspace) > 63 || !stateKeyspaceRegexp.MatchString(sc.Keyspace)) {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.Keyspace", sc.Keyspace, "must be 1-63 characters matching ^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"))
 	}
-	if sc.MaxValueBytes < 0 {
-		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxValueBytes", sc.MaxValueBytes, "must be >= 0"))
+	if sc.MaxValueBytes < 0 || sc.MaxValueBytes > MaxStateMaxValueBytes {
+		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxValueBytes", sc.MaxValueBytes, fmt.Sprintf("must be between 0 and %d (0 = platform default)", MaxStateMaxValueBytes)))
 	}
 	if sc.MaxKeys < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "FunctionSpec.State.MaxKeys", sc.MaxKeys, "must be >= 0"))
@@ -937,6 +947,14 @@ func (spec EnvironmentSpec) Validate() error {
 
 	if spec.TerminationGracePeriod != nil && *spec.TerminationGracePeriod < 0 {
 		errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.TerminationGracePeriod", *spec.TerminationGracePeriod, "must be greater than or equal to 0"))
+	}
+
+	if spec.RuntimeClassName != nil {
+		val := *spec.RuntimeClassName
+		if len(val) > 253 || !runtimeClassNameRegexp.MatchString(val) {
+			errs = errors.Join(errs, MakeValidationErr(ErrorInvalidValue, "EnvironmentSpec.RuntimeClassName", val,
+				"must be lowercase alphanumeric or '-', start and end alphanumeric, at most 253 characters"))
+		}
 	}
 
 	return errs

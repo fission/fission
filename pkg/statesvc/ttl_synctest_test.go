@@ -40,8 +40,10 @@ func newBubbleHandler(t *testing.T, fns map[types.NamespacedName]*fv1.StateConfi
 	scoped := statestore.NewScoped(inner, index)
 	kv, err := scoped.KV()
 	require.NoError(t, err)
+	el, err := scoped.EventLog()
+	require.NoError(t, err)
 	auth := newAuthenticator(testMaster, nil, hmacauth.VerifierOpts{SkewSec: 60})
-	return newHandler(kv, index, auth, func() bool { return true }, logr.Discard())
+	return newHandler(kv, el, index, auth, func() bool { return true }, logr.Discard())
 }
 
 func bubbleReq(h http.Handler, method, path, ns, ks, token string, body []byte, hdrs map[string]string) *httptest.ResponseRecorder {

@@ -232,8 +232,14 @@ func (c *Client) Append(ctx context.Context, stream string, expectedSeq int64, e
 }
 
 func (c *Client) Read(ctx context.Context, stream string, fromSeq int64, limit int) ([]statestore.Event, error) {
+	return c.ReadBounded(ctx, stream, fromSeq, limit, 0)
+}
+
+// ReadBounded implements statestore.BoundedEventLog; the budget rides the
+// request so the server-side store, not this client, enforces it.
+func (c *Client) ReadBounded(ctx context.Context, stream string, fromSeq int64, limit int, maxBytes int64) ([]statestore.Event, error) {
 	var resp httpapi.EventReadResp
-	if err := postJSON(c, ctx, httpapi.PathEventRead, httpapi.EventReadReq{Stream: stream, FromSeq: fromSeq, Limit: limit}, &resp); err != nil {
+	if err := postJSON(c, ctx, httpapi.PathEventRead, httpapi.EventReadReq{Stream: stream, FromSeq: fromSeq, Limit: limit, MaxBytes: maxBytes}, &resp); err != nil {
 		return nil, err
 	}
 	return resp.Events, nil

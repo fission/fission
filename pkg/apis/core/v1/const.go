@@ -184,6 +184,14 @@ const (
 	// storage).
 	DefaultStateMaxValueBytes int64 = 262144
 
+	// MaxStateMaxValueBytes is the hard ceiling a tenant may set
+	// FunctionSpec.State.MaxValueBytes to (4MiB, 16x the default). It bounds the
+	// amplification the /v1/eventlog/append body cap derives from MaxValueBytes
+	// (MaxAppendEvents * MaxValueBytes * 4/3), so no single tenant can force the
+	// shared statesvc to size an unbounded request body — blobs belong in object
+	// storage, not a state value.
+	MaxStateMaxValueBytes int64 = 4 << 20
+
 	// DefaultStateMaxKeys caps a keyspace's live keys when
 	// StateConfig.MaxKeys is unset.
 	DefaultStateMaxKeys int64 = 10000

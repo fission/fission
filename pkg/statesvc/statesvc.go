@@ -33,6 +33,7 @@ import (
 	"github.com/fission/fission/pkg/crd"
 	"github.com/fission/fission/pkg/generated/clientset/versioned/scheme"
 	"github.com/fission/fission/pkg/statestore"
+	"github.com/fission/fission/pkg/statesvc/stateapi"
 	"github.com/fission/fission/pkg/utils/crmanager"
 	"github.com/fission/fission/pkg/utils/httpserver"
 	"github.com/fission/fission/pkg/utils/metrics"
@@ -94,6 +95,16 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	if err != nil {
 		return fmt.Errorf("statestore KV capability: %w", err)
 	}
+	// Fail fast, like KV above: RFC-0027 already demands EventLog of every
+	// production statestore driver, so a driver missing it is a
+	// misconfiguration, not a capability statesvc should silently do without.
+	// Opened through the metered scoped wrapper (not raw caps.EventLog()) so
+	// the RFC-0019 ops metrics cover eventlog append/read/head like every
+	// other statesvc store call.
+	el, err := scoped.EventLog()
+	if err != nil {
+		return fmt.Errorf("statestore EventLog capability: %w", err)
+	}
 
 	// Secrets are read here (not in library constructors) per the
 	// deterministic-constructor convention. Empty master = bearer pass-through
@@ -102,8 +113,13 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 	master := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET"))
 	masterOld := []byte(os.Getenv("FISSION_INTERNAL_AUTH_SECRET_OLD"))
 	auth := newAuthenticator(master, masterOld, hmacauth.VerifierOpts{
-		SkewSec:      60,
-		MaxBodyBytes: fv1.DefaultStateMaxValueBytes * 2,
+		SkewSec: 60,
+		// The admin (HMAC) path buffers the body to verify the signature, so
+		// its cap must admit every request the handlers accept: a KV value or
+		// EventLog append at the payload budget, base64-inflated. Shared with
+		// the append handler's own reader bound so the two paths never
+		// disagree on what a valid request is.
+		MaxBodyBytes: stateapi.MaxRequestBodyBytes,
 		Logger:       logger,
 	})
 	if auth.passThrough() {
@@ -164,7 +180,7 @@ func Start(ctx context.Context, clientGen crd.ClientGeneratorInterface, logger l
 		return scoped.Ping(pingCtx) == nil
 	}
 
-	handler := newHandler(kv, index, auth, ready, logger)
+	handler := newHandler(kv, el, index, auth, ready, logger)
 	mgr.Go(func() error {
 		httpserver.Serve(ctx, logger, mgr, httpserver.ServerOptions{
 			Name: "statesvc", Addr: strconv.Itoa(opts.Port), Listener: opts.Listener, Handler: handler,

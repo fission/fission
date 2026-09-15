@@ -75,6 +75,63 @@ type EventLog interface {
 	Trim(ctx context.Context, stream string, belowSeq int64) error
 }
 
+// BoundedEventLog is an optional EventLog extension: ReadBounded is Read with
+// a payload-byte budget, so a caller can bound what one page materializes —
+// in the store, not only on the wire — regardless of how large the stored
+// events are (a keyspace may have lowered its per-event quota after appending
+// larger events, so no count derived from the current quota can bound bytes).
+//
+// Contract: events are returned in order until either limit is reached or
+// adding the next event would push the summed payload bytes over maxBytes.
+// At least one event is returned whenever any matches — a single event larger
+// than the budget is still delivered — so a reader paging by Seq never
+// stalls. maxBytes <= 0 means unbounded (identical to Read).
+//
+// Every shipped driver implements it; ReadBoundedFallback serves a driver
+// that does not, at the cost of materializing the full page first.
+type BoundedEventLog interface {
+	EventLog
+	ReadBounded(ctx context.Context, stream string, fromSeq int64, limit int, maxBytes int64) ([]Event, error)
+}
+
+// ReadBounded reads a page under a payload-byte budget through el's
+// BoundedEventLog implementation when it has one, and through
+// ReadBoundedFallback otherwise.
+func ReadBounded(ctx context.Context, el EventLog, stream string, fromSeq int64, limit int, maxBytes int64) ([]Event, error) {
+	if b, ok := el.(BoundedEventLog); ok {
+		return b.ReadBounded(ctx, stream, fromSeq, limit, maxBytes)
+	}
+	return ReadBoundedFallback(ctx, el, stream, fromSeq, limit, maxBytes)
+}
+
+// ReadBoundedFallback implements the ReadBounded contract on top of plain
+// Read: the store still materializes up to limit events, and the page is
+// trimmed to the budget afterwards. It bounds the response, not the store.
+func ReadBoundedFallback(ctx context.Context, el EventLog, stream string, fromSeq int64, limit int, maxBytes int64) ([]Event, error) {
+	evs, err := el.Read(ctx, stream, fromSeq, limit)
+	if err != nil {
+		return nil, err
+	}
+	return TrimToBudget(evs, maxBytes), nil
+}
+
+// TrimToBudget cuts evs (in order) to the longest prefix whose summed payload
+// bytes fit maxBytes, always keeping the first event. maxBytes <= 0 returns
+// evs unchanged.
+func TrimToBudget(evs []Event, maxBytes int64) []Event {
+	if maxBytes <= 0 {
+		return evs
+	}
+	var total int64
+	for i, ev := range evs {
+		total += int64(len(ev.Payload))
+		if total > maxBytes && i > 0 {
+			return evs[:i]
+		}
+	}
+	return evs
+}
+
 // Queue is an at-least-once work queue with visibility-timeout leases and a
 // dead-letter table.
 //

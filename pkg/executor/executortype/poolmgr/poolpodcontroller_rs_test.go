@@ -369,6 +369,28 @@ func TestEnvRuntimeHashIgnoresNonTemplateSpec(t *testing.T) {
 	assert.Equal(t, envRuntimeHash(defaulted), envRuntimeHash(explicit),
 		"nil and explicit-default grace produce the same template and must not differ in hash")
 
+	// RuntimeClassName lands in the pod template (util.ApplyEnvRuntimeClass),
+	// so setting or changing it must move the hash — otherwise specialized
+	// pods born under the old RuntimeClass keep passing envLabelsMatchLiveEnv
+	// and keep serving under it.
+	classed := base.DeepCopy()
+	classed.Spec.RuntimeClassName = new("gvisor")
+	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(classed),
+		"a RuntimeClassName change must recycle warm pods")
+	reclassed := classed.DeepCopy()
+	reclassed.Spec.RuntimeClassName = new("kata")
+	assert.NotEqual(t, envRuntimeHash(classed), envRuntimeHash(reclassed),
+		"switching RuntimeClass must recycle warm pods")
+	// A Runtime.PodSpec override wins over the dedicated field, so changing
+	// only the dedicated field under an override leaves the template — and
+	// the hash — unchanged.
+	overridden := classed.DeepCopy()
+	overridden.Spec.Runtime.PodSpec = &corev1.PodSpec{RuntimeClassName: new("kata")}
+	retagged := overridden.DeepCopy()
+	retagged.Spec.RuntimeClassName = new("runc")
+	assert.Equal(t, envRuntimeHash(overridden), envRuntimeHash(retagged),
+		"the dedicated field is shadowed by the PodSpec override; no recycle")
+
 	instantKill := base.DeepCopy()
 	instantKill.Spec.TerminationGracePeriod = new(int64(0))
 	assert.NotEqual(t, envRuntimeHash(base), envRuntimeHash(instantKill),

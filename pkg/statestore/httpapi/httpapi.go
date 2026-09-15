@@ -12,15 +12,21 @@ package httpapi
 import (
 	"errors"
 
+	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	"github.com/fission/fission/pkg/statestore"
 )
 
 // MaxRequestBytes bounds the size of a decoded request body, so the JSON
 // decoders never read an unbounded body (this holds even in the HMAC
-// pass-through mode where the verifier's own cap is absent). A KV value is capped
-// at 256KiB (RFC-0023); base64 + the JSON envelope inflate that, so 4MiB is
-// generous headroom.
-const MaxRequestBytes = 4 << 20
+// pass-through mode where the verifier's own cap is absent). It is derived
+// from the largest value the front door admits: a KV value or an EventLog
+// append batch is at most fv1.MaxStateMaxValueBytes of payload (the
+// admission ceiling on StateConfig.MaxValueBytes, and statesvc's per-append
+// budget), which base64 + the JSON envelope inflate by 4/3 — so twice the
+// ceiling is headroom, and a statesvc running in embedded mode (the client
+// driver against this server) never rejects a request the front door
+// accepted.
+const MaxRequestBytes = 2 * fv1.MaxStateMaxValueBytes
 
 // Route paths, versioned under /v1.
 const (
@@ -164,6 +170,9 @@ type EventReadReq struct {
 	Stream  string `json:"stream"`
 	FromSeq int64  `json:"fromSeq"`
 	Limit   int    `json:"limit"`
+	// MaxBytes is the optional payload-byte budget (statestore.BoundedEventLog);
+	// 0 means unbounded.
+	MaxBytes int64 `json:"maxBytes,omitempty"`
 }
 type EventReadResp struct {
 	Events []statestore.Event `json:"events"`

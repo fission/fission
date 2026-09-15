@@ -87,6 +87,8 @@ type Queue interface {
 ```
 
 Version semantics: `Set` with `IfVersion: 0` means create-only; a mismatched version returns `ErrVersionConflict` (a sentinel, checked with `errors.Is`).
+Shipped `EventLog` extensions beyond this listing: `Head(ctx, stream)` (RFC-0027) and the optional `BoundedEventLog` interface, whose `ReadBounded(ctx, stream, fromSeq, limit, maxBytes)` is `Read` under a payload-byte budget enforced while the store scans (every non-empty page returns at least one event; `maxBytes <= 0` is plain `Read`).
+Every shipped driver implements it; `statestore.ReadBounded` falls back to read-then-trim for one that does not.
 `Lease` is at-least-once: a message whose lease expires without Ack becomes leasable again; consumers must be idempotent or use `DedupKey`.
 
 ### Postgres reference driver (`pkg/statestore/postgres`)
