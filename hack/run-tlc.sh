@@ -14,22 +14,21 @@
 
 set -euo pipefail
 
-TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.8.0}"
-# SHA256 of the tla2tools.jar attached to the v1.8.0 GitHub release. NOTE: the
-# tlaplus project periodically REBUILDS and re-uploads this release asset (the jar
-# manifest carries a build date), so its SHA drifts over time. A checksum mismatch
-# here therefore usually means an upstream rebuild, not corruption or tampering —
-# re-verify the jar is genuine tla2tools (manifest Main-class tlc2.TLC, Microsoft
-# vendor) and bump this pin. The pin stays so an UNEXPECTED artifact still fails
-# loudly rather than silently running arbitrary downloaded code.
-# Last bumped 2026-09-11 for the upstream rebuild dated 2026-09-10. Verified
-# before bumping, per the note above: manifest Main-class tlc2.TLC,
-# Implementation-Title "TLA+ Tools", Implementation-Vendor "Microsoft Corp.",
-# Implementation-Version "2.0 2026-09-10", X-Git-Revision
-# c3af5e2dcc6e54860e96b8e7adf7509d3f685d25 on tlaplus master, tlc2/TLC.class
-# present, downloaded from the official tlaplus/tlaplus v1.8.0 release URL
-# (asset re-uploaded 2026-09-10T19:16:09Z, 4490846 bytes).
-TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-957b23b2bb31d08f19346e105e23585f93fea9a139a712b0ac347eedaf26afea}"
+TLA2TOOLS_VERSION="${TLA2TOOLS_VERSION:-1.7.4}"
+# SHA256 of the tla2tools.jar attached to the v1.7.4 GitHub release — the
+# latest STABLE (non-prerelease) tlaplus release. Its asset has been immutable
+# since 2024-08-08. Do NOT move this to v1.8.0: that tag is marked prerelease
+# and the tlaplus project re-uploads its assets on every master push (the jar
+# manifest carries a build date), so a v1.8.0 pin drifts daily and the job
+# fails at this checksum step on unrelated PRs (#3685, #3723, then again the
+# same afternoon). The pin stays so an UNEXPECTED artifact still fails loudly
+# rather than silently running arbitrary downloaded code.
+# Verified before pinning: manifest Main-class tlc2.TLC, Implementation-Title
+# "TLA+ Tools", Implementation-Vendor "Microsoft Corp.", Implementation-Version
+# "2.0 2024-08-08", X-Git-ShortRevision 5a47802, tlc2/TLC.class present,
+# 2274532 bytes, downloaded from the official tlaplus/tlaplus v1.7.4 release
+# URL; every green and negative config in this script passes on it.
+TLA2TOOLS_SHA256="${TLA2TOOLS_SHA256:-936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPECS_DIR="${REPO_ROOT}/docs/rfc/specs"
