@@ -14,7 +14,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -305,4 +307,64 @@ func TestContainerGetResources(t *testing.T) {
 	res := cn.getResources(fn)
 	assert.NotNil(t, res.Requests)
 	assert.NotNil(t, res.Limits)
+}
+
+// TestContainerScaleFromZeroWaitsForAvailability covers the scale-to-zero race
+// reported in #3183. The first read reports one available replica (the pod the
+// idle reaper is tearing down) and every later read reports none, so a caller
+// that trusts the pre-scale status reports success with no serving pod.
+func TestContainerScaleFromZeroWaitsForAvailability(t *testing.T) {
+	t.Parallel()
+
+	fn := newTestContainerFunction()
+	fn.Spec.PodSpec.Containers[0].Ports = []apiv1.ContainerPort{{ContainerPort: 8080}}
+	fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+
+	ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
+	zero := int32(0)
+	scaledIn := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "ctr-fn",
+			Namespace:   ns,
+			Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+		},
+		Spec:   appsv1.DeploymentSpec{Replicas: &zero},
+		Status: appsv1.DeploymentStatus{AvailableReplicas: 0},
+	}
+
+	kubeClient := fake.NewClientset(scaledIn)
+	var reads int
+	kubeClient.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		depl := scaledIn.DeepCopy()
+		reads++
+		if reads == 1 {
+			depl.Status.AvailableReplicas = 1
+		}
+		return true, depl, nil
+	})
+	// The fake clientset has no built-in scale subresource for deployments.
+	kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "scale" {
+			return false, nil, nil
+		}
+		return true, action.(k8stesting.UpdateAction).GetObject(), nil
+	})
+
+	cn := &Container{
+		logger:                 loggerfactory.GetLogger(),
+		kubernetesClient:       kubeClient,
+		instanceID:             "test-instance",
+		nsResolver:             utils.DefaultNSResolver(),
+		runtimeImagePullPolicy: apiv1.PullIfNotPresent,
+	}
+
+	// The deployment never becomes available in the fake cluster, so a correct
+	// implementation runs the readiness wait out to this deadline.
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+
+	_, err := cn.createOrGetDeployment(ctx, fn, "ctr-fn", map[string]string{"app": "ctr"}, nil, ns)
+	require.Error(t, err, "scale-from-zero must not report success while no replica is available")
+	assert.ErrorIs(t, err, context.DeadlineExceeded,
+		"expected the readiness wait to run to its deadline, got: %v", err)
 }
