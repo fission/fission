@@ -70,8 +70,21 @@ type Invoker struct {
 	// inflight dedups dispatches: the 60s resync recomputes actInvoke for
 	// attempts that are still executing, and re-running a long step's side
 	// effects (or filling the pool with duplicates) must not happen.
+	//
+	// done closes the window inflight leaves open: a reconcile folds the log,
+	// computes actInvoke for an attempt that is still unresolved in THAT
+	// snapshot, and only then dispatches — if the attempt's result landed in
+	// between (and its inflight key was released), the dispatch would be a
+	// duplicate delivery of a step this process already completed. Remembering
+	// completed attempts per run makes that dispatch a no-op. Cross-process
+	// duplicates (a restart replays the log) remain — at-least-once is the
+	// contract (workflowfold.tla) — but the in-process ones are free to avoid,
+	// and they are what let a region exceed MaxConcurrency at the function.
+	// Forget prunes a run's entries when it reaches a terminal phase or is
+	// cleaned up.
 	mu       sync.Mutex
-	inflight map[string]bool // "uid/state/attempt"
+	inflight map[string]bool                // "uid/branch/state/attempt"
+	done     map[string]map[string]struct{} // runUID -> completed attempt keys
 }
 
 type InvokerOptions struct {
@@ -97,6 +110,7 @@ func NewInvoker(o InvokerOptions) *Invoker {
 		el: o.EventLog, kv: o.KV, wake: o.Wake,
 		sem: make(chan struct{}, o.Workers), baseCtx: o.BaseCtx,
 		inflight: map[string]bool{},
+		done:     map[string]map[string]struct{}{},
 	}
 }
 
@@ -111,6 +125,12 @@ func (inv *Invoker) Dispatch(iv invocation) {
 	key := iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
 	inv.mu.Lock()
 	if inv.inflight[key] {
+		inv.mu.Unlock()
+		return
+	}
+	if _, completed := inv.done[iv.runUID][key]; completed {
+		// The result is already in the log; the caller's fold snapshot just
+		// predates it. The next resync sees it and computes no invoke.
 		inv.mu.Unlock()
 		return
 	}
@@ -158,7 +178,31 @@ func (inv *Invoker) run(iv invocation) {
 		inv.logger.Error(err, "recording step result (the resync will re-drive)", "run", iv.runKey, "state", iv.state, "attempt", iv.attempt)
 		return
 	}
+	// Mark done BEFORE the inflight key is released (the deferred delete in
+	// Dispatch runs after this returns), so there is no instant at which a
+	// completed attempt is neither in flight nor remembered.
+	inv.markDone(iv.runUID, iv.runUID+"/"+iv.branch+"/"+stepKey(iv.state, iv.attempt))
 	inv.wake(iv.runKey)
+}
+
+func (inv *Invoker) markDone(runUID, key string) {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	keys := inv.done[runUID]
+	if keys == nil {
+		keys = map[string]struct{}{}
+		inv.done[runUID] = keys
+	}
+	keys[key] = struct{}{}
+}
+
+// Forget drops the completed-attempt memory for a run. Called when the run
+// reaches a terminal phase (no attempt of it is ever dispatched again) and
+// from CleanupRun, so the map is bounded by the number of live runs.
+func (inv *Invoker) Forget(runUID string) {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	delete(inv.done, runUID)
 }
 
 // outcome is a classified invocation result per the RFC error model. skip

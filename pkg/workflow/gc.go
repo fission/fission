@@ -36,6 +36,7 @@ const (
 // payload (Trim keeps only the stream-head marker — one tiny row, documented
 // in the RFC) and the io/checkpoint KV keyspaces.
 func (e *Engine) CleanupRun(ctx context.Context, namespace, name string, uid types.UID) error {
+	e.invoker.Forget(string(uid))
 	stream := streamNameForUID(string(uid))
 	head, err := e.el.Head(ctx, stream)
 	if err != nil {
