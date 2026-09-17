@@ -62,9 +62,25 @@ func nextWaitPollDelay(cur time.Duration) time.Duration {
 	return min(cur*3/2, waitPollMaxDelay)
 }
 
-// WaitForDeployment polls the deployment until it has at least replicas
-// AvailableReplicas, or until specializationTimeout seconds elapse. Shared by
-// the newdeploy and container managers. specializationTimeout is floored at
+// deploymentAvailable reports whether depl has at least replicas available,
+// as observed by the deployment controller for the spec currently stored.
+//
+// The generation gate matters on the scale-from-zero path. UpdateScale only
+// writes the spec and bumps metadata.generation; status is written later, by
+// the deployment controller. A Get issued right after ScaleDeployment can
+// therefore still carry the status of the previous generation, which counts
+// the pod the idle reaper is tearing down, so AvailableReplicas alone would
+// report a serving deployment while the Service has no endpoint. Until
+// ObservedGeneration catches up, the status says nothing about this scale
+// request. Same gate as WaitForDeploymentRollout in the integration framework.
+func deploymentAvailable(depl *appsv1.Deployment, replicas int32) bool {
+	return depl.Status.ObservedGeneration >= depl.Generation && depl.Status.AvailableReplicas >= replicas
+}
+
+// WaitForDeployment polls the deployment until the deployment controller has
+// observed the current spec and reports at least replicas AvailableReplicas,
+// or until specializationTimeout seconds elapse. Shared by the newdeploy and
+// container managers. specializationTimeout is floored at
 // fv1.DefaultSpecializationTimeOut. AvailableReplicas is used in preference to
 // ReadyReplicas since the pods may not be able to serve network traffic yet.
 func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, logger logr.Logger, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
@@ -92,7 +108,7 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			return nil, err
 		}
 		// TODO check for imagePullerror
-		if latestDepl.Status.AvailableReplicas >= replicas {
+		if deploymentAvailable(latestDepl, replicas) {
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
