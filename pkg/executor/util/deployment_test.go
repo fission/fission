@@ -194,6 +194,35 @@ func TestWaitForDeployment(t *testing.T) {
 		assert.GreaterOrEqual(t, got.Status.AvailableReplicas, int32(1))
 	})
 
+	t.Run("ignores a status the controller has not caught up with", func(t *testing.T) {
+		t.Parallel()
+		// Scaled in from one replica to zero and back up: the spec is at
+		// generation 2, while the status still describes generation 1 and
+		// counts the pod the idle reaper is tearing down.
+		one := int32(1)
+		scaled := &appsv1.Deployment{
+			Namespace: ns, Name: "scaled-up", Generation: 2,
+			Spec:   appsv1.DeploymentSpec{Replicas: &one},
+			Status: appsv1.DeploymentStatus{ObservedGeneration: 1, AvailableReplicas: 1},
+		}
+		client := fake.NewClientset(scaled)
+		var gets int
+		client.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+			latest := scaled.DeepCopy()
+			gets++
+			if gets > 1 {
+				latest.Status.ObservedGeneration = latest.Generation
+			}
+			return true, latest, nil
+		})
+
+		got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), scaled, 1, 1)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, got.Generation, got.Status.ObservedGeneration,
+			"returned on a status that predates the scale request")
+	})
+
 	t.Run("surfaces a get error", func(t *testing.T) {
 		t.Parallel()
 		client := fake.NewClientset()
