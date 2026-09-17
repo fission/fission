@@ -310,61 +310,98 @@ func TestContainerGetResources(t *testing.T) {
 }
 
 // TestContainerScaleFromZeroWaitsForAvailability covers the scale-to-zero race
-// reported in #3183. The first read reports one available replica (the pod the
-// idle reaper is tearing down) and every later read reports none, so a caller
-// that trusts the pre-scale status reports success with no serving pod.
+// reported in #3183. On the scale-from-zero path the deployment status can
+// still describe the pod the idle reaper is tearing down, either because it
+// was read before the scale request or because the controller has not written
+// a status for that request yet. A caller that trusts such a status reports
+// success while the Service has no endpoint and the router forwards into it.
 func TestContainerScaleFromZeroWaitsForAvailability(t *testing.T) {
 	t.Parallel()
 
-	fn := newTestContainerFunction()
-	fn.Spec.PodSpec.Containers[0].Ports = []apiv1.ContainerPort{{ContainerPort: 8080}}
-	fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+	// Generation of the spec after the scale request.
+	const generation = 2
 
-	ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
-	zero := int32(0)
-	scaledIn := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "ctr-fn",
-			Namespace:   ns,
-			Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+	tests := []struct {
+		name string
+		// status is the deployment status served by the nth read, 1-based.
+		status func(read int) appsv1.DeploymentStatus
+	}{
+		{
+			// The copy createOrGetDeployment read before scaling up.
+			name: "pre-scale read still counts the terminating pod",
+			status: func(read int) appsv1.DeploymentStatus {
+				available := int32(0)
+				if read == 1 {
+					available = 1
+				}
+				return appsv1.DeploymentStatus{ObservedGeneration: generation, AvailableReplicas: available}
+			},
 		},
-		Spec:   appsv1.DeploymentSpec{Replicas: &zero},
-		Status: appsv1.DeploymentStatus{AvailableReplicas: 0},
+		{
+			// Status is written asynchronously by the deployment controller, so
+			// every read up to the deadline can still describe the generation
+			// before the scale request.
+			name: "status has not caught up with the scale request",
+			status: func(int) appsv1.DeploymentStatus {
+				return appsv1.DeploymentStatus{ObservedGeneration: generation - 1, AvailableReplicas: 1}
+			},
+		},
 	}
 
-	kubeClient := fake.NewClientset(scaledIn)
-	var reads int
-	kubeClient.PrependReactor("get", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		depl := scaledIn.DeepCopy()
-		reads++
-		if reads == 1 {
-			depl.Status.AvailableReplicas = 1
-		}
-		return true, depl, nil
-	})
-	// The fake clientset has no built-in scale subresource for deployments.
-	kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		if action.GetSubresource() != "scale" {
-			return false, nil, nil
-		}
-		return true, action.(k8stesting.UpdateAction).GetObject(), nil
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	cn := &Container{
-		logger:                 loggerfactory.GetLogger(),
-		kubernetesClient:       kubeClient,
-		instanceID:             "test-instance",
-		nsResolver:             utils.DefaultNSResolver(),
-		runtimeImagePullPolicy: apiv1.PullIfNotPresent,
+			fn := newTestContainerFunction()
+			fn.Spec.PodSpec.Containers[0].Ports = []apiv1.ContainerPort{{ContainerPort: 8080}}
+			fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+
+			ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
+			zero := int32(0)
+			scaledIn := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "ctr-fn",
+					Namespace:   ns,
+					Generation:  generation,
+					Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+				},
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+			}
+
+			kubeClient := fake.NewClientset(scaledIn)
+			var reads int
+			kubeClient.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+				depl := scaledIn.DeepCopy()
+				reads++
+				depl.Status = tt.status(reads)
+				return true, depl, nil
+			})
+			// The fake clientset has no built-in scale subresource for deployments.
+			kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "scale" {
+					return false, nil, nil
+				}
+				// SAFETY: this reactor is registered for "update" and returns early unless the subresource is scale, so the action is an UpdateAction.
+				return true, action.(k8stesting.UpdateAction).GetObject(), nil
+			})
+
+			cn := &Container{
+				logger:                 loggerfactory.GetLogger(),
+				kubernetesClient:       kubeClient,
+				instanceID:             "test-instance",
+				nsResolver:             utils.DefaultNSResolver(),
+				runtimeImagePullPolicy: apiv1.PullIfNotPresent,
+			}
+
+			// The deployment never becomes available in the fake cluster, so a
+			// correct implementation runs the readiness wait out to this deadline.
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+
+			_, err := cn.createOrGetDeployment(ctx, fn, "ctr-fn", map[string]string{"app": "ctr"}, nil, ns)
+			require.Error(t, err, "scale-from-zero must not report success while no replica is available")
+			assert.ErrorIs(t, err, context.DeadlineExceeded,
+				"expected the readiness wait to run to its deadline, got: %v", err)
+		})
 	}
-
-	// The deployment never becomes available in the fake cluster, so a correct
-	// implementation runs the readiness wait out to this deadline.
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-	defer cancel()
-
-	_, err := cn.createOrGetDeployment(ctx, fn, "ctr-fn", map[string]string{"app": "ctr"}, nil, ns)
-	require.Error(t, err, "scale-from-zero must not report success while no replica is available")
-	assert.ErrorIs(t, err, context.DeadlineExceeded,
-		"expected the readiness wait to run to its deadline, got: %v", err)
 }
