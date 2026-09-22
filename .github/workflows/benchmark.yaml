@@ -91,7 +91,7 @@ jobs:
       versions: ${{ steps.versions.outputs.list }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
       - id: versions
@@ -127,7 +127,7 @@ jobs:
         fission_version: ${{ fromJSON(needs.setup.outputs.versions) }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -152,7 +152,7 @@ jobs:
           version: ${{ env.HELM_VERSION }}
 
       - name: Kind Cluster
-        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
         with:
           node_image: kindest/node:${{ env.BENCH_K8S }}
           version: ${{ env.KIND_VERSION }}
@@ -384,7 +384,7 @@ jobs:
       - name: Upload benchmark coverage to Codecov
         if: ${{ matrix.fission_version == 'HEAD' && (github.event_name == 'pull_request' || github.event_name == 'push') && hashFiles('benchmark-coverage.txt') != '' }}
         continue-on-error: true
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: benchmark
@@ -395,7 +395,7 @@ jobs:
       # one direction per file, one series per fission version.
       - name: Publish latency trend (lower is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
+        uses: benchmark-action/github-action-benchmark@4322e5726e6334590d251fc4f92bec0efafc45dc # v1.22.2
         with:
           name: "Fission latency (${{ matrix.fission_version }})"
           tool: customSmallerIsBetter
@@ -410,7 +410,7 @@ jobs:
 
       - name: Publish throughput trend (higher is better)
         if: ${{ env.BM_PUBLISH_TREND == 'true' }}
-        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
+        uses: benchmark-action/github-action-benchmark@4322e5726e6334590d251fc4f92bec0efafc45dc # v1.22.2
         with:
           name: "Fission throughput (${{ matrix.fission_version }})"
           tool: customBiggerIsBetter
