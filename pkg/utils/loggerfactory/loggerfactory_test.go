@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	otellogglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/logtest"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 )
@@ -52,8 +52,8 @@ func TestOTLPLogBridge(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
 	t.Setenv("OTEL_LOGS_ENABLED", "true")
 	rec := logtest.NewRecorder()
-	otellogglobal.SetLoggerProvider(rec)
-	t.Cleanup(func() { otellogglobal.SetLoggerProvider(lognoop.NewLoggerProvider()) })
+	otel.SetLoggerProvider(rec)
+	t.Cleanup(func() { otel.SetLoggerProvider(lognoop.NewLoggerProvider()) })
 
 	// buildLogger (not the memoized GetLogger) so the bridge is wired with the
 	// env set above.
@@ -78,8 +78,8 @@ func TestOTLPLogBridgeDisabled(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
 	t.Setenv("OTEL_LOGS_ENABLED", "")
 	rec := logtest.NewRecorder()
-	otellogglobal.SetLoggerProvider(rec)
-	t.Cleanup(func() { otellogglobal.SetLoggerProvider(lognoop.NewLoggerProvider()) })
+	otel.SetLoggerProvider(rec)
+	t.Cleanup(func() { otel.SetLoggerProvider(lognoop.NewLoggerProvider()) })
 
 	logger := buildLogger()
 	logger.Info("should-not-bridge")
