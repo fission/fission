@@ -32,7 +32,7 @@ env:
   KIND_VERSION: v0.32.0
   KIND_CLUSTER_NAME: kind
   SKAFFOLD_VERSION: v2.25.0
-  ENVOY_GATEWAY_VERSION: v1.9.0
+  ENVOY_GATEWAY_VERSION: v1.9.2
 
 permissions:
   contents: read
