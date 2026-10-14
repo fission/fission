@@ -265,5 +265,5 @@ tool (
 
 // github.com/prometheus/common carries a retracted/bogus high-semver tag (v1.20.99)
 // on what is really the v0.x line; `go get` picks it as "latest" for our direct
-// require. Exclude it so MVS falls back to our real require (v0.68.0).
+// require. Exclude it so MVS falls back to our real require (the v0.x line pinned above).
 exclude github.com/prometheus/common v1.20.99
