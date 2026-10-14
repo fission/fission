@@ -28,9 +28,9 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/ohler55/ojg v1.28.5
 	github.com/ory/dockertest/v3 v3.12.0
-	github.com/prometheus/client_golang v1.24.1
+	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/prometheus/common v0.72.0
+	github.com/prometheus/common v0.72.1
 	github.com/prometheus/otlptranslator v1.0.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06

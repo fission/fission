@@ -141,7 +141,7 @@ func (promApiClient *PrometheusApiClient) GetTotalFailedRequestsToFuncInWindow(c
 func (promApiClient *PrometheusApiClient) executeQuery(ctx context.Context, queryString string) (float64, error) {
 	promApiClient.logger.V(1).Info("executing prometheus query", "query", queryString)
 
-	val, warn, err := promApiClient.client.Query(ctx, queryString, time.Now())
+	val, warn, _, err := promApiClient.client.Query(ctx, queryString, time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("error querying prometheus: %w", err)
 	}
