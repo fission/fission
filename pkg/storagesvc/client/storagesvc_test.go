@@ -9,15 +9,17 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/johannesboyne/gofakes3"
+	"github.com/johannesboyne/gofakes3/backend/s3mem"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/ory/dockertest/v3"
-	dc "github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 
@@ -51,68 +53,32 @@ func MakeTestFile(size int) (*os.File, error) {
 	return f, nil
 }
 
-func runMinioDockerContainer(pool *dockertest.Pool) *dockertest.Resource {
-	options := &dockertest.RunOptions{
-		// quay.io is MinIO's official registry; the Docker Hub mirror
-		// (minio/minio) was removed in 2026-09 and now answers "pull access
-		// denied", which log.Fatal'd this test on every CI run. A release tag,
-		// not "latest", so the fixture is reproducible.
-		Repository: "quay.io/minio/minio",
-		Tag:        "RELEASE.2025-09-07T16-13-09Z",
-		Cmd:        []string{"server", "/data"},
-		PortBindings: map[dc.Port][]dc.PortBinding{
-			"9000/tcp": {{HostIP: "", HostPort: "9000"}},
-		},
-	}
-
-	// pulls an image, creates a container based on it and runs it
-	resource, err := pool.RunWithOptions(options)
-	if err != nil {
-		log.Fatalf("Could not start resource: %s", err)
-	}
-	return resource
+// startFakeS3 serves an in-memory S3 API on a loopback httptest server and
+// returns its host:port. It replaces a MinIO container: MinIO's images were
+// pulled from Docker Hub and then quay.io, so a registry-hosted fixture kept
+// breaking CI. gofakes3 does not verify request signatures; the static
+// credentials below only satisfy the client side.
+func startFakeS3(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(gofakes3.New(s3mem.New()).Server())
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	return u.Host
 }
 
 func TestS3StorageService(t *testing.T) {
 	fmt.Println("Test S3 Storage service")
-	var minioClient *minio.Client
 
 	mgr := &errgroup.Group{}
 	t.Cleanup(func() { _ = mgr.Wait() })
 
-	// Start minio docker container
-	pool, err := dockertest.NewPool("")
-	resource := runMinioDockerContainer(pool)
-
-	endpoint := fmt.Sprintf("localhost:%s", resource.GetPort("9000/tcp"))
-
-	if err := pool.Retry(func() error {
-		minioClient, err = minio.New(endpoint, &minio.Options{
-			Creds:  credentials.NewStaticV4(minioAccessKeyID, minioSecretAccessKey, ""),
-			Secure: false,
-		})
-		if err != nil {
-			return err
-		}
-
-		// This is to ensure container is up. Just getting minioClient
-		// isn't sufficient to assume container is up.
-		_, err = minioClient.ListBuckets(t.Context())
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		log.Fatalf("Could not connect to docker: %s", err)
-	}
-
-	defer func() {
-		err := pool.Purge(resource)
-		if err != nil {
-			log.Fatalf("Could not purge resource: %s", err)
-		}
-	}()
+	endpoint := startFakeS3(t)
+	minioClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(minioAccessKeyID, minioSecretAccessKey, ""),
+		Secure: false,
+	})
+	require.NoError(t, err)
 
 	// Start storagesvc
 	bucketName := "test-s3-service"

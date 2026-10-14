@@ -20,6 +20,7 @@ require (
 	github.com/google/go-containerregistry v0.22.0
 	github.com/google/go-containerregistry/pkg/authn/kubernetes v0.0.0-20260831202016-7673ae25baf2
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/johannesboyne/gofakes3 v1.2.0
 	github.com/kedacore/keda/v2 v2.20.2
 	github.com/mholt/archives v0.1.5
 	github.com/minio/minio-go/v7 v7.3.0
@@ -198,6 +199,7 @@ require (
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/ryszard/goskiplist v0.0.0-20150312221310-2dfbae5fcf46 // indirect
 	github.com/sanketsudake/antislop v0.3.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
@@ -221,6 +223,7 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/proto/otlp v1.11.0 // indirect
+	go.shabbyrobe.org/gocovmerge v0.0.0-20230507111327-fa4f82cfbf4d // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
