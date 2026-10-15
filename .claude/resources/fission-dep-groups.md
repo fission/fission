@@ -21,11 +21,21 @@ The skill carries the generic methodology (govulncheck baseline/after, one commi
 
 ## The k8s-minor lockstep commit
 
-On a k8s **minor** bump, groups 1 (k8s core), 2 (controller-runtime), KEDA from group 5, **and** the code-generator fork are version-locked and must land as **one** commit. controller-runtime's cache code and KEDA's webhook code each compile against a specific k8s minor (the `ResourceEventHandlerRegistration.HasSyncedChecker` coupling: that interface method arrived at k8s v0.36, implemented only by controller-runtime v0.24+).
+On a k8s **minor** bump, groups 1 (k8s core), 2 (controller-runtime), `sigs.k8s.io/controller-tools`, `k8s.io/code-generator`, **and** `github.com/google/go-containerregistry/pkg/authn/kubernetes` are version-locked and must land as **one** commit, together with the regenerated `crds/v1/`. controller-runtime's cache code compiles against a specific k8s minor (the `ResourceEventHandlerRegistration.HasSyncedChecker` coupling: that interface method arrived at k8s v0.36, implemented only by controller-runtime v0.24+).
 MVS will otherwise pick an incompatible mix.
 A k8s **patch** bump (e.g. v0.36.1→v0.36.2) stays in its own small group.
 
-Worked example (2026-06-02 sweep): k8s v0.36.1 + controller-runtime v0.24.1 + KEDA v2.20.0 + code-generator 0.36 in a single commit, with the controller-runtime v0.24 source migrations alongside (next section).
+KEDA is **not** part of the lockstep.
+Fission imports only KEDA's `apis/keda/v1alpha1` types and its generated clientset,
+so KEDA's `go.mod` sets minimum versions, not a ceiling:
+a KEDA release built against the previous k8s minor is fine as long as those two packages still compile.
+Check with `go build ./pkg/...`, not by reading KEDA's `go.mod`.
+(Sweeps 2026-09 and 2026-10 deferred k8s 0.37 on the wrong belief that KEDA had to move first.)
+
+Worked examples:
+2026-06-02, k8s v0.36.1 + controller-runtime v0.24.1 + KEDA v2.20.0 + code-generator 0.36, with the controller-runtime v0.24 source migrations alongside (next section);
+2026-10-15, k8s v0.37.1 + controller-runtime v0.25.2 + controller-tools v0.22.0 + `authn/kubernetes`, with KEDA left at v2.21.0 (built against k8s 0.36).
+The only source change was `runtime.ParseDocumentationFrom` in `tools/genswaggertypedocs`, which now also returns an error.
 
 ## controller-runtime v0.24 source migrations
 
@@ -35,11 +45,14 @@ If you bump into / out of controller-runtime v0.24, replicate these:
 - `scheme.Builder` was deprecated (staticcheck SA1019).
   `pkg/apis/core/v1` migrated to the apimachinery builder (`runtime.NewSchemeBuilder(addKnownTypes)` + `metav1.AddToGroupVersion`), preserving exact `AddKnownTypes` semantics.
 
-## The code-generator fork
+## code-generator and other k8s-minor riders
 
-`go.mod` has `replace k8s.io/code-generator => github.com/fission/code-generator <pseudo-version>` — Fission's fork tracks upstream.
-It is **version-coupled to the k8s-core group**: when you bump `k8s.io/* → vN`, bump the fork to its matching `vN` ref (the fork carries `release-1.x` branches and `vN.0` tags; the 2026-06-02 sweep used fork master `ce5e0619` (0.36) per maintainer preference over the `v0.36.0` tag).
-**After** the bump, run `make codegen` + `make generate-crds` and commit the regenerated `pkg/generated/` + `crds/v1/` **in the same commit** as the k8s bump.
+`k8s.io/code-generator` is a plain direct require (the Fission fork and its `replace` were removed in #3672).
+`hack/update-codegen.sh` copies upstream code-generator out of the module cache at whatever version `go.mod` requires, so bump it with the `k8s.io/*` group.
+**After** a k8s bump, run `make codegen` + `make generate-crds` and commit the regenerated `pkg/generated/` + `crds/v1/` **in the same commit** as the k8s bump.
+
+`github.com/google/go-containerregistry/pkg/authn/kubernetes` is published only as pseudo-versions, and every snapshot after 2026-08-31 requires `k8s.io/* v0.37`.
+A `go get` of a newer snapshot silently pulls k8s core up a minor; keep it on its current pseudo-version until the k8s-minor lockstep commit, and bump it there.
 
 ## The `prometheus/common` phantom-tag exclude
 
@@ -51,8 +64,9 @@ Symptom: `tidy` warns `retracted by module author`.
 ## KEDA phantom-require history (resolved)
 
 Pre-v2.20.0, KEDA shipped a go.mod that `require`d `controller-runtime`/`client-go` at versions it internally `replace`d to sane ones; since `replace` isn't transitive, consumers inherited the bogus requires and MVS broke the build.
-**Resolved as of KEDA v2.20.0** (2026-06): its requires match its compile target and it dropped the bogus `client-go v1.5.2`, so k8s core + controller-runtime + KEDA now all move together.
-If a future KEDA re-caps controller-runtime at vX, cap k8s core at the highest minor controller-runtime vX supports, and expect the unblock to be a single event (KEDA shipping against the newer controller-runtime).
+**Resolved as of KEDA v2.20.0** (2026-06): its requires match its compile target and it dropped the bogus `client-go v1.5.2`.
+Its requires are now plain minimums, so KEDA can trail the k8s minor (see the lockstep section).
+Only a `replace`-style phantom require (a version above what Fission wants) would block a bump again.
 Diagnose a re-regression with `go mod graph | grep '<bad-version>'` and `go list -m sigs.k8s.io/controller-runtime`.
 
 ## The nested `test/benchmark` module

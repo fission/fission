@@ -30,9 +30,9 @@ type spyPromAPI struct {
 	value   model.Value
 }
 
-func (s *spyPromAPI) Query(_ context.Context, query string, _ time.Time, _ ...prometheusv1.Option) (model.Value, prometheusv1.Warnings, error) {
+func (s *spyPromAPI) Query(_ context.Context, query string, _ time.Time, _ ...prometheusv1.Option) (model.Value, prometheusv1.Warnings, prometheusv1.Infos, error) {
 	s.queries = append(s.queries, query)
-	return s.value, nil, nil
+	return s.value, nil, nil, nil
 }
 
 func newSpyClient() (*spyPromAPI, *PrometheusApiClient) {

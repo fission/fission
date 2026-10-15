@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/contrib/bridges/otelzap"
-	otellogglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	kzap "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -50,7 +50,7 @@ func buildLogger() logr.Logger {
 		logsEnabled, _ := strconv.ParseBool(os.Getenv("OTEL_LOGS_ENABLED"))
 		if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" && logsEnabled {
 			o.ZapOpts = append(o.ZapOpts, zap.WrapCore(func(c zapcore.Core) zapcore.Core {
-				bridge := otelzap.NewCore("fission", otelzap.WithLoggerProvider(otellogglobal.GetLoggerProvider()))
+				bridge := otelzap.NewCore("fission", otelzap.WithLoggerProvider(otel.GetLoggerProvider()))
 				leveled, err := zapcore.NewIncreaseLevelCore(bridge, zapLevel)
 				if err != nil {
 					leveled = bridge
