@@ -92,6 +92,9 @@ func (e *Engine) Reconcile(ctx context.Context, run *fv1.WorkflowRun, fetch spec
 		if err := e.foldTail(ctx, stream, s, deref); err != nil {
 			return nil, err
 		}
+		// Every dispatch from here on is computed from this fold or a newer
+		// one, so completion records it has consumed are no longer needed.
+		e.invoker.Prune(string(run.UID), s.LastSeq)
 
 		acts := decide(s, run.Annotations[CancelAnnotation] != "", e.clock(), e.rand)
 		act := acts[0]
@@ -285,9 +288,10 @@ func (e *Engine) FailUnstartable(ctx context.Context, run *fv1.WorkflowRun, caus
 		return err
 	}
 	ev := Event{Type: EvRunFailed, ErrorType: fv1.WorkflowErrPermanentError, Cause: causeOf(fmt.Errorf("%s", cause))}
-	return appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
+	_, err = appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
 		return isTerminalEvent(raced.Type)
 	})
+	return err
 }
 
 // armTimer enqueues the backoff delay. DedupKey collapses double-arms while
