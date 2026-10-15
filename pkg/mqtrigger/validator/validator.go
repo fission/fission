@@ -10,7 +10,7 @@ import (
 
 var (
 	topicValidators      = make(map[string]TopicValidator)
-	lock                 = sync.Mutex{}
+	lock                 sync.RWMutex // guards topicValidators
 	kedaMqTypeValidators = map[string]bool{
 		"kafka":              true,
 		"aws-sqs-queue":      true,
@@ -47,7 +47,9 @@ func IsValidTopic(mqType, topic, mqtKind string) bool {
 	if mqtKind == "keda" {
 		return true
 	}
+	lock.RLock()
 	validator, registered := topicValidators[mqType]
+	lock.RUnlock()
 	if !registered {
 		return false
 	}
@@ -58,6 +60,8 @@ func IsValidMessageQueue(mqType, mqtKind string) bool {
 	if mqtKind == "keda" {
 		return kedaMqTypeValidators[mqType]
 	}
+	lock.RLock()
+	defer lock.RUnlock()
 	_, registered := topicValidators[mqType]
 	return registered
 }

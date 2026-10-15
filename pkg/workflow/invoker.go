@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"sync"
@@ -70,8 +71,28 @@ type Invoker struct {
 	// inflight dedups dispatches: the 60s resync recomputes actInvoke for
 	// attempts that are still executing, and re-running a long step's side
 	// effects (or filling the pool with duplicates) must not happen.
+	//
+	// done closes the window inflight leaves open: a reconcile folds the log,
+	// computes actInvoke for an attempt that is still unresolved in THAT
+	// snapshot, and only then dispatches — if the attempt's result landed in
+	// between (and its inflight key was released), the dispatch would be a
+	// duplicate delivery of a step this process already completed. Remembering
+	// completed attempts per run makes that dispatch a no-op. Cross-process
+	// duplicates (a restart replays the log) remain — at-least-once is the
+	// contract (workflowfold.tla) — but the in-process ones are free to avoid,
+	// and they are what let a region exceed MaxConcurrency at the function.
+	//
+	// Each entry carries the seq that settled its attempt. An entry is needed
+	// only until a reconcile folds past that seq: reconciles of one run are
+	// serialized and every later dispatch is computed from that fold or a
+	// newer one, so Prune drops it then — a run that loops through regions
+	// keeps no completion history. Forget drops a run's set when it reaches a
+	// terminal phase or is cleaned up. The set is created by Dispatch, never
+	// by markDone, so a worker that finishes after Forget cannot resurrect it
+	// (its result is discarded against the terminal anyway).
 	mu       sync.Mutex
-	inflight map[string]bool // "uid/state/attempt"
+	inflight map[string]bool             // attemptKey
+	done     map[string]map[string]int64 // runUID -> attemptKey -> settling seq
 }
 
 type InvokerOptions struct {
@@ -97,6 +118,7 @@ func NewInvoker(o InvokerOptions) *Invoker {
 		el: o.EventLog, kv: o.KV, wake: o.Wake,
 		sem: make(chan struct{}, o.Workers), baseCtx: o.BaseCtx,
 		inflight: map[string]bool{},
+		done:     map[string]map[string]int64{},
 	}
 }
 
@@ -108,9 +130,15 @@ func NewInvoker(o InvokerOptions) *Invoker {
 // long steps (the head-of-line class the executor's specialization
 // semaphore documents).
 func (inv *Invoker) Dispatch(iv invocation) {
-	key := iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
+	key := attemptKey(iv)
 	inv.mu.Lock()
 	if inv.inflight[key] {
+		inv.mu.Unlock()
+		return
+	}
+	if _, completed := inv.done[iv.runUID][key]; completed {
+		// The result is already in the log; the caller's fold snapshot just
+		// predates it. The next resync sees it and computes no invoke.
 		inv.mu.Unlock()
 		return
 	}
@@ -122,6 +150,9 @@ func (inv *Invoker) Dispatch(iv invocation) {
 		return
 	}
 	inv.inflight[key] = true
+	if inv.done[iv.runUID] == nil {
+		inv.done[iv.runUID] = map[string]int64{}
+	}
 	inv.mu.Unlock()
 
 	go func() {
@@ -151,14 +182,63 @@ func (inv *Invoker) run(iv invocation) {
 		// never consume an attempt. The replay re-invokes.
 		return
 	}
-	if err := inv.appendResult(iv, result); err != nil {
+	seq, err := inv.appendResult(iv, result)
+	if err != nil {
 		// Deliberately NO wake here: waking on a failed append would hot-loop
 		// re-invocations of the same attempt (side effects included) as fast
 		// as the function responds. The 60s resync is the retry cadence.
 		inv.logger.Error(err, "recording step result (the resync will re-drive)", "run", iv.runKey, "state", iv.state, "attempt", iv.attempt)
 		return
 	}
+	// Mark done BEFORE the inflight key is released (the deferred delete in
+	// Dispatch runs after this returns), so there is no instant at which a
+	// completed attempt is neither in flight nor remembered.
+	inv.markDone(iv, seq)
 	inv.wake(iv.runKey)
+}
+
+// attemptKey identifies one attempt of one step for the inflight and done
+// sets. Dispatch, markDone and the tests must all build it here: two spellings
+// that drift apart would make the completed-attempt guard silently miss.
+//
+// The region instance is part of the key: every Parallel/Map region starts
+// fresh branch mini-runs, so successive regions (or one region re-entered by
+// a loop) reuse branch "0", the same state names and attempt 1, and a stale
+// record would suppress the later region's first delivery. Prune already
+// drops a closed region's records before the next region dispatches (entering
+// it means folding the join, which follows every branch result), so the
+// region here keeps the key unambiguous rather than closing a live gap.
+func attemptKey(iv invocation) string {
+	return iv.runUID + "/" + iv.region + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
+}
+
+// markDone records a completed attempt, settled at seq, in the run's set. It
+// never creates the set: if Forget has already dropped it, the run is
+// terminal or deleted and the record would only leak.
+func (inv *Invoker) markDone(iv invocation, seq int64) {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	if keys := inv.done[iv.runUID]; keys != nil {
+		keys[attemptKey(iv)] = seq
+	}
+}
+
+// Prune drops the completion records a fold up to foldedSeq has consumed.
+// Records settled after it stay: they guard the window this fold's
+// dispatches may still race.
+func (inv *Invoker) Prune(runUID string, foldedSeq int64) {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	maps.DeleteFunc(inv.done[runUID], func(_ string, seq int64) bool { return seq <= foldedSeq })
+}
+
+// Forget drops the completed-attempt memory for a run. Called when the run
+// reaches a terminal phase (no attempt of it is ever dispatched again) and
+// from CleanupRun, so the map is bounded by the number of live runs.
+func (inv *Invoker) Forget(runUID string) {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	delete(inv.done, runUID)
 }
 
 // outcome is a classified invocation result per the RFC error model. skip
@@ -301,7 +381,7 @@ func causeOf(err error) jsontext.Value {
 // appendResult shapes the outcome into the next state's document and
 // CAS-appends it. The conflict guard drops the append when a result for this
 // attempt already landed (W2) or a terminal event is present (W4).
-func (inv *Invoker) appendResult(iv invocation, res outcome) error {
+func (inv *Invoker) appendResult(iv invocation, res outcome) (int64, error) {
 	var ev Event
 	if !res.succeeded {
 		ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, ErrorType: res.errorType, Cause: res.cause}
@@ -312,12 +392,12 @@ func (inv *Invoker) appendResult(iv invocation, res outcome) error {
 				ev = Event{Type: EvStepFailed, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt,
 					ErrorType: fv1.WorkflowErrInvalidPath, Cause: causeOf(err)}
 			} else {
-				return err
+				return 0, err
 			}
 		} else if len(nextDoc) > spillThreshold {
 			ref, err := spill(inv.baseCtx, inv.kv, iv.namespace, iv.runKey.Name, spillKeyPrefix(iv.branch, iv.state), iv.attempt, nextDoc)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			ev = Event{Type: EvStepSucceeded, State: iv.state, Branch: iv.branch, Region: iv.region, Attempt: iv.attempt, OutputRef: ref}
 		} else {
@@ -381,26 +461,28 @@ func spillKeyPrefix(branch, state string) string {
 // appendGuarded CAS-appends ev at expectedSeq; on conflict it re-reads the
 // tail and drops silently if any event matches the guard (the race was
 // decided by someone else — expected, not an error), otherwise retries at
-// the new head.
-func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, expectedSeq int64, ev Event, dropIf func(Event) bool) error {
+// the new head. On success it returns the seq that settles the race: ev's
+// own seq when appended, the deciding event's seq when dropped, or the head
+// of a trimmed stream — a fold that reaches it has seen the outcome.
+func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, expectedSeq int64, ev Event, dropIf func(Event) bool) (int64, error) {
 	se, err := encodeEvent(ev)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for {
 		head, err := el.Append(ctx, stream, expectedSeq, []statestore.Event{se})
 		if err == nil {
-			return nil
+			return head, nil
 		}
 		if !errors.Is(err, statestore.ErrVersionConflict) {
-			return err
+			return 0, err
 		}
 		// Walk the events we lost to; drop if the race is already decided.
 		sawAny := false
 		for seq := expectedSeq; seq < head; {
 			events, err := el.Read(ctx, stream, seq, readBatch)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			if len(events) == 0 {
 				break
@@ -409,10 +491,10 @@ func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, e
 			for _, raced := range events {
 				decoded, err := decodeEvent(raced)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				if dropIf(decoded) {
-					return nil
+					return raced.Seq, nil
 				}
 				seq = raced.Seq
 			}
@@ -422,7 +504,7 @@ func appendGuarded(ctx context.Context, el statestore.EventLog, stream string, e
 			// the run is deleted and cleanup already ran. Appending would
 			// recreate rows in a reclaimed stream with no CR to ever clean
 			// them; drop instead.
-			return nil
+			return head, nil
 		}
 		expectedSeq = head
 	}

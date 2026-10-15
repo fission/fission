@@ -88,7 +88,7 @@ func (e *Engine) timerPollOnce(ctx context.Context) int {
 			}
 			continue
 		}
-		err = appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
+		_, err = appendGuarded(ctx, e.el, stream, head, ev, func(raced Event) bool {
 			switch raced.Type {
 			case EvTimerFired:
 				return raced.Region == tm.Region && raced.Branch == tm.Branch && raced.State == tm.State && raced.Attempt == tm.Attempt
