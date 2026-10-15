@@ -160,7 +160,7 @@ func TestInvokerSkipsCompletedAttemptInProcess(t *testing.T) {
 	}
 	// The terminal reconcile already called Forget; re-mark to model the
 	// window between the result append and terminal (the run is still live).
-	h.engine.invoker.markDone(inv.runUID, inv.runUID+"//"+stepKey("a", 1))
+	h.engine.invoker.markDone(inv)
 	h.engine.invoker.Dispatch(inv)
 	require.Never(t, func() bool { return h.callCount("fn-a") > before }, 200*time.Millisecond, 20*time.Millisecond,
 		"a completed attempt must not be delivered again by the same process")

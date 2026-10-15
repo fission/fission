@@ -122,7 +122,7 @@ func NewInvoker(o InvokerOptions) *Invoker {
 // long steps (the head-of-line class the executor's specialization
 // semaphore documents).
 func (inv *Invoker) Dispatch(iv invocation) {
-	key := iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
+	key := attemptKey(iv)
 	inv.mu.Lock()
 	if inv.inflight[key] {
 		inv.mu.Unlock()
@@ -181,19 +181,26 @@ func (inv *Invoker) run(iv invocation) {
 	// Mark done BEFORE the inflight key is released (the deferred delete in
 	// Dispatch runs after this returns), so there is no instant at which a
 	// completed attempt is neither in flight nor remembered.
-	inv.markDone(iv.runUID, iv.runUID+"/"+iv.branch+"/"+stepKey(iv.state, iv.attempt))
+	inv.markDone(iv)
 	inv.wake(iv.runKey)
 }
 
-func (inv *Invoker) markDone(runUID, key string) {
+// attemptKey identifies one attempt of one step for the inflight and done
+// sets. Dispatch, markDone and the tests must all build it here: two spellings
+// that drift apart would make the completed-attempt guard silently miss.
+func attemptKey(iv invocation) string {
+	return iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
+}
+
+func (inv *Invoker) markDone(iv invocation) {
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
-	keys := inv.done[runUID]
+	keys := inv.done[iv.runUID]
 	if keys == nil {
 		keys = map[string]struct{}{}
-		inv.done[runUID] = keys
+		inv.done[iv.runUID] = keys
 	}
-	keys[key] = struct{}{}
+	keys[attemptKey(iv)] = struct{}{}
 }
 
 // Forget drops the completed-attempt memory for a run. Called when the run
