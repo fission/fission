@@ -81,10 +81,12 @@ type Invoker struct {
 	// contract (workflowfold.tla) — but the in-process ones are free to avoid,
 	// and they are what let a region exceed MaxConcurrency at the function.
 	// Forget prunes a run's entries when it reaches a terminal phase or is
-	// cleaned up.
+	// cleaned up. A run's set is created by Dispatch, never by markDone, so a
+	// worker that finishes after Forget cannot resurrect it (its result is
+	// discarded against the terminal anyway) and no tombstone is kept.
 	mu       sync.Mutex
-	inflight map[string]bool                // "uid/branch/state/attempt"
-	done     map[string]map[string]struct{} // runUID -> completed attempt keys
+	inflight map[string]bool                // attemptKey
+	done     map[string]map[string]struct{} // runUID -> completed attemptKeys
 }
 
 type InvokerOptions struct {
@@ -142,6 +144,9 @@ func (inv *Invoker) Dispatch(iv invocation) {
 		return
 	}
 	inv.inflight[key] = true
+	if inv.done[iv.runUID] == nil {
+		inv.done[iv.runUID] = map[string]struct{}{}
+	}
 	inv.mu.Unlock()
 
 	go func() {
@@ -188,19 +193,24 @@ func (inv *Invoker) run(iv invocation) {
 // attemptKey identifies one attempt of one step for the inflight and done
 // sets. Dispatch, markDone and the tests must all build it here: two spellings
 // that drift apart would make the completed-attempt guard silently miss.
+//
+// The region instance is part of the key: every Parallel/Map region starts
+// fresh branch mini-runs, so successive regions (or one region re-entered by
+// a loop) reuse branch "0", the same state names and attempt 1. Without it,
+// the done set would suppress the later region's first delivery and stall it.
 func attemptKey(iv invocation) string {
-	return iv.runUID + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
+	return iv.runUID + "/" + iv.region + "/" + iv.branch + "/" + stepKey(iv.state, iv.attempt)
 }
 
+// markDone records a completed attempt in the run's set. It never creates
+// the set: if Forget has already dropped it, the run is terminal or deleted
+// and the record would only leak.
 func (inv *Invoker) markDone(iv invocation) {
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
-	keys := inv.done[iv.runUID]
-	if keys == nil {
-		keys = map[string]struct{}{}
-		inv.done[iv.runUID] = keys
+	if keys := inv.done[iv.runUID]; keys != nil {
+		keys[attemptKey(iv)] = struct{}{}
 	}
-	keys[attemptKey(iv)] = struct{}{}
 }
 
 // Forget drops the completed-attempt memory for a run. Called when the run
