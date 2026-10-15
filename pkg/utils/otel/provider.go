@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	otellogglobal "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -193,7 +192,7 @@ func InitProvider(ctx context.Context, logger logr.Logger, serviceName string) (
 			sdklog.WithResource(res),
 			sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
 		)
-		otellogglobal.SetLoggerProvider(loggerProvider)
+		otel.SetLoggerProvider(loggerProvider)
 	}
 
 	// Shutdown will flush any remaining spans/logs and shut down the exporters.

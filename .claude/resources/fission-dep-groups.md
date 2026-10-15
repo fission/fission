@@ -21,7 +21,7 @@ The skill carries the generic methodology (govulncheck baseline/after, one commi
 
 ## The k8s-minor lockstep commit
 
-On a k8s **minor** bump, groups 1 (k8s core), 2 (controller-runtime), KEDA from group 5, **and** the code-generator fork are version-locked and must land as **one** commit. controller-runtime's cache code and KEDA's webhook code each compile against a specific k8s minor (the `ResourceEventHandlerRegistration.HasSyncedChecker` coupling: that interface method arrived at k8s v0.36, implemented only by controller-runtime v0.24+).
+On a k8s **minor** bump, groups 1 (k8s core), 2 (controller-runtime), KEDA from group 5, `k8s.io/code-generator`, **and** `github.com/google/go-containerregistry/pkg/authn/kubernetes` are version-locked and must land as **one** commit. controller-runtime's cache code and KEDA's webhook code each compile against a specific k8s minor (the `ResourceEventHandlerRegistration.HasSyncedChecker` coupling: that interface method arrived at k8s v0.36, implemented only by controller-runtime v0.24+).
 MVS will otherwise pick an incompatible mix.
 A k8s **patch** bump (e.g. v0.36.1→v0.36.2) stays in its own small group.
 
@@ -35,11 +35,14 @@ If you bump into / out of controller-runtime v0.24, replicate these:
 - `scheme.Builder` was deprecated (staticcheck SA1019).
   `pkg/apis/core/v1` migrated to the apimachinery builder (`runtime.NewSchemeBuilder(addKnownTypes)` + `metav1.AddToGroupVersion`), preserving exact `AddKnownTypes` semantics.
 
-## The code-generator fork
+## code-generator and other k8s-minor riders
 
-`go.mod` has `replace k8s.io/code-generator => github.com/fission/code-generator <pseudo-version>` — Fission's fork tracks upstream.
-It is **version-coupled to the k8s-core group**: when you bump `k8s.io/* → vN`, bump the fork to its matching `vN` ref (the fork carries `release-1.x` branches and `vN.0` tags; the 2026-06-02 sweep used fork master `ce5e0619` (0.36) per maintainer preference over the `v0.36.0` tag).
-**After** the bump, run `make codegen` + `make generate-crds` and commit the regenerated `pkg/generated/` + `crds/v1/` **in the same commit** as the k8s bump.
+`k8s.io/code-generator` is a plain direct require (the Fission fork and its `replace` were removed in #3672).
+`hack/update-codegen.sh` copies upstream code-generator out of the module cache at whatever version `go.mod` requires, so bump it with the `k8s.io/*` group.
+**After** a k8s bump, run `make codegen` + `make generate-crds` and commit the regenerated `pkg/generated/` + `crds/v1/` **in the same commit** as the k8s bump.
+
+`github.com/google/go-containerregistry/pkg/authn/kubernetes` is published only as pseudo-versions, and every snapshot after 2026-08-31 requires `k8s.io/* v0.37`.
+A `go get` of a newer snapshot silently pulls k8s core up a minor; keep it on its current pseudo-version until the k8s-minor lockstep commit, and bump it there.
 
 ## The `prometheus/common` phantom-tag exclude
 
