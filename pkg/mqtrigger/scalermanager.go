@@ -142,10 +142,23 @@ func getEnvVarlist(ctx context.Context, mqt *fv1.MessageQueueTrigger, routerURL 
 			Value: mqt.Spec.ContentType,
 		},
 	}
-	// Metadata Fields
+	// Metadata fields. Skip a key whose normalized name is already reserved by
+	// a built-in connector env var (for example metadata "topic" -> TOPIC).
+	// Kubernetes rejects a Deployment update that repeats an env name, and
+	// that rejection runs before the ScaledObject update, so later trigger
+	// changes never reach KEDA. The original metadata map is still passed
+	// to the ScaledObject unchanged.
+	reserved := make(map[string]struct{}, len(envVars))
+	for i := range envVars {
+		reserved[envVars[i].Name] = struct{}{}
+	}
 	for key, value := range mqt.Spec.Metadata {
+		name := toEnvVar(key)
+		if _, exists := reserved[name]; exists {
+			continue
+		}
 		envVars = append(envVars, apiv1.EnvVar{
-			Name:  toEnvVar(key),
+			Name:  name,
 			Value: value,
 		})
 	}
