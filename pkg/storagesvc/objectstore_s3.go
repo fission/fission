@@ -134,7 +134,7 @@ func (s *s3ObjectStore) list(prefix string) ([]objectInfo, error) {
 		if obj.Err != nil {
 			return nil, obj.Err
 		}
-		infos = append(infos, objectInfo{id: obj.Key, lastMod: obj.LastModified})
+		infos = append(infos, objectInfo{id: obj.Key, lastMod: obj.LastModified, size: obj.Size})
 	}
 	return infos, nil
 }

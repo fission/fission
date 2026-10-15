@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: The Fission Authors
+#
+# SPDX-License-Identifier: Apache-2.0
+
+{{- if and .Values.networkPolicy.enabled .Values.agentRuntime.enabled }}
+# agentruntime dispatch (port 8894) is reached by in-cluster callers, external
+# clients/CLI/browser via port-forward, and the SSE registry feed. Those
+# callers are not a fixed, labelable set the way statesvc's function-pod clients
+# are, so this policy is deliberately PERMISSIVE: it admits ingress from any
+# source to port 8894 while still declaring an Ingress policyType (which, once
+# any NetworkPolicy selects these pods, denies every OTHER port by default).
+#
+# A production deployment SHOULD tighten the `from` selector to the specific
+# clients that legitimately dispatch turns. It is left open here because a
+# too-strict podSelector allowlist would silently drop legitimate traffic (the
+# same class of failure that surfaces elsewhere as `dial tcp <ip>:PORT: i/o
+# timeout`), and a permissive-but-present policy still beats none — every port
+# other than 8894 is closed. Note the framework's portless integration
+# forward reaches these pods through the kube-apiserver's SPDY port-forward
+# stream (node-local kubelet traffic), which a pod-to-pod NetworkPolicy does
+# not govern, so this policy — permissive or not — never blocks it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agentruntime
+  labels:
+    svc: agentruntime
+    application: fission-agentruntime
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+spec:
+  podSelector:
+    matchLabels:
+      svc: agentruntime
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ include "fission.agentRuntimePort" . }}
+          protocol: TCP
+{{- end }}

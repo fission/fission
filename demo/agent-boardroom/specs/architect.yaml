@@ -1,0 +1,69 @@
+include:
+  - fixtures/architect.js
+kind: ArchiveUploadSpec
+name: architect-src
+
+---
+apiVersion: fission.io/v1
+kind: Package
+metadata:
+  name: architect
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  # A single JS file needs no build: the deployment archive IS the source,
+  # buildstatus none skips the env's builder entirely (mirrors
+  # support-desk.yaml / order-lookup.yaml).
+  deployment:
+    type: url
+    url: archive://architect-src
+    checksum: {}
+  source:
+    checksum: {}
+status:
+  buildstatus: none
+
+---
+apiVersion: fission.io/v1
+kind: Function
+metadata:
+  name: architect
+  namespace: default
+spec:
+  environment:
+    name: node
+    namespace: default
+  package:
+    packageref:
+      name: architect
+      namespace: default
+  InvokeStrategy:
+    ExecutionStrategy:
+      ExecutorType: poolmgr
+      MaxScale: 0
+      MinScale: 0
+      SpecializationTimeout: 0
+      TargetCPUPercent: 0
+    StrategyType: execution
+  # 3 concurrent spawn POSTs to support-desk (each a possible cold
+  # specialization) plus the architect's own turn -- generous relative to
+  # support-desk's 60s, but still bounded.
+  functionTimeout: 90
+  resources: {}
+  # RFC-0023 keyed state: architect.js reads only the fetcher-written state
+  # token file's `namespace` field (ownNamespace() in the fixture) to build
+  # the ParentRef it stamps on spawned children -- it keeps no KV blob of its
+  # own, unlike support-desk. The keyspace still has to be set for the
+  # fetcher to write that token file at all (pkg/fetcher/fetcher.go).
+  state:
+    keyspace: architect
+  # Agent dispatch (fission-bundle --agentPort): the swarm beat -- every turn
+  # spawns 3 expert child sessions on support-desk (see fixtures/architect.js).
+  # maxSessions is smaller than support-desk's 500: this demo drives a
+  # handful of architect sessions, each fanning out to its own 3 children.
+  agent:
+    idleAfter: 2m
+    archiveAfter: 30m
+    maxSessions: 50

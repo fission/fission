@@ -61,6 +61,10 @@ manifests:
           # Dev/CI clusters run without authentication, so opt into the
           # unauthenticated MCP endpoint explicitly (the chart fails closed otherwise).
           mcp.allowInsecure: "true"
+          agentRuntime.enabled: "true"
+          # Same dev/CI posture as mcp.allowInsecure above: the agent runtime
+          # also fails closed without a signing key.
+          agentRuntime.allowInsecure: "true"
           namespace: fission
           networkPolicy.enabled: "false"
           router.displayAccessLog: "false"
