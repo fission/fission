@@ -62,6 +62,16 @@ func TestNewdeployIsValid(t *testing.T) {
 		assert.False(t, d.IsValid(t.Context(), fsvcWith(svcRef, deplRef)))
 	})
 
+	t.Run("invalid while the scale-in is not reflected in the status yet", func(t *testing.T) {
+		zero := int32(0)
+		depl := deplObj("default", "fn-dep", 1)
+		depl.Generation = 2
+		depl.Spec.Replicas = &zero
+		depl.Status.ObservedGeneration = 1
+		d := newDeploy(svcObj("default", "fn-svc"), depl)
+		assert.False(t, d.IsValid(t.Context(), fsvcWith(svcRef, deplRef)))
+	})
+
 	t.Run("invalid when the service is missing from the cache", func(t *testing.T) {
 		d := newDeploy(deplObj("default", "fn-dep", 1)) // no service
 		assert.False(t, d.IsValid(t.Context(), fsvcWith(svcRef, deplRef)))

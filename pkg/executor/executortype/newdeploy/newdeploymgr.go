@@ -232,7 +232,7 @@ func (deploy *NewDeploy) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) boo
 				}
 				return false
 			}
-			if currentDeploy.Status.AvailableReplicas < 1 {
+			if !executorUtils.DeploymentAvailable(currentDeploy, 1) {
 				return false
 			}
 		}

@@ -62,7 +62,7 @@ func nextWaitPollDelay(cur time.Duration) time.Duration {
 	return min(cur*3/2, waitPollMaxDelay)
 }
 
-// deploymentAvailable reports whether depl has at least replicas available,
+// DeploymentAvailable reports whether depl has at least replicas available,
 // as observed by the deployment controller for the spec currently stored.
 //
 // The generation gate matters on the scale-from-zero path. UpdateScale only
@@ -73,8 +73,19 @@ func nextWaitPollDelay(cur time.Duration) time.Duration {
 // report a serving deployment while the Service has no endpoint. Until
 // ObservedGeneration catches up, the status says nothing about this scale
 // request. Same gate as WaitForDeploymentRollout in the integration framework.
-func deploymentAvailable(depl *appsv1.Deployment, replicas int32) bool {
-	return depl.Status.ObservedGeneration >= depl.Generation && depl.Status.AvailableReplicas >= replicas
+//
+// The spec check covers the way down. Once the idle reaper scales the
+// deployment in, Spec.Replicas drops at once while the status can still count
+// the pod that is going away, which would keep a cached function service
+// looking valid.
+func DeploymentAvailable(depl *appsv1.Deployment, replicas int32) bool {
+	specReplicas := int32(1)
+	if depl.Spec.Replicas != nil {
+		specReplicas = *depl.Spec.Replicas
+	}
+	return specReplicas >= replicas &&
+		depl.Status.ObservedGeneration >= depl.Generation &&
+		depl.Status.AvailableReplicas >= replicas
 }
 
 // WaitForDeployment polls the deployment until the deployment controller has
@@ -108,7 +119,7 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			return nil, err
 		}
 		// TODO check for imagePullerror
-		if deploymentAvailable(latestDepl, replicas) {
+		if DeploymentAvailable(latestDepl, replicas) {
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
