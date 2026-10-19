@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791792514377,
+  "lastUpdate": 1792396531483,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission throughput (v1.27.0)": [
@@ -714,6 +714,153 @@ window.BENCHMARK_DATA = {
           {
             "name": "payload-sweep/1MiB_throughput",
             "value": 92.58333333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "autoscale-newdeploy/max_replicas",
+            "value": 5,
+            "unit": "count"
+          },
+          {
+            "name": "autoscale-newdeploy/scaled",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "router-index-scale/objects",
+            "value": 1000,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/routes",
+            "value": 500,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "a65daf70011b32274fb0fb9b74239479b65ab060",
+          "message": "workflow: do not re-deliver an attempt this process already completed (fixes intermittent TestEngineMap MaxConcurrency overshoot) (#3728)\n\n* workflow: do not re-deliver an attempt this process already completed\n\nA reconcile folds the log, computes actInvoke for an attempt that is still\nunresolved in that snapshot, and only then dispatches. If the attempt's\nresult landed in between, the invoker had already released its inflight\nkey, so the dispatch fired a second HTTP delivery of a step this process\njust completed. In a Map/Parallel region that duplicate runs alongside the\nbranches the completion opened, so the function sees MaxConcurrency+1 in\nflight — TestEngineMap's intermittent \"3 is not less than or equal to 2\"\n(about 1 run in 400 at -cpu 2).\n\nThe invoker now remembers, per run, the attempts it appended a result for\n(marked before the inflight key is released) and Dispatch is a no-op for\nthem; the next resync sees the result and computes no invoke. Forget prunes\na run's entries when it reaches a terminal phase and from CleanupRun, so the\nmemory is bounded by live runs. Cross-process duplicates (a restart replays\nthe log) remain — at-least-once is the contract (workflowfold.tla) — this\nnarrows only the in-process one.\n\nRegression test: a dispatch for a completed attempt does not deliver; after\nForget it delivers again. TestEngineMap: 1500 runs at -cpu 2 without a\nfailure (1 in 400 before).\n\n* workflow: build the invoker attempt key in one place\n\nDispatch, markDone and the regression test each spelled the\nuid/branch/state/attempt key by hand; if two of them drifted, the\ncompleted-attempt guard would silently miss and the test, which built its\nown key, would not notice. attemptKey is now the only spelling, and\nmarkDone takes the invocation.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* workflow: key completed attempts by region; no resurrection after Forget\n\nTwo gaps in the completed-attempt guard:\n\n- The attempt key omitted the region instance. Every Parallel/Map region\n  starts fresh branch mini-runs, so successive regions (or one re-entered\n  by a loop) reuse branch \"0\", the same state names and attempt 1. The done\n  set then suppressed the later region's first delivery and the run stalled.\n  attemptKey now includes iv.region.\n\n- A worker still executing when its run was forgotten (terminal reconcile\n  or CleanupRun) finished later, had its result discarded against the\n  terminal/trimmed stream, and markDone recreated the run's set, which then\n  lived until process restart. Dispatch now creates a run's set and\n  markDone only writes into an existing one, so no tombstone is needed.\n\nRegressions: TestEngineSuccessiveRegionsReuseBranchKeys (stalls without the\nregion in the key) and TestInvokerLateCompletionAfterForget, terminal and\ndeleted (leaks without the markDone change).\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* mqtrigger/validator: guard registry reads with the registry lock\n\nRegister took the lock, but IsValidTopic and IsValidMessageQueue read\ntopicValidators without it. The parallel tests in pkg/apis/core/v1 register\nvalidators while others validate, and the race detector failed the lint\njob's unit tests (TestMessageQueueTriggerSpecValidate vs\nTestMessageQueueTriggerSpecValidateForAdmission). Readers now take a read\nlock; the validator itself runs outside it.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* workflow: prune completion records once a fold consumes them\n\nThe done set kept one key per completed attempt until the run went\nterminal, so a long-lived run that loops through Map/Parallel regions grew\ncontroller memory with every iteration.\n\nA record is only needed until a reconcile folds past the seq that settled\nits attempt: reconciles of one run are serialized and every later dispatch\nis computed from that fold or a newer one. appendGuarded now returns that\nseq (the appended event's, the deciding event's when dropped, or the head\nof a trimmed stream), markDone stores it, and Reconcile calls\nInvoker.Prune(runUID, s.LastSeq) after each fold. Records settled after the\nfold survive and still guard its dispatches.\n\nTestInvokerSkipsCompletedAttemptInProcess now goes through the production\npath: it reconciles only until a/1 is dispatched, waits for the worker to\nrecord its completion, checks a stale re-dispatch is suppressed, then\nchecks the next reconcile prunes the record. TestInvokerPruneKeepsRecords\nPastTheFold pins the boundary.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-10-15T08:58:19Z",
+          "url": "https://github.com/fission/fission/commit/a65daf70011b32274fb0fb9b74239479b65ab060"
+        },
+        "date": 1792396530686,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/throughput",
+            "value": 4096.85,
+            "unit": "rps"
+          },
+          {
+            "name": "warm-path/endpointcache_hit_ratio",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/throughput",
+            "value": 3484.8166666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c10_throughput",
+            "value": 2863.4,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c50_throughput",
+            "value": 3786.8166666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c100_throughput",
+            "value": 3031.15,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c250_throughput",
+            "value": 1533.6166666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c500_throughput",
+            "value": 505.3,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps100_throughput",
+            "value": 98.96666666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps250_throughput",
+            "value": 42.95,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps500_throughput",
+            "value": 499.8833333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps1000_throughput",
+            "value": 940.25,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1KiB_throughput",
+            "value": 3492.6,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/10KiB_throughput",
+            "value": 3178.75,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/100KiB_throughput",
+            "value": 1285.15,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1MiB_throughput",
+            "value": 176.66666666666666,
             "unit": "rps"
           },
           {
