@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791792509818,
+  "lastUpdate": 1792396527140,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission latency (v1.27.0)": [
@@ -3374,6 +3374,673 @@ window.BENCHMARK_DATA = {
           {
             "name": "route-churn/apiserver_calls",
             "value": 24,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "a65daf70011b32274fb0fb9b74239479b65ab060",
+          "message": "workflow: do not re-deliver an attempt this process already completed (fixes intermittent TestEngineMap MaxConcurrency overshoot) (#3728)\n\n* workflow: do not re-deliver an attempt this process already completed\n\nA reconcile folds the log, computes actInvoke for an attempt that is still\nunresolved in that snapshot, and only then dispatches. If the attempt's\nresult landed in between, the invoker had already released its inflight\nkey, so the dispatch fired a second HTTP delivery of a step this process\njust completed. In a Map/Parallel region that duplicate runs alongside the\nbranches the completion opened, so the function sees MaxConcurrency+1 in\nflight — TestEngineMap's intermittent \"3 is not less than or equal to 2\"\n(about 1 run in 400 at -cpu 2).\n\nThe invoker now remembers, per run, the attempts it appended a result for\n(marked before the inflight key is released) and Dispatch is a no-op for\nthem; the next resync sees the result and computes no invoke. Forget prunes\na run's entries when it reaches a terminal phase and from CleanupRun, so the\nmemory is bounded by live runs. Cross-process duplicates (a restart replays\nthe log) remain — at-least-once is the contract (workflowfold.tla) — this\nnarrows only the in-process one.\n\nRegression test: a dispatch for a completed attempt does not deliver; after\nForget it delivers again. TestEngineMap: 1500 runs at -cpu 2 without a\nfailure (1 in 400 before).\n\n* workflow: build the invoker attempt key in one place\n\nDispatch, markDone and the regression test each spelled the\nuid/branch/state/attempt key by hand; if two of them drifted, the\ncompleted-attempt guard would silently miss and the test, which built its\nown key, would not notice. attemptKey is now the only spelling, and\nmarkDone takes the invocation.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* workflow: key completed attempts by region; no resurrection after Forget\n\nTwo gaps in the completed-attempt guard:\n\n- The attempt key omitted the region instance. Every Parallel/Map region\n  starts fresh branch mini-runs, so successive regions (or one re-entered\n  by a loop) reuse branch \"0\", the same state names and attempt 1. The done\n  set then suppressed the later region's first delivery and the run stalled.\n  attemptKey now includes iv.region.\n\n- A worker still executing when its run was forgotten (terminal reconcile\n  or CleanupRun) finished later, had its result discarded against the\n  terminal/trimmed stream, and markDone recreated the run's set, which then\n  lived until process restart. Dispatch now creates a run's set and\n  markDone only writes into an existing one, so no tombstone is needed.\n\nRegressions: TestEngineSuccessiveRegionsReuseBranchKeys (stalls without the\nregion in the key) and TestInvokerLateCompletionAfterForget, terminal and\ndeleted (leaks without the markDone change).\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* mqtrigger/validator: guard registry reads with the registry lock\n\nRegister took the lock, but IsValidTopic and IsValidMessageQueue read\ntopicValidators without it. The parallel tests in pkg/apis/core/v1 register\nvalidators while others validate, and the race detector failed the lint\njob's unit tests (TestMessageQueueTriggerSpecValidate vs\nTestMessageQueueTriggerSpecValidateForAdmission). Readers now take a read\nlock; the validator itself runs outside it.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* workflow: prune completion records once a fold consumes them\n\nThe done set kept one key per completed attempt until the run went\nterminal, so a long-lived run that loops through Map/Parallel regions grew\ncontroller memory with every iteration.\n\nA record is only needed until a reconcile folds past the seq that settled\nits attempt: reconciles of one run are serialized and every later dispatch\nis computed from that fold or a newer one. appendGuarded now returns that\nseq (the appended event's, the deciding event's when dropped, or the head\nof a trimmed stream), markDone stores it, and Reconcile calls\nInvoker.Prune(runUID, s.LastSeq) after each fold. Records settled after the\nfold survive and still guard its dispatches.\n\nTestInvokerSkipsCompletedAttemptInProcess now goes through the production\npath: it reconciles only until a/1 is dispatched, waits for the worker to\nrecord its completion, checks a stale re-dispatch is suppressed, then\nchecks the next reconcile prunes the record. TestInvokerPruneKeepsRecords\nPastTheFold pins the boundary.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-10-15T08:58:19Z",
+          "url": "https://github.com/fission/fission/commit/a65daf70011b32274fb0fb9b74239479b65ab060"
+        },
+        "date": 1792396525867,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/cold_p50",
+            "value": 58.266,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_p95",
+            "value": 110.339,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_max",
+            "value": 138.031,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr/apiserver_calls",
+            "value": 95,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p50",
+            "value": 2831.857,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p95",
+            "value": 3599.654,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_max",
+            "value": 7242.991,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/apiserver_calls",
+            "value": 754,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p50",
+            "value": 91.76,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p95",
+            "value": 140.23,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_max",
+            "value": 141.894,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/apiserver_calls",
+            "value": 397,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p50",
+            "value": 2258.668,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p95",
+            "value": 4286.982,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_max",
+            "value": 6247.997,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/apiserver_calls",
+            "value": 82,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p50",
+            "value": 2950.558,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p95",
+            "value": 5052.859,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_max",
+            "value": 6784.86,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/apiserver_calls",
+            "value": 457,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/p50",
+            "value": 10.751,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p95",
+            "value": 24.431,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99",
+            "value": 32.959,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99.9",
+            "value": 45.855,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/max",
+            "value": 139.135,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path/apiserver_calls",
+            "value": 137,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path-newdeploy/p50",
+            "value": 12.239,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p95",
+            "value": 30.671,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99",
+            "value": 43.775,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99.9",
+            "value": 64.127,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/max",
+            "value": 105.087,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/apiserver_calls",
+            "value": 78,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/c10_p50",
+            "value": 3.103,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p95",
+            "value": 6.463,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99",
+            "value": 9.391,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99.9",
+            "value": 15.703,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_max",
+            "value": 68.735,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c50_p50",
+            "value": 11.471,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p95",
+            "value": 27.279,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99",
+            "value": 37.855,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99.9",
+            "value": 56.415,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_max",
+            "value": 100.991,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c100_p50",
+            "value": 23.791,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p95",
+            "value": 75.455,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99",
+            "value": 110.143,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99.9",
+            "value": 163.327,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_max",
+            "value": 59539.455,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_error_rate",
+            "value": 0.000021993368999246727,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c250_p50",
+            "value": 142.207,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p95",
+            "value": 377.343,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99",
+            "value": 509.951,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99.9",
+            "value": 675.327,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_max",
+            "value": 863.743,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c500_p50",
+            "value": 159.103,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p95",
+            "value": 785.919,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99",
+            "value": 1609.727,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99.9",
+            "value": 36503.551,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_max",
+            "value": 59736.063,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_error_rate",
+            "value": 0.02920268972142171,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/specializations",
+            "value": 175,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/apiserver_calls",
+            "value": 704,
+            "unit": "count"
+          },
+          {
+            "name": "rps-sweep/rps100_p50",
+            "value": 2.301,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p95",
+            "value": 15.415,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99",
+            "value": 40.991,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99.9",
+            "value": 141.311,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_max",
+            "value": 190.847,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps250_p50",
+            "value": 606.719,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p95",
+            "value": 8310.783,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99",
+            "value": 13385.727,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99.9",
+            "value": 18890.751,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_max",
+            "value": 23101.439,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_error_rate",
+            "value": 0.8266747376916869,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps500_p50",
+            "value": 1.457,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p95",
+            "value": 2.319,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99",
+            "value": 4.439,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99.9",
+            "value": 47.007,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_max",
+            "value": 114.495,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps1000_p50",
+            "value": 1.381,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p95",
+            "value": 2.415,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99",
+            "value": 4.811,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99.9",
+            "value": 121.599,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_max",
+            "value": 199.935,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1KiB_p50",
+            "value": 12.455,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p95",
+            "value": 29.471,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99",
+            "value": 41.791,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99.9",
+            "value": 66.367,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_max",
+            "value": 119.807,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/10KiB_p50",
+            "value": 13.687,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p95",
+            "value": 32.271,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99",
+            "value": 45.055,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99.9",
+            "value": 74.751,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_max",
+            "value": 134.655,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/100KiB_p50",
+            "value": 37.631,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p95",
+            "value": 64.607,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99",
+            "value": 84.799,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99.9",
+            "value": 129.215,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_max",
+            "value": 30277.631,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1MiB_p50",
+            "value": 272.895,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p95",
+            "value": 404.735,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99",
+            "value": 513.791,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99.9",
+            "value": 774.655,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_max",
+            "value": 882.175,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_error_rate",
+            "value": 0.6818250037520637,
+            "unit": "ratio"
+          },
+          {
+            "name": "autoscale-newdeploy/scale_up_seconds",
+            "value": 50.055263075,
+            "unit": "s"
+          },
+          {
+            "name": "autoscale-newdeploy/apiserver_calls",
+            "value": 207,
+            "unit": "count"
+          },
+          {
+            "name": "build-time-python/build_seconds",
+            "value": 12.028261641,
+            "unit": "s"
+          },
+          {
+            "name": "build-time-python/apiserver_calls",
+            "value": 15,
+            "unit": "count"
+          },
+          {
+            "name": "router-index-scale/create_seconds",
+            "value": 3.615708532,
+            "unit": "s"
+          },
+          {
+            "name": "router-index-scale/router_rss_mb",
+            "value": 71.09765625,
+            "unit": "MiB"
+          },
+          {
+            "name": "router-index-scale/apiserver_calls",
+            "value": 36,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/create_seconds",
+            "value": 1.8419947570000001,
+            "unit": "s"
+          },
+          {
+            "name": "route-churn/route_table_applies_total",
+            "value": 522,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/apiserver_calls",
+            "value": 1523,
             "unit": "count"
           }
         ]
