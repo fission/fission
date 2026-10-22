@@ -194,6 +194,28 @@ func DeriveStateKeyspaceKey(master []byte, namespace, keyspace string) []byte {
 	return deriveKey(master, KeyVersion+":"+string(ServiceStateAPI)+":"+namespace+":"+keyspace)
 }
 
+// DeriveAgentIdentityKey derives the per-agent identity bearer credential (G16):
+// a bespoke chain — NOT an extension of DeriveStateKeyspaceKey or any
+// ServiceXxx channel — with info string "<KeyVersion>:agentident:<namespace>:<agent>".
+// The distinct "agentident" tag makes collision with every other channel
+// structural rather than incidental: DeriveServiceKey/DeriveServiceKeyNS stop
+// after "<service>"/"<service>:<ns>" and never contain "agentident", and
+// DeriveStateKeyspaceKey's info string carries "stateapi" in the same
+// position this one carries "agentident" — so even the same (namespace, agent)
+// pair fed to both chains derives unrelated keys, by construction, not by
+// coincidence of field values. Within the chain, namespace and agent are both
+// Kubernetes DNS labels, which cannot contain ':', so the two-colon-joined
+// tail cannot be re-split ambiguously (no "a:b" vs "a", "b" splice).
+//
+// Verification is stateless: agentruntime re-derives from the claimed
+// (namespace, agent) and the master(s) it holds and compares — the same
+// pattern as DeriveStateKeyspaceKey/statesvc. Transport to a pod must go
+// through EncodeKeyForEnv. Returns nil for an empty master, like every other
+// derivation in this file.
+func DeriveAgentIdentityKey(master []byte, namespace, agent string) []byte {
+	return deriveKey(master, KeyVersion+":agentident:"+namespace+":"+agent)
+}
+
 // EncodeKeyForEnv encodes a derived key for transport through a Kubernetes Secret
 // that a pod consumes as an ENVIRONMENT VARIABLE. Raw HKDF output is binary and is
 // not valid UTF-8, and env-var values must be — the kubelet/containerd reject the

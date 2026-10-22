@@ -11,6 +11,9 @@ metadata:
 {{- end }}
   name: "{{ .Release.Name }}-{{ .component }}"
   namespace: {{ .namespace }}
+{{- if eq "agentruntime" .component }}
+{{- include "agentruntime-kuberules" . }}
+{{- end }}
 {{- if eq "buildermgr" .component }}
 {{- include "buildermgr-kuberules" . }}
 {{- end }}

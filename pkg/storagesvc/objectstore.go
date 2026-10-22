@@ -21,6 +21,10 @@ type objectInfo struct {
 	// lastMod is the object's last-modified time, used by the archive pruner
 	// to skip recently created (not-yet-referenced) archives.
 	lastMod time.Time
+	// size is the object's byte size, used by the workspace list route
+	// (pkg/storagesvc/workspace.go) to report artifact sizes without an extra
+	// per-item stat call.
+	size int64
 }
 
 // objectStore is an internal abstraction over the two supported storage
