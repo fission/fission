@@ -1,6 +1,6 @@
 module github.com/fission/fission/test/benchmark
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2
@@ -70,7 +70,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nwaples/rardecode/v2 v2.2.0 // indirect
-	github.com/ohler55/ojg v1.28.7 // indirect
+	github.com/ohler55/ojg v1.28.8 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.31 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
