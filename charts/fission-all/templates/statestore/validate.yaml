@@ -12,9 +12,10 @@ This template emits no manifests; it only fails the render on an invalid config.
 {{- end }}
 {{- /*
 Forward-compatible dependent-feature gate: a statestore consumer (RFC-0022
-workflows, RFC-0023 function state, RFC-0024 async invocation) enabled without a
-statestore fails the render. Dormant until those features add their flags.
+workflows, RFC-0023 function state, RFC-0024 async invocation, the agent
+runtime) enabled without a statestore fails the render. Dormant until those
+features add their flags.
 */ -}}
-{{- if and (or (dig "enabled" false (.Values.workflows | default dict)) (dig "enabled" false (.Values.functionState | default dict)) (dig "enabled" false (.Values.asyncInvocation | default dict))) (not .Values.statestore.enabled) }}
-{{  required "a statestore-dependent feature (workflows/functionState/asyncInvocation) is enabled but statestore.enabled is false — set statestore.enabled=true and choose a mode." nil }}
+{{- if and (or (dig "enabled" false (.Values.workflows | default dict)) (dig "enabled" false (.Values.functionState | default dict)) (dig "enabled" false (.Values.asyncInvocation | default dict)) (dig "enabled" false (.Values.agentRuntime | default dict))) (not .Values.statestore.enabled) }}
+{{  required "a statestore-dependent feature (workflows/functionState/asyncInvocation/agentRuntime) is enabled but statestore.enabled is false — set statestore.enabled=true and choose a mode." nil }}
 {{- end }}

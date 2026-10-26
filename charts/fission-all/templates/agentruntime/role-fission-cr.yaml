@@ -1,0 +1,9 @@
+{{- if .Values.agentRuntime.enabled }}
+{{- include "fission-role-generator" (merge (dict "namespace" .Values.defaultNamespace "component" "agentruntime") .) }}
+
+{{- if gt (len .Values.additionalFissionNamespaces) 0 }}
+{{- range $namespace := $.Values.additionalFissionNamespaces }}
+{{ include "fission-role-generator" (merge (dict "namespace" $namespace "component" "agentruntime") $) }}
+{{- end }}
+{{- end }}
+{{- end }}

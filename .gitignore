@@ -6,6 +6,7 @@ cmd/fetcher/fetcher
 cmd/builder/builder
 cmd/preupgradechecks/pre-upgrade-checks
 cmd/reporter/reporter
+demo/agent-boardroom/loadgen/loadgen
 
 # Logs
 test/logs/
