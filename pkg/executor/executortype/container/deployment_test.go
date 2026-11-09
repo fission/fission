@@ -21,6 +21,7 @@ import (
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
 	"github.com/fission/fission/pkg/executor/fscache"
+	"github.com/fission/fission/pkg/executor/util"
 	hpautils "github.com/fission/fission/pkg/executor/util/hpa"
 	fissionfake "github.com/fission/fission/pkg/generated/clientset/versioned/fake"
 	"github.com/fission/fission/pkg/utils"
@@ -402,6 +403,8 @@ func TestContainerScaleFromZeroWaitsForAvailability(t *testing.T) {
 			require.Error(t, err, "scale-from-zero must not report success while no replica is available")
 			assert.ErrorIs(t, err, context.DeadlineExceeded,
 				"expected the readiness wait to run to its deadline, got: %v", err)
+			assert.ErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"an existing-deployment wait timeout must not trigger the destroy path")
 		})
 	}
 }

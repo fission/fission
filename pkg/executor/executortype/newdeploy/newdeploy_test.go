@@ -735,6 +735,8 @@ func TestNewDeployScaleFromZeroWaitsForAvailability(t *testing.T) {
 			require.Error(t, err, "scale-from-zero must not report success while no replica is available")
 			assert.ErrorIs(t, err, context.DeadlineExceeded,
 				"expected the readiness wait to run to its deadline, got: %v", err)
+			assert.ErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"an existing-deployment wait timeout must not trigger the destroy path")
 		})
 	}
 }

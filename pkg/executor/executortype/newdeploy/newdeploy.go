@@ -78,6 +78,14 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 		}
 		if !util.DeploymentAvailable(existingDepl, minScale) {
 			existingDepl, err = util.WaitForDeployment(ctx, deploy.kubernetesClient, deploy.logger, existingDepl, minScale, specializationTimeout)
+			if err != nil {
+				// The deployment predates this request, so a wait timeout is not a
+				// creation failure: mark it for destroyOnCreateError, which leaves
+				// the objects standing — a paused rollout or a stalled deployment
+				// controller can hold the status behind the spec past the whole
+				// timeout window while the deployment keeps serving.
+				err = fmt.Errorf("%w: %w", util.ErrDeploymentWaitTimeout, err)
+			}
 		}
 
 		return existingDepl, err
