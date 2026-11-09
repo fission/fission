@@ -65,18 +65,18 @@ func (deploy *NewDeploy) createOrGetDeployment(ctx context.Context, fn *fv1.Func
 			return existingDepl, nil
 		}
 
-		// existingDepl was read before the scale request, and on the scale-from-zero path
-		// its status can still count the pod the idle reaper is tearing down.
-		scaledUp := false
+		// existingDepl was read before any scale request: its spec can predate the
+		// scale-up and its status can still count the pod the idle reaper is
+		// tearing down. Gate the wait on the same predicate the cache path uses,
+		// so a stale status waits here instead of being re-cached and re-invalidated.
 		if *existingDepl.Spec.Replicas < minScale {
 			err = util.ScaleDeployment(ctx, deploy.kubernetesClient, deploy.logger, existingDepl.Namespace, existingDepl.Name, minScale)
 			if err != nil {
 				deploy.logger.Error(err, "error scaling up function deployment", "function", fn.Name)
 				return nil, err
 			}
-			scaledUp = true
 		}
-		if scaledUp || existingDepl.Status.AvailableReplicas < minScale {
+		if !util.DeploymentAvailable(existingDepl, minScale) {
 			existingDepl, err = util.WaitForDeployment(ctx, deploy.kubernetesClient, deploy.logger, existingDepl, minScale, specializationTimeout)
 		}
 
