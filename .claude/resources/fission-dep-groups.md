@@ -51,6 +51,12 @@ If you bump into / out of controller-runtime v0.24, replicate these:
 `hack/update-codegen.sh` copies upstream code-generator out of the module cache at whatever version `go.mod` requires, so bump it with the `k8s.io/*` group.
 **After** a k8s bump, run `make codegen` + `make generate-crds` and commit the regenerated `pkg/generated/` + `crds/v1/` **in the same commit** as the k8s bump.
 
+Local-env note: if the PATH `go` binary is older than this module's `go` directive (e.g. a Nix go 1.26 while `go.mod` says `go 1.27.3`),
+`make codegen` fails in register-gen with `method must have no type parameters` on stdlib `math/rand/v2`.
+The generator is built by `go install` inside the copied code-generator module (whose own `go` directive is older), so it compiles with the old local go/types,
+which then rejects the newer stdlib's generic methods. Run `GOTOOLCHAIN=go1.27.3 make codegen` to force the matching toolchain.
+CI is unaffected — every workflow installs Go from `go-version-file: go.mod`.
+
 `github.com/google/go-containerregistry/pkg/authn/kubernetes` is published only as pseudo-versions, and every snapshot after 2026-08-31 requires `k8s.io/* v0.37`.
 A `go get` of a newer snapshot silently pulls k8s core up a minor; keep it on its current pseudo-version until the k8s-minor lockstep commit, and bump it there.
 
