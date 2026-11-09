@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792396527140,
+  "lastUpdate": 1794210258350,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission latency (v1.27.0)": [
@@ -4041,6 +4041,673 @@ window.BENCHMARK_DATA = {
           {
             "name": "route-churn/apiserver_calls",
             "value": 1523,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "ae2aabf5a41896c19e51abb8ec7e4e6f90adfce3",
+          "message": "Dependency sweep 2026-10-25: go 1.27.3 (GO-2026-6809), controller-tools 0.23, misc patches (#3745)\n\n* Bump Go toolchain to 1.27.3 (closes GO-2026-6809)\n\ngo.mod and test/benchmark/go.mod move from 1.27.2 to 1.27.3, which fixes\ncrypto/x509's trust of compromised intermediate certificates. The router's\nstreaming path reaches x509.Certificate.Verify, so govulncheck reported the\nvulnerability as reachable.\n\nCI takes the toolchain from go.mod (go-version-file), so no workflow change\nis needed.\n\n* Bump controller-tools to v0.23.0 and regenerate the CRDs\n\ncontroller-gen v0.23 emits the validation markers that upstream k8s 0.37\nputs on PodSpec.evictionResponders (minLength on the responder name,\n0-100000 on priority, maxItems 10 on the list), so crds/v1 gains those\nconstraints alongside the new version stamp.\n\nv0.23.0 still targets k8s v0.37.0, so the k8s core group stays put.\n\n* Bump misc dependencies (go-snaps 0.5.24, ojg 1.28.8, sqlite 1.61.0)\n\nRoutine patch/minor updates with no CVEs attached; modernc.org/sqlite\npulls libc v1.79.0 and the x/mod+x/tools pair along with it. The nested\ntest/benchmark module is re-tidied to match.",
+          "timestamp": "2026-10-26T04:24:07Z",
+          "url": "https://github.com/fission/fission/commit/ae2aabf5a41896c19e51abb8ec7e4e6f90adfce3"
+        },
+        "date": 1794210257059,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/cold_p50",
+            "value": 73.621,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_p95",
+            "value": 195.744,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/cold_max",
+            "value": 310.75,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr/apiserver_calls",
+            "value": 128,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p50",
+            "value": 2846.73,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_p95",
+            "value": 3538.059,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/cold_max",
+            "value": 8192.038,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-newdeploy/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/apiserver_calls",
+            "value": 679,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p50",
+            "value": 145.943,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_p95",
+            "value": 365.548,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/cold_max",
+            "value": 1242.255,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/apiserver_calls",
+            "value": 387,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p50",
+            "value": 2536.35,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_p95",
+            "value": 5626.551,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/burst_max",
+            "value": 5731.374,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-same-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/apiserver_calls",
+            "value": 396,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p50",
+            "value": 2271.514,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_p95",
+            "value": 4309.511,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/burst_max",
+            "value": 5534.808,
+            "unit": "ms"
+          },
+          {
+            "name": "cold-burst-distinct-fn/failures",
+            "value": 0,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/apiserver_calls",
+            "value": 148,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/p50",
+            "value": 21.103,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p95",
+            "value": 39.935,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99",
+            "value": 51.487,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/p99.9",
+            "value": 70.143,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/max",
+            "value": 104.447,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path/apiserver_calls",
+            "value": 200,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path-newdeploy/p50",
+            "value": 22.671,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p95",
+            "value": 43.647,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99",
+            "value": 56.703,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/p99.9",
+            "value": 77.823,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/max",
+            "value": 119.551,
+            "unit": "ms"
+          },
+          {
+            "name": "warm-path-newdeploy/error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/apiserver_calls",
+            "value": 97,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/c10_p50",
+            "value": 5.507,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p95",
+            "value": 9.559,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99",
+            "value": 13.063,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_p99.9",
+            "value": 21.967,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_max",
+            "value": 92.415,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c10_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c50_p50",
+            "value": 22.063,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p95",
+            "value": 45.983,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99",
+            "value": 69.759,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_p99.9",
+            "value": 123.135,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_max",
+            "value": 186.751,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c50_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c100_p50",
+            "value": 33.407,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p95",
+            "value": 126.591,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99",
+            "value": 338.175,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_p99.9",
+            "value": 519.935,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_max",
+            "value": 904.191,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c250_p50",
+            "value": 39.423,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p95",
+            "value": 814.591,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99",
+            "value": 1278.975,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_p99.9",
+            "value": 1735.679,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_max",
+            "value": 1890.303,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c250_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/c500_p50",
+            "value": 153.599,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p95",
+            "value": 1079.295,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99",
+            "value": 1941.503,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_p99.9",
+            "value": 28082.175,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_max",
+            "value": 59867.135,
+            "unit": "ms"
+          },
+          {
+            "name": "concurrency-sweep/c500_error_rate",
+            "value": 0.013026228011656893,
+            "unit": "ratio"
+          },
+          {
+            "name": "concurrency-sweep/specializations",
+            "value": 47,
+            "unit": "count"
+          },
+          {
+            "name": "concurrency-sweep/apiserver_calls",
+            "value": 364,
+            "unit": "count"
+          },
+          {
+            "name": "rps-sweep/rps100_p50",
+            "value": 2.247,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p95",
+            "value": 3.639,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99",
+            "value": 6.895,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_p99.9",
+            "value": 102.911,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_max",
+            "value": 163.327,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps100_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps250_p50",
+            "value": 2904.063,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p95",
+            "value": 15941.631,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99",
+            "value": 18759.679,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_p99.9",
+            "value": 20742.143,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_max",
+            "value": 42958.847,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps250_error_rate",
+            "value": 0.7053255243802778,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps500_p50",
+            "value": 2.073,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p95",
+            "value": 4.727,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99",
+            "value": 14.999,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_p99.9",
+            "value": 58.847,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_max",
+            "value": 103.039,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps500_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "rps-sweep/rps1000_p50",
+            "value": 2.593,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p95",
+            "value": 19.551,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99",
+            "value": 134.271,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_p99.9",
+            "value": 281.343,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_max",
+            "value": 507.135,
+            "unit": "ms"
+          },
+          {
+            "name": "rps-sweep/rps1000_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1KiB_p50",
+            "value": 23.631,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p95",
+            "value": 48.895,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99",
+            "value": 92.351,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_p99.9",
+            "value": 168.959,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_max",
+            "value": 290.303,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/10KiB_p50",
+            "value": 26.463,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p95",
+            "value": 59.071,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99",
+            "value": 114.943,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_p99.9",
+            "value": 319.999,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_max",
+            "value": 606.207,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/10KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/100KiB_p50",
+            "value": 75.135,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p95",
+            "value": 114.751,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99",
+            "value": 145.535,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_p99.9",
+            "value": 189.439,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_max",
+            "value": 268.799,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/100KiB_error_rate",
+            "value": 0,
+            "unit": "ratio"
+          },
+          {
+            "name": "payload-sweep/1MiB_p50",
+            "value": 521.727,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p95",
+            "value": 1663.999,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99",
+            "value": 26853.375,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_p99.9",
+            "value": 57245.695,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_max",
+            "value": 59670.527,
+            "unit": "ms"
+          },
+          {
+            "name": "payload-sweep/1MiB_error_rate",
+            "value": 0.0034527406128614588,
+            "unit": "ratio"
+          },
+          {
+            "name": "autoscale-newdeploy/scale_up_seconds",
+            "value": 40.057035027,
+            "unit": "s"
+          },
+          {
+            "name": "autoscale-newdeploy/apiserver_calls",
+            "value": 244,
+            "unit": "count"
+          },
+          {
+            "name": "build-time-python/build_seconds",
+            "value": 12.030487639,
+            "unit": "s"
+          },
+          {
+            "name": "build-time-python/apiserver_calls",
+            "value": 30,
+            "unit": "count"
+          },
+          {
+            "name": "router-index-scale/create_seconds",
+            "value": 5.405387791,
+            "unit": "s"
+          },
+          {
+            "name": "router-index-scale/router_rss_mb",
+            "value": 142.26171875,
+            "unit": "MiB"
+          },
+          {
+            "name": "router-index-scale/apiserver_calls",
+            "value": 46,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/create_seconds",
+            "value": 2.085448189,
+            "unit": "s"
+          },
+          {
+            "name": "route-churn/route_table_applies_total",
+            "value": 756,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/apiserver_calls",
+            "value": 852,
             "unit": "count"
           }
         ]
