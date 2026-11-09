@@ -63,14 +63,20 @@ func nextWaitPollDelay(cur time.Duration) time.Duration {
 	return min(cur*3/2, waitPollMaxDelay)
 }
 
+// ErrDeploymentNotAvailable is the reason WaitForDeployment's timeout error
+// carries: the deployment did not report enough available replicas in the
+// window. Callers distinguish it from polling/API failures with errors.Is.
+var ErrDeploymentNotAvailable = errors.New("deployment did not become available")
+
 // ErrDeploymentWaitTimeout marks a WaitForDeployment timeout on a deployment
 // that already existed when the wait began. The newdeploy and container
-// managers wrap the wait error with it on that path so destroyOnCreateError
+// managers wrap the timeout error with it on that path so destroyOnCreateError
 // can leave the objects standing: they are complete, may already serve
 // traffic, and a status that lags the spec (a paused rollout, a stalled
 // deployment controller) can hold the wait past the timeout window without
-// the deployment being broken. A timeout on the create path stays unwrapped
-// and still tears down the half-created objects.
+// the deployment being broken. Polling and API failures keep their original
+// classification; a timeout on the create path stays unwrapped and still
+// tears down the half-created objects.
 var ErrDeploymentWaitTimeout = errors.New("wait on an existing deployment timed out")
 
 // DeploymentAvailable reports whether depl has at least replicas available,
@@ -154,7 +160,7 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 		"current_status", latestDepl.Status, "timeout", specializationTimeout)
 
 	// this error appears in the executor pod logs
-	timeoutError := fmt.Errorf("deployment did not become available within the timeout window of %d seconds", specializationTimeout)
+	timeoutError := fmt.Errorf("%w within the timeout window of %d seconds", ErrDeploymentNotAvailable, specializationTimeout)
 	return nil, timeoutError
 }
 
