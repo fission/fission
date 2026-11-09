@@ -17,7 +17,7 @@ import (
 //
 // Package Think of these as function-level images.
 type PackageApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *PackageSpecApplyConfiguration `json:"spec,omitempty"`
 	// Status indicates the build status of package.

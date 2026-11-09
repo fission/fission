@@ -22,11 +22,39 @@ import (
 )
 
 // TimeTriggerInformer provides access to a shared informer and lister for
-// TimeTriggers.
+// TimeTriggers. Prefer using the type-safe variant (see [TypedTimeTriggerInformer]).
 type TimeTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.TimeTriggerLister
 }
+
+// TypedTimeTriggerInformer provides access to a shared informer and lister for
+// TimeTriggers, including the type-safe TypedInformer variant.
+// It is a superset of TimeTriggerInformer.
+type TypedTimeTriggerInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() TimeTriggerIndexInformer
+	Lister() corev1.TimeTriggerLister
+}
+
+// TimeTriggerIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type TimeTriggerIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.TimeTrigger]
+
+// TimeTriggerHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for TimeTrigger.
+type TimeTriggerHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.TimeTrigger]
+
+// TimeTriggerDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for TimeTrigger.
+type TimeTriggerDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.TimeTrigger]
+
+// TimeTriggerFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for TimeTrigger.
+type TimeTriggerFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.TimeTrigger]
+
+// TimeTriggerIndexers is a specialization of [cache.TypedIndexers] for TimeTrigger.
+type TimeTriggerIndexers = cache.TypedIndexers[*apiscorev1.TimeTrigger]
+
+// DeletedTimeTrigger is a specialization of [cache.DeletedObject] for TimeTrigger.
+type DeletedTimeTrigger = cache.DeletedObject[*apiscorev1.TimeTrigger]
 
 type timeTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type timeTriggerInformer struct {
 // NewTimeTriggerInformer constructs a new informer for TimeTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedTimeTriggerInformer]).
 func NewTimeTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewTimeTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedTimeTriggerInformer constructs a new informer for TimeTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedTimeTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers TimeTriggerIndexers) TimeTriggerIndexInformer {
+	return NewTypedTimeTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredTimeTriggerInformer constructs a new informer for TimeTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredTimeTriggerInformer]).
 func NewFilteredTimeTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewTimeTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedTimeTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredTimeTriggerInformer constructs a new informer for TimeTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredTimeTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers TimeTriggerIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) TimeTriggerIndexInformer {
+	return NewTypedTimeTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewTimeTriggerInformerWithOptions constructs a new informer for TimeTrigger type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedTimeTriggerInformerWithOptions]).
 func NewTimeTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedTimeTriggerInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedTimeTriggerInformerWithOptions constructs a new informer for TimeTrigger type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedTimeTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) TimeTriggerIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "timetriggers"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.TimeTrigger](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewTimeTriggerInformerWithOptions(client versioned.Interface, namespace str
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *timeTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewTimeTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedTimeTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *timeTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.TimeTrigger{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *timeTriggerInformer) TypedInformer() TimeTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.TimeTrigger](f.factory.InformerFor(&apiscorev1.TimeTrigger{}, f.defaultInformer))
 }
 
 func (f *timeTriggerInformer) Lister() corev1.TimeTriggerLister {
 	return corev1.NewTimeTriggerLister(f.Informer().GetIndexer())
+}
+
+// ToTypedTimeTriggerInformer converts an untyped informer into a TypedTimeTriggerInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *TimeTrigger. If that is not the case, calling type-safe methods of the returned
+// TypedTimeTriggerInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedTimeTriggerInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedTimeTriggerInformer(informer TimeTriggerInformer) TypedTimeTriggerInformer {
+	if informer, ok := informer.(TypedTimeTriggerInformer); ok {
+		return informer
+	}
+	return &timeTriggerTypedInformerAdapter{informer}
+}
+
+type timeTriggerTypedInformerAdapter struct {
+	TimeTriggerInformer
+}
+
+func (a *timeTriggerTypedInformerAdapter) TypedInformer() TimeTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.TimeTrigger](a.Informer())
+}
+
+// ToTimeTriggerIndexInformer converts an untyped informer into a TimeTriggerIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *TimeTrigger. If that is not the case, calling type-safe methods of the returned
+// TimeTriggerIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a TimeTriggerIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTimeTriggerIndexInformer(informer cache.SharedIndexInformer) TimeTriggerIndexInformer {
+	if informer, ok := informer.(TimeTriggerIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.TimeTrigger](informer)
 }

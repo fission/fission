@@ -19,7 +19,7 @@ import (
 // the statestore EventLog stream for the run, never in etcd; status carries
 // a bounded tail for kubectl visibility.
 type WorkflowRunApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *WorkflowRunSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *WorkflowRunStatusApplyConfiguration `json:"status,omitempty"`

@@ -23,7 +23,7 @@ import (
 // and beyond the retain floor. FunctionVersion carries no Status: its
 // content is fixed at creation, so there is nothing to reconcile.
 type FunctionVersionApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *FunctionVersionSpecApplyConfiguration `json:"spec,omitempty"`
 }

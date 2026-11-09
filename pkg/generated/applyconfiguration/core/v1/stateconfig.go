@@ -28,7 +28,8 @@ type StateConfigApplyConfiguration struct {
 	// Must be >= 0; zero (or nil) means keys do not expire by default.
 	DefaultTTL *metav1.Duration `json:"defaultTTL,omitempty"`
 	// MaxValueBytes caps a single value's size. 0 means the platform default
-	// (DefaultStateMaxValueBytes, 256KiB). Blobs belong in object storage.
+	// (DefaultStateMaxValueBytes, 256KiB); the ceiling is
+	// MaxStateMaxValueBytes (4MiB). Blobs belong in object storage.
 	MaxValueBytes *int64 `json:"maxValueBytes,omitempty"`
 	// MaxKeys caps the number of live keys in the keyspace, enforced
 	// atomically with each write (quota.tla S3). 0 means the platform

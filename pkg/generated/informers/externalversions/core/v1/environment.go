@@ -22,11 +22,39 @@ import (
 )
 
 // EnvironmentInformer provides access to a shared informer and lister for
-// Environments.
+// Environments. Prefer using the type-safe variant (see [TypedEnvironmentInformer]).
 type EnvironmentInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.EnvironmentLister
 }
+
+// TypedEnvironmentInformer provides access to a shared informer and lister for
+// Environments, including the type-safe TypedInformer variant.
+// It is a superset of EnvironmentInformer.
+type TypedEnvironmentInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() EnvironmentIndexInformer
+	Lister() corev1.EnvironmentLister
+}
+
+// EnvironmentIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type EnvironmentIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.Environment]
+
+// EnvironmentHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for Environment.
+type EnvironmentHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.Environment]
+
+// EnvironmentDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for Environment.
+type EnvironmentDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.Environment]
+
+// EnvironmentFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for Environment.
+type EnvironmentFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.Environment]
+
+// EnvironmentIndexers is a specialization of [cache.TypedIndexers] for Environment.
+type EnvironmentIndexers = cache.TypedIndexers[*apiscorev1.Environment]
+
+// DeletedEnvironment is a specialization of [cache.DeletedObject] for Environment.
+type DeletedEnvironment = cache.DeletedObject[*apiscorev1.Environment]
 
 type environmentInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type environmentInformer struct {
 // NewEnvironmentInformer constructs a new informer for Environment type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedEnvironmentInformer]).
 func NewEnvironmentInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewEnvironmentInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedEnvironmentInformer constructs a new informer for Environment type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedEnvironmentInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers EnvironmentIndexers) EnvironmentIndexInformer {
+	return NewTypedEnvironmentInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredEnvironmentInformer constructs a new informer for Environment type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredEnvironmentInformer]).
 func NewFilteredEnvironmentInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewEnvironmentInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedEnvironmentInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredEnvironmentInformer constructs a new informer for Environment type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredEnvironmentInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers EnvironmentIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) EnvironmentIndexInformer {
+	return NewTypedEnvironmentInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewEnvironmentInformerWithOptions constructs a new informer for Environment type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedEnvironmentInformerWithOptions]).
 func NewEnvironmentInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedEnvironmentInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedEnvironmentInformerWithOptions constructs a new informer for Environment type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedEnvironmentInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) EnvironmentIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "environments"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Environment](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewEnvironmentInformerWithOptions(client versioned.Interface, namespace str
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *environmentInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewEnvironmentInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedEnvironmentInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *environmentInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.Environment{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *environmentInformer) TypedInformer() EnvironmentIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Environment](f.factory.InformerFor(&apiscorev1.Environment{}, f.defaultInformer))
 }
 
 func (f *environmentInformer) Lister() corev1.EnvironmentLister {
 	return corev1.NewEnvironmentLister(f.Informer().GetIndexer())
+}
+
+// ToTypedEnvironmentInformer converts an untyped informer into a TypedEnvironmentInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Environment. If that is not the case, calling type-safe methods of the returned
+// TypedEnvironmentInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedEnvironmentInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedEnvironmentInformer(informer EnvironmentInformer) TypedEnvironmentInformer {
+	if informer, ok := informer.(TypedEnvironmentInformer); ok {
+		return informer
+	}
+	return &environmentTypedInformerAdapter{informer}
+}
+
+type environmentTypedInformerAdapter struct {
+	EnvironmentInformer
+}
+
+func (a *environmentTypedInformerAdapter) TypedInformer() EnvironmentIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Environment](a.Informer())
+}
+
+// ToEnvironmentIndexInformer converts an untyped informer into a EnvironmentIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Environment. If that is not the case, calling type-safe methods of the returned
+// EnvironmentIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a EnvironmentIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToEnvironmentIndexInformer(informer cache.SharedIndexInformer) EnvironmentIndexInformer {
+	if informer, ok := informer.(EnvironmentIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Environment](informer)
 }

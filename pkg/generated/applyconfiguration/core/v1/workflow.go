@@ -21,7 +21,7 @@ import (
 // of this spec embedded in the run's event stream; editing a Workflow never
 // changes in-flight runs.
 type WorkflowApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *WorkflowSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *WorkflowStatusApplyConfiguration `json:"status,omitempty"`

@@ -17,7 +17,7 @@ import (
 //
 // KubernetesWatchTrigger watches kubernetes resource events and invokes functions.
 type KubernetesWatchTriggerApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *KubernetesWatchTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *KubernetesWatchTriggerStatusApplyConfiguration `json:"status,omitempty"`

@@ -22,7 +22,7 @@ import (
 // fission.io/enabled=true on a Namespace is sugar the controller
 // materializes into one of these. See docs/multiple-namespace/prd.md.
 type FissionTenantApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *FissionTenantSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *FissionTenantStatusApplyConfiguration `json:"status,omitempty"`

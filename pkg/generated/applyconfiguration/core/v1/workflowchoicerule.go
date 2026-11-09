@@ -17,7 +17,7 @@ import (
 // condition (inline) or exactly one of And/Or/Not over leaf conditions
 // (depth-1 composition; deeper nesting is additive later).
 type WorkflowChoiceRuleApplyConfiguration struct {
-	WorkflowChoiceConditionApplyConfiguration `json:",inline"`
+	WorkflowChoiceConditionApplyConfiguration `json:""`
 	And                                       []WorkflowChoiceConditionApplyConfiguration `json:"and,omitempty"`
 	Or                                        []WorkflowChoiceConditionApplyConfiguration `json:"or,omitempty"`
 	Not                                       *WorkflowChoiceConditionApplyConfiguration  `json:"not,omitempty"`

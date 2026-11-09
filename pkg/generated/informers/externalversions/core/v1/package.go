@@ -22,11 +22,39 @@ import (
 )
 
 // PackageInformer provides access to a shared informer and lister for
-// Packages.
+// Packages. Prefer using the type-safe variant (see [TypedPackageInformer]).
 type PackageInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.PackageLister
 }
+
+// TypedPackageInformer provides access to a shared informer and lister for
+// Packages, including the type-safe TypedInformer variant.
+// It is a superset of PackageInformer.
+type TypedPackageInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() PackageIndexInformer
+	Lister() corev1.PackageLister
+}
+
+// PackageIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type PackageIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.Package]
+
+// PackageHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for Package.
+type PackageHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.Package]
+
+// PackageDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for Package.
+type PackageDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.Package]
+
+// PackageFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for Package.
+type PackageFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.Package]
+
+// PackageIndexers is a specialization of [cache.TypedIndexers] for Package.
+type PackageIndexers = cache.TypedIndexers[*apiscorev1.Package]
+
+// DeletedPackage is a specialization of [cache.DeletedObject] for Package.
+type DeletedPackage = cache.DeletedObject[*apiscorev1.Package]
 
 type packageInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type packageInformer struct {
 // NewPackageInformer constructs a new informer for Package type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPackageInformer]).
 func NewPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedPackageInformer constructs a new informer for Package type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PackageIndexers) PackageIndexInformer {
+	return NewTypedPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredPackageInformer constructs a new informer for Package type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredPackageInformer]).
 func NewFilteredPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredPackageInformer constructs a new informer for Package type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredPackageInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers PackageIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) PackageIndexInformer {
+	return NewTypedPackageInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewPackageInformerWithOptions constructs a new informer for Package type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedPackageInformerWithOptions]).
 func NewPackageInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedPackageInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedPackageInformerWithOptions constructs a new informer for Package type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedPackageInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) PackageIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "packages"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Package](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewPackageInformerWithOptions(client versioned.Interface, namespace string,
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *packageInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewPackageInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedPackageInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *packageInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.Package{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *packageInformer) TypedInformer() PackageIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Package](f.factory.InformerFor(&apiscorev1.Package{}, f.defaultInformer))
 }
 
 func (f *packageInformer) Lister() corev1.PackageLister {
 	return corev1.NewPackageLister(f.Informer().GetIndexer())
+}
+
+// ToTypedPackageInformer converts an untyped informer into a TypedPackageInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Package. If that is not the case, calling type-safe methods of the returned
+// TypedPackageInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedPackageInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedPackageInformer(informer PackageInformer) TypedPackageInformer {
+	if informer, ok := informer.(TypedPackageInformer); ok {
+		return informer
+	}
+	return &packageTypedInformerAdapter{informer}
+}
+
+type packageTypedInformerAdapter struct {
+	PackageInformer
+}
+
+func (a *packageTypedInformerAdapter) TypedInformer() PackageIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Package](a.Informer())
+}
+
+// ToPackageIndexInformer converts an untyped informer into a PackageIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Package. If that is not the case, calling type-safe methods of the returned
+// PackageIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a PackageIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToPackageIndexInformer(informer cache.SharedIndexInformer) PackageIndexInformer {
+	if informer, ok := informer.(PackageIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Package](informer)
 }

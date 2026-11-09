@@ -22,11 +22,39 @@ import (
 )
 
 // WorkflowRunInformer provides access to a shared informer and lister for
-// WorkflowRuns.
+// WorkflowRuns. Prefer using the type-safe variant (see [TypedWorkflowRunInformer]).
 type WorkflowRunInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.WorkflowRunLister
 }
+
+// TypedWorkflowRunInformer provides access to a shared informer and lister for
+// WorkflowRuns, including the type-safe TypedInformer variant.
+// It is a superset of WorkflowRunInformer.
+type TypedWorkflowRunInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() WorkflowRunIndexInformer
+	Lister() corev1.WorkflowRunLister
+}
+
+// WorkflowRunIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type WorkflowRunIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.WorkflowRun]
+
+// WorkflowRunHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for WorkflowRun.
+type WorkflowRunHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.WorkflowRun]
+
+// WorkflowRunDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for WorkflowRun.
+type WorkflowRunDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.WorkflowRun]
+
+// WorkflowRunFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for WorkflowRun.
+type WorkflowRunFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.WorkflowRun]
+
+// WorkflowRunIndexers is a specialization of [cache.TypedIndexers] for WorkflowRun.
+type WorkflowRunIndexers = cache.TypedIndexers[*apiscorev1.WorkflowRun]
+
+// DeletedWorkflowRun is a specialization of [cache.DeletedObject] for WorkflowRun.
+type DeletedWorkflowRun = cache.DeletedObject[*apiscorev1.WorkflowRun]
 
 type workflowRunInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type workflowRunInformer struct {
 // NewWorkflowRunInformer constructs a new informer for WorkflowRun type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedWorkflowRunInformer]).
 func NewWorkflowRunInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewWorkflowRunInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedWorkflowRunInformer constructs a new informer for WorkflowRun type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedWorkflowRunInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers WorkflowRunIndexers) WorkflowRunIndexInformer {
+	return NewTypedWorkflowRunInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredWorkflowRunInformer constructs a new informer for WorkflowRun type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredWorkflowRunInformer]).
 func NewFilteredWorkflowRunInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewWorkflowRunInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedWorkflowRunInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredWorkflowRunInformer constructs a new informer for WorkflowRun type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredWorkflowRunInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers WorkflowRunIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) WorkflowRunIndexInformer {
+	return NewTypedWorkflowRunInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewWorkflowRunInformerWithOptions constructs a new informer for WorkflowRun type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedWorkflowRunInformerWithOptions]).
 func NewWorkflowRunInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedWorkflowRunInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedWorkflowRunInformerWithOptions constructs a new informer for WorkflowRun type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedWorkflowRunInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) WorkflowRunIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "workflowruns"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.WorkflowRun](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewWorkflowRunInformerWithOptions(client versioned.Interface, namespace str
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *workflowRunInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewWorkflowRunInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedWorkflowRunInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *workflowRunInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.WorkflowRun{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *workflowRunInformer) TypedInformer() WorkflowRunIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.WorkflowRun](f.factory.InformerFor(&apiscorev1.WorkflowRun{}, f.defaultInformer))
 }
 
 func (f *workflowRunInformer) Lister() corev1.WorkflowRunLister {
 	return corev1.NewWorkflowRunLister(f.Informer().GetIndexer())
+}
+
+// ToTypedWorkflowRunInformer converts an untyped informer into a TypedWorkflowRunInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *WorkflowRun. If that is not the case, calling type-safe methods of the returned
+// TypedWorkflowRunInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedWorkflowRunInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedWorkflowRunInformer(informer WorkflowRunInformer) TypedWorkflowRunInformer {
+	if informer, ok := informer.(TypedWorkflowRunInformer); ok {
+		return informer
+	}
+	return &workflowRunTypedInformerAdapter{informer}
+}
+
+type workflowRunTypedInformerAdapter struct {
+	WorkflowRunInformer
+}
+
+func (a *workflowRunTypedInformerAdapter) TypedInformer() WorkflowRunIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.WorkflowRun](a.Informer())
+}
+
+// ToWorkflowRunIndexInformer converts an untyped informer into a WorkflowRunIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *WorkflowRun. If that is not the case, calling type-safe methods of the returned
+// WorkflowRunIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a WorkflowRunIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToWorkflowRunIndexInformer(informer cache.SharedIndexInformer) WorkflowRunIndexInformer {
+	if informer, ok := informer.(WorkflowRunIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.WorkflowRun](informer)
 }

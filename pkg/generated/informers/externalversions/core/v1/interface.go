@@ -13,31 +13,31 @@ import (
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// CanaryConfigs returns a CanaryConfigInformer.
-	CanaryConfigs() CanaryConfigInformer
+	CanaryConfigs() TypedCanaryConfigInformer
 	// Environments returns a EnvironmentInformer.
-	Environments() EnvironmentInformer
+	Environments() TypedEnvironmentInformer
 	// FissionTenants returns a FissionTenantInformer.
-	FissionTenants() FissionTenantInformer
+	FissionTenants() TypedFissionTenantInformer
 	// Functions returns a FunctionInformer.
-	Functions() FunctionInformer
+	Functions() TypedFunctionInformer
 	// FunctionAliases returns a FunctionAliasInformer.
-	FunctionAliases() FunctionAliasInformer
+	FunctionAliases() TypedFunctionAliasInformer
 	// FunctionVersions returns a FunctionVersionInformer.
-	FunctionVersions() FunctionVersionInformer
+	FunctionVersions() TypedFunctionVersionInformer
 	// HTTPTriggers returns a HTTPTriggerInformer.
-	HTTPTriggers() HTTPTriggerInformer
+	HTTPTriggers() TypedHTTPTriggerInformer
 	// KubernetesWatchTriggers returns a KubernetesWatchTriggerInformer.
-	KubernetesWatchTriggers() KubernetesWatchTriggerInformer
+	KubernetesWatchTriggers() TypedKubernetesWatchTriggerInformer
 	// MessageQueueTriggers returns a MessageQueueTriggerInformer.
-	MessageQueueTriggers() MessageQueueTriggerInformer
+	MessageQueueTriggers() TypedMessageQueueTriggerInformer
 	// Packages returns a PackageInformer.
-	Packages() PackageInformer
+	Packages() TypedPackageInformer
 	// TimeTriggers returns a TimeTriggerInformer.
-	TimeTriggers() TimeTriggerInformer
+	TimeTriggers() TypedTimeTriggerInformer
 	// Workflows returns a WorkflowInformer.
-	Workflows() WorkflowInformer
+	Workflows() TypedWorkflowInformer
 	// WorkflowRuns returns a WorkflowRunInformer.
-	WorkflowRuns() WorkflowRunInformer
+	WorkflowRuns() TypedWorkflowRunInformer
 }
 
 type version struct {
@@ -51,67 +51,67 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// CanaryConfigs returns a CanaryConfigInformer.
-func (v *version) CanaryConfigs() CanaryConfigInformer {
+// CanaryConfigs returns a TypedCanaryConfigInformer.
+func (v *version) CanaryConfigs() TypedCanaryConfigInformer {
 	return &canaryConfigInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// Environments returns a EnvironmentInformer.
-func (v *version) Environments() EnvironmentInformer {
+// Environments returns a TypedEnvironmentInformer.
+func (v *version) Environments() TypedEnvironmentInformer {
 	return &environmentInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// FissionTenants returns a FissionTenantInformer.
-func (v *version) FissionTenants() FissionTenantInformer {
+// FissionTenants returns a TypedFissionTenantInformer.
+func (v *version) FissionTenants() TypedFissionTenantInformer {
 	return &fissionTenantInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
-// Functions returns a FunctionInformer.
-func (v *version) Functions() FunctionInformer {
+// Functions returns a TypedFunctionInformer.
+func (v *version) Functions() TypedFunctionInformer {
 	return &functionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// FunctionAliases returns a FunctionAliasInformer.
-func (v *version) FunctionAliases() FunctionAliasInformer {
+// FunctionAliases returns a TypedFunctionAliasInformer.
+func (v *version) FunctionAliases() TypedFunctionAliasInformer {
 	return &functionAliasInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// FunctionVersions returns a FunctionVersionInformer.
-func (v *version) FunctionVersions() FunctionVersionInformer {
+// FunctionVersions returns a TypedFunctionVersionInformer.
+func (v *version) FunctionVersions() TypedFunctionVersionInformer {
 	return &functionVersionInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// HTTPTriggers returns a HTTPTriggerInformer.
-func (v *version) HTTPTriggers() HTTPTriggerInformer {
+// HTTPTriggers returns a TypedHTTPTriggerInformer.
+func (v *version) HTTPTriggers() TypedHTTPTriggerInformer {
 	return &hTTPTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// KubernetesWatchTriggers returns a KubernetesWatchTriggerInformer.
-func (v *version) KubernetesWatchTriggers() KubernetesWatchTriggerInformer {
+// KubernetesWatchTriggers returns a TypedKubernetesWatchTriggerInformer.
+func (v *version) KubernetesWatchTriggers() TypedKubernetesWatchTriggerInformer {
 	return &kubernetesWatchTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// MessageQueueTriggers returns a MessageQueueTriggerInformer.
-func (v *version) MessageQueueTriggers() MessageQueueTriggerInformer {
+// MessageQueueTriggers returns a TypedMessageQueueTriggerInformer.
+func (v *version) MessageQueueTriggers() TypedMessageQueueTriggerInformer {
 	return &messageQueueTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// Packages returns a PackageInformer.
-func (v *version) Packages() PackageInformer {
+// Packages returns a TypedPackageInformer.
+func (v *version) Packages() TypedPackageInformer {
 	return &packageInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// TimeTriggers returns a TimeTriggerInformer.
-func (v *version) TimeTriggers() TimeTriggerInformer {
+// TimeTriggers returns a TypedTimeTriggerInformer.
+func (v *version) TimeTriggers() TypedTimeTriggerInformer {
 	return &timeTriggerInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// Workflows returns a WorkflowInformer.
-func (v *version) Workflows() WorkflowInformer {
+// Workflows returns a TypedWorkflowInformer.
+func (v *version) Workflows() TypedWorkflowInformer {
 	return &workflowInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
-// WorkflowRuns returns a WorkflowRunInformer.
-func (v *version) WorkflowRuns() WorkflowRunInformer {
+// WorkflowRuns returns a TypedWorkflowRunInformer.
+func (v *version) WorkflowRuns() TypedWorkflowRunInformer {
 	return &workflowRunInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

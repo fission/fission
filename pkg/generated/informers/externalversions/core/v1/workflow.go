@@ -22,11 +22,39 @@ import (
 )
 
 // WorkflowInformer provides access to a shared informer and lister for
-// Workflows.
+// Workflows. Prefer using the type-safe variant (see [TypedWorkflowInformer]).
 type WorkflowInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.WorkflowLister
 }
+
+// TypedWorkflowInformer provides access to a shared informer and lister for
+// Workflows, including the type-safe TypedInformer variant.
+// It is a superset of WorkflowInformer.
+type TypedWorkflowInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() WorkflowIndexInformer
+	Lister() corev1.WorkflowLister
+}
+
+// WorkflowIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type WorkflowIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.Workflow]
+
+// WorkflowHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for Workflow.
+type WorkflowHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.Workflow]
+
+// WorkflowDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for Workflow.
+type WorkflowDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.Workflow]
+
+// WorkflowFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for Workflow.
+type WorkflowFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.Workflow]
+
+// WorkflowIndexers is a specialization of [cache.TypedIndexers] for Workflow.
+type WorkflowIndexers = cache.TypedIndexers[*apiscorev1.Workflow]
+
+// DeletedWorkflow is a specialization of [cache.DeletedObject] for Workflow.
+type DeletedWorkflow = cache.DeletedObject[*apiscorev1.Workflow]
 
 type workflowInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type workflowInformer struct {
 // NewWorkflowInformer constructs a new informer for Workflow type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedWorkflowInformer]).
 func NewWorkflowInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewWorkflowInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedWorkflowInformer constructs a new informer for Workflow type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedWorkflowInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers WorkflowIndexers) WorkflowIndexInformer {
+	return NewTypedWorkflowInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredWorkflowInformer constructs a new informer for Workflow type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredWorkflowInformer]).
 func NewFilteredWorkflowInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewWorkflowInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedWorkflowInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredWorkflowInformer constructs a new informer for Workflow type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredWorkflowInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers WorkflowIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) WorkflowIndexInformer {
+	return NewTypedWorkflowInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewWorkflowInformerWithOptions constructs a new informer for Workflow type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedWorkflowInformerWithOptions]).
 func NewWorkflowInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedWorkflowInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedWorkflowInformerWithOptions constructs a new informer for Workflow type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedWorkflowInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) WorkflowIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "workflows"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Workflow](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewWorkflowInformerWithOptions(client versioned.Interface, namespace string
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *workflowInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewWorkflowInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedWorkflowInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *workflowInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.Workflow{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *workflowInformer) TypedInformer() WorkflowIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Workflow](f.factory.InformerFor(&apiscorev1.Workflow{}, f.defaultInformer))
 }
 
 func (f *workflowInformer) Lister() corev1.WorkflowLister {
 	return corev1.NewWorkflowLister(f.Informer().GetIndexer())
+}
+
+// ToTypedWorkflowInformer converts an untyped informer into a TypedWorkflowInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Workflow. If that is not the case, calling type-safe methods of the returned
+// TypedWorkflowInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedWorkflowInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedWorkflowInformer(informer WorkflowInformer) TypedWorkflowInformer {
+	if informer, ok := informer.(TypedWorkflowInformer); ok {
+		return informer
+	}
+	return &workflowTypedInformerAdapter{informer}
+}
+
+type workflowTypedInformerAdapter struct {
+	WorkflowInformer
+}
+
+func (a *workflowTypedInformerAdapter) TypedInformer() WorkflowIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Workflow](a.Informer())
+}
+
+// ToWorkflowIndexInformer converts an untyped informer into a WorkflowIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Workflow. If that is not the case, calling type-safe methods of the returned
+// WorkflowIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a WorkflowIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToWorkflowIndexInformer(informer cache.SharedIndexInformer) WorkflowIndexInformer {
+	if informer, ok := informer.(WorkflowIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Workflow](informer)
 }

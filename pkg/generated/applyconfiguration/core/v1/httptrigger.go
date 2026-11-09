@@ -17,7 +17,7 @@ import (
 //
 // HTTPTrigger is the trigger invokes user functions when receiving HTTP requests.
 type HTTPTriggerApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *HTTPTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *HTTPTriggerStatusApplyConfiguration `json:"status,omitempty"`

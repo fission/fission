@@ -17,7 +17,7 @@ import (
 //
 // Function is function runs within environment runtime with given package and secrets/configmaps.
 type FunctionApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *FunctionSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *FunctionStatusApplyConfiguration `json:"status,omitempty"`

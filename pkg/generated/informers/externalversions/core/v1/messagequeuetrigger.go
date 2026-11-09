@@ -22,11 +22,39 @@ import (
 )
 
 // MessageQueueTriggerInformer provides access to a shared informer and lister for
-// MessageQueueTriggers.
+// MessageQueueTriggers. Prefer using the type-safe variant (see [TypedMessageQueueTriggerInformer]).
 type MessageQueueTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.MessageQueueTriggerLister
 }
+
+// TypedMessageQueueTriggerInformer provides access to a shared informer and lister for
+// MessageQueueTriggers, including the type-safe TypedInformer variant.
+// It is a superset of MessageQueueTriggerInformer.
+type TypedMessageQueueTriggerInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() MessageQueueTriggerIndexInformer
+	Lister() corev1.MessageQueueTriggerLister
+}
+
+// MessageQueueTriggerIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type MessageQueueTriggerIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.MessageQueueTrigger]
+
+// MessageQueueTriggerHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for MessageQueueTrigger.
+type MessageQueueTriggerHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.MessageQueueTrigger]
+
+// MessageQueueTriggerDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for MessageQueueTrigger.
+type MessageQueueTriggerDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.MessageQueueTrigger]
+
+// MessageQueueTriggerFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for MessageQueueTrigger.
+type MessageQueueTriggerFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.MessageQueueTrigger]
+
+// MessageQueueTriggerIndexers is a specialization of [cache.TypedIndexers] for MessageQueueTrigger.
+type MessageQueueTriggerIndexers = cache.TypedIndexers[*apiscorev1.MessageQueueTrigger]
+
+// DeletedMessageQueueTrigger is a specialization of [cache.DeletedObject] for MessageQueueTrigger.
+type DeletedMessageQueueTrigger = cache.DeletedObject[*apiscorev1.MessageQueueTrigger]
 
 type messageQueueTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type messageQueueTriggerInformer struct {
 // NewMessageQueueTriggerInformer constructs a new informer for MessageQueueTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedMessageQueueTriggerInformer]).
 func NewMessageQueueTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewMessageQueueTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedMessageQueueTriggerInformer constructs a new informer for MessageQueueTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedMessageQueueTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers MessageQueueTriggerIndexers) MessageQueueTriggerIndexInformer {
+	return NewTypedMessageQueueTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredMessageQueueTriggerInformer constructs a new informer for MessageQueueTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredMessageQueueTriggerInformer]).
 func NewFilteredMessageQueueTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewMessageQueueTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedMessageQueueTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredMessageQueueTriggerInformer constructs a new informer for MessageQueueTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredMessageQueueTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers MessageQueueTriggerIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) MessageQueueTriggerIndexInformer {
+	return NewTypedMessageQueueTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewMessageQueueTriggerInformerWithOptions constructs a new informer for MessageQueueTrigger type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedMessageQueueTriggerInformerWithOptions]).
 func NewMessageQueueTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedMessageQueueTriggerInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedMessageQueueTriggerInformerWithOptions constructs a new informer for MessageQueueTrigger type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedMessageQueueTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) MessageQueueTriggerIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "messagequeuetriggers"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.MessageQueueTrigger](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewMessageQueueTriggerInformerWithOptions(client versioned.Interface, names
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *messageQueueTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewMessageQueueTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedMessageQueueTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *messageQueueTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.MessageQueueTrigger{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *messageQueueTriggerInformer) TypedInformer() MessageQueueTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.MessageQueueTrigger](f.factory.InformerFor(&apiscorev1.MessageQueueTrigger{}, f.defaultInformer))
 }
 
 func (f *messageQueueTriggerInformer) Lister() corev1.MessageQueueTriggerLister {
 	return corev1.NewMessageQueueTriggerLister(f.Informer().GetIndexer())
+}
+
+// ToTypedMessageQueueTriggerInformer converts an untyped informer into a TypedMessageQueueTriggerInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *MessageQueueTrigger. If that is not the case, calling type-safe methods of the returned
+// TypedMessageQueueTriggerInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedMessageQueueTriggerInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedMessageQueueTriggerInformer(informer MessageQueueTriggerInformer) TypedMessageQueueTriggerInformer {
+	if informer, ok := informer.(TypedMessageQueueTriggerInformer); ok {
+		return informer
+	}
+	return &messageQueueTriggerTypedInformerAdapter{informer}
+}
+
+type messageQueueTriggerTypedInformerAdapter struct {
+	MessageQueueTriggerInformer
+}
+
+func (a *messageQueueTriggerTypedInformerAdapter) TypedInformer() MessageQueueTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.MessageQueueTrigger](a.Informer())
+}
+
+// ToMessageQueueTriggerIndexInformer converts an untyped informer into a MessageQueueTriggerIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *MessageQueueTrigger. If that is not the case, calling type-safe methods of the returned
+// MessageQueueTriggerIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a MessageQueueTriggerIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToMessageQueueTriggerIndexInformer(informer cache.SharedIndexInformer) MessageQueueTriggerIndexInformer {
+	if informer, ok := informer.(MessageQueueTriggerIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.MessageQueueTrigger](informer)
 }

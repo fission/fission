@@ -22,11 +22,39 @@ import (
 )
 
 // HTTPTriggerInformer provides access to a shared informer and lister for
-// HTTPTriggers.
+// HTTPTriggers. Prefer using the type-safe variant (see [TypedHTTPTriggerInformer]).
 type HTTPTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.HTTPTriggerLister
 }
+
+// TypedHTTPTriggerInformer provides access to a shared informer and lister for
+// HTTPTriggers, including the type-safe TypedInformer variant.
+// It is a superset of HTTPTriggerInformer.
+type TypedHTTPTriggerInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() HTTPTriggerIndexInformer
+	Lister() corev1.HTTPTriggerLister
+}
+
+// HTTPTriggerIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type HTTPTriggerIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.HTTPTrigger]
+
+// HTTPTriggerHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for HTTPTrigger.
+type HTTPTriggerHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.HTTPTrigger]
+
+// HTTPTriggerDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for HTTPTrigger.
+type HTTPTriggerDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.HTTPTrigger]
+
+// HTTPTriggerFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for HTTPTrigger.
+type HTTPTriggerFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.HTTPTrigger]
+
+// HTTPTriggerIndexers is a specialization of [cache.TypedIndexers] for HTTPTrigger.
+type HTTPTriggerIndexers = cache.TypedIndexers[*apiscorev1.HTTPTrigger]
+
+// DeletedHTTPTrigger is a specialization of [cache.DeletedObject] for HTTPTrigger.
+type DeletedHTTPTrigger = cache.DeletedObject[*apiscorev1.HTTPTrigger]
 
 type hTTPTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type hTTPTriggerInformer struct {
 // NewHTTPTriggerInformer constructs a new informer for HTTPTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedHTTPTriggerInformer]).
 func NewHTTPTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewHTTPTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedHTTPTriggerInformer constructs a new informer for HTTPTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedHTTPTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers HTTPTriggerIndexers) HTTPTriggerIndexInformer {
+	return NewTypedHTTPTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredHTTPTriggerInformer constructs a new informer for HTTPTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredHTTPTriggerInformer]).
 func NewFilteredHTTPTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewHTTPTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedHTTPTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredHTTPTriggerInformer constructs a new informer for HTTPTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredHTTPTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers HTTPTriggerIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) HTTPTriggerIndexInformer {
+	return NewTypedHTTPTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewHTTPTriggerInformerWithOptions constructs a new informer for HTTPTrigger type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedHTTPTriggerInformerWithOptions]).
 func NewHTTPTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedHTTPTriggerInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedHTTPTriggerInformerWithOptions constructs a new informer for HTTPTrigger type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedHTTPTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) HTTPTriggerIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "httptriggers"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.HTTPTrigger](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewHTTPTriggerInformerWithOptions(client versioned.Interface, namespace str
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *hTTPTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewHTTPTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedHTTPTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *hTTPTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.HTTPTrigger{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *hTTPTriggerInformer) TypedInformer() HTTPTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.HTTPTrigger](f.factory.InformerFor(&apiscorev1.HTTPTrigger{}, f.defaultInformer))
 }
 
 func (f *hTTPTriggerInformer) Lister() corev1.HTTPTriggerLister {
 	return corev1.NewHTTPTriggerLister(f.Informer().GetIndexer())
+}
+
+// ToTypedHTTPTriggerInformer converts an untyped informer into a TypedHTTPTriggerInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *HTTPTrigger. If that is not the case, calling type-safe methods of the returned
+// TypedHTTPTriggerInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedHTTPTriggerInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedHTTPTriggerInformer(informer HTTPTriggerInformer) TypedHTTPTriggerInformer {
+	if informer, ok := informer.(TypedHTTPTriggerInformer); ok {
+		return informer
+	}
+	return &hTTPTriggerTypedInformerAdapter{informer}
+}
+
+type hTTPTriggerTypedInformerAdapter struct {
+	HTTPTriggerInformer
+}
+
+func (a *hTTPTriggerTypedInformerAdapter) TypedInformer() HTTPTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.HTTPTrigger](a.Informer())
+}
+
+// ToHTTPTriggerIndexInformer converts an untyped informer into a HTTPTriggerIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *HTTPTrigger. If that is not the case, calling type-safe methods of the returned
+// HTTPTriggerIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a HTTPTriggerIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToHTTPTriggerIndexInformer(informer cache.SharedIndexInformer) HTTPTriggerIndexInformer {
+	if informer, ok := informer.(HTTPTriggerIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.HTTPTrigger](informer)
 }
