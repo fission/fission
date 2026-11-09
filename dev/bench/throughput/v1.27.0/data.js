@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792396531483,
+  "lastUpdate": 1794210263461,
   "repoUrl": "https://github.com/fission/fission",
   "entries": {
     "Fission throughput (v1.27.0)": [
@@ -861,6 +861,153 @@ window.BENCHMARK_DATA = {
           {
             "name": "payload-sweep/1MiB_throughput",
             "value": 176.66666666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "autoscale-newdeploy/max_replicas",
+            "value": 5,
+            "unit": "count"
+          },
+          {
+            "name": "autoscale-newdeploy/scaled",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "router-index-scale/objects",
+            "value": 1000,
+            "unit": "count"
+          },
+          {
+            "name": "route-churn/routes",
+            "value": 500,
+            "unit": "count"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Sanket Sudake",
+            "username": "sanketsudake",
+            "email": "sanketsudake@gmail.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "ae2aabf5a41896c19e51abb8ec7e4e6f90adfce3",
+          "message": "Dependency sweep 2026-10-25: go 1.27.3 (GO-2026-6809), controller-tools 0.23, misc patches (#3745)\n\n* Bump Go toolchain to 1.27.3 (closes GO-2026-6809)\n\ngo.mod and test/benchmark/go.mod move from 1.27.2 to 1.27.3, which fixes\ncrypto/x509's trust of compromised intermediate certificates. The router's\nstreaming path reaches x509.Certificate.Verify, so govulncheck reported the\nvulnerability as reachable.\n\nCI takes the toolchain from go.mod (go-version-file), so no workflow change\nis needed.\n\n* Bump controller-tools to v0.23.0 and regenerate the CRDs\n\ncontroller-gen v0.23 emits the validation markers that upstream k8s 0.37\nputs on PodSpec.evictionResponders (minLength on the responder name,\n0-100000 on priority, maxItems 10 on the list), so crds/v1 gains those\nconstraints alongside the new version stamp.\n\nv0.23.0 still targets k8s v0.37.0, so the k8s core group stays put.\n\n* Bump misc dependencies (go-snaps 0.5.24, ojg 1.28.8, sqlite 1.61.0)\n\nRoutine patch/minor updates with no CVEs attached; modernc.org/sqlite\npulls libc v1.79.0 and the x/mod+x/tools pair along with it. The nested\ntest/benchmark module is re-tidied to match.",
+          "timestamp": "2026-10-26T04:24:07Z",
+          "url": "https://github.com/fission/fission/commit/ae2aabf5a41896c19e51abb8ec7e4e6f90adfce3"
+        },
+        "date": 1794210262372,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "cold-start-poolmgr/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-newdeploy/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-start-poolmgr-configdeps/samples",
+            "value": 20,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-same-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "cold-burst-distinct-fn/samples",
+            "value": 10,
+            "unit": "count"
+          },
+          {
+            "name": "warm-path/throughput",
+            "value": 2211.733333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "warm-path/endpointcache_hit_ratio",
+            "value": 1,
+            "unit": "ratio"
+          },
+          {
+            "name": "warm-path-newdeploy/throughput",
+            "value": 2047.2666666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c10_throughput",
+            "value": 1693.1833333333334,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c50_throughput",
+            "value": 2030.7166666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c100_throughput",
+            "value": 2101.016666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c250_throughput",
+            "value": 2051.5666666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "concurrency-sweep/c500_throughput",
+            "value": 468.5,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps100_throughput",
+            "value": 100,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps250_throughput",
+            "value": 72.11666666666666,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps500_throughput",
+            "value": 499.46666666666664,
+            "unit": "rps"
+          },
+          {
+            "name": "rps-sweep/rps1000_throughput",
+            "value": 958.45,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1KiB_throughput",
+            "value": 1858.7166666666667,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/10KiB_throughput",
+            "value": 1610.9833333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/100KiB_throughput",
+            "value": 657.7333333333333,
+            "unit": "rps"
+          },
+          {
+            "name": "payload-sweep/1MiB_throughput",
+            "value": 38.483333333333334,
             "unit": "rps"
           },
           {
