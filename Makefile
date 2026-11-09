@@ -160,7 +160,7 @@ delete-crds:
 
 ### Cleanup
 clean:
-	@rm -f dist/
+	@rm -rf dist/
 
 ### Misc
 generate-swagger-doc:

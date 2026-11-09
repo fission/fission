@@ -22,11 +22,39 @@ import (
 )
 
 // FunctionAliasInformer provides access to a shared informer and lister for
-// FunctionAliases.
+// FunctionAliases. Prefer using the type-safe variant (see [TypedFunctionAliasInformer]).
 type FunctionAliasInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.FunctionAliasLister
 }
+
+// TypedFunctionAliasInformer provides access to a shared informer and lister for
+// FunctionAliases, including the type-safe TypedInformer variant.
+// It is a superset of FunctionAliasInformer.
+type TypedFunctionAliasInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() FunctionAliasIndexInformer
+	Lister() corev1.FunctionAliasLister
+}
+
+// FunctionAliasIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type FunctionAliasIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.FunctionAlias]
+
+// FunctionAliasHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for FunctionAlias.
+type FunctionAliasHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.FunctionAlias]
+
+// FunctionAliasDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for FunctionAlias.
+type FunctionAliasDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.FunctionAlias]
+
+// FunctionAliasFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for FunctionAlias.
+type FunctionAliasFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.FunctionAlias]
+
+// FunctionAliasIndexers is a specialization of [cache.TypedIndexers] for FunctionAlias.
+type FunctionAliasIndexers = cache.TypedIndexers[*apiscorev1.FunctionAlias]
+
+// DeletedFunctionAlias is a specialization of [cache.DeletedObject] for FunctionAlias.
+type DeletedFunctionAlias = cache.DeletedObject[*apiscorev1.FunctionAlias]
 
 type functionAliasInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type functionAliasInformer struct {
 // NewFunctionAliasInformer constructs a new informer for FunctionAlias type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFunctionAliasInformer]).
 func NewFunctionAliasInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewFunctionAliasInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedFunctionAliasInformer constructs a new informer for FunctionAlias type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFunctionAliasInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers FunctionAliasIndexers) FunctionAliasIndexInformer {
+	return NewTypedFunctionAliasInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredFunctionAliasInformer constructs a new informer for FunctionAlias type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredFunctionAliasInformer]).
 func NewFilteredFunctionAliasInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewFunctionAliasInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedFunctionAliasInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredFunctionAliasInformer constructs a new informer for FunctionAlias type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredFunctionAliasInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers FunctionAliasIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) FunctionAliasIndexInformer {
+	return NewTypedFunctionAliasInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewFunctionAliasInformerWithOptions constructs a new informer for FunctionAlias type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFunctionAliasInformerWithOptions]).
 func NewFunctionAliasInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedFunctionAliasInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedFunctionAliasInformerWithOptions constructs a new informer for FunctionAlias type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFunctionAliasInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) FunctionAliasIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "functionaliass"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FunctionAlias](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewFunctionAliasInformerWithOptions(client versioned.Interface, namespace s
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *functionAliasInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFunctionAliasInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedFunctionAliasInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *functionAliasInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.FunctionAlias{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *functionAliasInformer) TypedInformer() FunctionAliasIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FunctionAlias](f.factory.InformerFor(&apiscorev1.FunctionAlias{}, f.defaultInformer))
 }
 
 func (f *functionAliasInformer) Lister() corev1.FunctionAliasLister {
 	return corev1.NewFunctionAliasLister(f.Informer().GetIndexer())
+}
+
+// ToTypedFunctionAliasInformer converts an untyped informer into a TypedFunctionAliasInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *FunctionAlias. If that is not the case, calling type-safe methods of the returned
+// TypedFunctionAliasInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedFunctionAliasInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedFunctionAliasInformer(informer FunctionAliasInformer) TypedFunctionAliasInformer {
+	if informer, ok := informer.(TypedFunctionAliasInformer); ok {
+		return informer
+	}
+	return &functionAliasTypedInformerAdapter{informer}
+}
+
+type functionAliasTypedInformerAdapter struct {
+	FunctionAliasInformer
+}
+
+func (a *functionAliasTypedInformerAdapter) TypedInformer() FunctionAliasIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FunctionAlias](a.Informer())
+}
+
+// ToFunctionAliasIndexInformer converts an untyped informer into a FunctionAliasIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *FunctionAlias. If that is not the case, calling type-safe methods of the returned
+// FunctionAliasIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a FunctionAliasIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToFunctionAliasIndexInformer(informer cache.SharedIndexInformer) FunctionAliasIndexInformer {
+	if informer, ok := informer.(FunctionAliasIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FunctionAlias](informer)
 }

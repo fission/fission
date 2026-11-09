@@ -22,11 +22,39 @@ import (
 )
 
 // KubernetesWatchTriggerInformer provides access to a shared informer and lister for
-// KubernetesWatchTriggers.
+// KubernetesWatchTriggers. Prefer using the type-safe variant (see [TypedKubernetesWatchTriggerInformer]).
 type KubernetesWatchTriggerInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.KubernetesWatchTriggerLister
 }
+
+// TypedKubernetesWatchTriggerInformer provides access to a shared informer and lister for
+// KubernetesWatchTriggers, including the type-safe TypedInformer variant.
+// It is a superset of KubernetesWatchTriggerInformer.
+type TypedKubernetesWatchTriggerInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() KubernetesWatchTriggerIndexInformer
+	Lister() corev1.KubernetesWatchTriggerLister
+}
+
+// KubernetesWatchTriggerIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type KubernetesWatchTriggerIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.KubernetesWatchTrigger]
+
+// KubernetesWatchTriggerHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for KubernetesWatchTrigger.
+type KubernetesWatchTriggerHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.KubernetesWatchTrigger]
+
+// KubernetesWatchTriggerDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for KubernetesWatchTrigger.
+type KubernetesWatchTriggerDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.KubernetesWatchTrigger]
+
+// KubernetesWatchTriggerFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for KubernetesWatchTrigger.
+type KubernetesWatchTriggerFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.KubernetesWatchTrigger]
+
+// KubernetesWatchTriggerIndexers is a specialization of [cache.TypedIndexers] for KubernetesWatchTrigger.
+type KubernetesWatchTriggerIndexers = cache.TypedIndexers[*apiscorev1.KubernetesWatchTrigger]
+
+// DeletedKubernetesWatchTrigger is a specialization of [cache.DeletedObject] for KubernetesWatchTrigger.
+type DeletedKubernetesWatchTrigger = cache.DeletedObject[*apiscorev1.KubernetesWatchTrigger]
 
 type kubernetesWatchTriggerInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type kubernetesWatchTriggerInformer struct {
 // NewKubernetesWatchTriggerInformer constructs a new informer for KubernetesWatchTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedKubernetesWatchTriggerInformer]).
 func NewKubernetesWatchTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewKubernetesWatchTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedKubernetesWatchTriggerInformer constructs a new informer for KubernetesWatchTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedKubernetesWatchTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers KubernetesWatchTriggerIndexers) KubernetesWatchTriggerIndexInformer {
+	return NewTypedKubernetesWatchTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredKubernetesWatchTriggerInformer constructs a new informer for KubernetesWatchTrigger type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredKubernetesWatchTriggerInformer]).
 func NewFilteredKubernetesWatchTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewKubernetesWatchTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedKubernetesWatchTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredKubernetesWatchTriggerInformer constructs a new informer for KubernetesWatchTrigger type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredKubernetesWatchTriggerInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers KubernetesWatchTriggerIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) KubernetesWatchTriggerIndexInformer {
+	return NewTypedKubernetesWatchTriggerInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewKubernetesWatchTriggerInformerWithOptions constructs a new informer for KubernetesWatchTrigger type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedKubernetesWatchTriggerInformerWithOptions]).
 func NewKubernetesWatchTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedKubernetesWatchTriggerInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedKubernetesWatchTriggerInformerWithOptions constructs a new informer for KubernetesWatchTrigger type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedKubernetesWatchTriggerInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) KubernetesWatchTriggerIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "kuberneteswatchtriggers"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.KubernetesWatchTrigger](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewKubernetesWatchTriggerInformerWithOptions(client versioned.Interface, na
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *kubernetesWatchTriggerInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewKubernetesWatchTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedKubernetesWatchTriggerInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *kubernetesWatchTriggerInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.KubernetesWatchTrigger{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *kubernetesWatchTriggerInformer) TypedInformer() KubernetesWatchTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.KubernetesWatchTrigger](f.factory.InformerFor(&apiscorev1.KubernetesWatchTrigger{}, f.defaultInformer))
 }
 
 func (f *kubernetesWatchTriggerInformer) Lister() corev1.KubernetesWatchTriggerLister {
 	return corev1.NewKubernetesWatchTriggerLister(f.Informer().GetIndexer())
+}
+
+// ToTypedKubernetesWatchTriggerInformer converts an untyped informer into a TypedKubernetesWatchTriggerInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *KubernetesWatchTrigger. If that is not the case, calling type-safe methods of the returned
+// TypedKubernetesWatchTriggerInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedKubernetesWatchTriggerInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedKubernetesWatchTriggerInformer(informer KubernetesWatchTriggerInformer) TypedKubernetesWatchTriggerInformer {
+	if informer, ok := informer.(TypedKubernetesWatchTriggerInformer); ok {
+		return informer
+	}
+	return &kubernetesWatchTriggerTypedInformerAdapter{informer}
+}
+
+type kubernetesWatchTriggerTypedInformerAdapter struct {
+	KubernetesWatchTriggerInformer
+}
+
+func (a *kubernetesWatchTriggerTypedInformerAdapter) TypedInformer() KubernetesWatchTriggerIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.KubernetesWatchTrigger](a.Informer())
+}
+
+// ToKubernetesWatchTriggerIndexInformer converts an untyped informer into a KubernetesWatchTriggerIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *KubernetesWatchTrigger. If that is not the case, calling type-safe methods of the returned
+// KubernetesWatchTriggerIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a KubernetesWatchTriggerIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToKubernetesWatchTriggerIndexInformer(informer cache.SharedIndexInformer) KubernetesWatchTriggerIndexInformer {
+	if informer, ok := informer.(KubernetesWatchTriggerIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.KubernetesWatchTrigger](informer)
 }

@@ -20,7 +20,7 @@ import (
 // what triggers reference in production; moving an alias is how a rollout
 // or rollback happens without touching the trigger.
 type FunctionAliasApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *FunctionAliasSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *FunctionAliasStatusApplyConfiguration `json:"status,omitempty"`

@@ -17,7 +17,7 @@ import (
 //
 // CanaryConfig is for canary deployment of two functions.
 type CanaryConfigApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *CanaryConfigSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *CanaryConfigStatusApplyConfiguration `json:"status,omitempty"`

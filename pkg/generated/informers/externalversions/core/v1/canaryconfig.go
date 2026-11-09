@@ -22,11 +22,39 @@ import (
 )
 
 // CanaryConfigInformer provides access to a shared informer and lister for
-// CanaryConfigs.
+// CanaryConfigs. Prefer using the type-safe variant (see [TypedCanaryConfigInformer]).
 type CanaryConfigInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.CanaryConfigLister
 }
+
+// TypedCanaryConfigInformer provides access to a shared informer and lister for
+// CanaryConfigs, including the type-safe TypedInformer variant.
+// It is a superset of CanaryConfigInformer.
+type TypedCanaryConfigInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() CanaryConfigIndexInformer
+	Lister() corev1.CanaryConfigLister
+}
+
+// CanaryConfigIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type CanaryConfigIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.CanaryConfig]
+
+// CanaryConfigHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for CanaryConfig.
+type CanaryConfigHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.CanaryConfig]
+
+// CanaryConfigDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for CanaryConfig.
+type CanaryConfigDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.CanaryConfig]
+
+// CanaryConfigFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for CanaryConfig.
+type CanaryConfigFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.CanaryConfig]
+
+// CanaryConfigIndexers is a specialization of [cache.TypedIndexers] for CanaryConfig.
+type CanaryConfigIndexers = cache.TypedIndexers[*apiscorev1.CanaryConfig]
+
+// DeletedCanaryConfig is a specialization of [cache.DeletedObject] for CanaryConfig.
+type DeletedCanaryConfig = cache.DeletedObject[*apiscorev1.CanaryConfig]
 
 type canaryConfigInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type canaryConfigInformer struct {
 // NewCanaryConfigInformer constructs a new informer for CanaryConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedCanaryConfigInformer]).
 func NewCanaryConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewCanaryConfigInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedCanaryConfigInformer constructs a new informer for CanaryConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedCanaryConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers CanaryConfigIndexers) CanaryConfigIndexInformer {
+	return NewTypedCanaryConfigInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredCanaryConfigInformer constructs a new informer for CanaryConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredCanaryConfigInformer]).
 func NewFilteredCanaryConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewCanaryConfigInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedCanaryConfigInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredCanaryConfigInformer constructs a new informer for CanaryConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredCanaryConfigInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers CanaryConfigIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) CanaryConfigIndexInformer {
+	return NewTypedCanaryConfigInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewCanaryConfigInformerWithOptions constructs a new informer for CanaryConfig type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedCanaryConfigInformerWithOptions]).
 func NewCanaryConfigInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedCanaryConfigInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedCanaryConfigInformerWithOptions constructs a new informer for CanaryConfig type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedCanaryConfigInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) CanaryConfigIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "canaryconfigs"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.CanaryConfig](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewCanaryConfigInformerWithOptions(client versioned.Interface, namespace st
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *canaryConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewCanaryConfigInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedCanaryConfigInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *canaryConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.CanaryConfig{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *canaryConfigInformer) TypedInformer() CanaryConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.CanaryConfig](f.factory.InformerFor(&apiscorev1.CanaryConfig{}, f.defaultInformer))
 }
 
 func (f *canaryConfigInformer) Lister() corev1.CanaryConfigLister {
 	return corev1.NewCanaryConfigLister(f.Informer().GetIndexer())
+}
+
+// ToTypedCanaryConfigInformer converts an untyped informer into a TypedCanaryConfigInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *CanaryConfig. If that is not the case, calling type-safe methods of the returned
+// TypedCanaryConfigInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedCanaryConfigInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedCanaryConfigInformer(informer CanaryConfigInformer) TypedCanaryConfigInformer {
+	if informer, ok := informer.(TypedCanaryConfigInformer); ok {
+		return informer
+	}
+	return &canaryConfigTypedInformerAdapter{informer}
+}
+
+type canaryConfigTypedInformerAdapter struct {
+	CanaryConfigInformer
+}
+
+func (a *canaryConfigTypedInformerAdapter) TypedInformer() CanaryConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.CanaryConfig](a.Informer())
+}
+
+// ToCanaryConfigIndexInformer converts an untyped informer into a CanaryConfigIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *CanaryConfig. If that is not the case, calling type-safe methods of the returned
+// CanaryConfigIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a CanaryConfigIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToCanaryConfigIndexInformer(informer cache.SharedIndexInformer) CanaryConfigIndexInformer {
+	if informer, ok := informer.(CanaryConfigIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.CanaryConfig](informer)
 }

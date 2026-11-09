@@ -22,11 +22,39 @@ import (
 )
 
 // FunctionInformer provides access to a shared informer and lister for
-// Functions.
+// Functions. Prefer using the type-safe variant (see [TypedFunctionInformer]).
 type FunctionInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.FunctionLister
 }
+
+// TypedFunctionInformer provides access to a shared informer and lister for
+// Functions, including the type-safe TypedInformer variant.
+// It is a superset of FunctionInformer.
+type TypedFunctionInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() FunctionIndexInformer
+	Lister() corev1.FunctionLister
+}
+
+// FunctionIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type FunctionIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.Function]
+
+// FunctionHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for Function.
+type FunctionHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.Function]
+
+// FunctionDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for Function.
+type FunctionDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.Function]
+
+// FunctionFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for Function.
+type FunctionFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.Function]
+
+// FunctionIndexers is a specialization of [cache.TypedIndexers] for Function.
+type FunctionIndexers = cache.TypedIndexers[*apiscorev1.Function]
+
+// DeletedFunction is a specialization of [cache.DeletedObject] for Function.
+type DeletedFunction = cache.DeletedObject[*apiscorev1.Function]
 
 type functionInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -37,25 +65,49 @@ type functionInformer struct {
 // NewFunctionInformer constructs a new informer for Function type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFunctionInformer]).
 func NewFunctionInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewFunctionInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedFunctionInformer constructs a new informer for Function type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFunctionInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers FunctionIndexers) FunctionIndexInformer {
+	return NewTypedFunctionInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredFunctionInformer constructs a new informer for Function type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredFunctionInformer]).
 func NewFilteredFunctionInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewFunctionInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedFunctionInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredFunctionInformer constructs a new informer for Function type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredFunctionInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers FunctionIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) FunctionIndexInformer {
+	return NewTypedFunctionInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewFunctionInformerWithOptions constructs a new informer for Function type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFunctionInformerWithOptions]).
 func NewFunctionInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedFunctionInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedFunctionInformerWithOptions constructs a new informer for Function type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFunctionInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) FunctionIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "functions"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Function](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -88,17 +140,57 @@ func NewFunctionInformerWithOptions(client versioned.Interface, namespace string
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *functionInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFunctionInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedFunctionInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *functionInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.Function{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *functionInformer) TypedInformer() FunctionIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Function](f.factory.InformerFor(&apiscorev1.Function{}, f.defaultInformer))
 }
 
 func (f *functionInformer) Lister() corev1.FunctionLister {
 	return corev1.NewFunctionLister(f.Informer().GetIndexer())
+}
+
+// ToTypedFunctionInformer converts an untyped informer into a TypedFunctionInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Function. If that is not the case, calling type-safe methods of the returned
+// TypedFunctionInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedFunctionInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedFunctionInformer(informer FunctionInformer) TypedFunctionInformer {
+	if informer, ok := informer.(TypedFunctionInformer); ok {
+		return informer
+	}
+	return &functionTypedInformerAdapter{informer}
+}
+
+type functionTypedInformerAdapter struct {
+	FunctionInformer
+}
+
+func (a *functionTypedInformerAdapter) TypedInformer() FunctionIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Function](a.Informer())
+}
+
+// ToFunctionIndexInformer converts an untyped informer into a FunctionIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Function. If that is not the case, calling type-safe methods of the returned
+// FunctionIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a FunctionIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToFunctionIndexInformer(informer cache.SharedIndexInformer) FunctionIndexInformer {
+	if informer, ok := informer.(FunctionIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.Function](informer)
 }

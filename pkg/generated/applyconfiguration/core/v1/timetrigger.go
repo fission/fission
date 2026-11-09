@@ -17,7 +17,7 @@ import (
 //
 // TimeTrigger invokes functions based on given cron schedule.
 type TimeTriggerApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *TimeTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *TimeTriggerStatusApplyConfiguration `json:"status,omitempty"`

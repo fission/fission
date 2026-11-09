@@ -17,7 +17,7 @@ import (
 //
 // MessageQueueTrigger invokes functions when messages arrive to certain topic that trigger subscribes to.
 type MessageQueueTriggerApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *MessageQueueTriggerSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *MessageQueueTriggerStatusApplyConfiguration `json:"status,omitempty"`

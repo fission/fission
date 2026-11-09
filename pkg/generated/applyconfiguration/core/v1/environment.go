@@ -17,7 +17,7 @@ import (
 //
 // Environment is environment for building and running user functions.
 type EnvironmentApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                                 *EnvironmentSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                               *EnvironmentStatusApplyConfiguration `json:"status,omitempty"`

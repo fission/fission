@@ -6,12 +6,12 @@ pull_request_rules:
       - label=ready-to-merge
       - label!=hold-off-merging
       - check-success=CodeQL-Build
-      - check-success=CodeQL
-      - check-success=lint 
-      - check-success=upgrade-test (kindest/node:v1.23.17, ubuntu-latest)
-      - check-success=integration-test (v1.23.17, ubuntu-latest)
-      - check-success=integration-test (v1.25.11, ubuntu-latest)
-      - check-success=integration-test (v1.27.3, ubuntu-latest)
+      - check-success=lint
+      - check-success=upgrade-test (v1.32.11, ubuntu-24.04, latest)
+      - check-success=upgrade-test (v1.32.11, ubuntu-24.04, skip-level)
+      - check-success=integration-test (v1.32.11, ubuntu-24.04)
+      - check-success=integration-test (v1.34.8, ubuntu-24.04)
+      - check-success=integration-test (v1.36.1, ubuntu-24.04)
     actions:
       merge:
         method: squash

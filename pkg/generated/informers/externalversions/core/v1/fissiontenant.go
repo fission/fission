@@ -22,11 +22,39 @@ import (
 )
 
 // FissionTenantInformer provides access to a shared informer and lister for
-// FissionTenants.
+// FissionTenants. Prefer using the type-safe variant (see [TypedFissionTenantInformer]).
 type FissionTenantInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1.FissionTenantLister
 }
+
+// TypedFissionTenantInformer provides access to a shared informer and lister for
+// FissionTenants, including the type-safe TypedInformer variant.
+// It is a superset of FissionTenantInformer.
+type TypedFissionTenantInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() FissionTenantIndexInformer
+	Lister() corev1.FissionTenantLister
+}
+
+// FissionTenantIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type FissionTenantIndexInformer cache.TypedSharedIndexInformer[*apiscorev1.FissionTenant]
+
+// FissionTenantHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for FissionTenant.
+type FissionTenantHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1.FissionTenant]
+
+// FissionTenantDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for FissionTenant.
+type FissionTenantDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1.FissionTenant]
+
+// FissionTenantFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for FissionTenant.
+type FissionTenantFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1.FissionTenant]
+
+// FissionTenantIndexers is a specialization of [cache.TypedIndexers] for FissionTenant.
+type FissionTenantIndexers = cache.TypedIndexers[*apiscorev1.FissionTenant]
+
+// DeletedFissionTenant is a specialization of [cache.DeletedObject] for FissionTenant.
+type DeletedFissionTenant = cache.DeletedObject[*apiscorev1.FissionTenant]
 
 type fissionTenantInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -36,25 +64,49 @@ type fissionTenantInformer struct {
 // NewFissionTenantInformer constructs a new informer for FissionTenant type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFissionTenantInformer]).
 func NewFissionTenantInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedFissionTenantInformer constructs a new informer for FissionTenant type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFissionTenantInformer(client versioned.Interface, resyncPeriod time.Duration, indexers FissionTenantIndexers) FissionTenantIndexInformer {
+	return NewTypedFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredFissionTenantInformer constructs a new informer for FissionTenant type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredFissionTenantInformer]).
 func NewFilteredFissionTenantInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredFissionTenantInformer constructs a new informer for FissionTenant type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredFissionTenantInformer(client versioned.Interface, resyncPeriod time.Duration, indexers FissionTenantIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) FissionTenantIndexInformer {
+	return NewTypedFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewFissionTenantInformerWithOptions constructs a new informer for FissionTenant type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFissionTenantInformerWithOptions]).
 func NewFissionTenantInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedFissionTenantInformerWithOptions(client, options)
+}
+
+// NewTypedFissionTenantInformerWithOptions constructs a new informer for FissionTenant type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFissionTenantInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) FissionTenantIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "fission.io", Version: "v1", Resource: "fissiontenants"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FissionTenant](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -87,17 +139,57 @@ func NewFissionTenantInformerWithOptions(client versioned.Interface, options int
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *fissionTenantInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedFissionTenantInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *fissionTenantInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1.FissionTenant{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *fissionTenantInformer) TypedInformer() FissionTenantIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FissionTenant](f.factory.InformerFor(&apiscorev1.FissionTenant{}, f.defaultInformer))
 }
 
 func (f *fissionTenantInformer) Lister() corev1.FissionTenantLister {
 	return corev1.NewFissionTenantLister(f.Informer().GetIndexer())
+}
+
+// ToTypedFissionTenantInformer converts an untyped informer into a TypedFissionTenantInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *FissionTenant. If that is not the case, calling type-safe methods of the returned
+// TypedFissionTenantInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedFissionTenantInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedFissionTenantInformer(informer FissionTenantInformer) TypedFissionTenantInformer {
+	if informer, ok := informer.(TypedFissionTenantInformer); ok {
+		return informer
+	}
+	return &fissionTenantTypedInformerAdapter{informer}
+}
+
+type fissionTenantTypedInformerAdapter struct {
+	FissionTenantInformer
+}
+
+func (a *fissionTenantTypedInformerAdapter) TypedInformer() FissionTenantIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FissionTenant](a.Informer())
+}
+
+// ToFissionTenantIndexInformer converts an untyped informer into a FissionTenantIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *FissionTenant. If that is not the case, calling type-safe methods of the returned
+// FissionTenantIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a FissionTenantIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToFissionTenantIndexInformer(informer cache.SharedIndexInformer) FissionTenantIndexInformer {
+	if informer, ok := informer.(FissionTenantIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1.FissionTenant](informer)
 }
