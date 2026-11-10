@@ -211,6 +211,76 @@ func TestScalerReconciler(t *testing.T) {
 		assert.Equal(t, authTriggerName("mqt"), so.Spec.Triggers[0].AuthenticationRef.Name)
 	})
 
+	t.Run("metadata topic does not block a later deployment and scaledobject update", func(t *testing.T) {
+		t.Parallel()
+		mqt := mqtForKind("mqt", MqtKindKeda)
+		mqt.Spec.Metadata = map[string]string{
+			"topic":            "orders",
+			"bootstrapServers": "kafka:9092",
+		}
+
+		kube := k8sfake.NewClientset()
+		// The API server rejects a Deployment whose containers repeat an env name.
+		// The fake client does not, so model that rejection on update — the path
+		// that runs before the ScaledObject is written.
+		kube.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			dep := action.(k8stesting.UpdateAction).GetObject().(*appsv1.Deployment)
+			seen := map[string]struct{}{}
+			for _, c := range dep.Spec.Template.Spec.Containers {
+				for _, env := range c.Env {
+					if _, dup := seen[env.Name]; dup {
+						return true, nil, apierrors.NewBadRequest("duplicate env var name " + env.Name)
+					}
+					seen[env.Name] = struct{}{}
+				}
+			}
+			return false, nil, nil
+		})
+
+		kc := kedafake.NewSimpleClientset()
+		r := newScalerReconciler(
+			loggerfactory.GetLogger(),
+			crfake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(mqt).Build(),
+			kc,
+			kube,
+			"http://router.fission",
+		)
+
+		_, err := r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+
+		cur := &fv1.MessageQueueTrigger{}
+		require.NoError(t, r.client.Get(t.Context(), key, cur))
+		newMax := int32(7)
+		cur.Spec.MaxReplicaCount = &newMax
+		require.NoError(t, r.client.Update(t.Context(), cur))
+
+		_, err = r.Reconcile(t.Context(), req)
+		require.NoError(t, err)
+
+		dep, err := kube.AppsV1().Deployments(metav1.NamespaceDefault).Get(t.Context(), "mqt", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.Len(t, dep.Spec.Template.Spec.Containers, 1)
+		topicCount := 0
+		for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+			if env.Name == "TOPIC" {
+				topicCount++
+				assert.Equal(t, mqt.Spec.Topic, env.Value)
+			}
+		}
+		assert.Equal(t, 1, topicCount, "spec.topic and metadata.topic must not both become TOPIC")
+
+		so, err := kc.KedaV1alpha1().ScaledObjects(metav1.NamespaceDefault).Get(t.Context(), "mqt", metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NotNil(t, so.Spec.MaxReplicaCount)
+		assert.Equal(t, newMax, *so.Spec.MaxReplicaCount)
+		require.Len(t, so.Spec.Triggers, 1)
+		assert.Equal(t, map[string]string{
+			"topic":            "orders",
+			"bootstrapServers": "kafka:9092",
+		}, so.Spec.Triggers[0].Metadata)
+	})
+
 	t.Run("rollback on scaledobject failure does not delete a pre-existing deployment", func(t *testing.T) {
 		t.Parallel()
 		mqt := mqtForKind("mqt", MqtKindKeda)

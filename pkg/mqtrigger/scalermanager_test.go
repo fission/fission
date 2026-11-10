@@ -143,6 +143,7 @@ func Test_getEnvVarlist(t *testing.T) {
 				"bootstrapServers": "my-cluster-kafka-brokers.my-kafka-project.svc:9092",
 				"consumerGroup":    "my-group",
 				"topic":            "topic",
+				"responseTopic":    "metadata-response-topic",
 			},
 			Secret:  "test-kafka-secrets",
 			MqtKind: "keda",
@@ -209,10 +210,6 @@ func Test_getEnvVarlist(t *testing.T) {
 		{
 			Name:  "CONSUMER_GROUP",
 			Value: "my-group",
-		},
-		{
-			Name:  "TOPIC",
-			Value: "topic",
 		},
 		secretEnv("KEY", "test-kafka-secrets", "key"),
 		secretEnv("AUTH_MODE", "test-kafka-secrets", "authMode"),
