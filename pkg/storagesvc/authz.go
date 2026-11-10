@@ -23,6 +23,52 @@ import (
 // used as a storage sub-directory (SUBDIR / STORAGE_S3_SUB_DIR).
 const archiveTenantMarker = "_tenant_"
 
+// workspaceMarker is the fixed path segment that roots the reserved session
+// artifact workspace object space (".../_workspace_/<ns>/<agent>/<session>/...",
+// see workspace.go). Reserved exactly like archiveTenantMarker: an underscore
+// makes it impossible for an RFC-1123 namespace label to collide with it, and
+// it must never be used as a storage sub-directory (SUBDIR / STORAGE_S3_SUB_DIR).
+// The archive pruner and the /v1/archive routes must never treat an id
+// containing this marker as an archive — see isWorkspaceID and its call sites.
+const workspaceMarker = "_workspace_"
+
+// isWorkspaceID reports whether id contains the reserved workspaceMarker as a
+// path segment, independent of any backend-added prefix — the local backend's
+// id is the ABSOLUTE container path, and an S3 id may carry a
+// STORAGE_S3_SUB_DIR prefix — so a naive strings.HasPrefix(id, workspaceMarker)
+// would miss both. Same segment-based approach as archiveNamespace (path.Clean
+// first so a crafted ".."-bearing id is judged on what the backend will
+// actually resolve, not the literal string).
+//
+// This is the seal between the workspace object space and the archive routes:
+// the archive handlers (download/delete/info) and the archive/orphan-pruner
+// candidate listing (getItemIDsWithFilter) all reject/exclude on this check so
+// a workspace object is never reachable as if it were an archive — including
+// for the master principal, which authorizedFor's legacy-id grandfather would
+// otherwise wave through unconditionally.
+func isWorkspaceID(id string) bool {
+	for _, s := range strings.Split(path.Clean(filepath.ToSlash(id)), "/") {
+		if s == workspaceMarker {
+			return true
+		}
+	}
+	return false
+}
+
+// rejectWorkspaceID is the archive routes' seal against workspace ids (see
+// isWorkspaceID). Every archive handler (download/delete/info) MUST call it
+// BEFORE ss.authorizedFor, whose legacy-id grandfather would otherwise wave a
+// _workspace_-marked id through as an unscoped legacy archive. It writes a 404
+// (never a 403 — a workspace object simply is not an archive) with the caller's
+// route-specific message and returns true when the id was rejected.
+func rejectWorkspaceID(w http.ResponseWriter, fileID, notFoundMsg string) bool {
+	if isWorkspaceID(fileID) {
+		http.Error(w, notFoundMsg, http.StatusNotFound)
+		return true
+	}
+	return false
+}
+
 // archiveNamespace returns the namespace that owns the archive id, or "" for a
 // legacy/unscoped id (one with no marker). It locates the marker segment and
 // returns the following segment when it is a valid namespace label and is itself

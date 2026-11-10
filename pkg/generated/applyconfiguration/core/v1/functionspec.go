@@ -122,6 +122,13 @@ type FunctionSpecApplyConfiguration struct {
 	// Streaming and Tool): nil (the default) means exactly today's mutable
 	// in-place behavior. Additive and backward compatible.
 	Versioning *VersioningConfigApplyConfiguration `json:"versioning,omitempty"`
+	// Agent, when non-nil, declares this function as an agent: its
+	// invocations are session-scoped, dispatched and lifecycle-tracked by
+	// the fission-bundle --agentPort subsystem, with session records kept
+	// in the statestore (never CRDs). Presence is the on switch (like
+	// Streaming, Tool and State): nil (the default) means exactly today's
+	// behavior. Additive and backward compatible.
+	Agent *AgentConfigApplyConfiguration `json:"agent,omitempty"`
 	// Podspec specifies podspec to use for executor type container based functions
 	// Different arguments mentioned for container based function are populated inside a pod.
 	PodSpec *corev1.PodSpec `json:"podspec,omitempty"`
@@ -304,6 +311,14 @@ func (b *FunctionSpecApplyConfiguration) WithProvisionedConcurrency(value *Provi
 // If called multiple times, the Versioning field is set to the value of the last call.
 func (b *FunctionSpecApplyConfiguration) WithVersioning(value *VersioningConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
 	b.Versioning = value
+	return b
+}
+
+// WithAgent sets the Agent field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Agent field is set to the value of the last call.
+func (b *FunctionSpecApplyConfiguration) WithAgent(value *AgentConfigApplyConfiguration) *FunctionSpecApplyConfiguration {
+	b.Agent = value
 	return b
 }
 

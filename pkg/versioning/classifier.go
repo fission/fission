@@ -114,6 +114,12 @@ func RuntimeAffecting(old, new fv1.FunctionSpec) bool {
 	case !equality.Semantic.DeepEqual(old.PodSpec, new.PodSpec):
 		return true
 
+	// Agent: presence switches invocation dispatch to the fission-bundle
+	// --agentPort subsystem (session-scoped routing and lifecycle tracking)
+	// instead of the normal invocation path — invocation-observable.
+	case !equality.Semantic.DeepEqual(old.Agent, new.Agent):
+		return true
+
 	default:
 		return false
 	}

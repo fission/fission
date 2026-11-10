@@ -54,6 +54,9 @@ const (
 	// (RFC-0023). Scoped surface only — the raw statestore stays on
 	// PortStatestore, unreachable from function pods.
 	PortStateSvc = 8893
+	// PortAgentRuntime is the agent runtime's session-dispatch port: health
+	// probes plus POST /agents/{namespace}/{name}.
+	PortAgentRuntime = 8894
 	// PortMetrics is the default Prometheus metrics port every component
 	// serves when METRICS_ADDR is unset; chart ServiceMonitors scrape it.
 	PortMetrics = 8080
@@ -76,6 +79,7 @@ const (
 	SvcStatestore     = "statestore"
 	SvcWorkflow       = "workflow"
 	SvcStateSvc       = "statesvc"
+	SvcAgentRuntime   = "agentruntime"
 )
 
 // RouterURL returns the in-cluster URL of the router's public listener

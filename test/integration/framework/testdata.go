@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -29,11 +30,47 @@ import (
 //	ns.CreateFunction(t, ctx, framework.FunctionOptions{Code: codePath, ...})
 func WriteTestData(t *testing.T, embedPath string) string {
 	t.Helper()
+	// A nil replacement set makes WriteTestDataReplacing's substitution loop a
+	// no-op, so this is byte-for-byte the same read-tempdir-write, without a
+	// second copy of that scaffolding.
+	return WriteTestDataReplacing(t, embedPath, nil)
+}
+
+// WriteTestDataReplacing is WriteTestData plus literal string substitution on
+// the file contents before it is written. It exists so a fixture can carry
+// per-test values (a function's own namespace/name) as source constants
+// instead of function env vars: env/envFrom is rejected by the vfunction
+// webhook on the poolmgr executor (RFC-0030 phase 2), so a poolmgr agent
+// fixture that needs to know its own identity must have it templated in.
+// Replacement keys are unique placeholder tokens (e.g. "__SELF_AGENT_NAME__");
+// each must occur in the fixture or the caller is silently wrong, so a missing
+// placeholder fails the test.
+func WriteTestDataReplacing(t *testing.T, embedPath string, replacements map[string]string) string {
+	t.Helper()
 	b, err := testdata.FS.ReadFile(embedPath)
-	require.NoErrorf(t, err, "WriteTestData: read embedded %q", embedPath)
+	require.NoErrorf(t, err, "WriteTestDataReplacing: read embedded %q", embedPath)
+	s := string(b)
+	// Apply placeholders longest-key-first: this makes the result independent of
+	// Go's random map iteration order, and keeps a placeholder that is a
+	// substring of another (e.g. "__SELF_NAME__" vs "__SELF_NAMESPACE__") from
+	// being partially consumed by the shorter one.
+	keys := make([]string, 0, len(replacements))
+	for k := range replacements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) != len(keys[j]) {
+			return len(keys[i]) > len(keys[j])
+		}
+		return keys[i] < keys[j]
+	})
+	for _, placeholder := range keys {
+		require.Containsf(t, s, placeholder, "WriteTestDataReplacing: %q has no placeholder %q to replace", embedPath, placeholder)
+		s = strings.ReplaceAll(s, placeholder, replacements[placeholder])
+	}
 	dir := t.TempDir()
 	dst := filepath.Join(dir, filepath.Base(embedPath))
-	require.NoErrorf(t, os.WriteFile(dst, b, 0o644), "WriteTestData: write %q", dst)
+	require.NoErrorf(t, os.WriteFile(dst, []byte(s), 0o644), "WriteTestDataReplacing: write %q", dst)
 	return dst
 }
 

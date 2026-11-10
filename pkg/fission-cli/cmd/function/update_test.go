@@ -134,3 +134,76 @@ func TestUpdateLeavesStampAloneWhenPackageUntouched(t *testing.T) {
 	assert.Equal(t, "100", got.Spec.Package.PackageRef.ResourceVersion,
 		"an update that touches no package must leave the stamp alone, or it mints a version for nothing")
 }
+
+// TestUpdateAgentFalseClearsExistingConfig pins that an explicit
+// --agent=false CLEARS Spec.Agent, mirroring --state=false /
+// --expose-as-mcp=false: the bool flag is a toggle (on merges, off clears),
+// not merely a one-way opt-in gate.
+func TestUpdateAgentFalseClearsExistingConfig(t *testing.T) {
+	pkg := &fv1.Package{
+		Name: "pkg-a", Namespace: "default",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+	}
+	fn := &fv1.Function{
+		Name: "hello", Namespace: "default",
+		Spec: fv1.FunctionSpec{
+			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
+			Package: fv1.FunctionPackageRef{
+				PackageRef: fv1.PackageRef{Name: "pkg-a", Namespace: "default"},
+			},
+			Agent: &fv1.AgentConfig{MaxSessions: 10},
+		},
+	}
+
+	fc := fissionfake.NewSimpleClientset(fn, pkg) //nolint:staticcheck
+	cmd.ResetClientsetForTest()
+	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
+	t.Cleanup(cmd.ResetClientsetForTest)
+
+	in := dummy.TestFlagSet()
+	in.SetString(flagkey.FnName, "hello")
+	in.SetBool(flagkey.FnAgent, false)
+	require.NoError(t, Update(in))
+
+	got, err := fc.CoreV1().Functions("default").Get(t.Context(), "hello", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Nil(t, got.Spec.Agent, "explicit --agent=false must clear the config")
+}
+
+// TestUpdateAgentFlagAbsentPreservesExistingConfig is the other half of the
+// same contract: an update that never mentions --agent must leave an
+// existing Spec.Agent untouched. dummy.Cli.IsSet keys off map presence (see
+// pkg/fission-cli/cliwrapper/driver/dummy), so never calling SetBool here is
+// what actually distinguishes "absent" from an explicit "false" — Bool()
+// alone can't tell them apart.
+func TestUpdateAgentFlagAbsentPreservesExistingConfig(t *testing.T) {
+	pkg := &fv1.Package{
+		Name: "pkg-a", Namespace: "default",
+		Spec: fv1.PackageSpec{Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"}},
+	}
+	fn := &fv1.Function{
+		Name: "hello", Namespace: "default",
+		Spec: fv1.FunctionSpec{
+			Environment: fv1.EnvironmentReference{Name: "node", Namespace: "default"},
+			Package: fv1.FunctionPackageRef{
+				PackageRef: fv1.PackageRef{Name: "pkg-a", Namespace: "default"},
+			},
+			Agent: &fv1.AgentConfig{MaxSessions: 10},
+		},
+	}
+
+	fc := fissionfake.NewSimpleClientset(fn, pkg) //nolint:staticcheck
+	cmd.ResetClientsetForTest()
+	cmd.SetClientset(cmd.Client{FissionClientSet: fc, Namespace: "default"})
+	t.Cleanup(cmd.ResetClientsetForTest)
+
+	in := dummy.TestFlagSet()
+	in.SetString(flagkey.FnName, "hello")
+	in.SetString(flagkey.FnVersioning, "manual") // unrelated flag, to exercise a real update path
+	require.NoError(t, Update(in))
+
+	got, err := fc.CoreV1().Functions("default").Get(t.Context(), "hello", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, got.Spec.Agent, "an update that never mentions --agent must not clear the existing config")
+	assert.Equal(t, int64(10), got.Spec.Agent.MaxSessions)
+}

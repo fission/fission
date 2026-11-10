@@ -21,6 +21,9 @@ import (
 // allComponentsValues enables every optional component, so a render sees every
 // ServiceAccount the chart can produce rather than the default subset.
 const allComponentsValues = `
+agentRuntime:
+  enabled: true
+  allowInsecure: true
 statestore:
   enabled: true
   mode: embedded
@@ -71,7 +74,7 @@ func serviceAccounts(t *testing.T, ms manifests) []corev1.ServiceAccount {
 // proves this list and the rendered accounts agree, and a copy the test owns is
 // what makes that a real assertion rather than a tautology against the helper.
 var saComponents = []string{
-	"builder", "buildermgr", "canaryconfig", "executor", "fetcher", "kafka",
+	"agentruntime", "builder", "buildermgr", "canaryconfig", "executor", "fetcher", "kafka",
 	"kubewatcher", "mcp", "mqtKeda", "preupgrade", "router", "statestore",
 	"statestoreMqt", "statesvc", "storagesvc", "tenantController", "timer",
 	"webhook", "workflow",

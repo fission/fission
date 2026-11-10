@@ -221,6 +221,7 @@ func (cfg *Config) NewSpecializeRequest(fn *fv1.Function, env *fv1.Environment) 
 			FunctionMetadata: &fn.ObjectMeta,
 			EnvVersion:       env.Spec.Version,
 			StateKeyspace:    stateKeyspace(fn, env),
+			AgentName:        agentName(fn, env),
 		},
 	}
 }
@@ -245,6 +246,26 @@ func stateKeyspace(fn *fv1.Function, env *fv1.Environment) string {
 		return ""
 	}
 	return fn.Spec.State.EffectiveKeyspace(fn.Name)
+}
+
+// agentName resolves the G16 agent identity name for a function that is an
+// agent ("" = not an agent, no token is delivered). Only this non-secret
+// name travels in the specialize request; the fetcher derives the actual
+// token pod-locally.
+//
+// Drop-in sibling of stateKeyspace: the same specialize-time enforcement of
+// the "no per-function credentials on an allowedFunctionsPerContainer:
+// infinite environment" invariant (S1) applies here for the identical
+// reason — such pods serve many functions from one shared mount, so a
+// single per-pod token file cannot isolate them.
+func agentName(fn *fv1.Function, env *fv1.Environment) string {
+	if fn.Spec.Agent == nil {
+		return ""
+	}
+	if env.Spec.AllowedFunctionsPerContainer == fv1.AllowedFunctionsPerContainerInfinite {
+		return ""
+	}
+	return fn.Name
 }
 
 // AddFetcherToPodSpec adds the fetcher sidecar to podSpec. namespace is where the

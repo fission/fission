@@ -59,14 +59,25 @@ func (fetcher *Fetcher) writeStateTokenFile(loadReq FunctionLoadRequest) error {
 		creds.Token = hmacauth.EncodeKeyForEnv(hmacauth.DeriveStateKeyspaceKey(master,
 			creds.Namespace, creds.Keyspace))
 	}
-	// cross-language SDK file contract: exact v1 emission
-	blob, err := json.Marshal(creds, statetokenWireOpts)
+	return writeCredentialFile(fetcher, StateTokenFileName, creds, statetokenWireOpts)
+}
+
+// writeCredentialFile marshals creds to exact-v1 JSON (the cross-language SDK
+// file contract) and writes it under the shared mount as a read-only 0444 file,
+// replacing any existing one: the env container runs as a different user and only
+// reads it, and a re-specialize on an infinite-functions pool cannot overwrite a
+// 0444 file in place. It is the shared write tail of writeStateTokenFile and
+// writeAgentTokenFile — the read-only-replace step is security-sensitive (it
+// closes the torn-read window on a re-specialize), so both credential kinds go
+// through this one implementation rather than keeping it in lockstep by hand.
+// Generic on the credential type so the caller's struct survives the call (the
+// house no-any-params rule); it is marshaled by exactly the opts passed.
+func writeCredentialFile[T any](fetcher *Fetcher, fileName string, creds T, opts jsonv1.Options) error {
+	blob, err := json.Marshal(creds, opts)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(fetcher.sharedVolumePath, StateTokenFileName)
-	// The file is read-only, so a re-specialize (infinite-functions pools,
-	// retried specialization) cannot overwrite in place — replace it.
+	path := filepath.Join(fetcher.sharedVolumePath, fileName)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

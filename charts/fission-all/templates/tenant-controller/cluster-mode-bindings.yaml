@@ -60,4 +60,38 @@ roleRef:
   name: "{{ .Release.Name }}-router-dataplane-cluster"
   apiGroup: rbac.authorization.k8s.io
 {{- end }}
+{{- if .Values.agentRuntime.enabled }}
+---
+# Agent-runtime pool introspection (GET /registry/pool), cluster-wide: in cluster
+# mode functions — and therefore their pods/EndpointSlices — live in any namespace,
+# so poolCacheOptions (pkg/agentruntime/main.go) watches cluster-wide (the
+# per-namespace agentruntime Role, agentruntime/role-kubernetes.yaml, covers the
+# static/dynamic paths). Read-only. SECURITY TRADE-OFF: this grants the
+# fission-agentruntime ServiceAccount cluster-wide read of Pods (identity/labels/
+# status only — poolCacheOptions strips Spec, so pod env is never read) and
+# EndpointSlices; a compromise reaches every namespace's pod topology. Documented
+# cost of cluster mode; the grant stays namespace-scoped in every other tenancy mode.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: "{{ .Release.Name }}-agentruntime-dataplane-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+{{- include "agentruntime-kuberules" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: "{{ .Release.Name }}-agentruntime-dataplane-cluster"
+  labels:
+    chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+subjects:
+  - kind: ServiceAccount
+    name: fission-agentruntime
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: "{{ .Release.Name }}-agentruntime-dataplane-cluster"
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
 {{- end }}

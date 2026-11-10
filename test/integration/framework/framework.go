@@ -51,6 +51,10 @@ const (
 	// MCPName resolves to svc/mcp (RFC-0011). MCP tests skip when it is
 	// unreachable (MCP disabled in this install).
 	MCPName = "mcp.fission"
+	// AgentRuntimeName resolves to svc/agentruntime (agent-runtime session
+	// dispatch, slices 1-2). Agent tests skip when it is unreachable (the
+	// agent runtime disabled in this install).
+	AgentRuntimeName = "agentruntime.fission"
 	// StateSvcName resolves to svc/statesvc (RFC-0023 keyed state). State
 	// tests skip when it is unreachable (functionState disabled).
 	StateSvcName = "statesvc.fission"
@@ -207,6 +211,7 @@ func newRegistry(restConfig *rest.Config) (*portless.Registry, error) {
 		{MCPName, "FISSION_MCP_BASE_URL", "mcp", []portless.RouteOption{portless.RouteWithHostRewrite("127.0.0.1")}},
 		{StateSvcName, "FISSION_STATESVC", "statesvc", nil},
 		{ExecutorName, "FISSION_EXECUTOR", "executor", nil},
+		{AgentRuntimeName, "FISSION_AGENTRUNTIME_BASE_URL", "agentruntime", nil},
 	} {
 		var b portless.Backend
 		var err error
@@ -294,6 +299,13 @@ func (f *Framework) InternalAuthSecret() []byte { return f.internalAuthSecret }
 // unreachable (the MCP subsystem is enabled in the kind/kind-ci skaffold
 // profiles but may be off in other installs).
 func (f *Framework) MCPBaseURL() string { return portless.URL(MCPName, 0, "") }
+
+// AgentRuntimeBaseURL returns the URL of the agent runtime dispatch endpoint
+// (svc/agentruntime). Agent integration tests POST turns to
+// "<base>/agents/<namespace>/<name>" via HTTPClient; they should skip when
+// the endpoint is unreachable (the agent runtime is enabled in the
+// kind/kind-ci skaffold profiles but may be off in other installs).
+func (f *Framework) AgentRuntimeBaseURL() string { return portless.URL(AgentRuntimeName, 0, "") }
 
 // ExecutorBaseURL returns the framework's URL for the executor's HTTP API
 // (svc/executor). Direct-specialize tests (RFC-0025 phase 2) POST versioned

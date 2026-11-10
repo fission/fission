@@ -871,6 +871,62 @@ mcp:
     runAsUser: 10001
     runAsGroup: 10001
 
+## The agent runtime dispatches durable, multi-turn agent sessions to
+## Tool-exposed functions. Off by default. When enabled it runs
+## fission-bundle --agentPort as a ClusterIP-only Service, keeps session
+## records in the statestore (requires statestore.enabled, render-validated),
+## and dispatches turns to the router internal listener like the other
+## internal publishers. Agents authenticate with a bearer JWT when
+## authentication.enabled is set. With authentication disabled the dispatcher
+## can only run unauthenticated if you explicitly set allowInsecure below;
+## otherwise enabling the agent runtime without authentication fails the
+## chart render.
+##
+agentRuntime:
+  enabled: false
+  ## Port the agent runtime listens on (ClusterIP Service of the same port).
+  ## 8891-8893 belong to statestore/workflow/statesvc.
+  ##
+  port: 8894
+  ## allowInsecure permits running the dispatcher UNAUTHENTICATED when
+  ## authentication.enabled is false (dev/test only). Leave false in
+  ## production; enable authentication instead so callers are scoped by a
+  ## signed JWT.
+  ##
+  allowInsecure: false
+  ## replicas: the dispatcher is stateless (session truth is the statestore)
+  ## and the sweeper is CAS-idempotent, so replicas need no leader election.
+  ##
+  replicas: 1
+  ## Sweep cadence and archived-record retention.
+  ##
+  sweepInterval: 30s
+  archiveRetention: 168h
+  ## Caps yield=continue self-chaining per session (0 = unlimited). Guards a
+  ## misbehaving agent from chaining forever on the agent-wake queue.
+  ##
+  maxContinuations: 1000
+  ## Platform-wide live-session ceiling applied to any agent whose spec sets
+  ## no MaxSessions of its own (0 = no default, unbounded). Bounds unqualified
+  ## session creation without requiring a per-agent quota.
+  ##
+  maxSessions: 1000
+  ## Pod resources.
+  ##
+  resources: {}
+
+  ## Security Context
+  ## It holds pod-level and container level security configuration.
+  ## This is an experimental section, please verify before enabling in production.
+  ## Ref: https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1
+  securityContext:
+    enabled: true
+    ## Mark it false, if you want to stop the non root user validation
+    runAsNonRoot: true
+    fsGroup: 10001
+    runAsUser: 10001
+    runAsGroup: 10001
+
 ## Statestore — the durable-state substrate (RFC-0021) consumed by workflows
 ## (RFC-0022), stateful functions (RFC-0023), and async invocation (RFC-0024).
 ##
@@ -1457,6 +1513,7 @@ serviceAccounts:
   ## Per-account overrides. Every account this chart can create is listed, so
   ## the set is discoverable without reading the templates; an account only
   ## renders when its component is enabled.
+  agentruntime: {}
   builder: {}
   buildermgr: {}
   canaryconfig: {}

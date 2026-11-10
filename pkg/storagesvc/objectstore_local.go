@@ -186,7 +186,7 @@ func (s *localObjectStore) list(prefix string) ([]objectInfo, error) {
 		if infoErr != nil {
 			return infoErr
 		}
-		infos = append(infos, objectInfo{id: path, lastMod: fi.ModTime()})
+		infos = append(infos, objectInfo{id: path, lastMod: fi.ModTime(), size: fi.Size()})
 		return nil
 	})
 	if err != nil {
