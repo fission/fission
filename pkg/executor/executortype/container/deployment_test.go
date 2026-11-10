@@ -7,6 +7,7 @@ package container
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -407,4 +408,91 @@ func TestContainerScaleFromZeroWaitsForAvailability(t *testing.T) {
 				"an existing-deployment wait timeout must not trigger the destroy path")
 		})
 	}
+}
+
+// TestContainerWaitTimeoutClassification covers the branch the caller-context
+// tests above cannot reach: the wait's OWN timeout expiring. With a caller
+// context that never expires, the readiness wait runs out its
+// specializationTimeout window and returns the ErrDeploymentNotAvailable
+// sentinel; on an existing deployment that error must be wrapped in
+// ErrDeploymentWaitTimeout so destroyOnCreateError leaves the deployment
+// standing, while a timeout on the create path stays unwrapped and still
+// cleans up the half-created objects. The synctest bubble advances the
+// virtual clock through the window instantly.
+func TestContainerWaitTimeoutClassification(t *testing.T) {
+	// Generation of the spec after the scale request.
+	const generation = 2
+
+	t.Run("existing deployment's wait timeout is non-destructive", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			fn := newTestContainerFunction()
+			fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+
+			ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
+			zero := int32(0)
+			scaledIn := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "ctr-fn",
+					Namespace:   ns,
+					Generation:  generation,
+					Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+				},
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+			}
+
+			kubeClient := fake.NewClientset(scaledIn)
+			// The status never catches up with the scale request, so the wait
+			// can only end at its own deadline.
+			kubeClient.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+				depl := scaledIn.DeepCopy()
+				depl.Status = appsv1.DeploymentStatus{ObservedGeneration: generation - 1, AvailableReplicas: 1}
+				return true, depl, nil
+			})
+			// The fake clientset has no built-in scale subresource for deployments.
+			kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "scale" {
+					return false, nil, nil
+				}
+				// SAFETY: this reactor is registered for "update" and returns early unless the subresource is scale, so the action is an UpdateAction.
+				return true, action.(k8stesting.UpdateAction).GetObject(), nil
+			})
+
+			cn := &Container{
+				logger:                 loggerfactory.GetLogger(),
+				kubernetesClient:       kubeClient,
+				instanceID:             "test-instance",
+				nsResolver:             utils.DefaultNSResolver(),
+				runtimeImagePullPolicy: apiv1.PullIfNotPresent,
+			}
+
+			// The caller context carries no deadline: only the wait's own
+			// window can end the loop.
+			_, err := cn.createOrGetDeployment(t.Context(), fn, "ctr-fn", map[string]string{"app": "ctr"}, nil, ns)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, util.ErrDeploymentNotAvailable,
+				"the wait's own timeout must surface the sentinel, not a context error")
+			assert.ErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"an existing-deployment wait timeout must be wrapped for the destroy path")
+			assert.False(t, destroyOnCreateError(err),
+				"a wait timeout on an existing deployment must not trigger cleanup")
+		})
+	})
+
+	t.Run("create path's wait timeout stays destructive", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			fn := newTestContainerFunction()
+			cn := newTestContainer()
+
+			// No pre-existing deployment: createOrGetDeployment creates one,
+			// and the readiness wait for it can only end at its own deadline.
+			_, err := cn.createOrGetDeployment(t.Context(), fn, "ctr-fn", map[string]string{"app": "ctr"}, nil, "default")
+			require.Error(t, err)
+			assert.ErrorIs(t, err, util.ErrDeploymentNotAvailable,
+				"the wait's own timeout must surface the sentinel, not a context error")
+			assert.NotErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"a create-path timeout must stay unwrapped: the objects are half-created")
+			assert.True(t, destroyOnCreateError(err),
+				"a create-path timeout must still trigger cleanup")
+		})
+	})
 }

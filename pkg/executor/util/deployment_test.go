@@ -7,6 +7,7 @@ package util
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -249,6 +250,33 @@ func TestWaitForDeployment(t *testing.T) {
 		got, err := WaitForDeployment(ctx, client, loggerfactory.GetLogger(), dep, 1, 1)
 		require.Error(t, err)
 		assert.Nil(t, got)
+	})
+
+	t.Run("expires on its own window when the caller context does not", func(t *testing.T) {
+		// The other subtests short-circuit before the deadline; this one covers
+		// the timeout path itself. The caller context carries no deadline, so
+		// only the wait's own (floored) window can end the loop, and the error
+		// must be the ErrDeploymentNotAvailable sentinel callers classify on —
+		// not a context error. The synctest bubble advances the virtual clock
+		// through the window instantly.
+		synctest.Test(t, func(t *testing.T) {
+			dep := &appsv1.Deployment{
+				Namespace: ns, Name: "pending",
+				Status: appsv1.DeploymentStatus{AvailableReplicas: 0},
+			}
+			client := fake.NewClientset(dep)
+
+			started := time.Now()
+			got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), dep, 1, 1)
+			require.Error(t, err)
+			assert.Nil(t, got)
+			assert.ErrorIs(t, err, ErrDeploymentNotAvailable,
+				"the wait's own timeout must carry the sentinel")
+			assert.NotErrorIs(t, err, context.DeadlineExceeded,
+				"the caller context never expires, so the error must not be a context error")
+			assert.GreaterOrEqual(t, time.Since(started), time.Duration(fv1.DefaultSpecializationTimeOut)*time.Second,
+				"the virtual clock must have advanced through the wait's own window")
+		})
 	})
 }
 
