@@ -209,7 +209,7 @@ func (caaf *Container) IsValid(ctx context.Context, fsvc *fscache.FuncSvc) bool 
 				}
 				return false
 			}
-			if currentDeploy.Status.AvailableReplicas < 1 {
+			if !executorUtils.DeploymentAvailable(currentDeploy, 1) {
 				return false
 			}
 		}
@@ -328,9 +328,13 @@ func (caaf *Container) deleteFunction(ctx context.Context, fn *fv1.Function) err
 // the function's partial resources. A Conflict or AlreadyExists means the object
 // exists and was concurrently modified (e.g. the adopt pass racing a reconcile,
 // or two reconciles), so deleting it would turn a transient blip into a cold
-// recreate — leave it for the next reconcile to converge instead. Genuine
-// creation failures (quota, invalid spec, API errors) still trigger cleanup so a
-// brand-new function doesn't leak half-created objects.
+// recreate — leave it for the next reconcile to converge instead. A wait
+// timeout wrapped in executorUtils.ErrDeploymentWaitTimeout means the
+// deployment predates the request and is complete — possibly still serving, as
+// with a paused rollout or a stalled deployment controller — so it stays for
+// the next attempt too. Genuine creation failures (quota, invalid spec, API
+// errors) still trigger cleanup so a brand-new function doesn't leak
+// half-created objects.
 func destroyOnCreateError(err error) bool {
 	// An explicitly cancelled context means the executor is shutting down, lost
 	// leadership, or the caller gave up — not that creation genuinely failed —
@@ -340,6 +344,9 @@ func destroyOnCreateError(err error) bool {
 	// SpecializationTimeout (see pkg/executor/executor.go), so DeadlineExceeded
 	// is a genuine timeout and falls through to normal cleanup.
 	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, executorUtils.ErrDeploymentWaitTimeout) {
 		return false
 	}
 	return !k8sErrs.IsConflict(err) && !k8sErrs.IsAlreadyExists(err)

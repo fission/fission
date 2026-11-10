@@ -5,14 +5,19 @@
 package newdeploy
 
 import (
+	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	fv1 "github.com/fission/fission/pkg/apis/core/v1"
 	ferror "github.com/fission/fission/pkg/error"
@@ -638,4 +643,189 @@ func TestGetDeploymentSpecNonOCIUnchanged(t *testing.T) {
 		assert.Nil(t, v.Image, "tarball packages must not grow an image volume")
 	}
 	assert.Empty(t, dep.Spec.Template.Spec.ImagePullSecrets)
+}
+
+// TestNewDeployScaleFromZeroWaitsForAvailability is the newdeploy side of the
+// scale-to-zero race reported in #3183. On the scale-from-zero path the
+// deployment status can still describe the pod the idle reaper is tearing
+// down, either because it was read before the scale request or because the
+// controller has not written a status for that request yet. A caller that
+// trusts such a status reports success while the Service has no endpoint and
+// the router forwards into it.
+func TestNewDeployScaleFromZeroWaitsForAvailability(t *testing.T) {
+	t.Parallel()
+
+	// Generation of the spec after the scale request.
+	const generation = 2
+
+	tests := []struct {
+		name string
+		// status is the deployment status served by the nth read, 1-based.
+		status func(read int) appsv1.DeploymentStatus
+	}{
+		{
+			// The copy createOrGetDeployment read before scaling up.
+			name: "pre-scale read still counts the terminating pod",
+			status: func(read int) appsv1.DeploymentStatus {
+				available := int32(0)
+				if read == 1 {
+					available = 1
+				}
+				return appsv1.DeploymentStatus{ObservedGeneration: generation, AvailableReplicas: available}
+			},
+		},
+		{
+			// Status is written asynchronously by the deployment controller, so
+			// every read up to the deadline can still describe the generation
+			// before the scale request.
+			name: "status has not caught up with the scale request",
+			status: func(int) appsv1.DeploymentStatus {
+				return appsv1.DeploymentStatus{ObservedGeneration: generation - 1, AvailableReplicas: 1}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := newTestNewDeployEnv()
+			fn := newTestNewDeployFunction()
+			fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+
+			ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
+			zero := int32(0)
+			scaledIn := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "newdeploy-test-fn",
+					Namespace:   ns,
+					Generation:  generation,
+					Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+				},
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+			}
+
+			kubeClient := fake.NewClientset(scaledIn)
+			var reads int
+			kubeClient.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+				depl := scaledIn.DeepCopy()
+				reads++
+				depl.Status = tc.status(reads)
+				return true, depl, nil
+			})
+			// The fake clientset has no built-in scale subresource for deployments.
+			kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "scale" {
+					return false, nil, nil
+				}
+				// SAFETY: this reactor is registered for "update" and returns early unless the subresource is scale, so the action is an UpdateAction.
+				return true, action.(k8stesting.UpdateAction).GetObject(), nil
+			})
+
+			deploy := newTestNewDeploy(t)
+			deploy.kubernetesClient = kubeClient
+			deploy.instanceID = "test-instance"
+
+			// The deployment never becomes available in the fake cluster, so a
+			// correct implementation runs the readiness wait out to this deadline.
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+
+			_, err := deploy.createOrGetDeployment(ctx, fn, env, "newdeploy-test-fn",
+				map[string]string{"app": "newdeploy-test"}, map[string]string{}, ns)
+			require.Error(t, err, "scale-from-zero must not report success while no replica is available")
+			assert.ErrorIs(t, err, context.DeadlineExceeded,
+				"expected the readiness wait to run to its deadline, got: %v", err)
+			assert.ErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"an existing-deployment wait timeout must not trigger the destroy path")
+		})
+	}
+}
+
+// TestNewDeployWaitTimeoutClassification is the newdeploy side of
+// TestContainerWaitTimeoutClassification: it covers the branch the
+// caller-context test above cannot reach, the wait's OWN timeout expiring.
+// With a caller context that never expires, the readiness wait runs out its
+// specializationTimeout window and returns the ErrDeploymentNotAvailable
+// sentinel; on an existing deployment that error must be wrapped in
+// ErrDeploymentWaitTimeout so destroyOnCreateError leaves the deployment
+// standing, while a timeout on the create path stays unwrapped and still
+// cleans up the half-created objects. The synctest bubble advances the
+// virtual clock through the window instantly.
+func TestNewDeployWaitTimeoutClassification(t *testing.T) {
+	// Generation of the spec after the scale request.
+	const generation = 2
+
+	t.Run("existing deployment's wait timeout is non-destructive", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			env := newTestNewDeployEnv()
+			fn := newTestNewDeployFunction()
+			fn.Spec.InvokeStrategy.ExecutionStrategy.MinScale = 0
+
+			ns := utils.DefaultNSResolver().GetFunctionNS(fn.Namespace)
+			zero := int32(0)
+			scaledIn := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "newdeploy-test-fn",
+					Namespace:   ns,
+					Generation:  generation,
+					Annotations: map[string]string{fv1.EXECUTOR_INSTANCEID_LABEL: "test-instance"},
+				},
+				Spec: appsv1.DeploymentSpec{Replicas: &zero},
+			}
+
+			kubeClient := fake.NewClientset(scaledIn)
+			// The status never catches up with the scale request, so the wait
+			// can only end at its own deadline.
+			kubeClient.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+				depl := scaledIn.DeepCopy()
+				depl.Status = appsv1.DeploymentStatus{ObservedGeneration: generation - 1, AvailableReplicas: 1}
+				return true, depl, nil
+			})
+			// The fake clientset has no built-in scale subresource for deployments.
+			kubeClient.PrependReactor("update", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				if action.GetSubresource() != "scale" {
+					return false, nil, nil
+				}
+				// SAFETY: this reactor is registered for "update" and returns early unless the subresource is scale, so the action is an UpdateAction.
+				return true, action.(k8stesting.UpdateAction).GetObject(), nil
+			})
+
+			deploy := newTestNewDeploy(t)
+			deploy.kubernetesClient = kubeClient
+			deploy.instanceID = "test-instance"
+
+			// The caller context carries no deadline: only the wait's own
+			// window can end the loop.
+			_, err := deploy.createOrGetDeployment(t.Context(), fn, env, "newdeploy-test-fn",
+				map[string]string{"app": "newdeploy-test"}, map[string]string{}, ns)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, util.ErrDeploymentNotAvailable,
+				"the wait's own timeout must surface the sentinel, not a context error")
+			assert.ErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"an existing-deployment wait timeout must be wrapped for the destroy path")
+			assert.False(t, destroyOnCreateError(err),
+				"a wait timeout on an existing deployment must not trigger cleanup")
+		})
+	})
+
+	t.Run("create path's wait timeout stays destructive", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			env := newTestNewDeployEnv()
+			fn := newTestNewDeployFunction()
+			deploy := newTestNewDeploy(t)
+
+			// No pre-existing deployment: createOrGetDeployment creates one,
+			// and the readiness wait for it can only end at its own deadline.
+			_, err := deploy.createOrGetDeployment(t.Context(), fn, env, "newdeploy-test-fn",
+				map[string]string{"app": "newdeploy-test"}, map[string]string{}, "default")
+			require.Error(t, err)
+			assert.ErrorIs(t, err, util.ErrDeploymentNotAvailable,
+				"the wait's own timeout must surface the sentinel, not a context error")
+			assert.NotErrorIs(t, err, util.ErrDeploymentWaitTimeout,
+				"a create-path timeout must stay unwrapped: the objects are half-created")
+			assert.True(t, destroyOnCreateError(err),
+				"a create-path timeout must still trigger cleanup")
+		})
+	})
 }

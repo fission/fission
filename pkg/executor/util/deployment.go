@@ -6,6 +6,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -62,9 +63,52 @@ func nextWaitPollDelay(cur time.Duration) time.Duration {
 	return min(cur*3/2, waitPollMaxDelay)
 }
 
-// WaitForDeployment polls the deployment until it has at least replicas
-// AvailableReplicas, or until specializationTimeout seconds elapse. Shared by
-// the newdeploy and container managers. specializationTimeout is floored at
+// ErrDeploymentNotAvailable is the reason WaitForDeployment's timeout error
+// carries: the deployment did not report enough available replicas in the
+// window. Callers distinguish it from polling/API failures with errors.Is.
+var ErrDeploymentNotAvailable = errors.New("deployment did not become available")
+
+// ErrDeploymentWaitTimeout marks a WaitForDeployment timeout on a deployment
+// that already existed when the wait began. The newdeploy and container
+// managers wrap the timeout error with it on that path so destroyOnCreateError
+// can leave the objects standing: they are complete, may already serve
+// traffic, and a status that lags the spec (a paused rollout, a stalled
+// deployment controller) can hold the wait past the timeout window without
+// the deployment being broken. Polling and API failures keep their original
+// classification; a timeout on the create path stays unwrapped and still
+// tears down the half-created objects.
+var ErrDeploymentWaitTimeout = errors.New("wait on an existing deployment timed out")
+
+// DeploymentAvailable reports whether depl has at least replicas available,
+// as observed by the deployment controller for the spec currently stored.
+//
+// The generation gate matters on the scale-from-zero path. UpdateScale only
+// writes the spec and bumps metadata.generation; status is written later, by
+// the deployment controller. A Get issued right after ScaleDeployment can
+// therefore still carry the status of the previous generation, which counts
+// the pod the idle reaper is tearing down, so AvailableReplicas alone would
+// report a serving deployment while the Service has no endpoint. Until
+// ObservedGeneration catches up, the status says nothing about this scale
+// request. Same gate as WaitForDeploymentRollout in the integration framework.
+//
+// The spec check covers the way down. Once the idle reaper scales the
+// deployment in, Spec.Replicas drops at once while the status can still count
+// the pod that is going away, which would keep a cached function service
+// looking valid.
+func DeploymentAvailable(depl *appsv1.Deployment, replicas int32) bool {
+	specReplicas := int32(1)
+	if depl.Spec.Replicas != nil {
+		specReplicas = *depl.Spec.Replicas
+	}
+	return specReplicas >= replicas &&
+		depl.Status.ObservedGeneration >= depl.Generation &&
+		depl.Status.AvailableReplicas >= replicas
+}
+
+// WaitForDeployment polls the deployment until the deployment controller has
+// observed the current spec and reports at least replicas AvailableReplicas,
+// or until specializationTimeout seconds elapse. Shared by the newdeploy and
+// container managers. specializationTimeout is floored at
 // fv1.DefaultSpecializationTimeOut. AvailableReplicas is used in preference to
 // ReadyReplicas since the pods may not be able to serve network traffic yet.
 func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, logger logr.Logger, depl *appsv1.Deployment, replicas int32, specializationTimeout int) (latestDepl *appsv1.Deployment, err error) {
@@ -92,7 +136,7 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 			return nil, err
 		}
 		// TODO check for imagePullerror
-		if latestDepl.Status.AvailableReplicas >= replicas {
+		if DeploymentAvailable(latestDepl, replicas) {
 			otelUtils.SpanTrackEvent(ctx, "deploymentAvailable", otelUtils.GetAttributesForDeployment(latestDepl)...)
 			return latestDepl, err
 		}
@@ -116,7 +160,7 @@ func WaitForDeployment(ctx context.Context, kubeClient kubernetes.Interface, log
 		"current_status", latestDepl.Status, "timeout", specializationTimeout)
 
 	// this error appears in the executor pod logs
-	timeoutError := fmt.Errorf("failed to create deployment within the timeout window of %d seconds", specializationTimeout)
+	timeoutError := fmt.Errorf("%w within the timeout window of %d seconds", ErrDeploymentNotAvailable, specializationTimeout)
 	return nil, timeoutError
 }
 

@@ -7,6 +7,7 @@ package util
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -194,6 +195,35 @@ func TestWaitForDeployment(t *testing.T) {
 		assert.GreaterOrEqual(t, got.Status.AvailableReplicas, int32(1))
 	})
 
+	t.Run("ignores a status the controller has not caught up with", func(t *testing.T) {
+		t.Parallel()
+		// Scaled in from one replica to zero and back up: the spec is at
+		// generation 2, while the status still describes generation 1 and
+		// counts the pod the idle reaper is tearing down.
+		one := int32(1)
+		scaled := &appsv1.Deployment{
+			Namespace: ns, Name: "scaled-up", Generation: 2,
+			Spec:   appsv1.DeploymentSpec{Replicas: &one},
+			Status: appsv1.DeploymentStatus{ObservedGeneration: 1, AvailableReplicas: 1},
+		}
+		client := fake.NewClientset(scaled)
+		var gets int
+		client.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
+			latest := scaled.DeepCopy()
+			gets++
+			if gets > 1 {
+				latest.Status.ObservedGeneration = latest.Generation
+			}
+			return true, latest, nil
+		})
+
+		got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), scaled, 1, 1)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		assert.Equal(t, got.Generation, got.Status.ObservedGeneration,
+			"returned on a status that predates the scale request")
+	})
+
 	t.Run("surfaces a get error", func(t *testing.T) {
 		t.Parallel()
 		client := fake.NewClientset()
@@ -220,6 +250,33 @@ func TestWaitForDeployment(t *testing.T) {
 		got, err := WaitForDeployment(ctx, client, loggerfactory.GetLogger(), dep, 1, 1)
 		require.Error(t, err)
 		assert.Nil(t, got)
+	})
+
+	t.Run("expires on its own window when the caller context does not", func(t *testing.T) {
+		// The other subtests short-circuit before the deadline; this one covers
+		// the timeout path itself. The caller context carries no deadline, so
+		// only the wait's own (floored) window can end the loop, and the error
+		// must be the ErrDeploymentNotAvailable sentinel callers classify on —
+		// not a context error. The synctest bubble advances the virtual clock
+		// through the window instantly.
+		synctest.Test(t, func(t *testing.T) {
+			dep := &appsv1.Deployment{
+				Namespace: ns, Name: "pending",
+				Status: appsv1.DeploymentStatus{AvailableReplicas: 0},
+			}
+			client := fake.NewClientset(dep)
+
+			started := time.Now()
+			got, err := WaitForDeployment(t.Context(), client, loggerfactory.GetLogger(), dep, 1, 1)
+			require.Error(t, err)
+			assert.Nil(t, got)
+			assert.ErrorIs(t, err, ErrDeploymentNotAvailable,
+				"the wait's own timeout must carry the sentinel")
+			assert.NotErrorIs(t, err, context.DeadlineExceeded,
+				"the caller context never expires, so the error must not be a context error")
+			assert.GreaterOrEqual(t, time.Since(started), time.Duration(fv1.DefaultSpecializationTimeOut)*time.Second,
+				"the virtual clock must have advanced through the wait's own window")
+		})
 	})
 }
 

@@ -6,6 +6,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 
@@ -87,6 +88,10 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 		return existingDepl, nil
 	}
 
+	// existingDepl was read before any scale request: its spec can predate the
+	// scale-up and its status can still count the pod the idle reaper is
+	// tearing down. Gate the wait on the same predicate the cache path uses,
+	// so a stale status waits here instead of being re-cached and re-invalidated.
 	if *existingDepl.Spec.Replicas < minScale {
 		err = util.ScaleDeployment(ctx, cn.kubernetesClient, cn.logger, existingDepl.Namespace, existingDepl.Name, minScale)
 		if err != nil {
@@ -94,8 +99,19 @@ func (cn *Container) createOrGetDeployment(ctx context.Context, fn *fv1.Function
 			return nil, err
 		}
 	}
-	if existingDepl.Status.AvailableReplicas < minScale {
+	if !util.DeploymentAvailable(existingDepl, minScale) {
 		existingDepl, err = util.WaitForDeployment(ctx, cn.kubernetesClient, cn.logger, existingDepl, minScale, specializationTimeout)
+		if err != nil {
+			// Only a timeout — the wait's own window or the caller's deadline —
+			// marks the error non-destructive: the deployment predates this
+			// request and may still be serving (a paused rollout or a stalled
+			// deployment controller holds the status behind the spec past the
+			// whole window). Polling and API failures keep their original
+			// classification and still trigger cleanup.
+			if errors.Is(err, util.ErrDeploymentNotAvailable) || errors.Is(err, context.DeadlineExceeded) {
+				err = fmt.Errorf("%w: %w", util.ErrDeploymentWaitTimeout, err)
+			}
+		}
 	}
 
 	return existingDepl, err

@@ -7,11 +7,14 @@ package container
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	k8sErrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	executorUtils "github.com/fission/fission/pkg/executor/util"
 )
 
 // TestDestroyOnCreateError guards the gate that keeps a transient fnCreate
@@ -31,6 +34,7 @@ func TestDestroyOnCreateError(t *testing.T) {
 		{"already exists is transient — keep", k8sErrs.NewAlreadyExists(gr, "fn"), false},
 		{"context canceled is cancellation — keep", context.Canceled, false},
 		{"deadline exceeded is a genuine specialization timeout — clean up", context.DeadlineExceeded, true},
+		{"existing-deployment wait timeout is transient — keep", fmt.Errorf("%w: %w", executorUtils.ErrDeploymentWaitTimeout, context.DeadlineExceeded), false},
 		{"not found is genuine — clean up", k8sErrs.NewNotFound(gr, "fn"), true},
 		{"forbidden is genuine — clean up", k8sErrs.NewForbidden(gr, "fn", errors.New("rbac")), true},
 		{"opaque error is genuine — clean up", errors.New("quota exceeded"), true},
