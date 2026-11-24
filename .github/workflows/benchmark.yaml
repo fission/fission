@@ -91,7 +91,7 @@ jobs:
       versions: ${{ steps.versions.outputs.list }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: audit
       - id: versions
@@ -127,7 +127,7 @@ jobs:
         fission_version: ${{ fromJSON(needs.setup.outputs.versions) }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c # v2.23.0
         with:
           egress-policy: audit
 
@@ -141,13 +141,13 @@ jobs:
           df -h /
 
       - name: setup go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
           cache: true
 
       - name: Helm installation
-        uses: Azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        uses: Azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
           version: ${{ env.HELM_VERSION }}
 
